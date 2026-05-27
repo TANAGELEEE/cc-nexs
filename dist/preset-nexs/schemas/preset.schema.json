@@ -1,0 +1,151 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "cc-nexs preset.yml",
+  "description": "Schema for a cc-nexs preset declaration. Each preset describes which roles are enabled, which tools to use for review, what stack-specific checks to run, and what i18n locale to load.",
+  "type": "object",
+  "required": ["name", "version", "roles", "stack"],
+  "properties": {
+    "name": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "version": { "type": "string" },
+    "description": { "type": "string" },
+    "language": {
+      "type": "string",
+      "enum": ["zh-CN", "en-US"],
+      "default": "en-US"
+    },
+    "roles": {
+      "type": "object",
+      "required": ["enabled"],
+      "properties": {
+        "enabled": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Role identifiers in execution order. Common: planner, tech-lead, sa, qa, evaluator. Custom roles allowed."
+        },
+        "definitions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["agent", "tool"],
+            "properties": {
+              "agent": { "type": "string", "description": "Path to agent .md file relative to preset root" },
+              "tool": {
+                "type": "string",
+                "enum": ["claude-subagent", "codex", "gemini", "openai-cli", "custom"],
+                "description": "Which reviewer tool drives this role"
+              },
+              "alias": { "type": "string", "description": "Display name (e.g. 'PM' instead of 'planner')" },
+              "session_isolation": {
+                "type": "string",
+                "enum": ["independent", "shared"],
+                "default": "independent"
+              }
+            }
+          }
+        }
+      }
+    },
+    "stack": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["java-maven", "node-pnpm", "python-poetry", "rust-cargo", "go-mod", "generic"]
+        },
+        "build_cmd": { "type": "string" },
+        "test_cmd": { "type": "string" },
+        "lint_cmd": { "type": "string" },
+        "src_paths": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "forbidden_patterns": {
+          "type": "array",
+          "description": "Regex patterns disallowed in source code, with optional excludes for comments/logs",
+          "items": {
+            "type": "object",
+            "required": ["regex"],
+            "properties": {
+              "regex": { "type": "string" },
+              "excludes": { "type": "array", "items": { "type": "string" } },
+              "description": { "type": "string" }
+            }
+          }
+        },
+        "custom_review_rules": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Free-text rules to inject into reviewer prompt"
+        }
+      }
+    },
+    "paths": {
+      "type": "object",
+      "properties": {
+        "doc_dir": { "type": "string", "default": "doc/{id}.{slug}/" },
+        "branch_pattern": { "type": "string", "default": "feature/{id}-{slug}" },
+        "bugs_dir": { "type": "string", "default": "bugs/" }
+      }
+    },
+    "workflow": {
+      "type": "object",
+      "properties": {
+        "sprint_enabled": { "type": "boolean", "default": true },
+        "human_gate_after": {
+          "type": "string",
+          "description": "State after which to insert human approval gate; null disables gate",
+          "default": "spec_reviewing_pass"
+        },
+        "thresholds": {
+          "type": "object",
+          "properties": {
+            "review_revision": { "type": "integer", "default": 3 },
+            "fix_per_bug": { "type": "integer", "default": 3 },
+            "evaluator_reject": { "type": "integer", "default": 2 }
+          }
+        }
+      }
+    },
+    "modes": {
+      "type": "object",
+      "description": "Mode declarations. Each mode picks a state-machine flavor + an enabled-role subset. The orchestrator reads doc/<id>/config.json.mode to decide which mode is active.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["enabled", "state_machine"],
+        "properties": {
+          "description": { "type": "string" },
+          "enabled": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1
+          },
+          "state_machine": {
+            "type": "string",
+            "enum": ["full", "fast"],
+            "description": "State-machine flavor. 'full' = 5-role SOP with sprint slicing. 'fast' = 3-role single-sprint merged pipeline."
+          },
+          "sprint_enabled": { "type": "boolean", "default": true },
+          "thresholds_override": {
+            "type": "object",
+            "properties": {
+              "review_revision": { "type": "integer" },
+              "fix_per_bug": { "type": "integer" },
+              "evaluator_reject": { "type": "integer" }
+            }
+          }
+        }
+      }
+    },
+    "i18n": {
+      "type": "object",
+      "properties": {
+        "locale_dir": { "type": "string", "default": "i18n/" },
+        "conclusion_pass": { "type": "string", "default": "PASS" },
+        "conclusion_fail": { "type": "string", "default": "NEEDS_REVISION" },
+        "acceptance_pass": { "type": "string", "default": "PASSED" },
+        "acceptance_fail": { "type": "string", "default": "FAILED" }
+      }
+    }
+  }
+}

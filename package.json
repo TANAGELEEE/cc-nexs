@@ -1,0 +1,22 @@
+{
+  "name": "cc-nexs",
+  "version": "0.2.0-dev",
+  "private": true,
+  "description": "Multi-role state-machine driven SOP for Claude Code, with pluggable presets.",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:nexs": "node scripts/build.mjs preset-nexs",
+    "build:minimal": "node scripts/build.mjs preset-minimal",
+    "clean": "rm -rf dist",
+    "install:local": "node scripts/install-local.mjs",
+    "install:local:minimal": "node scripts/install-local.mjs preset-minimal",
+    "test:hooks": "node --test packages/core/lib/*.test.mjs",
+    "validate:json": "node packages/core/lib/validate-json.mjs"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

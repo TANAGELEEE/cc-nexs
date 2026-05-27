@@ -1,0 +1,37 @@
+{
+  "description": "cc-nexs preset-nexs hooks: 角色边界、唯一人工 gate、合并主干前置检查。",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|Write|Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/role-boundary-guard.mjs\"",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/approval-gate-guard.mjs\"",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pre-merge-check.mjs\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

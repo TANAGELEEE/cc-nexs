@@ -1,0 +1,47 @@
+{
+  "states": {
+    "INIT": "Initialized, awaiting requirements",
+    "REQ_DRAFTED": "Requirements drafted, awaiting tech spec",
+    "SPEC_DRAFTED": "Spec drafted, awaiting review",
+    "SPEC_REVIEWING": "Spec under review",
+    "SPEC_NEEDS_REVISION": "Spec needs revision",
+    "SPEC_PENDING_HUMAN": "Awaiting human approval (the single human gate)",
+    "SPEC_APPROVED": "Human approved, entering implementation",
+    "SPRINT_KICKOFF": "Sprint kicked off",
+    "SPRINT_DEV": "Implementation in progress",
+    "SPRINT_REVIEW": "Code review in progress",
+    "SPRINT_TEST": "Testing in progress",
+    "SPRINT_FIX": "Fixing bugs",
+    "SPRINT_REGRESSION": "Regression testing",
+    "SPRINT_EVAL": "Acceptance evaluation",
+    "SPRINT_DONE": "Sprint done",
+    "ALL_SPRINTS_DONE": "All sprints done",
+    "FINAL_EVAL": "Final acceptance",
+    "COMPLETE": "Complete, ready to merge",
+    "TECH_LEAD_REVIEW": "Implementation path circuit-broken, re-evaluating"
+  },
+  "conclusions": {
+    "pass": "PASS",
+    "fail": "NEEDS_REVISION",
+    "acceptance_pass": "PASSED",
+    "acceptance_fail": "FAILED",
+    "test_pass": "PASS",
+    "test_fail": "BLOCKED"
+  },
+  "messages": {
+    "human_gate_summary_header": "🚦 Human checkpoint: spec passed review, awaiting approval",
+    "human_gate_approve": "Run /cc-nexs:approve-spec <id> to approve",
+    "human_gate_revise": "If unsatisfied, edit spec.md then re-run /cc-nexs:run <id>",
+    "circuit_breaker_review": "🛑 Circuit breaker: review repeatedly rejected, forcing spec re-evaluation",
+    "circuit_breaker_fix": "🛑 Circuit breaker: same bug fixed N times unsuccessfully, re-evaluating implementation",
+    "circuit_breaker_eval": "🛑 Circuit breaker: acceptance repeatedly failed, rolling back to spec stage",
+    "complete_summary_header": "✅ Pipeline complete"
+  },
+  "labels": {
+    "feature": "Feature",
+    "sprint": "Sprint",
+    "branch": "Branch",
+    "approved_by": "Approved by",
+    "approved_at": "Approved at"
+  }
+}

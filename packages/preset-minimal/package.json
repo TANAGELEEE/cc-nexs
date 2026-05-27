@@ -1,0 +1,11 @@
+{
+  "name": "@cc-nexs/preset-minimal",
+  "version": "0.2.0-dev",
+  "private": true,
+  "description": "Minimal generic preset for cc-nexs: 3 roles (Planner / Developer / Reviewer), Claude single-tool with subagent isolation, English docs, no language-stack assumptions.",
+  "main": "preset.yml",
+  "scripts": {
+    "build": "node ../../scripts/build.mjs preset-minimal",
+    "install:local": "node ../../scripts/install-local.mjs preset-minimal"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "_comment": "cc-nexs 单需求配置。orchestrator 启动时读取本文件决定流水线模式。",
+  "mode": "full",
+  "_mode_options": {
+    "full": "完整五方流程（Planner → SA → 人工 gate → Tech Lead × QA × SA 闭环 → Evaluator）",
+    "fast": "三角色单 sprint（Fullstack 一手包办 spec+code → Reviewer 评 spec → 人工 gate → Verifier 写+跑用例 → Reviewer 一次完成代码评审+契约验收）。比 full 少 ~50% 调用，适合单模块小改动",
+    "lite": "轻量流程（Tech Lead → 自测 → commit），跳过 spec 和 Evaluator，适合极小改动",
+    "hotfix": "Bug 修复流程，按 P0/P1/P2/P3 自动分档"
+  },
+  "_mode_选择建议": {
+    "用 full 当": "跨模块、含 DB schema 变更、涉及对外契约、合规风险、Sprint 切片 ≥ 2",
+    "用 fast 当": "单模块单接口、Sprint 切片 = 1、改动 ≤ 800 行 diff、无并发/事务复杂度"
+  },
+  "thresholds": {
+    "sa_code_revision": 3,
+    "qa_fix_per_bug": 3,
+    "evaluator_未通过": 2
+  },
+  "auto_squash_on_sprint_done": true,
+  "max_commits_per_sprint": 10,
+  "skip_human_gate": false,
+  "_skip_human_gate_warning": "true 时跳过 spec 评审后的人工 checkpoint。仅用于 demo 或紧急 hotfix，正常需求请保持 false。"
+}

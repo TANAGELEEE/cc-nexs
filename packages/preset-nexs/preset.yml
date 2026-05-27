@@ -1,0 +1,149 @@
+name: preset-nexs
+version: 0.3.0-dev
+description: 五方异构 SOP 预设。支持 full（五方异构）与 fast（三角色合并）两种模式，Java/Maven/Spring 栈默认，中文文档为主。多模块项目通过 cc-nexs.config.yml 的 paths_override 注入真实路径。
+language: zh-CN
+
+# 默认 enabled 列表（向后兼容）。orchestrator 会按 doc/<id>/config.json 的 mode 字段
+# 选用 modes.<mode>.enabled 覆盖；未声明 mode 时回退到 modes.full.enabled。
+roles:
+  enabled:
+    - repo-scout
+    - planner
+    - tech-lead
+    - sa
+    - qa
+    - evaluator
+
+  definitions:
+    # ===== full 模式角色 =====
+    repo-scout:
+      agent: agents/repo-scout-claude.md
+      tool: claude-subagent
+      alias: RepoScout
+      session_isolation: independent
+
+    planner:
+      agent: agents/planner-claude.md
+      tool: claude-subagent
+      alias: Planner
+      session_isolation: independent
+
+    tech-lead:
+      agent: agents/tech-lead-claude.md
+      tool: claude-subagent
+      alias: Tech Lead
+      session_isolation: independent
+
+    sa:
+      agent: agents/sa-codex.md
+      tool: codex
+      alias: SA
+
+    qa:
+      agent: agents/qa-codex.md
+      tool: codex
+      alias: QA
+
+    evaluator:
+      agent: agents/evaluator-codex.md
+      tool: codex
+      alias: Evaluator
+
+    # ===== 旁路角色（不进状态机循环，由独立命令触发）=====
+    compound:
+      agent: agents/compound-claude.md
+      tool: claude-subagent
+      alias: Compound
+      session_isolation: independent
+      # 旁路角色：仅在 /cc-nexs:compound 命令被显式调用时启动，状态机的 modes.*.enabled 不应包含 compound
+
+    # ===== fast 模式角色（合并版）=====
+    fullstack:
+      agent: agents/fullstack-claude.md
+      tool: claude-subagent
+      alias: Fullstack
+      session_isolation: independent
+
+    reviewer:
+      agent: agents/reviewer-codex.md
+      tool: codex
+      alias: Reviewer
+
+    verifier:
+      agent: agents/verifier-codex.md
+      tool: codex
+      alias: Verifier
+
+# 模式声明：每个 mode 列出自己的 enabled 列表与状态机骨架。
+# orchestrator 启动时读 doc/<id>/config.json.mode 选择对应分支。
+modes:
+  full:
+    description: 完整五方异构 + 现状勘察前置。Repo Scout 先扫 src/ 产 repo-context.md，再 Planner / Tech Lead / SA / QA / Evaluator 严格分离。
+    enabled:
+      - repo-scout
+      - planner
+      - tech-lead
+      - sa
+      - qa
+      - evaluator
+    state_machine: full
+    sprint_enabled: true
+
+  fast:
+    description: 单 sprint 三角色合并。Fullstack（Planner+Tech Lead）/ Reviewer（SA+Evaluator）/ Verifier（QA cases+run+regression）。
+    enabled:
+      - fullstack
+      - reviewer
+      - verifier
+    state_machine: fast
+    sprint_enabled: false      # fast 模式强制单 sprint，无需 sprint 切片
+    thresholds_override:
+      review_revision: 2       # 比 full 更严：2 轮即熔断
+      fix_per_bug: 2
+      evaluator_reject: 2
+
+stack:
+  type: java-maven
+  # 单模块默认值。多模块项目通过 cc-nexs.config.yml 的 paths_override.{build_cmd,test_cmd,src_paths} 覆盖。
+  build_cmd: "mvn compile -q"
+  test_cmd: "mvn test"
+  lint_cmd: ""
+  src_paths:
+    - "src/main/java/**"
+    - "**/src/main/java/**"
+    - "**/src/main/resources/**"
+  forbidden_patterns:
+    - regex: "[一-龥]"
+      excludes: ["//", "/\\*", "\\*", "log\\."]
+      description: "代码内禁中文字符串（注释和日志除外）"
+  custom_review_rules:
+    - "严禁 JdbcTemplate，必须通过 Service 层访问数据"
+    - "禁用 @Autowired，统一构造器注入（@RequiredArgsConstructor）"
+    - "Service 不写 Interface + Impl，直接具体类"
+    - "@Transactional 放 Service 层，不放 Controller"
+    - "所有 DB 表必须含 create_time / update_time 由 DB 自动维护"
+    - "Spring Bean 名全局唯一（@Bean(name) 显式名 OR 类名首字母小写）"
+    - "错误码遵循 BaseErrorEnums 5 位数字，前 2 位为模块前缀"
+    - "Entity 时间字段保留 Date / LocalDateTime；VO 必须 Long（毫秒时间戳）"
+
+paths:
+  doc_dir: "doc/{id}.{slug}/"
+  branch_pattern: "feature/{id}-{slug}"
+  bugs_dir: "bugs/"
+
+workflow:
+  sprint_enabled: true
+  human_gate_after: spec_reviewing_pass
+  thresholds:
+    review_revision: 3
+    fix_per_bug: 3
+    evaluator_reject: 2
+
+i18n:
+  locale_dir: "i18n/"
+  conclusion_pass: "PASS"
+  conclusion_fail: "NEEDS_REVISION"
+  acceptance_pass: "通过"
+  acceptance_fail: "未通过"
+  test_pass: "通过"
+  test_fail: "阻塞"

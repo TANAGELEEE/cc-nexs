@@ -1,0 +1,25 @@
+# 演示项目级 cc-nexs 配置。
+# 真实使用时放在你的项目根目录。
+
+preset: preset-nexs
+preset_path: "../../packages/preset-nexs"  # 演示用相对路径
+
+# 可选：覆盖 preset 的默认阈值
+thresholds:
+  review_revision: 3
+  fix_per_bug: 3
+  evaluator_reject: 2
+
+# 可选：项目本地化覆盖 preset 默认 language
+# language: zh-CN
+
+# 可选：项目级路径覆盖。
+# 公开发布的 preset 用通用占位符（src/main/java/**），
+# 在你自己的多模块项目里通过下面的 paths_override 注入真实路径，无需 fork preset。
+# paths_override:
+#   build_cmd: "cd backend && mvn compile -q"
+#   test_cmd: "cd backend && mvn test"
+#   src_paths:
+#     - "backend/module-a/src/main/java/**"
+#     - "backend/module-b/src/main/java/**"
+#     - "backend/**/src/main/resources/**"

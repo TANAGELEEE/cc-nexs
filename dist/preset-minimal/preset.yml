@@ -1,0 +1,65 @@
+name: preset-minimal
+version: 0.2.0-dev
+description: Minimal generic preset. Three roles. Claude-only (subagent isolation). No stack assumption. English by default.
+language: en-US
+
+roles:
+  enabled:
+    - planner
+    - developer
+    - reviewer
+
+  definitions:
+    planner:
+      agent: agents/planner.md
+      tool: claude-subagent
+      alias: Planner
+      session_isolation: independent
+
+    developer:
+      agent: agents/developer.md
+      tool: claude-subagent
+      alias: Developer
+      session_isolation: independent
+
+    reviewer:
+      agent: agents/reviewer.md
+      tool: claude-subagent
+      alias: Reviewer
+      session_isolation: independent
+
+stack:
+  type: generic
+  build_cmd: ""
+  test_cmd: ""
+  lint_cmd: ""
+  src_paths:
+    - "src/**"
+  forbidden_patterns: []
+  custom_review_rules:
+    - "Code is readable, intentions match implementation"
+    - "Error handling is present at boundaries (user input, external APIs)"
+    - "No dead code, no premature abstractions"
+    - "Tests exist for non-trivial logic"
+
+paths:
+  doc_dir: "doc/{id}.{slug}/"
+  branch_pattern: "feature/{id}-{slug}"
+  bugs_dir: "bugs/"
+
+workflow:
+  sprint_enabled: false
+  human_gate_after: spec_reviewing_pass
+  thresholds:
+    review_revision: 3
+    fix_per_bug: 3
+    evaluator_reject: 2
+
+i18n:
+  locale_dir: "i18n/"
+  conclusion_pass: "PASS"
+  conclusion_fail: "NEEDS_REVISION"
+  acceptance_pass: "PASSED"
+  acceptance_fail: "FAILED"
+  test_pass: "PASS"
+  test_fail: "BLOCKED"

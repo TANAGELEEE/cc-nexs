@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "cc-nexs progress.md state schema",
+  "description": "The structured state in progress.md (parsed from YAML front-matter or fenced yaml blocks).",
+  "type": "object",
+  "required": ["current_state", "updated_at"],
+  "properties": {
+    "current_state": { "type": "string" },
+    "updated_at": { "type": ["string", "null"] },
+    "feature_id": { "type": "string" },
+    "feature_slug": { "type": "string" },
+    "preset": { "type": "string" },
+    "counters": {
+      "type": "object",
+      "properties": {
+        "review_revision": { "type": "integer", "minimum": 0 },
+        "fix_per_bug": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "evaluator_reject": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "properties": {
+        "review_revision": { "type": "integer", "minimum": 1 },
+        "fix_per_bug": { "type": "integer", "minimum": 1 },
+        "evaluator_reject": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "sprint": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "total": { "type": "integer", "minimum": 0 },
+        "current": { "type": "integer", "minimum": 0 },
+        "status": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "enum": ["not_started", "in_progress", "done"]
+          }
+        }
+      }
+    },
+    "human_gate": {
+      "type": "object",
+      "properties": {
+        "approved_at": { "type": ["string", "null"] },
+        "approver": { "type": ["string", "null"] }
+      }
+    },
+    "history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ts", "from", "to"],
+        "properties": {
+          "ts": { "type": "string" },
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "human_required": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Items that require human action (deployment, approval, real-device tests, etc.)"
+    }
+  }
+}

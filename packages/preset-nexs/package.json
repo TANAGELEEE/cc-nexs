@@ -1,0 +1,11 @@
+{
+  "name": "@cc-nexs/preset-nexs",
+  "version": "0.2.0-dev",
+  "private": true,
+  "description": "5-role heterogeneous SOP preset for cc-nexs (Planner/Tech Lead/SA/QA/Evaluator), Java/Maven/Spring stack defaults, Chinese docs.",
+  "main": "preset.yml",
+  "scripts": {
+    "build": "node ../../scripts/build.mjs preset-nexs",
+    "install:local": "node ../../scripts/install-local.mjs preset-nexs"
+  }
+}

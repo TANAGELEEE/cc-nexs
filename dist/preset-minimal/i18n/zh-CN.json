@@ -1,0 +1,47 @@
+{
+  "states": {
+    "INIT": "已初始化，待填写需求",
+    "REQ_DRAFTED": "需求已写，待展开技术规范",
+    "SPEC_DRAFTED": "技术规范已写，待评审",
+    "SPEC_REVIEWING": "技术规范评审中",
+    "SPEC_NEEDS_REVISION": "技术规范需修订",
+    "SPEC_PENDING_HUMAN": "等待人工审核（唯一人工 gate）",
+    "SPEC_APPROVED": "人工已放行，进入实现阶段",
+    "SPRINT_KICKOFF": "Sprint 启动",
+    "SPRINT_DEV": "实现中",
+    "SPRINT_REVIEW": "代码评审中",
+    "SPRINT_TEST": "测试中",
+    "SPRINT_FIX": "修复中",
+    "SPRINT_REGRESSION": "回归中",
+    "SPRINT_EVAL": "验收中",
+    "SPRINT_DONE": "Sprint 完成",
+    "ALL_SPRINTS_DONE": "所有 Sprint 完成",
+    "FINAL_EVAL": "最终验收中",
+    "COMPLETE": "完成，可合并",
+    "TECH_LEAD_REVIEW": "实现路径熔断重评"
+  },
+  "conclusions": {
+    "pass": "PASS",
+    "fail": "NEEDS_REVISION",
+    "acceptance_pass": "通过",
+    "acceptance_fail": "未通过",
+    "test_pass": "通过",
+    "test_fail": "阻塞"
+  },
+  "messages": {
+    "human_gate_summary_header": "🚦 唯一人工 checkpoint：技术方案已通过评审，等待人工放行",
+    "human_gate_approve": "运行 /cc-nexs:approve-spec <编号> 放行",
+    "human_gate_revise": "不满意请修改 spec.md 后跑 /cc-nexs:run <编号>",
+    "circuit_breaker_review": "🛑 熔断：评审反复打回，强制重审方案",
+    "circuit_breaker_fix": "🛑 熔断：同 BUG 修复反复失败，重评实现路径",
+    "circuit_breaker_eval": "🛑 熔断：验收反复未通过，回退到方案阶段",
+    "complete_summary_header": "✅ 流水线完成"
+  },
+  "labels": {
+    "feature": "需求",
+    "sprint": "迭代",
+    "branch": "分支",
+    "approved_by": "放行人",
+    "approved_at": "放行时间"
+  }
+}

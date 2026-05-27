@@ -1,0 +1,27 @@
+{
+  "description": "cc-nexs preset-minimal hooks: 仅启用角色边界 + 人工 gate 两道。",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|Write|Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/role-boundary-guard.mjs\"",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/approval-gate-guard.mjs\"",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}

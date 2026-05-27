@@ -1,0 +1,13 @@
+{
+  "name": "cc-nexs-minimal",
+  "version": "0.2.0-dev",
+  "description": "cc-nexs minimal preset: 3 roles (Planner / Developer / Reviewer), Claude-only with subagent isolation, English by default, no language stack assumption.",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "plugin",
+    "sop",
+    "workflow",
+    "minimal"
+  ]
+}
