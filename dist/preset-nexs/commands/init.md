@@ -1,5 +1,5 @@
 ---
-description: 用模板初始化新需求目录。自动按 doc/ 下已有编号续号，自动从需求描述生成 slug。默认在 .worktrees/<id>-<slug>/ 创建独立 git worktree，多需求可并行。
+description: 用模板初始化新需求目录。自动按 all-docs/doc/ 下已有编号续号，自动从需求描述生成 slug。默认在 .worktrees/<id>-<slug>/ 创建独立 git worktree，多需求可并行。
 allowed-tools: Read, Write, Edit, Bash, Glob, Skill
 argument-hint: <需求描述> [--mode=full|fast] [--id=<编号>] [--slug=<短名>] [--brainstorm] [--no-worktree]
 ---
@@ -60,17 +60,17 @@ echo "🛠️  模式: ${MODE}"
 
 ### 2. 决定编号
 
-如果用户传了 `--id=<X>`，直接用。否则扫描 `doc/` 下已有目录续号：
+如果用户传了 `--id=<X>`，直接用。否则扫描 `all-docs/doc/` 下已有目录续号：
 
 ```bash
 # 解析显式 --id 参数
 ID=$(echo "$@" | grep -oE -- '--id=[^ ]+' | cut -d= -f2)
 
 if [ -z "$ID" ]; then
-  # 自动续号：扫 doc/<数字>.<slug>/ 形式
-  if [ -d doc ]; then
-    LAST=$(ls -d doc/*/ 2>/dev/null \
-      | grep -oE 'doc/[0-9]+\.' \
+  # 自动续号：扫 all-docs/doc/<数字>.<slug>/ 形式
+  if [ -d all-docs/doc ]; then
+    LAST=$(ls -d all-docs/doc/*/ 2>/dev/null \
+      | grep -oE 'all-docs/doc/[0-9]+\.' \
       | grep -oE '[0-9]+' \
       | sort -n \
       | tail -1)
@@ -91,7 +91,7 @@ echo "📦 编号: ${ID}"
 ```
 
 **续号规则**：
-- 扫 `doc/<数字>.<任意>/` 取最大数字 + 1
+- 扫 `all-docs/doc/<数字>.<任意>/` 取最大数字 + 1
 - 不连续编号不补缺（已有 01、03、05 → 下一个是 06，不是 02）
 - 默认两位零填充
 - 用户带 `--id` 时按用户给的（支持 `14.2`、`auth-001` 这种带版本/前缀的格式）
@@ -136,11 +136,11 @@ SLUG=$(echo "$@" | grep -oE -- '--slug=[^ ]+' | cut -d= -f2)
 
 ### 4. 检查目录冲突（在主仓库）
 
-无论是否走 worktree，都先在**主仓库**预检 doc/<id>.<slug>/ 是否已存在——避免建完 worktree 才发现冲突。
+无论是否走 worktree，都先在**主仓库**预检 all-docs/doc/<id>.<slug>/ 是否已存在——避免建完 worktree 才发现冲突。
 
 ```bash
 REPO_ROOT=$(git rev-parse --show-toplevel)
-REQ_REL="doc/${ID}.${SLUG}"
+REQ_REL="all-docs/doc/${ID}.${SLUG}"
 REQ_PRE="${REPO_ROOT}/${REQ_REL}"
 
 if [ -d "$REQ_PRE" ]; then
@@ -263,16 +263,20 @@ BRANCH="feature/${ID}-${SLUG}"
 
 if [ "$BRANCH_CREATED" != "1" ]; then
   CURRENT=$(git -C "$WORK_DIR" branch --show-current)
+  # 始终从最新远端主分支拉取
+  DEFAULT_BRANCH=$(git -C "$WORK_DIR" remote show origin 2>/dev/null | sed -n 's/.*HEAD branch: //p')
+  [ -z "$DEFAULT_BRANCH" ] && DEFAULT_BRANCH="master"
+  git -C "$WORK_DIR" fetch origin "$DEFAULT_BRANCH" --quiet 2>/dev/null || true
   case "$CURRENT" in
     master|main|test)
-      git -C "$WORK_DIR" checkout -b "$BRANCH"
+      git -C "$WORK_DIR" checkout -b "$BRANCH" "origin/$DEFAULT_BRANCH"
       ;;
     "$BRANCH")
       echo "已在 ${BRANCH} 分支，无需切换"
       ;;
     *)
       echo "⚠️ 当前分支 ${CURRENT}，未自动切换"
-      echo "   建议手动: git -C ${WORK_DIR} checkout -b ${BRANCH}"
+      echo "   建议手动: git -C ${WORK_DIR} checkout -b ${BRANCH} origin/${DEFAULT_BRANCH}"
       ;;
   esac
 fi
@@ -336,28 +340,28 @@ fi
 ```bash
 # 默认 full 模式（自动续号 + 自动 slug）
 /cc-nexs:init 添加 /api/health 健康检查接口
-# → doc/01.api-health-check/  mode=full
+# → all-docs/doc/01.api-health-check/  mode=full
 
 # fast 模式：单接口小改动
 /cc-nexs:init 修支付偶现 500 --mode=fast
-# → doc/02.payment-500-fix/  mode=fast
+# → all-docs/doc/02.payment-500-fix/  mode=fast
 
 # fast 模式 + 强制 slug
 /cc-nexs:init '修支付偶现 500' --mode=fast --slug=payment-500-fix
-# → doc/03.payment-500-fix/  mode=fast
+# → all-docs/doc/03.payment-500-fix/  mode=fast
 
 # full 模式 + 带版本号
 /cc-nexs:init 重做注册流程 --id=14.2
-# → doc/14.2.user-register-revamp/  mode=full
+# → all-docs/doc/14.2.user-register-revamp/  mode=full
 
 # 一条命令到位：init + 自动进入 brainstorming 对话
 /cc-nexs:init "做个订单导出后台" --brainstorm
-# → doc/05.order-export-admin/  mode=full
+# → all-docs/doc/05.order-export-admin/  mode=full
 # → 立即进入 Socratic 对话补全 requirements.md
 
 # 关 worktree（旧行为）：直接在当前目录切分支
 /cc-nexs:init "微调首页文案" --no-worktree
-# → doc/06.homepage-copy-tweak/  mode=full
+# → all-docs/doc/06.homepage-copy-tweak/  mode=full
 # → git checkout -b feature/06-homepage-copy-tweak（在当前目录）
 ```
 

@@ -83,7 +83,7 @@ Test commands:
 ⚠️ 没有 module 命中——使用顶层 build_cmd / test_cmd
    常见原因：
    - cc-nexs.config.yml 没声明 paths_override.modules
-   - 本次需求只动了 doc/，没改源码
+   - 本次需求只动了 all-docs/doc/，没改源码
    - module match glob 写错了（用 /cc-nexs:build --dry-run 看 changed 列表对照检查）
 ```
 
@@ -188,4 +188,4 @@ paths_override:
 | `matched=[]` 但确实改了源码 | match glob 不对 | `/cc-nexs:build --dry-run` 看 changed 列表，对照修 glob |
 | `git diff` 报 "unknown revision main" | 仓库主分支叫 master | yml 加 `paths_override.diff_base: master` |
 | 命令里有 `cd X &&` 报错 | shell 语法 | selector 用 `bash -c` 跑，原生支持 |
-| 改了 doc/ 也跑了 build | doc 默认不命中任何 module → fallback 顶层 | 顶层 `build_cmd: ""` 留空就不跑 |
+| 改了 all-docs/doc/ 也跑了 build | all-docs/doc 默认不命中任何 module → fallback 顶层 | 顶层 `build_cmd: ""` 留空就不跑 |

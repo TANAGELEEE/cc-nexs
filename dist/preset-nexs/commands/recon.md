@@ -6,7 +6,7 @@ argument-hint: [需求编号]
 
 # /cc-nexs:recon
 
-启动 Repo Scout 子代理，扫描代码库现状，产出 `doc/<编号>.<短名>/repo-context.md`，给 Planner 当 spec 的现状对照基础。
+启动 Repo Scout 子代理，扫描代码库现状，产出 `all-docs/doc/<编号>.<短名>/repo-context.md`，给 Planner 当 spec 的现状对照基础。
 
 参数：
 
@@ -28,9 +28,9 @@ fi
 ### 2. 定位需求目录
 
 ```bash
-REQ_DIR=$(ls -d doc/${ID}.*/ 2>/dev/null | head -1)
+REQ_DIR=$(ls -d all-docs/doc/${ID}.*/ 2>/dev/null | head -1)
 if [ -z "$REQ_DIR" ]; then
-  echo "❌ 需求目录不存在: doc/${ID}.*/"
+  echo "❌ 需求目录不存在: all-docs/doc/${ID}.*/"
   echo "👉 先跑: /cc-nexs:init <需求描述>"
   exit 1
 fi

@@ -19,7 +19,7 @@ argument-hint: <phase: cases|run|regression> [需求编号] [--sprint=N]
 PHASE=$1
 REQ_NUM=$2
 SPRINT=$(echo "$@" | grep -oE 'sprint=[0-9]+' | cut -d= -f2)
-REQ_DIR=$(ls -d doc/${REQ_NUM}*/ | head -1)
+REQ_DIR=$(ls -d all-docs/doc/${REQ_NUM}*/ | head -1)
 ```
 
 ### 2. 按 phase 分派

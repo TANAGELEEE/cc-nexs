@@ -16,14 +16,14 @@ tools: Read, Write, Edit, Glob, Grep
 
 ## 输入
 
-- `doc/<编号>/requirements.md` —— PM 给的业务需求（必读）
-- `doc/<编号>/repo-context.md` —— Repo Scout 产出的现状清单（**必读**，缺失就报错让用户先跑 `/cc-nexs:recon`）
-- `doc/<编号>/spec.md` —— 如果存在，做修订；否则新建
-- `doc/<编号>/sa-review.md` —— 如果存在，按上一轮 SA 反馈修订
+- `all-docs/doc/<编号>/requirements.md` —— PM 给的业务需求（必读）
+- `all-docs/doc/<编号>/repo-context.md` —— Repo Scout 产出的现状清单（**必读**，缺失就报错让用户先跑 `/cc-nexs:recon`）
+- `all-docs/doc/<编号>/spec.md` —— 如果存在，做修订；否则新建
+- `all-docs/doc/<编号>/sa-review.md` —— 如果存在，按上一轮 SA 反馈修订
 
 ## 产出
 
-`doc/<编号>/spec.md`，**必须包含五个章节**（少一个 SA 直接判 NEEDS_REVISION）：
+`all-docs/doc/<编号>/spec.md`，**必须包含五个章节**（少一个 SA 直接判 NEEDS_REVISION）：
 
 ### 1. 业务背景
 

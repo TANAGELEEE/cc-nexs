@@ -17,7 +17,7 @@ argument-hint: [需求编号] [可选: --revise]
 ### 1. 定位需求目录
 
 ```bash
-REQ_DIR=$(ls -d doc/${1}*/ 2>/dev/null | head -1)
+REQ_DIR=$(ls -d all-docs/doc/${1}*/ 2>/dev/null | head -1)
 [ -z "$REQ_DIR" ] && { echo "❌ 需求目录不存在"; exit 1; }
 ```
 
