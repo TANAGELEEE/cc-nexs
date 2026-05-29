@@ -6,7 +6,7 @@ argument-hint: <feature_id> <feature_slug> [--mode=full|fast] [--sprints=N] [--n
 
 # /cc-nexs:init
 
-Bootstrap a feature directory under `doc/`. By default creates an isolated git worktree at `.worktrees/<id>-<slug>/` so multiple features can be developed in parallel.
+Bootstrap a feature directory under `all-docs/doc/`. By default creates an isolated git worktree at `.worktrees/<id>-<slug>/` so multiple features can be developed in parallel.
 
 ## Args
 
@@ -28,9 +28,9 @@ Bootstrap a feature directory under `doc/`. By default creates an isolated git w
    - On `STATUS=created|reused`: `WORK_DIR=$WORKTREE_PATH`, branch already created by skill.
    - With `--no-worktree`: `WORK_DIR=$REPO_ROOT`, branch created in step 8.
 4. Resolve preset templates dir from `${CLAUDE_PLUGIN_ROOT}/templates/`.
-5. Copy all template files to `${WORK_DIR}/doc/<id>.<slug>/`:
+5. Copy all template files to `${WORK_DIR}/all-docs/doc/<id>.<slug>/`:
    ```bash
-   REQ_DIR="${WORK_DIR}/doc/${feature_id}.${feature_slug}"
+   REQ_DIR="${WORK_DIR}/all-docs/doc/${feature_id}.${feature_slug}"
    mkdir -p "$REQ_DIR"
    cp -r ${CLAUDE_PLUGIN_ROOT}/templates/* "${REQ_DIR}/"
    ```
@@ -58,7 +58,7 @@ Bootstrap a feature directory under `doc/`. By default creates an isolated git w
    ```
 9. Print:
    ```
-   ✅ Initialized doc/<id>.<slug>/
+   ✅ Initialized all-docs/doc/<id>.<slug>/
       Mode:     <full | fast>
       Templates copied: <N> files
       Branch:   feature/<id>-<slug>
@@ -66,7 +66,7 @@ Bootstrap a feature directory under `doc/`. By default creates an isolated git w
 
    👉 Next:
       1. cd <WORK_DIR>             ← worktree mode only; --no-worktree skips this
-      2. Edit doc/<id>.<slug>/requirements.md (business needs)
+      2. Edit all-docs/doc/<id>.<slug>/requirements.md (business needs)
       3. Run /cc-nexs:run <id> to start the pipeline
    ```
 

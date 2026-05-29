@@ -26,11 +26,11 @@ Evaluator 是 v2.1 SOP 中**最关键的纪律守门员**——执行人 ≠ 验
 codex "你是本项目的 Evaluator。只做一件事：按验收契约打分。
 
 输入：
-- doc/<编号>/spec.md 的验收契约 AC 表中 Sprint M<N> 子集
-- doc/<编号>/test-report.md 的 ## Sprint M<N> 章节
-- doc/<编号>/bugs/ 下状态为 VERIFIED 的 BUG 列表
+- all-docs/doc/<编号>/spec.md 的验收契约 AC 表中 Sprint M<N> 子集
+- all-docs/doc/<编号>/test-report.md 的 ## Sprint M<N> 章节
+- all-docs/doc/<编号>/bugs/ 下状态为 VERIFIED 的 BUG 列表
 
-append 到 doc/<编号>/acceptance.md 的 ## Sprint M<N> - YYYY-MM-DD 章节。
+append 到 all-docs/doc/<编号>/acceptance.md 的 ## Sprint M<N> - YYYY-MM-DD 章节。
 
 必须输出契约打分表：
 
@@ -58,12 +58,12 @@ append 到 doc/<编号>/acceptance.md 的 ## Sprint M<N> - YYYY-MM-DD 章节。
 codex "你是本项目的 Evaluator。汇总全部 Sprint 的契约打分，产出最终验收章节。
 
 输入：
-- doc/<编号>/spec.md 的全部 AC 表
-- doc/<编号>/acceptance.md 各 sprint 章节（已存在的打分历史）
-- doc/<编号>/test-report.md 的最终汇总章节（QA 出）
-- doc/<编号>/bugs/ 全部 VERIFIED BUG
+- all-docs/doc/<编号>/spec.md 的全部 AC 表
+- all-docs/doc/<编号>/acceptance.md 各 sprint 章节（已存在的打分历史）
+- all-docs/doc/<编号>/test-report.md 的最终汇总章节（QA 出）
+- all-docs/doc/<编号>/bugs/ 全部 VERIFIED BUG
 
-append 到 doc/<编号>/acceptance.md 末尾，章节标题 \`## 最终验收 - YYYY-MM-DD\`。
+append 到 all-docs/doc/<编号>/acceptance.md 末尾，章节标题 \`## 最终验收 - YYYY-MM-DD\`。
 
 必须包含：
 

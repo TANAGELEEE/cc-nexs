@@ -22,7 +22,7 @@ REQ_NUM=$1
 SCOPE=$(echo "$@" | grep -oE 'scope=[a-z]+' | cut -d= -f2)
 SCOPE=${SCOPE:-sprint}
 SPRINT=$(echo "$@" | grep -oE 'sprint=[0-9]+' | cut -d= -f2)
-REQ_DIR=$(ls -d doc/${REQ_NUM}*/ | head -1)
+REQ_DIR=$(ls -d all-docs/doc/${REQ_NUM}*/ | head -1)
 ```
 
 ### 2. 校验前置

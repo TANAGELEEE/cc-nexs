@@ -20,7 +20,7 @@ argument-hint: [需求编号] [可选: --phase=spec|build|fix --bug=BUG-id]
 
 ### 1. 校验 mode
 
-读 `doc/<编号>/config.json`，必须 `mode=fast`。
+读 `all-docs/doc/<编号>/config.json`，必须 `mode=fast`。
 
 ```bash
 MODE=$(grep -oE '"mode"\s*:\s*"[^"]*"' "${REQ_DIR}config.json" | head -1 | grep -oE '"[^"]*"$' | tr -d '"')

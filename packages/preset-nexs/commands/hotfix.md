@@ -138,7 +138,7 @@ fi
 ```
 ⚠️ 此 BUG 已超出 hotfix 边界，建议走完整 SOP：
   原因: <具体哪条触发>
-  下一步: 把 BUG 转化为新需求 doc/<编号>，跑 /cc-nexs:run
+  下一步: 把 BUG 转化为新需求 all-docs/doc/<编号>，跑 /cc-nexs:run
 ```
 
 ### 4. 输出
@@ -152,4 +152,30 @@ fi
    BUG 状态: VERIFIED
    <P0/P1 时输出 Evaluator 验收结果 + 回归用例 ID>
    <已上线时输出回滚步骤 append 位置>
+
+📄 all-docs 已提交: docs: <id> hotfix BUG-<N> 修复记录
+
+📦 Push & MR（代码仓库）:
+   git push -u origin <BRANCH>
+   创建两个 MR（不自动合并）:
+   ① <BRANCH> → test    <MR_URL_TEST>
+   ② <BRANCH> → master  <MR_URL_MASTER>
+   建议顺序：先合 test → 测试通过 → 再合 master
 ```
+
+### 5. Doc repo commit
+
+hotfix 产生的 BUG 文件写入 `all-docs/doc/{原需求编号}/bugs/`，完成后自动提交到 all-docs 仓库 master：
+
+```bash
+DOC_REPO="all-docs"
+if git -C "$DOC_REPO" rev-parse --git-dir >/dev/null 2>&1; then
+  git -C "$DOC_REPO" add "doc/<原需求编号>/"
+  if ! git -C "$DOC_REPO" diff --cached --quiet; then
+    git -C "$DOC_REPO" commit -m "docs: <id> hotfix BUG-<N> 修复记录"
+    git -C "$DOC_REPO" push origin master || echo "⚠️ all-docs push 失败，不阻塞主流程"
+  fi
+fi
+```
+
+MR URL 生成逻辑同 `/cc-nexs:run` COMPLETE 段（自动 detect remote 域名，GitHub 用 compare URL，GitLab 用 merge_requests/new）。

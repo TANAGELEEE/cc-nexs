@@ -20,7 +20,7 @@ argument-hint: <mode: initial|regression> [需求编号]
 ```bash
 VMODE=$1
 REQ_NUM=$2
-REQ_DIR=$(ls -d doc/${REQ_NUM}*/ | head -1)
+REQ_DIR=$(ls -d all-docs/doc/${REQ_NUM}*/ | head -1)
 PMODE=$(grep -oE '"mode"\s*:\s*"[^"]*"' "${REQ_DIR}config.json" | head -1 | grep -oE '"[^"]*"$' | tr -d '"')
 [ "$PMODE" != "fast" ] && {
   echo "❌ /cc-nexs:verify 仅 fast 模式可用，当前 mode=$PMODE"

@@ -25,10 +25,10 @@ fast 模式合并 Planner + Tech Lead 进入同一 session。理由：
 ### mode = SPEC_DRAFTED 之前（即从 REQ_DRAFTED 启动）
 
 **必读输入**（缺一不可）：
-- `doc/<id>/requirements.md` —— 业务诉求
-- `doc/<id>/repo-context.md` —— Repo Scout 现状清单（fast 模式由 `/cc-nexs:fullstack --phase=spec` 命令兜底保证存在；缺失则立即停手让用户先跑 `/cc-nexs:recon`）
+- `all-docs/doc/<id>/requirements.md` —— 业务诉求
+- `all-docs/doc/<id>/repo-context.md` —— Repo Scout 现状清单（fast 模式由 `/cc-nexs:fullstack --phase=spec` 命令兜底保证存在；缺失则立即停手让用户先跑 `/cc-nexs:recon`）
 
-读完输入后，产 `doc/<id>/spec.md`，必须含五章节：
+读完输入后，产 `all-docs/doc/<id>/spec.md`，必须含五章节：
 
 1. 业务背景（≤ 200 字摘录 requirements）
 2. 技术方案（含关键决策标 ⚠️ 或【取舍】，便于人工 gate 摘要抓取）—— **必须点名 repo-context 中可复用的既有 Service/类/表**
@@ -41,7 +41,7 @@ fast 模式合并 Planner + Tech Lead 进入同一 session。理由：
 
 ### mode = SPEC_APPROVED 之后（实现阶段）
 
-读 `doc/<id>/spec.md` 全部 AC，开始实现：
+读 `all-docs/doc/<id>/spec.md` 全部 AC，开始实现：
 
 - 在 feature/<编号>-<短名> 分支下编码
 - 实现完成后**当 session 内**同步：
@@ -63,7 +63,7 @@ commit 格式：`feat: <id> M1 <模块> - <简述>`，单 commit 完成全部实
 
 Reviewer 或 Verifier 报 BUG / NEEDS_REVISION 时进入此模式：
 
-- 读 `doc/<id>/bugs/BUG-<n>.md` 或 `sa-code-review.md` 末轮反馈
+- 读 `all-docs/doc/<id>/bugs/BUG-<n>.md` 或 `sa-code-review.md` 末轮反馈
 - 精准修复，避免顺手重构
 - BUG 文件状态置 `FIXED`，commit 格式 `fix(<模块>): <简述> (BUG-<n>)`
 - mvn compile 必须 = 0

@@ -24,7 +24,7 @@ cc-nexs 按 `config.json.mode` 选择两套角色：
 
 Planner 仍**禁读 src/**——这是身份隔离的基础。但为了避免 Planner 在真空里设计 spec，引入 **Repo Scout** 作为前置勘察员：
 
-- Repo Scout 可以读 src/，但**只能**产出 `doc/<id>/repo-context.md`（事实清单），不能写 spec/code/progress.md
+- Repo Scout 可以读 src/，但**只能**产出 `all-docs/doc/<id>/repo-context.md`（事实清单），不能写 spec/code/progress.md
 - Planner 必读 repo-context.md（与 requirements.md 同级）
 - Planner 看到的是 Repo Scout 浓缩过的事实清单，已不是代码
 
@@ -93,10 +93,10 @@ SA 在评审代码 diff 时，会检查"这个 commit 是不是 Tech Lead 角色
 | **Session** | 独立 |
 | **入口 command** | `/cc-nexs:compound`（旁路，不入状态机） |
 | **agent 文件** | `agents/compound-claude.md` |
-| **职责** | 读完成需求 doc/<id>/* 把"非显然教训"沉淀到 `docs/solutions/<topic>.md` |
-| **可读** | doc/<id>/ 全部文档（spec / sa-* / bugs / test-report / acceptance / repo-context / progress）+ 既有 docs/solutions/*.md |
-| **可写** | docs/solutions/<topic>.md（新建或 Edit）+ doc/<id>/compound-summary.md |
-| **禁写** | spec / src/ / progress / sa-*.md / acceptance / 任何 doc/<id>/ 历史档案 |
+| **职责** | 读完成需求 all-docs/doc/<id>/* 把"非显然教训"沉淀到 `docs/solutions/<topic>.md` |
+| **可读** | all-docs/doc/<id>/ 全部文档（spec / sa-* / bugs / test-report / acceptance / repo-context / progress）+ 既有 docs/solutions/*.md |
+| **可写** | docs/solutions/<topic>.md（新建或 Edit）+ all-docs/doc/<id>/compound-summary.md |
+| **禁写** | spec / src/ / progress / sa-*.md / acceptance / 任何 all-docs/doc/<id>/ 历史档案 |
 
 **强信号过滤**——必须满足以下任一才允许产出 solution，否则在 compound-summary.md 写"跳过"：
 1. 同 BUG 修 ≥ 2 次

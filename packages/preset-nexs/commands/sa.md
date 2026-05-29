@@ -19,7 +19,7 @@ argument-hint: <target: spec|cases|code> [需求编号] [可选: --sprint=N]
 TARGET=$1
 REQ_NUM=$2
 SPRINT=$(echo "$@" | grep -oE 'sprint=[0-9]+' | cut -d= -f2)
-REQ_DIR=$(ls -d doc/${REQ_NUM}*/ | head -1)
+REQ_DIR=$(ls -d all-docs/doc/${REQ_NUM}*/ | head -1)
 ```
 
 ### 2. 按 target 分派
@@ -52,7 +52,7 @@ append 到 ${REQ_DIR}sa-test-review.md（## Sprint M${SPRINT} Round N 分隔）
 
 ```bash
 DIFF_FILE=/tmp/review-m${SPRINT}-a.diff
-git diff main...HEAD -- "src/main/java/**/m${SPRINT}/**" "src/main/resources/**" "doc/${REQ_NUM}*/*.sql" > $DIFF_FILE
+git diff main...HEAD -- "src/main/java/**/m${SPRINT}/**" "src/main/resources/**" "all-docs/doc/${REQ_NUM}*/*.sql" > $DIFF_FILE
 LINES=$(wc -l < $DIFF_FILE)
 
 if [ $LINES -gt 1500 ]; then

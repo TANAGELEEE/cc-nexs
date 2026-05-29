@@ -20,7 +20,7 @@ argument-hint: <target: spec|accept> [需求编号]
 ```bash
 TARGET=$1
 REQ_NUM=$2
-REQ_DIR=$(ls -d doc/${REQ_NUM}*/ | head -1)
+REQ_DIR=$(ls -d all-docs/doc/${REQ_NUM}*/ | head -1)
 MODE=$(grep -oE '"mode"\s*:\s*"[^"]*"' "${REQ_DIR}config.json" | head -1 | grep -oE '"[^"]*"$' | tr -d '"')
 [ "$MODE" != "fast" ] && {
   echo "❌ /cc-nexs:review 仅 fast 模式可用，当前 mode=$MODE"

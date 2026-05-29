@@ -12,7 +12,7 @@ This command is the generic orchestrator. It loads `cc-nexs.config.yml` + the ac
 
 ## Step -1: Worktree sanity check
 
-cc-nexs `init` defaults to creating an isolated worktree at `<repo>/.worktrees/<id>-<slug>/`. `run` must be executed **inside that worktree**, otherwise state writes (progress.md, doc/*.md) land on the wrong branch.
+cc-nexs `init` defaults to creating an isolated worktree at `<repo>/.worktrees/<id>-<slug>/`. `run` must be executed **inside that worktree**, otherwise state writes (progress.md, all-docs/doc/*.md) land on the wrong branch.
 
 ```bash
 REPO_ROOT=$(git rev-parse --show-toplevel)
@@ -49,11 +49,11 @@ fi
 
 ```bash
 if [ -n "$1" ]; then
-  REQ_DIR=$(ls -d doc/${1}*/ 2>/dev/null | head -1)
+  REQ_DIR=$(ls -d all-docs/doc/${1}*/ 2>/dev/null | head -1)
 else
-  REQ_DIR=$(ls -d doc/*/ 2>/dev/null | grep -v _templates | head -1)
+  REQ_DIR=$(ls -d all-docs/doc/*/ 2>/dev/null | grep -v _templates | head -1)
 fi
-[ -z "$REQ_DIR" ] && { echo "No feature directory found under doc/"; exit 1; }
+[ -z "$REQ_DIR" ] && { echo "No feature directory found under all-docs/doc/"; exit 1; }
 PROGRESS="${REQ_DIR}progress.md"
 ```
 
@@ -234,13 +234,78 @@ No other condition causes the orchestrator to stop and wait for user input.
 cc-nexs does not auto-remove the worktree — the user might still want to run end-to-end checks, hotfix, or rebase. Print the manual cleanup recipe:
 
 ```
-📦 Worktree cleanup (manual; run from main repo):
-   1. Push branch and merge feature/<id>-<slug> into main via PR/merge.
-   2. cd <REPO_ROOT>                   # back to main repo
-   3. git worktree remove .worktrees/<id>-<slug>
-   4. git branch -d feature/<id>-<slug>   # only when fully merged
+📦 Push & MR (manual):
+   1. git push -u origin <BRANCH>
+   2. 创建两个 MR（不自动合并）:
+      ① <BRANCH> → test    <MR_URL_TEST>
+      ② <BRANCH> → master  <MR_URL_MASTER>
+      建议顺序：先合 test → 测试通过 → 再合 master
+   3. 合并完成后清理 worktree:
+      cd <REPO_ROOT>
+      git worktree remove .worktrees/<id>-<slug>
+      git branch -d <BRANCH>
    或保留 worktree 继续做 hotfix / 二次验证。
 ```
 
-Where `<REPO_ROOT>` is the path printed in Step -1. Do not actually run `git worktree remove` — let the user decide.
+### Doc repo commit (always when reached COMPLETE or any doc file was written)
+
+`all-docs/` 是独立 git 仓库，文档变更需要在其中单独提交。每次状态机推进产生文档写入后，执行以下步骤：
+
+```bash
+DOC_REPO="all-docs"
+DOC_FEATURE_DIR="all-docs/doc/<id>.<slug>"
+
+# 检测 all-docs 是否是独立 git 仓库
+if [ -d "${DOC_REPO}/.git" ] || git -C "$DOC_REPO" rev-parse --git-dir >/dev/null 2>&1; then
+  cd "$DOC_REPO"
+  git add "doc/<id>.<slug>/"
+  
+  # 有变更才 commit
+  if ! git diff --cached --quiet; then
+    git commit -m "docs: <id> <当前阶段简述>"
+    git push origin master
+    echo "📄 all-docs 已提交并推送到 master"
+  else
+    echo "📄 all-docs 无新变更"
+  fi
+  cd -
+fi
+```
+
+**时机**：
+- 每个状态机 step 完成后（写了 spec.md / sa-review.md / test-report.md 等任何 doc 文件时）
+- COMPLETE 终态时做最后一次兜底 commit（确保不遗漏）
+
+**commit message 规范**：
+- `docs: <id> planner 产出 spec + 验收契约`
+- `docs: <id> SA 评审 Round 1 PASS`
+- `docs: <id> QA 测试报告 Sprint M1`
+- `docs: <id> Evaluator 验收通过`
+- `docs: <id> hotfix BUG-<N> 修复记录`
+
+**注意**：
+- all-docs 直接提交 master，不建 feature 分支
+- `git push` 失败时不阻塞主流程，打印警告继续
+- 不要把代码仓库的文件误提交到 all-docs（`git add` 只点名 `doc/<id>.<slug>/`）
+
+MR URL 生成逻辑（由 agent 在输出时计算，针对**代码仓库**）：
+
+```bash
+REMOTE_URL=$(git remote get-url origin)
+# 去掉 .git 后缀、ssh 前缀统一为 https
+REPO_URL=$(echo "$REMOTE_URL" | sed -E 's|^git@([^:]+):|https://\1/|; s|\.git$||')
+HOST=$(echo "$REPO_URL" | sed -E 's|https://([^/]+)/.*|\1|')
+
+if echo "$HOST" | grep -qiE "github"; then
+  # GitHub: compare URL
+  MR_URL_TEST="${REPO_URL}/compare/test...${BRANCH}?expand=1"
+  MR_URL_MASTER="${REPO_URL}/compare/master...${BRANCH}?expand=1"
+elif echo "$HOST" | grep -qiE "gitlab"; then
+  # GitLab: merge_requests/new
+  MR_URL_TEST="${REPO_URL}/-/merge_requests/new?merge_request[source_branch]=${BRANCH}&merge_request[target_branch]=test"
+  MR_URL_MASTER="${REPO_URL}/-/merge_requests/new?merge_request[source_branch]=${BRANCH}&merge_request[target_branch]=master"
+fi
+```
+
+Where `<REPO_ROOT>` is the path printed in Step -1. Do not actually run `git worktree remove` or `git push` for the code repo — let the user decide. The doc repo push is automatic.
 

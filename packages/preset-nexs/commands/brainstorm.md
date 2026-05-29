@@ -38,9 +38,9 @@ fi
 ### 2. 定位需求目录
 
 ```bash
-REQ_DIR=$(ls -d doc/${ID}.*/ 2>/dev/null | head -1)
+REQ_DIR=$(ls -d all-docs/doc/${ID}.*/ 2>/dev/null | head -1)
 if [ -z "$REQ_DIR" ]; then
-  echo "❌ 需求目录不存在: doc/${ID}.*/"
+  echo "❌ 需求目录不存在: all-docs/doc/${ID}.*/"
   echo "👉 先跑: /cc-nexs:init <需求描述>"
   exit 1
 fi

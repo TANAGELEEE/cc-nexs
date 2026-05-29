@@ -6,7 +6,7 @@
 
 | 状态 | 入态前置（必满足） | 出态产物（必产出） | 解析判据（orchestrator 用） |
 |------|-------------------|-------------------|---------------------------|
-| INIT | `doc/<编号>/` 目录存在；本目录至少含 templates 文件骨架 | `requirements.md` 非空 | 文件大小 > 100 字节 |
+| INIT | `all-docs/doc/<编号>/` 目录存在；本目录至少含 templates 文件骨架 | `requirements.md` 非空 | 文件大小 > 100 字节 |
 | REQ_DRAFTED | `requirements.md` 非空 | `repo-context.md` 含 8 章节、至少一条带行号引用 | grep `## .*(领域关键词\|同类配置\|风险提示)` |
 | RECON_DONE | `repo-context.md` 章节齐全 | `spec.md` 含五章节，"现状对照"小节非空 | grep `## (业务背景\|技术方案\|影响范围\|验收契约\|Sprint 切片)` + grep `### 现状对照` |
 | SPEC_DRAFTED | `spec.md` 五章节齐全；AC ≥ 5 条；"现状对照"小节非空 | `sa-review.md` 末尾结论行 | `tail -20 sa-review.md \| grep -E '^结论:'` |
@@ -33,7 +33,7 @@
 
 ```
 [Day 1]
-人:  cp -r templates/ doc/01.feature/ && 填 requirements.md
+人:  cp -r templates/ all-docs/doc/01.feature/ && 填 requirements.md
 人:  /cc-nexs:run 01
 机:  INIT → REQ_DRAFTED → RECON_DONE → SPEC_DRAFTED
      先调起 Repo Scout session → 扫 src/ 产 repo-context.md
@@ -75,7 +75,7 @@
 [Day 2，可选]
 人:  /cc-nexs:compound 01    ← 旁路命令，不进状态机
 机:  调起 compound-claude session（独立）
-     扫 doc/01.feature/* 检查 5 项强信号：
+     扫 all-docs/doc/01.feature/* 检查 5 项强信号：
        - 同 BUG 修 ≥ 2 次？
        - 同类 SA 反馈跨 ≥ 2 sprint？
        - RECON 现状假设被推翻？
@@ -235,9 +235,9 @@ COMPLETE 后人工拉取清单去做线下验证
 
 ## 与 README 同步
 
-每次 `transitionState(...)` 之后 orchestrator 自动调 `syncFeatureReadme({ reqDir })`，把 `doc/<id>/README.md` 的 `<!-- AUTOGEN:status START/END -->` 区段刷新为最新进度（当前状态 / 产物索引 / 契约覆盖快照 / 待人工接入）。锚点外的"下一步动作（人工维护）"小节保留人工编辑。这兑现了 README 模板"进入目录第一件事：读本文件"的承诺——用户每次进 worktree 看到的都是 fresh state。
+每次 `transitionState(...)` 之后 orchestrator 自动调 `syncFeatureReadme({ reqDir })`，把 `all-docs/doc/<id>/README.md` 的 `<!-- AUTOGEN:status START/END -->` 区段刷新为最新进度（当前状态 / 产物索引 / 契约覆盖快照 / 待人工接入）。锚点外的"下一步动作（人工维护）"小节保留人工编辑。这兑现了 README 模板"进入目录第一件事：读本文件"的承诺——用户每次进 worktree 看到的都是 fresh state。
 
-旧 `doc/<id>/README.md` 没有 AUTOGEN 锚点的会被自动跳过 + 输出 warn，不强改。要恢复自动同步，从模板重建该文件即可。
+旧 `all-docs/doc/<id>/README.md` 没有 AUTOGEN 锚点的会被自动跳过 + 输出 warn，不强改。要恢复自动同步，从模板重建该文件即可。
 
 ## 与 hooks 协同
 
@@ -256,13 +256,13 @@ COMPLETE 后人工拉取清单去做线下验证
 
 ## fast 模式状态契约（0.3.0+）
 
-由 `doc/<id>/config.json.mode = "fast"` 触发，单 sprint 强制，无 SPRINT_<N>_* 命名。
+由 `all-docs/doc/<id>/config.json.mode = "fast"` 触发，单 sprint 强制，无 SPRINT_<N>_* 命名。
 
 ### 状态契约表
 
 | 状态 | 入态前置 | 出态产物 | 解析判据 |
 |------|---------|---------|---------|
-| INIT | `doc/<编号>/` 已建 | requirements.md 非空 | 文件大小 > 100 字节 |
+| INIT | `all-docs/doc/<编号>/` 已建 | requirements.md 非空 | 文件大小 > 100 字节 |
 | REQ_DRAFTED | requirements.md 非空 | spec.md 五章节齐全 | grep `## (业务背景\|技术方案\|影响范围\|验收契约\|Sprint切片)`；fast 模式 AC ≥ 3 即可 |
 | SPEC_DRAFTED | spec.md 五章节齐全；AC ≥ 3 条 | sa-review.md 末尾结论行 | `tail -20 sa-review.md \| grep -E '^结论:'` |
 | SPEC_REVIEWING | reviewer codex 已完成 | 同上 | PASS → SPEC_PENDING_HUMAN<br>NEEDS_REVISION → SPEC_NEEDS_REVISION（review_revision++）|

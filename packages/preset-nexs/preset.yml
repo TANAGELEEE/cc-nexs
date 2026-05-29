@@ -3,7 +3,7 @@ version: 0.3.0-dev
 description: 五方异构 SOP 预设。支持 full（五方异构）与 fast（三角色合并）两种模式，Java/Maven/Spring 栈默认，中文文档为主。多模块项目通过 cc-nexs.config.yml 的 paths_override 注入真实路径。
 language: zh-CN
 
-# 默认 enabled 列表（向后兼容）。orchestrator 会按 doc/<id>/config.json 的 mode 字段
+# 默认 enabled 列表（向后兼容）。orchestrator 会按 all-docs/doc/<id>/config.json 的 mode 字段
 # 选用 modes.<mode>.enabled 覆盖；未声明 mode 时回退到 modes.full.enabled。
 roles:
   enabled:
@@ -75,7 +75,7 @@ roles:
       alias: Verifier
 
 # 模式声明：每个 mode 列出自己的 enabled 列表与状态机骨架。
-# orchestrator 启动时读 doc/<id>/config.json.mode 选择对应分支。
+# orchestrator 启动时读 all-docs/doc/<id>/config.json.mode 选择对应分支。
 modes:
   full:
     description: 完整五方异构 + 现状勘察前置。Repo Scout 先扫 src/ 产 repo-context.md，再 Planner / Tech Lead / SA / QA / Evaluator 严格分离。
@@ -127,7 +127,9 @@ stack:
     - "Entity 时间字段保留 Date / LocalDateTime；VO 必须 Long（毫秒时间戳）"
 
 paths:
-  doc_dir: "doc/{id}.{slug}/"
+  doc_dir: "all-docs/doc/{id}.{slug}/"
+  doc_repo: "all-docs/"
+  doc_repo_branch: "master"
   branch_pattern: "feature/{id}-{slug}"
   bugs_dir: "bugs/"
 
