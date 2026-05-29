@@ -59,6 +59,17 @@ PROGRESS="${REQ_DIR}progress.md"
 
 If `progress.md` does not exist, copy from preset `templates/progress.md` and set `current_state: INIT`.
 
+### Step 0.1: README catch-up sync (defensive)
+
+Every run invocation starts by syncing README to match current progress.md — this covers cases where the previous run was interrupted, manually driven, or crashed mid-step:
+
+```js
+import { syncFeatureReadme } from '@cc-nexs/core/lib/readme-sync.mjs';
+try { syncFeatureReadme({ reqDir: REQ_DIR }); } catch (_) { /* best-effort */ }
+```
+
+This is idempotent: if README is already current, it returns `no_change` and costs nothing.
+
 ## Step 0.5: Resolve feature mode
 
 Read `${REQ_DIR}config.json` and extract `mode` (defaults to `full` if missing or unknown):
