@@ -23,7 +23,7 @@
 | SPRINT_<N>_QA_RUN | sa-code-review.md M<N> 末轮 PASS | test-report.md M<N> Round 1 结论 + AC×用例×结果覆盖审计表 | 末尾 `结论: 通过\|阻塞` |
 | SPRINT_<N>_FIX | bugs/ 下有 OPEN BUG | 对应 BUG.状态 = FIXED + 修复 commit | grep `状态.*FIXED` BUG-*.md |
 | SPRINT_<N>_QA_REGRESSION | bugs/ 下有 FIXED BUG | 对应 BUG.状态 = VERIFIED + 回归记录 append | grep `状态.*VERIFIED` |
-| SPRINT_<N>_EVAL | bugs/ 全 VERIFIED + test-report 通过 | acceptance.md M<N> 章节 + 契约打分表 | 末尾 `验收结果: 通过\|未通过` |
+| SPRINT_<N>_EVAL | bugs/ 全 VERIFIED + test-report 通过 + **产物完整性 gate**（deploy.md/api-doc.md/test-report.md 非模板内容） | acceptance.md M<N> 章节 + 契约打分表 | 末尾 `验收结果: 通过\|未通过` |
 | SPRINT_<N>_DONE | acceptance.md M<N> 末尾通过 | progress.md.sprint_status[M<N>] = done | — |
 | ALL_SPRINTS_DONE | 所有 sprint 状态 done | — | — |
 | FINAL_EVAL | ALL_SPRINTS_DONE | acceptance.md 最终章节 + 跨 sprint 全量打分 | 末尾 `验收结果: 通过\|未通过` |

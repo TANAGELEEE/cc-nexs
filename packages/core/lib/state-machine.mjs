@@ -126,16 +126,22 @@ function nextStepFull({
           case 'KICKOFF':
             // Parallel: QA writes cases + Dev implements
             return { next: `SPRINT_${N}_DEV`, role: dev, action: 'implement', parallel: { role: qa, action: 'write_cases' } };
+          case 'QA_CASES':
+            return { next: `SPRINT_${N}_SA_TEST_REVIEW`, role: reviewer, action: 'review_test_cases', sprint: N };
           case 'DEV':
-            return { next: `SPRINT_${N}_REVIEW`, role: reviewer, action: 'review_code', sprint: N };
-          case 'REVIEW':
-            return { next: `SPRINT_${N}_PARSE_REVIEW`, role: null, action: 'parse_review_conclusion', sprint: N };
-          case 'TEST':
-            return { next: `SPRINT_${N}_PARSE_TEST`, role: null, action: 'parse_test_conclusion', sprint: N };
+            return { next: `SPRINT_${N}_DOC_SYNC`, role: dev, action: 'sync_docs', sprint: N };
+          case 'SA_TEST_REVIEW':
+            return { next: `SPRINT_${N}_PARSE_SA_TEST_REVIEW`, role: null, action: 'parse_test_review_conclusion', sprint: N };
+          case 'DOC_SYNC':
+            return { next: `SPRINT_${N}_SA_CODE`, role: reviewer, action: 'review_code', sprint: N };
+          case 'SA_CODE':
+            return { next: `SPRINT_${N}_PARSE_SA_CODE`, role: null, action: 'parse_review_conclusion', sprint: N };
+          case 'QA_RUN':
+            return { next: `SPRINT_${N}_PARSE_QA_RUN`, role: null, action: 'parse_test_conclusion', sprint: N };
           case 'FIX':
-            return { next: `SPRINT_${N}_REGRESSION`, role: qa, action: 'regression', sprint: N };
-          case 'REGRESSION':
-            return { next: `SPRINT_${N}_PARSE_REGRESSION`, role: null, action: 'parse_regression_conclusion', sprint: N };
+            return { next: `SPRINT_${N}_QA_REGRESSION`, role: qa, action: 'regression', sprint: N };
+          case 'QA_REGRESSION':
+            return { next: `SPRINT_${N}_PARSE_QA_REGRESSION`, role: null, action: 'parse_regression_conclusion', sprint: N };
           case 'EVAL':
             return { next: `SPRINT_${N}_PARSE_EVAL`, role: null, action: 'parse_eval_conclusion', sprint: N };
           case 'DONE':

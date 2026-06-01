@@ -128,22 +128,24 @@ Repeatedly:
 
 Per-mode mapping. The orchestrator selects the correct slash command based on `MODE` + the `role` field returned by `nextStep`.
 
-| role (from nextStep) | full mode command | fast mode command |
-|----------------------|-------------------|-------------------|
-| `repo-scout` | `/cc-nexs:recon` | (folded into `/cc-nexs:fullstack <id> --phase=spec`) |
-| `planner` / `pm` | `/cc-nexs:planner` | (n/a) |
-| `tech-lead` / `developer` / `dev` | `/cc-nexs:dev` | (n/a) |
-| `sa` / `reviewer` (spec) | `/cc-nexs:sa spec` | `/cc-nexs:review spec <id>` |
-| `sa` / `reviewer` (code) | `/cc-nexs:sa code` | `/cc-nexs:review accept <id>` |
-| `qa` / `verifier` (cases) | `/cc-nexs:qa cases` | `/cc-nexs:verify initial <id>` |
-| `qa` / `verifier` (run) | `/cc-nexs:qa run` | (folded into `/cc-nexs:verify initial`) |
-| `qa` / `verifier` (regression) | `/cc-nexs:qa regression` | `/cc-nexs:verify regression <id>` |
-| `evaluator` | `/cc-nexs:evaluator` | (folded into `/cc-nexs:review accept`) |
-| `fullstack` (spec) | (n/a) | `/cc-nexs:fullstack <id> --phase=spec` |
-| `fullstack` (build) | (n/a) | `/cc-nexs:fullstack <id> --phase=build` |
-| `fullstack` (fix) | (n/a) | `/cc-nexs:fullstack <id> --phase=fix --bug=<BUG-ID>` |
+| role (from nextStep) | action | full mode command | fast mode command |
+|----------------------|--------|-------------------|-------------------|
+| `repo-scout` | `recon` | `/cc-nexs:recon` | (folded into `/cc-nexs:fullstack <id> --phase=spec`) |
+| `planner` / `pm` | `draft_spec` / `revise_spec` | `/cc-nexs:planner` | (n/a) |
+| `tech-lead` / `dev` | `implement` | `/cc-nexs:dev <id> --mode=feat --sprint=N` | (n/a) |
+| `tech-lead` / `dev` | `sync_docs` | `/cc-nexs:dev <id> --mode=doc --sprint=N` | (n/a) |
+| `sa` / `reviewer` | `review_spec` | `/cc-nexs:sa spec` | `/cc-nexs:review spec <id>` |
+| `sa` / `reviewer` | `review_test_cases` | `/cc-nexs:sa test-cases` | (n/a) |
+| `sa` / `reviewer` | `review_code` | `/cc-nexs:sa code` | `/cc-nexs:review accept <id>` |
+| `qa` / `verifier` | `write_cases` | `/cc-nexs:qa cases` | `/cc-nexs:verify initial <id>` |
+| `qa` / `verifier` | `run` | `/cc-nexs:qa run` | (folded into `/cc-nexs:verify initial`) |
+| `qa` / `verifier` | `regression` | `/cc-nexs:qa regression` | `/cc-nexs:verify regression <id>` |
+| `evaluator` | `final_acceptance` | `/cc-nexs:evaluator` | (folded into `/cc-nexs:review accept`) |
+| `fullstack` | `draft_spec` / `revise_spec` | (n/a) | `/cc-nexs:fullstack <id> --phase=spec` |
+| `fullstack` | `implement` / `revise_implementation` | (n/a) | `/cc-nexs:fullstack <id> --phase=build` |
+| `fullstack` | `fix_bug` | (n/a) | `/cc-nexs:fullstack <id> --phase=fix --bug=<BUG-ID>` |
 
-Implementation hint: a small `dispatch(role, action, mode, reqId, extras)` helper picks the command name from this table; the action keyword (`recon` / `review_spec` / `review_code` / `verify_initial` / `verify_regression` / `implement` / `fix_bug` / `draft_spec` / `revise_spec` / `revise_implementation`) disambiguates which sub-target on a multi-target role.
+Implementation hint: a small `dispatch(role, action, mode, reqId, extras)` helper picks the command name from this table; the `action` field from `nextStep` directly disambiguates which sub-command to invoke for multi-target roles.
 
 ## Step 3: Human gate output
 
@@ -187,7 +189,7 @@ Then **return**. Do not call any tool that the approval-gate-guard hook would bl
 |------|------------------------------------------|---------------------|
 | `sa-review.md` / `review.md` | `^[结论\|Conclusion]:\s*(\S+)` | `PASS` / `NEEDS_REVISION` |
 | `sa-code-review.md` / `code-review.md` | same | same |
-| `test-report.md` | same | preset-defined `test_pass` / `test_fail` |
+| `test-report.md` | same | preset-defined `test_pass` / `test_fail` / `待人工执行`(= pass, 不阻塞) |
 | `acceptance.md` | `^[验收结果\|Acceptance]:\s*(\S+)` | `acceptance_pass` / `acceptance_fail` |
 
 i18n: the literal strings (`PASS`, `通过`, `PASSED`, etc.) come from preset's `i18n.conclusion_*` settings.
@@ -209,6 +211,30 @@ ACC=$(tail -30 ${REQ_DIR}acceptance.md | grep -E '^验收结果:' | tail -1 | aw
 | NEEDS_REVISION | 未通过 | ACCEPT_NEEDS_REVISION | review_revision++、evaluator_reject++ |
 
 `mode=fast` 在 `state == 'TEST'` 后解析 `test-report.md` 末尾结论；`通过 → TEST_PASSED`，`阻塞 → TEST_BLOCKED`。
+
+## Step 4.5: Artifact completeness gate (full mode, before EVAL)
+
+Before transitioning from `SPRINT_<N>_QA_RUN` (or `QA_REGRESSION` PASS) → `SPRINT_<N>_EVAL`, the orchestrator runs a pre-flight check:
+
+```bash
+FAILED=0
+for f in deploy.md api-doc.md test-report.md; do
+  FILE="${REQ_DIR}${f}"
+  if [ ! -f "$FILE" ]; then
+    echo "❌ $f 不存在，阻塞进入 Evaluator"
+    FAILED=1
+  elif grep -qE 'YYYY-MM-DD|/api/xxx/yyy|（append）|（自动填）' "$FILE"; then
+    echo "❌ $f 仍为模板内容，阻塞进入 Evaluator"
+    FAILED=1
+  fi
+done
+if [ $FAILED -ne 0 ]; then
+  echo "⚠️ 产物不完整。回退到 SPRINT_${N}_DOC_SYNC 让 Tech Lead 补充文档。"
+  # transition back to DOC_SYNC
+fi
+```
+
+This is the final guardrail — even if earlier steps were skipped, the completeness gate catches template-only artifacts before Evaluator wastes a scoring cycle on incomplete input.
 
 ## Step 5: Counter increments
 

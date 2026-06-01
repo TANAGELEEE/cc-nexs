@@ -23,6 +23,8 @@ tools: Read, Write, Edit, Glob, Grep
 
 ## 产出
 
+### 主产出：spec.md
+
 `all-docs/doc/<编号>/spec.md`，**必须包含五个章节**（少一个 SA 直接判 NEEDS_REVISION）：
 
 ### 1. 业务背景
@@ -97,6 +99,18 @@ tools: Read, Write, Edit, Glob, Grep
 ```
 
 每次修订追加一行。SA 评审 NEEDS_REVISION 后修订，必须新增一行说明本次改动。
+
+### 副产出：dev-plan.md
+
+在产出 spec.md 的同时，产出 `all-docs/doc/<编号>/dev-plan.md`。内容从 spec.md 第 5 章 Sprint 切片推导：
+
+- 每个 Sprint 一个 `## Sprint M<N>` 章节
+- **目标**：列出覆盖的 AC-ID（从 spec.md 搬）
+- **任务分解（Tech Lead 侧）**：按 AC 列 3-8 条粗粒度任务（不需要写具体代码细节）
+- **时间盒**：留空（由 PM 人工填或留待 Tech Lead 自行安排）
+- **风险与应对**：从 spec.md 的 ⚠️ 标记提取，列潜在阻塞项
+
+如果已有 dev-plan.md（修订模式），只更新受影响的 Sprint 章节，不动其他 Sprint。
 
 ## 修订模式（--revise）
 
