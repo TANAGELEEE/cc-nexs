@@ -205,9 +205,11 @@ BRANCH_CREATED=0
 ### 5. 拷贝模板（在 WORK_DIR）
 
 ```bash
+CC_NEXS_RESOLVED_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CODEX_PLUGIN_ROOT:-${CC_NEXS_PLUGIN_ROOT:-}}}}"
+[ -n "$CC_NEXS_RESOLVED_PLUGIN_ROOT" ] || { echo "❌ 找不到 plugin root（需 CLAUDE_PLUGIN_ROOT / PLUGIN_ROOT / CODEX_PLUGIN_ROOT / CC_NEXS_PLUGIN_ROOT）"; exit 1; }
 REQ_DIR="${WORK_DIR}/${REQ_REL}"
 mkdir -p "$REQ_DIR"
-cp -r ${CLAUDE_PLUGIN_ROOT}/templates/* "${REQ_DIR}/"
+cp -r "${CC_NEXS_RESOLVED_PLUGIN_ROOT}/templates/"* "${REQ_DIR}/"
 ```
 
 包含模板：requirements.md / spec.md / dev-plan.md / test-cases.md / api-doc.md / deploy.md / acceptance.md / test-report.md / progress.md / config.json / bugs/BUG-template.md

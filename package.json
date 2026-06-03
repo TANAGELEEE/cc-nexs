@@ -8,13 +8,23 @@
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:codex": "node scripts/build.mjs",
     "build:nexs": "node scripts/build.mjs preset-nexs",
     "build:minimal": "node scripts/build.mjs preset-minimal",
     "clean": "rm -rf dist",
     "install:local": "node scripts/install-local.mjs",
+    "install:local:codex": "node scripts/install-local-codex.mjs",
+    "install:local:codex:all": "node scripts/install-local-codex.mjs --all",
+    "install:local:codex:minimal": "node scripts/install-local-codex.mjs preset-minimal",
     "install:local:minimal": "node scripts/install-local.mjs preset-minimal",
+    "smoke:claude-install": "node scripts/smoke-claude-install.mjs",
+    "smoke:runtime-contract": "node scripts/smoke-runtime-contract.mjs",
     "test:hooks": "node --test packages/core/lib/*.test.mjs",
-    "validate:json": "node packages/core/lib/validate-json.mjs"
+    "validate:claude": "node scripts/validate-claude-plugins.mjs",
+    "validate:codex": "node scripts/validate-codex-plugins.mjs",
+    "validate:plugins": "pnpm validate:claude && pnpm validate:codex && pnpm validate:sop && pnpm smoke:claude-install && pnpm smoke:runtime-contract",
+    "validate:json": "node packages/core/lib/validate-json.mjs",
+    "validate:sop": "node scripts/validate-sop-parity.mjs"
   },
   "engines": {
     "node": ">=18.0.0"

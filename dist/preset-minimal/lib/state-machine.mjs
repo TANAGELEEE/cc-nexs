@@ -12,10 +12,14 @@ const HUMAN_GATE = 'SPEC_PENDING_HUMAN';
  *
  * Two state-machine flavors are supported via the `mode` parameter:
  *
- *   mode='full' (default) — five-role SOP with sprint slicing:
- *     INIT → REQ_DRAFTED → SPEC_DRAFTED → SPEC_REVIEWING → [SPEC_PENDING_HUMAN] → SPEC_APPROVED
+ *   mode='full' (default) — five-role SOP with sprint slicing, plus pre-spec recon:
+ *     INIT → REQ_DRAFTED → RECON_DONE → SPEC_DRAFTED → SPEC_REVIEWING → [SPEC_PENDING_HUMAN] → SPEC_APPROVED
  *       → SPRINT_<N>_DEV → SPRINT_<N>_REVIEW → SPRINT_<N>_TEST → [SPRINT_<N>_FIX → SPRINT_<N>_REGRESSION]
  *       → SPRINT_<N>_EVAL → SPRINT_<N>_DONE → … → ALL_SPRINTS_DONE → FINAL_EVAL → COMPLETE
+ *     RECON stage: repo-scout reads src/ and produces repo-context.md so Planner — which is
+ *     forbidden from reading src/ — can ground its spec in the existing infrastructure.
+ *     If the `repo-scout` role is not enabled in the active preset, RECON_DONE is skipped
+ *     (REQ_DRAFTED jumps straight to SPEC_DRAFTED) — backward-compatible.
  *
  *   mode='fast' — three-role single-sprint merged pipeline:
  *     INIT → REQ_DRAFTED → SPEC_DRAFTED → SPEC_REVIEWING → [SPEC_PENDING_HUMAN] → SPEC_APPROVED
@@ -24,12 +28,13 @@ const HUMAN_GATE = 'SPEC_PENDING_HUMAN';
  *     verifier (replaces qa cases+run+regression).
  *
  * Role mapping (role identifier in preset → state slot):
+ *   repo-scout                   → recon: produce repo-context.md (full only, optional)
  *   planner | pm                 → drafts spec       (full)
  *   tech-lead | developer | dev  → implements code   (full)
  *   sa | reviewer                → reviews spec / cases / code
  *   qa | verifier                → writes cases, runs tests, regression
  *   evaluator                    → contract-driven acceptance scoring (full only)
- *   fullstack                    → spec + code + fix (fast only)
+ *   fullstack                    → spec + code + fix (fast only; bakes recon into --phase=spec)
  *
  * If `qa` is missing, tests are folded into reviewer responsibilities.
  * If `evaluator` is missing, the final acceptance step is folded into reviewer.
@@ -60,6 +65,7 @@ function nextStepFull({
   workflow,
 }) {
   const has = (r) => enabledRoles.includes(r);
+  const scout = has('repo-scout') ? 'repo-scout' : null;
   const planner = has('planner') ? 'planner' : has('pm') ? 'pm' : null;
   const dev = has('tech-lead') ? 'tech-lead' : has('developer') ? 'developer' : has('dev') ? 'dev' : null;
   const reviewer = has('sa') ? 'sa' : has('reviewer') ? 'reviewer' : null;
@@ -88,12 +94,21 @@ function nextStepFull({
     case 'INIT':
       return { next: 'REQ_DRAFTED', role: null, action: 'await_requirements_md' };
     case 'REQ_DRAFTED':
+      // Optional pre-spec recon: produce repo-context.md so Planner can ground in existing infra.
+      // When repo-scout role is not enabled, skip RECON_DONE entirely for backward compatibility.
+      if (scout) {
+        return { next: 'RECON_DONE', role: scout, action: 'recon' };
+      }
+      return { next: 'SPEC_DRAFTED', role: planner, action: 'draft_spec' };
+    case 'RECON_DONE':
       return { next: 'SPEC_DRAFTED', role: planner, action: 'draft_spec' };
     case 'SPEC_DRAFTED':
       return { next: 'SPEC_REVIEWING', role: reviewer, action: 'review_spec' };
     case 'SPEC_REVIEWING':
       return { next: 'PARSE_SPEC_REVIEW', role: null, action: 'parse_review_conclusion' };
     case 'SPEC_NEEDS_REVISION':
+      // Revisions reuse the existing repo-context.md; do NOT re-run recon by default.
+      // If SA review explicitly cites stale recon, the orchestrator can manually reset to REQ_DRAFTED.
       return { next: 'SPEC_DRAFTED', role: planner, action: 'revise_spec' };
     case HUMAN_GATE:
       if (humanGateApproved) return { next: 'SPEC_APPROVED', role: null, action: 'continue' };
@@ -111,16 +126,22 @@ function nextStepFull({
           case 'KICKOFF':
             // Parallel: QA writes cases + Dev implements
             return { next: `SPRINT_${N}_DEV`, role: dev, action: 'implement', parallel: { role: qa, action: 'write_cases' } };
+          case 'QA_CASES':
+            return { next: `SPRINT_${N}_SA_TEST_REVIEW`, role: reviewer, action: 'review_test_cases', sprint: N };
           case 'DEV':
-            return { next: `SPRINT_${N}_REVIEW`, role: reviewer, action: 'review_code', sprint: N };
-          case 'REVIEW':
-            return { next: `SPRINT_${N}_PARSE_REVIEW`, role: null, action: 'parse_review_conclusion', sprint: N };
-          case 'TEST':
-            return { next: `SPRINT_${N}_PARSE_TEST`, role: null, action: 'parse_test_conclusion', sprint: N };
+            return { next: `SPRINT_${N}_DOC_SYNC`, role: dev, action: 'sync_docs', sprint: N };
+          case 'SA_TEST_REVIEW':
+            return { next: `SPRINT_${N}_PARSE_SA_TEST_REVIEW`, role: null, action: 'parse_test_review_conclusion', sprint: N };
+          case 'DOC_SYNC':
+            return { next: `SPRINT_${N}_SA_CODE`, role: reviewer, action: 'review_code', sprint: N };
+          case 'SA_CODE':
+            return { next: `SPRINT_${N}_PARSE_SA_CODE`, role: null, action: 'parse_review_conclusion', sprint: N };
+          case 'QA_RUN':
+            return { next: `SPRINT_${N}_PARSE_QA_RUN`, role: null, action: 'parse_test_conclusion', sprint: N };
           case 'FIX':
-            return { next: `SPRINT_${N}_REGRESSION`, role: qa, action: 'regression', sprint: N };
-          case 'REGRESSION':
-            return { next: `SPRINT_${N}_PARSE_REGRESSION`, role: null, action: 'parse_regression_conclusion', sprint: N };
+            return { next: `SPRINT_${N}_QA_REGRESSION`, role: qa, action: 'regression', sprint: N };
+          case 'QA_REGRESSION':
+            return { next: `SPRINT_${N}_PARSE_QA_REGRESSION`, role: null, action: 'parse_regression_conclusion', sprint: N };
           case 'EVAL':
             return { next: `SPRINT_${N}_PARSE_EVAL`, role: null, action: 'parse_eval_conclusion', sprint: N };
           case 'DONE':

@@ -11,6 +11,9 @@ import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const PLUGIN_ROOT = process.env.CLAUDE_PLUGIN_ROOT
+  || process.env.PLUGIN_ROOT
+  || process.env.CODEX_PLUGIN_ROOT
+  || process.env.CC_NEXS_PLUGIN_ROOT
   || resolve(fileURLToPath(import.meta.url), '../..');
 
 const role = process.env.CC_NEXS_ROLE;

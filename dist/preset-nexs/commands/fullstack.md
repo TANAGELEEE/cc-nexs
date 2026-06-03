@@ -73,7 +73,7 @@ fi
 subagent_type: general-purpose（或 cc-nexs 自定义 fullstack-claude，看 Claude Code 实际加载情况）
 prompt:
   你是 Fullstack（fast 模式，独立 session）。
-  按 ${CLAUDE_PLUGIN_ROOT}/agents/fullstack-claude.md 的 ${PHASE} 模式执行。
+  按 ${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CODEX_PLUGIN_ROOT:-${CC_NEXS_PLUGIN_ROOT}}}}/agents/fullstack-claude.md 的 ${PHASE} 模式执行。
   需求目录: ${REQ_DIR}
   ${BUG_ID:+BUG: ${BUG_ID}}
 

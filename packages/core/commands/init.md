@@ -27,12 +27,14 @@ Bootstrap a feature directory under `all-docs/doc/`. By default creates an isola
    - On `STATUS=failed_fallback_inplace`: degrade to in-place mode (`WORK_DIR=$REPO_ROOT`, branch created later in step 8).
    - On `STATUS=created|reused`: `WORK_DIR=$WORKTREE_PATH`, branch already created by skill.
    - With `--no-worktree`: `WORK_DIR=$REPO_ROOT`, branch created in step 8.
-4. Resolve preset templates dir from `${CLAUDE_PLUGIN_ROOT}/templates/`.
+4. Resolve preset templates dir from `${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CODEX_PLUGIN_ROOT:-${CC_NEXS_PLUGIN_ROOT}}}}/templates/`.
 5. Copy all template files to `${WORK_DIR}/all-docs/doc/<id>.<slug>/`:
    ```bash
+   CC_NEXS_RESOLVED_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CODEX_PLUGIN_ROOT:-${CC_NEXS_PLUGIN_ROOT:-}}}}"
+   [ -n "$CC_NEXS_RESOLVED_PLUGIN_ROOT" ] || { echo "❌ 找不到 plugin root（需 CLAUDE_PLUGIN_ROOT / PLUGIN_ROOT / CODEX_PLUGIN_ROOT / CC_NEXS_PLUGIN_ROOT）"; exit 1; }
    REQ_DIR="${WORK_DIR}/all-docs/doc/${feature_id}.${feature_slug}"
    mkdir -p "$REQ_DIR"
-   cp -r ${CLAUDE_PLUGIN_ROOT}/templates/* "${REQ_DIR}/"
+   cp -r "${CC_NEXS_RESOLVED_PLUGIN_ROOT}/templates/"* "${REQ_DIR}/"
    ```
 6. Edit progress.md (in `$REQ_DIR`):
    - Replace `{编号}` / `{id}` placeholders with feature_id
@@ -69,4 +71,3 @@ Bootstrap a feature directory under `all-docs/doc/`. By default creates an isola
       2. Edit all-docs/doc/<id>.<slug>/requirements.md (business needs)
       3. Run /cc-nexs:run <id> to start the pipeline
    ```
-

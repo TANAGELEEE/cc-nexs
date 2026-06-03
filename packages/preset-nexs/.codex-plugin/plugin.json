@@ -1,0 +1,37 @@
+{
+  "name": "cc-nexs",
+  "version": "0.2.0-dev",
+  "description": "五方异构 SOP 的 Codex Plugin：完整复刻 cc-nexs full / fast / hotfix 流水线、文档落点、角色边界与状态机编排。",
+  "author": {
+    "name": "cc-nexs"
+  },
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "plugin",
+    "sop",
+    "workflow",
+    "state-machine",
+    "multi-role"
+  ],
+  "skills": "./codex-skills/",
+  "interface": {
+    "displayName": "cc-nexs",
+    "shortDescription": "Run cc-nexs SOP workflows in Codex",
+    "longDescription": "cc-nexs brings the same full, fast, and hotfix SOP workflows used in Claude Code into Codex. It mirrors command behavior, document write locations, role isolation, state-machine progression, and build/test selection.",
+    "developerName": "cc-nexs",
+    "category": "Engineering",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "/cc-nexs:init \"添加 /api/health 健康检查接口\"",
+      "/cc-nexs:run 01",
+      "/cc-nexs:hotfix \"支付回调偶现 500\""
+    ],
+    "brandColor": "#2563EB",
+    "screenshots": []
+  }
+}

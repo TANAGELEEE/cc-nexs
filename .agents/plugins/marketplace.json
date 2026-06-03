@@ -1,0 +1,32 @@
+{
+  "name": "cc-nexs",
+  "interface": {
+    "displayName": "cc-nexs"
+  },
+  "plugins": [
+    {
+      "name": "cc-nexs-minimal",
+      "source": {
+        "source": "local",
+        "path": "./dist/preset-minimal"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Engineering"
+    },
+    {
+      "name": "cc-nexs",
+      "source": {
+        "source": "local",
+        "path": "./dist/preset-nexs"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Engineering"
+    }
+  ]
+}

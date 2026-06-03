@@ -121,7 +121,7 @@ i18n:
     "PreToolUse": [
       {
         "matcher": "Bash|Edit|Write|Read",
-        "command": "node ${CLAUDE_PLUGIN_ROOT}/../core/hooks/role-boundary-guard.mjs"
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CODEX_PLUGIN_ROOT:-${CC_NEXS_PLUGIN_ROOT:-.}}}}/../core/hooks/role-boundary-guard.mjs"
       }
       // ...
     ]
@@ -178,7 +178,7 @@ forbidden_write:
       ...core hooks...,
       {
         "matcher": "Bash",
-        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/my-custom-check.mjs"
+        "command": "node ${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CODEX_PLUGIN_ROOT:-${CC_NEXS_PLUGIN_ROOT:-.}}}}/hooks/my-custom-check.mjs"
       }
     ]
   }

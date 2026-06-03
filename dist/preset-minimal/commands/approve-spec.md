@@ -24,8 +24,5 @@ The only manual operation in the entire pipeline.
       Feature: <id> <slug>
       Approver: <name>
       Approved at: <ts>
-
-   👉 Continue: /cc-nexs:run <id>
    ```
-
-Does NOT auto-trigger /cc-nexs:run — give control back to the user to confirm next step.
+7. Auto-continue: immediately invoke `/cc-nexs:run <id>` to resume the pipeline from SPEC_APPROVED state. No manual re-run needed.

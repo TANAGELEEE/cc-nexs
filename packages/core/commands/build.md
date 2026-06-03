@@ -42,15 +42,16 @@ esac
 
 ### 2. 调用 selector 拿命令列表
 
-selector 路径取决于安装方式。优先用 plugin 提供的 `${CLAUDE_PLUGIN_ROOT}/lib/build-selector.mjs`：
+selector 路径取决于安装方式。优先用 plugin 提供的 `${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CODEX_PLUGIN_ROOT:-${CC_NEXS_PLUGIN_ROOT}}}}/lib/build-selector.mjs`：
 
 ```bash
-SELECTOR="${CLAUDE_PLUGIN_ROOT}/lib/build-selector.mjs"
+CC_NEXS_RESOLVED_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CODEX_PLUGIN_ROOT:-${CC_NEXS_PLUGIN_ROOT:-}}}}"
+SELECTOR="${CC_NEXS_RESOLVED_PLUGIN_ROOT}/lib/build-selector.mjs"
 if [ ! -f "$SELECTOR" ]; then
   # Monorepo dev-mode fallback (running from cc-nexs source repo).
   SELECTOR="$(git rev-parse --show-toplevel)/packages/core/lib/build-selector.mjs"
 fi
-[ -f "$SELECTOR" ] || { echo "❌ 找不到 build-selector.mjs（CLAUDE_PLUGIN_ROOT=${CLAUDE_PLUGIN_ROOT}）"; exit 1; }
+[ -f "$SELECTOR" ] || { echo "❌ 找不到 build-selector.mjs（PLUGIN_ROOT=${CC_NEXS_RESOLVED_PLUGIN_ROOT:-unset}）"; exit 1; }
 
 # JSON 模式拿结构化输出
 PROJECT_ROOT=$(git rev-parse --show-toplevel)

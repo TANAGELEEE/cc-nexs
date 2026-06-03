@@ -296,7 +296,7 @@ DOC_FEATURE_DIR="all-docs/doc/<id>.<slug>"
 if [ -d "${DOC_REPO}/.git" ] || git -C "$DOC_REPO" rev-parse --git-dir >/dev/null 2>&1; then
   cd "$DOC_REPO"
   git add "doc/<id>.<slug>/"
-  
+
   # 有变更才 commit
   if ! git diff --cached --quiet; then
     git commit -m "docs: <id> <当前阶段简述>"
@@ -345,4 +345,3 @@ fi
 ```
 
 Where `<REPO_ROOT>` is the path printed in Step -1. Do not actually run `git worktree remove` or `git push` for the code repo — let the user decide. The doc repo push is automatic.
-

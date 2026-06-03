@@ -25,54 +25,232 @@ function parseScalar(s) {
   return s;
 }
 
-function parseYaml(text) {
-  const lines = text.split(/\r?\n/).map((l) => l.replace(/\s+#.*$/, ''));
-  const root = {};
-  const stack = [{ indent: -1, container: root, key: null }];
-
-  for (let raw of lines) {
-    if (!raw.trim() || raw.trim().startsWith('#')) continue;
-    const indent = raw.match(/^ */)[0].length;
-    const line = raw.trim();
-
-    while (stack.length > 1 && stack[stack.length - 1].indent >= indent) stack.pop();
-    const top = stack[stack.length - 1];
-
-    if (line.startsWith('- ')) {
-      const item = line.slice(2);
-      const parent = top.container;
-      if (!Array.isArray(parent)) {
-        const k = top.key;
-        const newArr = [];
-        const grand = stack[stack.length - 2];
-        grand.container[k] = newArr;
-        stack[stack.length - 1] = { indent, container: newArr, key: null };
+// Recursive-descent YAML parser. Supports the subset cc-nexs needs:
+//   - key: value (with scalars: string, int, float, bool, null)
+//   - key:        nested object on next indented line
+//   - key:        nested array (- ...) on next indented line
+//   - inline flow arrays: key: [a, b, "c"]
+//   - array of scalars
+//   - array of objects (- key1: v1 / two-space indented siblings)
+// Limitations: no anchors, no multi-line strings, no document markers.
+//
+// Why hand-rolled: cc-nexs intentionally has zero runtime npm deps.
+function tryParseInlineArray(s) {
+  // "[a, b, c]" → array; otherwise return undefined
+  const t = s.trim();
+  if (!t.startsWith('[') || !t.endsWith(']')) return undefined;
+  const inner = t.slice(1, -1).trim();
+  if (inner === '') return [];
+  const items = [];
+  let cur = '';
+  let inS = null; // current quote char
+  let depth = 0;
+  for (let i = 0; i < inner.length; i++) {
+    const c = inner[i];
+    if (inS) {
+      cur += c;
+      if (c === '\\') {
+        if (i + 1 < inner.length) cur += inner[++i];
+      } else if (c === inS) {
+        inS = null;
       }
-      const arr = stack[stack.length - 1].container;
-      if (item.includes(':')) {
-        const obj = {};
-        arr.push(obj);
-        const [k, ...rest] = item.split(':');
-        const v = rest.join(':').trim();
-        if (v) obj[k.trim()] = parseScalar(v);
-        else stack.push({ indent: indent + 2, container: obj, key: k.trim() });
-      } else {
-        arr.push(parseScalar(item));
-      }
-    } else if (line.includes(':')) {
-      const [k, ...rest] = line.split(':');
-      const key = k.trim();
-      const v = rest.join(':').trim();
-      const parent = top.container;
-      if (v === '') {
-        parent[key] = {};
-        stack.push({ indent, container: parent[key], key });
-      } else {
-        parent[key] = parseScalar(v);
-      }
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      inS = c;
+      cur += c;
+      continue;
+    }
+    if (c === '[' || c === '{') depth++;
+    else if (c === ']' || c === '}') depth--;
+    if (c === ',' && depth === 0) {
+      items.push(parseScalar(cur.trim()));
+      cur = '';
+    } else {
+      cur += c;
     }
   }
-  return root;
+  if (cur.trim() !== '') items.push(parseScalar(cur.trim()));
+  return items;
+}
+
+function parseYaml(text) {
+  const rawLines = text.split(/\r?\n/);
+  // Strip inline comments (`<sp>#...`) but preserve `#` inside quotes — minimal handling.
+  const cleaned = rawLines.map((line) => {
+    if (line.trim().startsWith('#')) return '';
+    let inS = null;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (inS) {
+        if (c === '\\' && i + 1 < line.length) i++;
+        else if (c === inS) inS = null;
+      } else if (c === '"' || c === "'") {
+        inS = c;
+      } else if (c === '#' && (i === 0 || /\s/.test(line[i - 1]))) {
+        return line.slice(0, i).replace(/\s+$/, '');
+      }
+    }
+    return line;
+  });
+
+  const lines = [];
+  for (const l of cleaned) {
+    if (l.trim() === '') continue;
+    lines.push(l);
+  }
+  let pos = 0;
+
+  const indentOf = (l) => l.match(/^ */)[0].length;
+
+  function lookaheadStructure(parentIndent) {
+    if (pos >= lines.length) return { kind: 'null' };
+    const cur = lines[pos];
+    const ind = indentOf(cur);
+    if (ind <= parentIndent) return { kind: 'null' };
+    return { kind: cur.trim().startsWith('- ') ? 'array' : 'object', indent: ind };
+  }
+
+  function parseObject(baseIndent) {
+    const obj = {};
+    while (pos < lines.length) {
+      const cur = lines[pos];
+      const ind = indentOf(cur);
+      if (ind < baseIndent) break;
+      const trimmed = cur.trim();
+      if (trimmed.startsWith('- ')) break; // belongs to enclosing array
+      if (ind > baseIndent) {
+        // Skip — should have been consumed by recursion
+        pos++;
+        continue;
+      }
+      const colonIdx = trimmed.indexOf(':');
+      if (colonIdx < 0) {
+        pos++;
+        continue;
+      }
+      const key = trimmed.substring(0, colonIdx).trim();
+      const rawValue = trimmed.substring(colonIdx + 1).trim();
+      pos++;
+      if (rawValue !== '') {
+        const inline = tryParseInlineArray(rawValue);
+        obj[key] = inline !== undefined ? inline : parseScalar(rawValue);
+        continue;
+      }
+      const peek = lookaheadStructure(baseIndent);
+      if (peek.kind === 'array') {
+        obj[key] = parseArray(peek.indent);
+      } else if (peek.kind === 'object') {
+        obj[key] = parseObject(peek.indent);
+      } else {
+        obj[key] = null;
+      }
+    }
+    return obj;
+  }
+
+  function parseArray(baseIndent) {
+    const arr = [];
+    while (pos < lines.length) {
+      const cur = lines[pos];
+      const ind = indentOf(cur);
+      if (ind < baseIndent) break;
+      const trimmed = cur.trim();
+      if (!trimmed.startsWith('- ')) break;
+      if (ind !== baseIndent) break;
+
+      const after = trimmed.substring(2);
+      const itemIndent = baseIndent + 2;
+      pos++;
+
+      // Case 1: "- key: value"  → object item starting with one inline key
+      // Case 2: "- value"        → scalar item
+      // Case 3: "-"              → object on next indented line
+      const colonIdx = (() => {
+        // First top-level ':' outside quotes
+        let inS = null;
+        for (let i = 0; i < after.length; i++) {
+          const c = after[i];
+          if (inS) {
+            if (c === '\\' && i + 1 < after.length) i++;
+            else if (c === inS) inS = null;
+          } else if (c === '"' || c === "'") {
+            inS = c;
+          } else if (c === ':') {
+            // Treat as kv only if followed by space or end-of-string
+            if (i === after.length - 1 || after[i + 1] === ' ') return i;
+          }
+        }
+        return -1;
+      })();
+
+      if (after === '') {
+        // Object whose first kv begins on the next line at deeper indent.
+        const peek = lookaheadStructure(baseIndent);
+        if (peek.kind === 'object') {
+          arr.push(parseObject(peek.indent));
+        } else if (peek.kind === 'array') {
+          arr.push(parseArray(peek.indent));
+        } else {
+          arr.push(null);
+        }
+      } else if (colonIdx >= 0) {
+        // "- key: value" → start an object whose remaining fields live at itemIndent.
+        const obj = {};
+        const key = after.substring(0, colonIdx).trim();
+        const v = after.substring(colonIdx + 1).trim();
+        if (v !== '') {
+          const inline = tryParseInlineArray(v);
+          obj[key] = inline !== undefined ? inline : parseScalar(v);
+        } else {
+          // Look ahead at fields nested under this kv (deeper than itemIndent).
+          const peek = lookaheadStructure(itemIndent);
+          if (peek.kind === 'array') obj[key] = parseArray(peek.indent);
+          else if (peek.kind === 'object') obj[key] = parseObject(peek.indent);
+          else obj[key] = null;
+        }
+        // Continue gathering sibling fields of this object at itemIndent.
+        while (pos < lines.length) {
+          const next = lines[pos];
+          const nind = indentOf(next);
+          if (nind < itemIndent) break;
+          if (nind > itemIndent) {
+            // Belongs to a deeper nested value already consumed above.
+            pos++;
+            continue;
+          }
+          const ntrim = next.trim();
+          if (ntrim.startsWith('- ')) break; // belongs to a parent array, not us
+          const ci = ntrim.indexOf(':');
+          if (ci < 0) {
+            pos++;
+            continue;
+          }
+          const k2 = ntrim.substring(0, ci).trim();
+          const v2 = ntrim.substring(ci + 1).trim();
+          pos++;
+          if (v2 !== '') {
+            const inline = tryParseInlineArray(v2);
+            obj[k2] = inline !== undefined ? inline : parseScalar(v2);
+          } else {
+            const peek = lookaheadStructure(itemIndent);
+            if (peek.kind === 'array') obj[k2] = parseArray(peek.indent);
+            else if (peek.kind === 'object') obj[k2] = parseObject(peek.indent);
+            else obj[k2] = null;
+          }
+        }
+        arr.push(obj);
+      } else {
+        // Scalar / inline array
+        const inline = tryParseInlineArray(after);
+        arr.push(inline !== undefined ? inline : parseScalar(after));
+      }
+    }
+    return arr;
+  }
+
+  // Top level is always an object.
+  return parseObject(0);
 }
 
 function readStructured(filePath) {
@@ -132,6 +310,22 @@ export function loadConfig({ projectRoot = process.cwd(), presetRoot = null } = 
     ...(pathsOverride.test_cmd !== undefined && { test_cmd: pathsOverride.test_cmd }),
     ...(pathsOverride.lint_cmd !== undefined && { lint_cmd: pathsOverride.lint_cmd }),
     ...(Array.isArray(pathsOverride.src_paths) && { src_paths: pathsOverride.src_paths }),
+    // Per-module commands. When set, /cc-nexs:build picks per-module build_cmd / test_cmd
+    // based on git-diff intersection with each module's `match` globs. Top-level
+    // build_cmd / test_cmd act as fallback when no module matches.
+    //
+    // Schema:
+    //   paths_override.modules:
+    //     - name: backend
+    //       match: ["backend-java/**"]
+    //       build_cmd: "cd backend-java && mvn -q compile"
+    //       test_cmd:  "cd backend-java && mvn -q test"
+    //     - name: web
+    //       match: ["web/**"]
+    //       build_cmd: "cd web && pnpm build"
+    //       test_cmd:  "cd web && pnpm test"
+    ...(Array.isArray(pathsOverride.modules) && { modules: pathsOverride.modules }),
+    ...(pathsOverride.diff_base !== undefined && { diff_base: pathsOverride.diff_base }),
   };
 
   return {

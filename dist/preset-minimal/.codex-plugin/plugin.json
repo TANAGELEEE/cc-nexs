@@ -1,0 +1,36 @@
+{
+  "name": "cc-nexs-minimal",
+  "version": "0.2.0-dev",
+  "description": "Minimal cc-nexs Codex Plugin: mirrors the lightweight planner / developer / reviewer SOP with the same command and document semantics as the Claude Code preset.",
+  "author": {
+    "name": "cc-nexs"
+  },
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "plugin",
+    "sop",
+    "workflow",
+    "state-machine"
+  ],
+  "skills": "./codex-skills/",
+  "interface": {
+    "displayName": "cc-nexs minimal",
+    "shortDescription": "Run the minimal cc-nexs SOP in Codex",
+    "longDescription": "cc-nexs minimal provides the generic three-role SOP preset for Codex. It mirrors command behavior, document write locations, role isolation, and state-machine progression from the Claude Code preset.",
+    "developerName": "cc-nexs",
+    "category": "Engineering",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "/cc-nexs-minimal:planner 01",
+      "/cc-nexs-minimal:dev 01",
+      "/cc-nexs-minimal:review code 01"
+    ],
+    "brandColor": "#2563EB",
+    "screenshots": []
+  }
+}
