@@ -94,7 +94,8 @@ function validateRunCommand() {
   const path = join(ROOT, 'packages', 'core', 'commands', 'run.md');
   const text = read(path);
   mustContain(path, text, [
-    'current_state == SPEC_PENDING_HUMAN',
+    'SPEC_PENDING_HUMAN',
+    'DEPLOY_GATE',
     'MODE=$(grep -oE',
     'full|fast|lite|hotfix',
     'Role → command dispatch table',
@@ -106,7 +107,7 @@ function validateRunCommand() {
     '/cc-nexs:fullstack <id> --phase=spec',
     '/cc-nexs:review accept <id>',
     '/cc-nexs:verify regression <id>',
-    'fast 模式合并解析',
+    'fast 模式解析',
     'Artifact completeness gate',
     'deploy.md api-doc.md test-report.md',
     'all-docs/doc/<id>.<slug>',

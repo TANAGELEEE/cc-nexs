@@ -131,7 +131,8 @@ fi
 /cc-nexs:init         ← 第 1 步：建目录 + 写一句话诉求
 /cc-nexs:brainstorm   ← 第 2 步：本命令，把一句话展成 requirements.md
 /cc-nexs:run          ← 第 3 步：Planner 把 requirements.md 展成 spec.md，跑全流程
-/cc-nexs:approve-spec ← 唯一人工 gate
+/cc-nexs:approve-spec ← G1 人工 gate（spec 审批）
+/cc-nexs:approve-deploy ← G2 人工 gate（部署确认）
 ```
 
 ## 输出契约

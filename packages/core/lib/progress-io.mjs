@@ -34,7 +34,7 @@ function detectKeys(text) {
 }
 
 function extractYamlBlock(text, heading) {
-  const re = new RegExp(`## ${escape(heading)}\\s*\\n([\\s\\S]*?)(?=\\n## |\\n# |$)`);
+  const re = new RegExp(`## ${escape(heading)}\\s*\\n([\\s\\S]*?)(?=\\n## |$)`);
   const m = text.match(re);
   if (!m) return null;
   const body = m[1];
@@ -42,6 +42,20 @@ function extractYamlBlock(text, heading) {
   if (fence) return parseSimpleYaml(fence[1]);
   // Allow plain `key: value` lines without code fence
   return parseSimpleYaml(body);
+}
+
+function extractAllYamlBlocks(text, heading) {
+  const re = new RegExp(`## ${escape(heading)}\\s*\\n([\\s\\S]*?)(?=\\n## |$)`);
+  const m = text.match(re);
+  if (!m) return null;
+  const body = m[1];
+  const fences = [...body.matchAll(/```ya?ml\s*\n([\s\S]*?)\n```/g)];
+  if (fences.length === 0) return parseSimpleYaml(body);
+  const merged = {};
+  for (const f of fences) {
+    Object.assign(merged, parseSimpleYaml(f[1]));
+  }
+  return merged;
 }
 
 function escape(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
@@ -52,7 +66,11 @@ function parseSimpleYaml(text) {
     if (!line.trim() || line.trim().startsWith('#')) continue;
     const m = line.match(/^\s*([a-zA-Z_][\w-]*)\s*:\s*(.*)$/);
     if (m) {
-      const v = m[2].trim();
+      let v = m[2].trim();
+      // Strip inline YAML comments (not inside quotes)
+      if (!v.startsWith('"') && !v.startsWith("'")) {
+        v = v.replace(/\s+#.*$/, '');
+      }
       if (v === '' || v === 'null' || v === '~') out[m[1]] = null;
       else if (/^-?\d+$/.test(v)) out[m[1]] = parseInt(v, 10);
       else if (v === 'true') out[m[1]] = true;
@@ -69,7 +87,7 @@ export function readProgress(path) {
   const keys = detectKeys(text);
   const stateBlock = extractYamlBlock(text, keys.state) || {};
   const counters = extractYamlBlock(text, keys.counters) || {};
-  const gate = extractYamlBlock(text, keys.gate) || {};
+  const gate = extractAllYamlBlocks(text, keys.gate) || {};
   const sprint = extractYamlBlock(text, keys.sprint) || {};
   const history = parseHistory(text, keys.history);
 
@@ -81,8 +99,21 @@ export function readProgress(path) {
     counters,
     sprint,
     gate,
+    workflow: {
+      g2_approved: gate.g2_approved === true,
+      g2_approved_sprints: buildG2SprintMap(gate),
+    },
     history,
   };
+}
+
+function buildG2SprintMap(gate) {
+  const map = {};
+  for (const [k, v] of Object.entries(gate)) {
+    const m = k.match(/^g2_sprint_(\d+)_approved$/);
+    if (m && v === true) map[parseInt(m[1], 10)] = true;
+  }
+  return map;
 }
 
 function parseHistory(text, heading) {

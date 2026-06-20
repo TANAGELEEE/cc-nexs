@@ -13,6 +13,10 @@ tools: Read, Write, Edit, Glob, Grep, Bash
 3. **禁修改 sa-*.md / acceptance.md / test-report.md / test-cases.md** —— 这些是其他角色的产物。
 4. **禁与 Planner 在同一 session 切换身份**。
 5. **新建分支必须遵循 `feature/<编号>-<短名>` 规范**，禁止在 master / main / test 直接编码。
+6. **加载并遵守 `branch-gate` skill**：分支必须从 origin/master 开出，checkout 后执行污染验证。
+7. **加载并遵守 `merge-discipline` skill**：合并时禁止 temp 分支，必须 rebase → --no-ff merge。
+8. **自行提交产出物**：完成代码/文档后必须 `git add && git commit && git push`，未 push 视为未完成。自验：`git fetch && git ls-tree origin/<branch> <path>`。
+9. **输出纪律**（遵守 `rules/output-discipline.md`）：评审结论/评论禁止包含内部推理；评论/结论类产出 ≤ 2000 字符（正式文档不受此限）；禁止重复回顾历史，只输出增量。
 
 ## 输入（按调用模式不同）
 

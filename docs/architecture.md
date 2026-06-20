@@ -114,7 +114,7 @@ loadConfig({ projectRoot, presetRoot? })
 特点：
 - 三档熔断（review_revision / fix_per_bug / evaluator_reject）
 - 角色弹性（缺 evaluator 时 reviewer 兼任，缺 qa 时 reviewer 兼任）
-- 唯一 stop 条件：`SPEC_PENDING_HUMAN` 且未人工放行
+- stop 条件：`SPEC_PENDING_HUMAN`（G1）或 `*_DEPLOY_GATE`（G2）且未人工放行
 
 ### `core/lib/role-registry.mjs`
 
@@ -155,7 +155,7 @@ INIT → REQ_DRAFTED → SPEC_DRAFTED → SPEC_REVIEWING
        │                ┌───────────────┴──────────────┐
        │                │ NEEDS_REVISION               │ PASS
        │                ▼                              ▼
-       │          SPEC_NEEDS_REVISION          SPEC_PENDING_HUMAN  ⏸️ 唯一人工 gate
+       │          SPEC_NEEDS_REVISION          SPEC_PENDING_HUMAN  ⏸️ G1 人工 gate
        │                │                              │
        │                └────► SPEC_DRAFTED            │ /cc-nexs:approve-spec
        │                                               ▼

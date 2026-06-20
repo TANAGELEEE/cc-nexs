@@ -5,7 +5,7 @@
 把 本预设 SOP 从 monolith CLAUDE.md 拆成可独立加载、按状态自动衔接的原子组件，达成三个核心特性：
 
 1. **状态机驱动的自循环**：阶段完成自动进入下一阶段，零等待
-2. **唯一人工 checkpoint**：仅在 spec 通过 SA 评审后停一次，避免在错误方向上累积浪费
+2. **两个人工 checkpoint**：G1 spec 通过 SA 评审后停一次；G2 代码评审通过后部署确认
 3. **五方异构身份隔离**：Planner / Tech Lead / SA / QA / Evaluator 五角色，跨工具（Claude × 2 + Codex × 3）+ session 级隔离
 
 ## 状态机
@@ -32,7 +32,7 @@
                                  │ PASS
                                  ▼
               ┌────────────────────────────────────────┐
-              │  ⏸️  SPEC_PENDING_HUMAN  (唯一人工 gate) │
+              │  ⏸️  SPEC_PENDING_HUMAN  (G1 人工 gate)    │
               └─────────────────────┬──────────────────┘
                                     │ /cc-nexs:approve-spec
                                     ▼
@@ -133,7 +133,7 @@
 3. 等待 command 完成 → 解析输出 → 写新状态
 4. 检查熔断阈值
 5. **立即** 回到 1，自循环
-6. **唯一例外**：`SPEC_PENDING_HUMAN` 时 return 等人工
+6. **例外**：`SPEC_PENDING_HUMAN` 或 `*_DEPLOY_GATE` 时 return 等人工
 
 ## 数据流
 
@@ -208,32 +208,42 @@ INIT → REQ_DRAFTED → SPEC_DRAFTED → SPEC_REVIEWING ──┐
                                        SPEC_APPROVED
                                              │
                                              ▼
-                                      ┌──────────┐ ◄────┐
-                                      │  BUILD   │      │ ACCEPT_NEEDS_REVISION
-                                      └────┬─────┘      │
-                                           ▼            │
-                                      ┌──────────┐      │
-                                      │   TEST   │      │
-                                      └────┬─────┘      │
-                                  阻塞 │    │ 通过       │
-                                       ▼    ▼            │
-                              ┌──────────┐  TEST_PASSED  │
-                              │   FIX    │      │        │
-                              └────┬─────┘      │        │
-                                   ▼            │        │
-                              ┌────────────┐    │        │
-                              │REGRESSION  │────┘        │
-                              └────────────┘             │
-                                       │                 │
-                                       ▼                 │
-                                   ┌──────────┐          │
-                                   │  ACCEPT  │──────────┘ 代码 NEEDS_REVISION
-                                   └────┬─────┘            或 验收未通过
-                                        │ 全 PASS
-                                        ▼
-                                   ┌──────────┐
-                                   │ COMPLETE │
-                                   └──────────┘
+                                      ┌──────────────┐ ◄──┐
+                                      │    BUILD     │    │ ACCEPTANCE_REJECTED
+                                      └──────┬───────┘    │
+                                             ▼            │
+                                      ┌──────────────┐    │
+                                      │ CODE_REVIEW  │    │
+                                      └──────┬───────┘    │
+                                    PASS │   │ NEEDS_REV  │
+                                         │   └────────────┘
+                                         ▼
+                                      ┌──────────────┐
+                                      │ DEPLOY_GATE ⏸️│
+                                      └──────┬───────┘
+                                             ▼
+                                      ┌──────────┐
+                                      │   TEST   │
+                                      └────┬─────┘
+                                  阻塞 │    │ 通过
+                                       ▼    ▼
+                              ┌──────────┐  TEST_PASSED
+                              │   FIX    │      │
+                              └────┬─────┘      │
+                                   ▼            │
+                              ┌────────────┐    │
+                              │REGRESSION  │────┘
+                              └────────────┘
+                                       │
+                                       ▼
+                                   ┌────────────┐
+                                   │ ACCEPTANCE │────┐ 验收未通过
+                                   └─────┬──────┘    │ → ACCEPTANCE_REJECTED
+                                         │ 通过      │   → 回 BUILD
+                                         ▼           │
+                                   ┌──────────┐      │
+                                   │ COMPLETE │      │
+                                   └──────────┘      │
 ```
 
 ### 三角色对照

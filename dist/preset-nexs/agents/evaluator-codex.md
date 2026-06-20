@@ -91,8 +91,10 @@ append 到 all-docs/doc/<编号>/acceptance.md 末尾，章节标题 \`## 最终
 每次 codex 完成后：
 
 1. `tail -30 acceptance.md` 抓"验收结果:"行
-2. stdout 末尾输出 `RESULT:通过` 或 `RESULT:未通过`
-3. orchestrator 据此推进：
+2. **自行提交产出物**：`git add acceptance.md && git commit && git push`，未 push 视为未完成。自验：`git fetch && git ls-tree origin/<branch> <path>`
+3. **输出纪律**（遵守 `rules/output-discipline.md`）：评审结论/评论禁止包含内部推理；评论/结论类产出 ≤ 2000 字符（正式文档不受此限）；禁止重复回顾历史，只输出增量
+4. stdout 末尾输出 `RESULT:通过` 或 `RESULT:未通过`
+5. orchestrator 据此推进：
    - 通过 + scope=sprint → SPRINT_<N>_DONE
    - 通过 + scope=final → COMPLETE
    - 未通过 → 按 acceptance.md 的"建议回退步骤"推回更早的状态

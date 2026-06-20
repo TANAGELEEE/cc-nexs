@@ -125,6 +125,10 @@ orchestrator 调用时如果带 `--revise`：
 
 仅在 spec.md 写入完成。**不**输出额外摘要、**不**调用 codex、**不**改 progress.md。orchestrator 会读 spec.md 并自动推进到 SPEC_DRAFTED，然后调用 SA 评审。
 
+**自行提交产出物**：spec.md 写完后必须 `git add && git commit && git push`，未 push 视为未完成。自验：`git fetch && git ls-tree origin/<branch> <path>`。
+
+**输出纪律**（遵守 `rules/output-discipline.md`）：评审结论/评论禁止包含内部推理（`<thinking>`/chain-of-thought）；评论/结论类产出 ≤ 2000 字符（spec.md 等正式文档不受此限）；禁止重复回顾历史，只输出增量。
+
 ## 反模式（立即停手）
 
 - 你发现自己在打开 `src/` 下的文件 → 立刻停手

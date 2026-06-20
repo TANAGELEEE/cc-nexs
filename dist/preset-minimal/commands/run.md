@@ -6,9 +6,45 @@ argument-hint: [feature_id] [--sprint=N | --resume]
 
 # /cc-nexs:run
 
-> **Core rule**: after a stage completes, immediately enter the next stage. Do NOT print a summary and wait for user input. **The single exception** is `current_state == SPEC_PENDING_HUMAN` — in that case stop and return.
+> **Core rule**: after a stage completes, immediately enter the next stage. Do NOT print a summary and wait for user input. **The exceptions** are human gates (`SPEC_PENDING_HUMAN` and `*_DEPLOY_GATE`) — in those cases stop and return.
 
 This command is the generic orchestrator. It loads `cc-nexs.config.yml` + the active `preset.yml`, then drives the state machine in `lib/state-machine.mjs`.
+
+## Orchestrator Identity & Anti-overreach
+
+> **身份声明**：Orchestrator 只编排，**不写文件、不提交任何仓库、不写代码、不写 spec、不评审、不测试**。
+
+### 交付物验证协议
+
+成员角色声称"已完成"时，Orchestrator **必须**通过 `git fetch && git ls-tree` 验证产出物确实存在于远端分支，**禁止盲信声明**：
+
+```bash
+git fetch origin <branch>
+git ls-tree origin/<branch> <expected_artifact_path>
+```
+
+- 文件可见 → 确认完成，推进状态机
+- 文件不可见 → **重新 dispatch 给原角色**，附带明确补推指令
+
+### 禁止自行补救
+
+发现成员交付物缺失（文档未推送 / 任务未完成）时：
+- ❌ 禁止 Orchestrator 自己补写、补推、补提交
+- ✅ 必须重新派发给对应成员，附带"你的 XX 文档未推送到 <branch>，请补推"
+
+### 并行 dispatch 规则
+
+当 `nextStep()` 返回 `parallel` 字段时，Orchestrator **必须**使用 Agent tool 并发调用两个角色（在同一条消息中发出多个 Agent tool call），而非串行执行：
+
+```
+// nextStep 返回示例:
+{ next: 'SPRINT_1_DEV', role: 'tech-lead', action: 'implement', parallel: { role: 'qa', action: 'write_cases' } }
+
+// → 同时 dispatch:
+//   Agent 1: tech-lead → implement
+//   Agent 2: qa → write_cases
+// 两者完成后再推进状态机
+```
 
 ## Step -1: Worktree sanity check
 
@@ -94,7 +130,24 @@ Use core's `loadConfig({ projectRoot: pwd })` to get:
 - `preset.modes[MODE].enabled` (preferred) or `preset.roles.enabled` (fallback) — ordered role list
 - `preset.modes[MODE].state_machine` — `'full'` or `'fast'` (passed to `nextStep` as `mode`)
 - `preset.modes[MODE].thresholds_override` merged on top of `preset.workflow.thresholds`
+- `preset.modes?.[MODE]?.g2_enabled` — whether G2 deploy gate is active (default: `true` for nexs, `false` for minimal)
 - `i18n.locale` — for state names + conclusion strings
+
+### Constructing `workflow` for `nextStep`
+
+The `workflow` object passed to `nextStep` is assembled from **preset config + progress.md state**:
+
+```js
+const presetG2 = preset.modes?.[MODE]?.g2_enabled ?? preset.workflow?.g2_enabled ?? true;
+const progress = readProgress(progressPath);
+const workflow = {
+  g2_enabled: presetG2,
+  g2_approved: progress.workflow.g2_approved,
+  g2_approved_sprints: progress.workflow.g2_approved_sprints,
+};
+```
+
+This ensures `g2_enabled: false` in minimal preset causes the state machine to skip DEPLOY_GATE entirely.
 
 ## Step 2: Dispatch loop
 
@@ -106,7 +159,7 @@ Repeatedly:
    - `circuitBreaker` set → log to progress.md history + spec.md changelog, then transition
    - `stop: true` → output human-gate summary (Step 3) and return
    - `role` set → invoke that role's command per the dispatch table below
-   - `parallel` set → invoke the parallel role too (full mode only: e.g. QA writes cases while Dev implements)
+   - `parallel` set → **必须**在同一条消息中使用多个 Agent tool call 并发 dispatch 两个角色（见 "并行 dispatch 规则"），两者都完成后再推进状态机
    - `action == 'parse_*_conclusion'` → tail the corresponding md file's conclusion line, choose next state accordingly
 4. After the action completes, call `transitionState(progressPath, {from, to, reason})`
 4.5. **Sync the per-feature README** so users entering the worktree see fresh state (the README's first line promises "进入目录第一件事：读本文件"). Best-effort, never blocks orchestration:
@@ -136,14 +189,19 @@ Per-mode mapping. The orchestrator selects the correct slash command based on `M
 | `tech-lead` / `dev` | `sync_docs` | `/cc-nexs:dev <id> --mode=doc --sprint=N` | (n/a) |
 | `sa` / `reviewer` | `review_spec` | `/cc-nexs:sa spec` | `/cc-nexs:review spec <id>` |
 | `sa` / `reviewer` | `review_test_cases` | `/cc-nexs:sa test-cases` | (n/a) |
-| `sa` / `reviewer` | `review_code` | `/cc-nexs:sa code` | `/cc-nexs:review accept <id>` |
+| `sa` / `reviewer` | `review_code` | `/cc-nexs:sa code` | `/cc-nexs:review code <id>` |
+| `sa` / `reviewer` | `accept` | (n/a) | `/cc-nexs:review accept <id>` |
 | `qa` / `verifier` | `write_cases` | `/cc-nexs:qa cases` | `/cc-nexs:verify initial <id>` |
 | `qa` / `verifier` | `run` | `/cc-nexs:qa run` | (folded into `/cc-nexs:verify initial`) |
 | `qa` / `verifier` | `regression` | `/cc-nexs:qa regression` | `/cc-nexs:verify regression <id>` |
-| `evaluator` | `final_acceptance` | `/cc-nexs:evaluator` | (folded into `/cc-nexs:review accept`) |
+| `evaluator` | `final_acceptance` | `/cc-nexs:evaluator` | (n/a) |
 | `fullstack` | `draft_spec` / `revise_spec` | (n/a) | `/cc-nexs:fullstack <id> --phase=spec` |
 | `fullstack` | `implement` / `revise_implementation` | (n/a) | `/cc-nexs:fullstack <id> --phase=build` |
 | `fullstack` | `fix_bug` | (n/a) | `/cc-nexs:fullstack <id> --phase=fix --bug=<BUG-ID>` |
+
+Key fast mode distinction:
+- `review_code` → `/cc-nexs:review code <id>` — **only** generates `sa-code-review.md` (no acceptance)
+- `accept` → `/cc-nexs:review accept <id>` — **only** generates `acceptance.md` (test-report.md is available)
 
 Implementation hint: a small `dispatch(role, action, mode, reqId, extras)` helper picks the command name from this table; the `action` field from `nextStep` directly disambiguates which sub-command to invoke for multi-target roles.
 
@@ -183,6 +241,42 @@ When `next == 'SPEC_PENDING_HUMAN'` and `humanGateApproved == false`, **first ca
 
 Then **return**. Do not call any tool that the approval-gate-guard hook would block.
 
+## Step 3.5: Deploy gate output (G2)
+
+When `action == 'await_deploy_approval'` and `stop: true`, output the G2 gate summary:
+
+```
+═══════════════════════════════════════════════════════════════
+🚀 [i18n: deploy_gate_summary_header]
+═══════════════════════════════════════════════════════════════
+
+[i18n: labels.feature]: <id> <slug>
+[i18n: labels.branch]: $(git branch --show-current)
+[i18n: labels.mode]: <full|fast>
+[i18n: labels.sprint]: M<N>          ← full 模式有
+
+【SA Code Review 结论】
+(tail -5 sa-code-review.md 结论行)
+
+【待部署变更摘要】
+(git log --oneline origin/master..HEAD | head -10)
+
+【数据库变更】（如有）
+(grep -A5 'DDL\|DML\|ALTER\|CREATE' deploy.md)
+
+═══════════════════════════════════════════════════════════════
+👉 请按 merge-discipline 完整流程完成部署确认:
+   1. git fetch origin test && git rebase origin/test
+   2. 构建验证通过（mvn compile / pnpm build 等）
+   3. git push --force-with-lease origin <feature-branch>
+   4. git checkout test && git merge --no-ff <feature-branch>
+   5. git push origin test → 部署测试环境
+   6. 功能验证通过后执行: /cc-nexs:approve-deploy <id>
+═══════════════════════════════════════════════════════════════
+```
+
+Then **return**. Pipeline halts until human runs `/cc-nexs:approve-deploy`.
+
 ## Step 4: Conclusion parsing rules
 
 | File | Pattern (regex applied to last 30 lines) | Conclusion outcomes |
@@ -194,21 +288,51 @@ Then **return**. Do not call any tool that the approval-gate-guard hook would bl
 
 i18n: the literal strings (`PASS`, `通过`, `PASSED`, etc.) come from preset's `i18n.conclusion_*` settings.
 
-### fast 模式合并解析
+### full 模式 SA_CODE 结论路由
 
-`mode=fast` 在 `state == 'ACCEPT'` 之后 `action == 'parse_accept_conclusion'`，需要**同时解析两个文件**（reviewer 一次产两份）：
+`PARSE_SA_CODE` 结论解析后的路由（G2 门禁插入点）：
+
+| SA_CODE 结论 | 下一状态 | 说明 |
+|---|---|---|
+| PASS | `SPRINT_<N>_DEPLOY_GATE` | 代码评审通过 → 等待人工部署测试环境 |
+| NEEDS_REVISION | `SPRINT_<N>_FIX` | 代码评审未通过 → 开发修复 |
+
+### full 模式 SA_TEST_REVIEW 结论路由
+
+`PARSE_SA_TEST_REVIEW` 解析 `sa-test-review.md` 末尾结论后的路由：
+
+| SA_TEST_REVIEW 结论 | 下一状态 | 说明 |
+|---|---|---|
+| PASS | `SPRINT_<N>_DOC_SYNC` | 用例评审通过 → Tech Lead 同步文档 |
+| NEEDS_REVISION | `SPRINT_<N>_QA_CASES` | 用例评审未通过 → QA 修订用例 |
+
+### fast 模式解析（拆分后）
+
+#### PARSE_CODE_REVIEW（CODE_REVIEW 之后）
+
+只解析 sa-code-review.md：
 
 ```bash
 CODE=$(tail -20 ${REQ_DIR}sa-code-review.md | grep -E '^结论:' | tail -1 | awk '{print $2}')
+```
+
+| CODE 结论 | 下一状态 | 计数器 |
+|---|---|---|
+| PASS | DEPLOY_GATE | — |
+| NEEDS_REVISION | CODE_REVIEW_NEEDS_REVISION | review_revision++ |
+
+#### PARSE_ACCEPTANCE（ACCEPTANCE 之后）
+
+只解析 acceptance.md（此时 test-report.md 已存在）：
+
+```bash
 ACC=$(tail -30 ${REQ_DIR}acceptance.md | grep -E '^验收结果:' | tail -1 | awk '{print $2}')
 ```
 
-| CODE 结论 | ACC 验收结果 | 下一状态 | 计数器 |
-|---|---|---|---|
-| PASS | 通过 | COMPLETE | — |
-| NEEDS_REVISION | 通过 | ACCEPT_NEEDS_REVISION | review_revision++ |
-| PASS | 未通过 | ACCEPT_NEEDS_REVISION | evaluator_reject++ |
-| NEEDS_REVISION | 未通过 | ACCEPT_NEEDS_REVISION | review_revision++、evaluator_reject++ |
+| ACC 验收结果 | 下一状态 | 计数器 |
+|---|---|---|
+| 通过 | COMPLETE | — |
+| 未通过 | ACCEPTANCE_REJECTED | evaluator_reject++ |
 
 `mode=fast` 在 `state == 'TEST'` 后解析 `test-report.md` 末尾结论；`通过 → TEST_PASSED`，`阻塞 → TEST_BLOCKED`。
 

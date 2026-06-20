@@ -19,7 +19,7 @@
     },
     {
       "name": "cc-nexs",
-      "description": "五方异构 SOP 的 Claude Code Plugin：Planner / Tech Lead / SA / QA / Evaluator 五角色，状态机驱动的自循环开发流水线，spec 通过评审后唯一一次人工 checkpoint。",
+      "description": "五方异构 SOP 的 Claude Code Plugin：Planner / Tech Lead / SA / QA / Evaluator 五角色，状态机驱动的自循环开发流水线，两个人工 checkpoint（G1 spec 审批 + G2 部署确认）。",
       "version": "0.2.0-dev",
       "author": {
         "name": "cc-nexs"

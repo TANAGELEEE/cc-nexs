@@ -3,7 +3,7 @@
   "mode": "full",
   "_mode_options": {
     "full": "完整五方流程（Planner → SA → 人工 gate → Tech Lead × QA × SA 闭环 → Evaluator）",
-    "fast": "三角色单 sprint（Fullstack 一手包办 spec+code → Reviewer 评 spec → 人工 gate → Verifier 写+跑用例 → Reviewer 一次完成代码评审+契约验收）。比 full 少 ~50% 调用，适合单模块小改动",
+    "fast": "三角色单 sprint（Fullstack 一手包办 spec+code → Reviewer 评 spec → 人工 gate → Fullstack 编码 → Reviewer 代码评审 → G2 部署门禁 → Verifier 写+跑用例 → Reviewer 契约验收）。比 full 少 ~50% 调用，适合单模块小改动",
     "lite": "轻量流程（Tech Lead → 自测 → commit），跳过 spec 和 Evaluator，适合极小改动",
     "hotfix": "Bug 修复流程，按 P0/P1/P2/P3 自动分档"
   },

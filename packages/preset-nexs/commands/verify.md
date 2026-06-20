@@ -84,9 +84,9 @@ echo "RESULT:${RESULT} OPEN=${OPEN} FIXED=${FIXED} VERIFIED=${VERIFIED}"
 ### 4. 不推进状态
 
 orchestrator 读结论 + BUG 计数后推进：
-- initial 通过 → ACCEPT
+- initial 通过 → ACCEPTANCE
 - initial 阻塞（有 OPEN BUG）→ SPRINT_FIX
-- regression 通过（全 VERIFIED）→ ACCEPT
+- regression 通过（全 VERIFIED）→ ACCEPTANCE
 - regression 失败 → fix_per_bug++ 回 SPRINT_FIX
 
 ## 输出

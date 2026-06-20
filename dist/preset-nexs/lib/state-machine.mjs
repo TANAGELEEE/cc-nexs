@@ -14,7 +14,8 @@ const HUMAN_GATE = 'SPEC_PENDING_HUMAN';
  *
  *   mode='full' (default) — five-role SOP with sprint slicing, plus pre-spec recon:
  *     INIT → REQ_DRAFTED → RECON_DONE → SPEC_DRAFTED → SPEC_REVIEWING → [SPEC_PENDING_HUMAN] → SPEC_APPROVED
- *       → SPRINT_<N>_DEV → SPRINT_<N>_REVIEW → SPRINT_<N>_TEST → [SPRINT_<N>_FIX → SPRINT_<N>_REGRESSION]
+ *       → SPRINT_<N>_DEV → SPRINT_<N>_DOC_SYNC → SPRINT_<N>_SA_CODE → SPRINT_<N>_DEPLOY_GATE (stop)
+ *       → SPRINT_<N>_QA_RUN → [SPRINT_<N>_FIX → SPRINT_<N>_REGRESSION]
  *       → SPRINT_<N>_EVAL → SPRINT_<N>_DONE → … → ALL_SPRINTS_DONE → FINAL_EVAL → COMPLETE
  *     RECON stage: repo-scout reads src/ and produces repo-context.md so Planner — which is
  *     forbidden from reading src/ — can ground its spec in the existing infrastructure.
@@ -50,7 +51,7 @@ export function nextStep({
   mode = 'full',
 }) {
   if (mode === 'fast') {
-    return nextStepFast({ state, counters, thresholds, enabledRoles, humanGateApproved });
+    return nextStepFast({ state, counters, thresholds, enabledRoles, humanGateApproved, workflow });
   }
   return nextStepFull({ state, counters, thresholds, enabledRoles, sprint, humanGateApproved, workflow });
 }
@@ -129,13 +130,19 @@ function nextStepFull({
           case 'QA_CASES':
             return { next: `SPRINT_${N}_SA_TEST_REVIEW`, role: reviewer, action: 'review_test_cases', sprint: N };
           case 'DEV':
-            return { next: `SPRINT_${N}_DOC_SYNC`, role: dev, action: 'sync_docs', sprint: N };
+            // After parallel DEV + QA_CASES both complete, route to SA_TEST_REVIEW
+            // so SA reviews the cases QA wrote in parallel, then continue to DOC_SYNC.
+            return { next: `SPRINT_${N}_SA_TEST_REVIEW`, role: reviewer, action: 'review_test_cases', sprint: N };
           case 'SA_TEST_REVIEW':
             return { next: `SPRINT_${N}_PARSE_SA_TEST_REVIEW`, role: null, action: 'parse_test_review_conclusion', sprint: N };
           case 'DOC_SYNC':
             return { next: `SPRINT_${N}_SA_CODE`, role: reviewer, action: 'review_code', sprint: N };
           case 'SA_CODE':
             return { next: `SPRINT_${N}_PARSE_SA_CODE`, role: null, action: 'parse_review_conclusion', sprint: N };
+          case 'DEPLOY_GATE':
+            if (!workflow.g2_enabled) return { next: `SPRINT_${N}_QA_RUN`, role: qa, action: 'run', sprint: N };
+            if (workflow.g2_approved_sprints && workflow.g2_approved_sprints[N]) return { next: `SPRINT_${N}_QA_RUN`, role: qa, action: 'run', sprint: N };
+            return { next: `SPRINT_${N}_DEPLOY_GATE`, role: null, action: 'await_deploy_approval', stop: true, sprint: N };
           case 'QA_RUN':
             return { next: `SPRINT_${N}_PARSE_QA_RUN`, role: null, action: 'parse_test_conclusion', sprint: N };
           case 'FIX':
@@ -175,7 +182,12 @@ function nextStepFull({
  * 状态序列：
  *   INIT → REQ_DRAFTED → SPEC_DRAFTED → SPEC_REVIEWING
  *     → [SPEC_PENDING_HUMAN] → SPEC_APPROVED
- *     → BUILD → TEST → [FIX → REGRESSION]* → ACCEPT → COMPLETE
+ *     → BUILD → CODE_REVIEW → DEPLOY_GATE (stop) → TEST → [FIX → REGRESSION]*
+ *     → TEST_PASSED → ACCEPTANCE → COMPLETE
+ *
+ * CODE_REVIEW produces only sa-code-review.md (no test-report.md needed).
+ * ACCEPTANCE produces acceptance.md after tests pass (test-report.md is available).
+ * DEPLOY_GATE is skippable via preset config (g2_enabled: false).
  *
  * 与 full 的关键差异：
  *   - 没有 SPRINT_<N>_* 命名（强制单 sprint）
@@ -183,7 +195,7 @@ function nextStepFull({
  *   - ACCEPT 一次完成代码评审 + 契约验收（合并 SA code + Evaluator）
  *   - 熔断阈值更严（preset thresholds_override）
  */
-function nextStepFast({ state, counters, thresholds, enabledRoles, humanGateApproved }) {
+function nextStepFast({ state, counters, thresholds, enabledRoles, humanGateApproved, workflow = {} }) {
   const has = (r) => enabledRoles.includes(r);
   // fast 模式三角色：fullstack / reviewer / verifier，缺一不可
   const fullstack = has('fullstack') ? 'fullstack' : null;
@@ -226,8 +238,18 @@ function nextStepFast({ state, counters, thresholds, enabledRoles, humanGateAppr
     case 'SPEC_APPROVED':
       return { next: 'BUILD', role: fullstack, action: 'implement' };
     case 'BUILD':
-      // 实现完成后由 verifier 一次产 cases + run + report
-      return { next: 'TEST', role: verifier, action: 'verify_initial' };
+      // After coding → code review only (no acceptance yet, no test-report available)
+      return { next: 'CODE_REVIEW', role: reviewer, action: 'review_code' };
+    case 'CODE_REVIEW':
+      return { next: 'PARSE_CODE_REVIEW', role: null, action: 'parse_review_conclusion' };
+    case 'CODE_REVIEW_NEEDS_REVISION':
+      return { next: 'BUILD', role: fullstack, action: 'revise_implementation' };
+    case 'DEPLOY_GATE':
+      // After code review passes → human merges to test + deploys → then QA
+      // Skip if g2_enabled is false (preset config)
+      if (!workflow.g2_enabled) return { next: 'TEST', role: verifier, action: 'verify_initial' };
+      if (workflow.g2_approved) return { next: 'TEST', role: verifier, action: 'verify_initial' };
+      return { next: 'DEPLOY_GATE', role: null, action: 'await_deploy_approval', stop: true };
     case 'TEST':
       return { next: 'PARSE_TEST', role: null, action: 'parse_test_conclusion' };
     case 'TEST_BLOCKED':
@@ -237,12 +259,11 @@ function nextStepFast({ state, counters, thresholds, enabledRoles, humanGateAppr
     case 'REGRESSION':
       return { next: 'PARSE_REGRESSION', role: null, action: 'parse_regression_conclusion' };
     case 'TEST_PASSED':
-      // initial 通过 或 regression 通过 → 进入合并 ACCEPT
-      return { next: 'ACCEPT', role: reviewer, action: 'review_and_accept' };
-    case 'ACCEPT':
-      return { next: 'PARSE_ACCEPT', role: null, action: 'parse_accept_conclusion' };
-    case 'ACCEPT_NEEDS_REVISION':
-      // 代码评审 NEEDS_REVISION 或 契约验收 未通过 → 回 BUILD（fullstack 修，并 increment 对应计数）
+      // Tests passed → final contract acceptance (test-report.md now available)
+      return { next: 'ACCEPTANCE', role: reviewer, action: 'accept' };
+    case 'ACCEPTANCE':
+      return { next: 'PARSE_ACCEPTANCE', role: null, action: 'parse_accept_conclusion' };
+    case 'ACCEPTANCE_REJECTED':
       return { next: 'BUILD', role: fullstack, action: 'revise_implementation' };
     default:
       return { next: state, role: null, action: 'unknown_state' };

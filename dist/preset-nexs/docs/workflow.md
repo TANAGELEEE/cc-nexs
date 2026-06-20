@@ -270,15 +270,16 @@ COMPLETE 后人工拉取清单去做线下验证
 | **SPEC_PENDING_HUMAN** | sa-review.md 末轮 PASS | 摘要输出 + 等 `/cc-nexs:approve-spec` | progress.md.human_approved_at != null |
 | SPEC_APPROVED | human_approved_at 非空 | — | — |
 | BUILD | spec.md 五章节齐全 + 已 approved | 代码 commit + mvn compile = 0 + 无中文字符串 + dev-plan/api-doc/deploy 各 append M1 章节 | mvn compile 退出码 0；`grep -E '^## Sprint M1' api-doc.md deploy.md` |
-| TEST | BUILD 完成 | test-cases.md ## Sprint M1 + qa-scripts/ 脚本 + test-report.md ## Sprint M1 Round 1 + 覆盖审计表 | 末尾 `结论: 通过\|阻塞`；通过 → TEST_PASSED，阻塞 → TEST_BLOCKED |
+| CODE_REVIEW | BUILD 完成 | sa-code-review.md ## Sprint M1 - Round R 结论 | `tail -20 sa-code-review.md \| grep '^结论:'`；PASS → DEPLOY_GATE，NEEDS_REVISION → BUILD(review_revision++) |
+| DEPLOY_GATE | sa-code-review PASS | 人工合入 test + 部署 + 验证后 `/cc-nexs:approve-deploy` | progress.md g2_approved = true |
+| TEST | DEPLOY_GATE 通过 | test-cases.md ## Sprint M1 + qa-scripts/ 脚本 + test-report.md ## Sprint M1 Round 1 + 覆盖审计表 | 末尾 `结论: 通过\|阻塞`；通过 → TEST_PASSED，阻塞 → TEST_BLOCKED |
 | TEST_BLOCKED | test-report.md 阻塞 + 至少一个 OPEN BUG | — | — |
 | FIX | bugs/ 下有 OPEN BUG | BUG.状态 = FIXED + 修复 commit + mvn compile = 0 | grep `状态.*FIXED` BUG-*.md |
 | REGRESSION | bugs/ 下有 FIXED BUG | BUG.状态 = VERIFIED + test-report ## Sprint M1 回归 Round R | grep `状态.*VERIFIED`；末尾结论；阻塞 → fix_per_bug++ |
 | TEST_PASSED | test-report 末尾通过 | — | — |
-| ACCEPT | TEST_PASSED | sa-code-review.md ## Sprint M1 - Round R 结论 + acceptance.md ## Sprint M1 + 最终验收 章节 + 契约打分表 | 同时解析两个文件末尾结论行 |
-| ACCEPT_NEEDS_REVISION | code NEEDS_REVISION 或 验收未通过 | 修订后回 BUILD | review_revision 或 evaluator_reject 计数器 ++ |
+| ACCEPTANCE | TEST_PASSED | acceptance.md ## Sprint M1 + 最终验收 章节 + 契约打分表 | `tail -30 acceptance.md \| grep '^验收结果:'`；通过 → COMPLETE，未通过 → BUILD(evaluator_reject++) |
 | HUMAN_INTERVENTION | 同 BUG fix_per_bug ≥ 2 | 停下要人工介入 | stop=true，orchestrator 输出当前 BUG 上下文后 return |
-| COMPLETE | code PASS + 验收通过 | 输出最终报告 | — |
+| COMPLETE | 验收通过 | 输出最终报告 | — |
 
 ### fast 模式典型时序
 
@@ -301,12 +302,19 @@ COMPLETE 后人工拉取清单去做线下验证
 机:   → SPEC_APPROVED → BUILD
       调起 fullstack-claude（phase=build）→ src/* + dev-plan + api-doc + deploy
       mvn compile = 0 + 无中文字符串
+机:   → CODE_REVIEW
+      调起 reviewer-codex（target=code）→ sa-code-review.md 结论 PASS
+机:   → DEPLOY_GATE ⏸️ 输出合并/部署指引 + return
+
+人:   合入 test 分支 → 部署测试环境 → 验证
+人:   /cc-nexs:approve-deploy 01
+
+人:   /cc-nexs:run 01
 机:   → TEST
       调起 verifier-codex（mode=initial）→ test-cases + qa-scripts + test-report
       末尾通过
-机:   → TEST_PASSED → ACCEPT
-      调起 reviewer-codex（target=accept）→ sa-code-review + acceptance（一次完成）
-      代码 PASS + 验收通过
+机:   → TEST_PASSED → ACCEPTANCE
+      调起 reviewer-codex（target=accept）→ acceptance.md 验收通过
 机:   → COMPLETE
 ```
 
@@ -317,15 +325,15 @@ COMPLETE 后人工拉取清单去做线下验证
       调起 fullstack-claude（phase=fix --bug=BUG-001）→ BUG-001.状态=FIXED
 机:   → REGRESSION
       调起 verifier-codex（mode=regression）→ BUG-001.状态=VERIFIED + 回归通过
-机:   → TEST_PASSED → ACCEPT → COMPLETE
+机:   → TEST_PASSED → ACCEPTANCE → COMPLETE
 ```
 
 ### 熔断路径
 
 ```
-机:   → ACCEPT → 代码 NEEDS_REVISION → ACCEPT_NEEDS_REVISION (review_revision=1)
-机:   → BUILD → TEST → ACCEPT → 代码 NEEDS_REVISION (review_revision=2)
-🛑   熔断：回 SPEC_REVIEWING，Fullstack 按 sa-code-review.md 反馈重写方案
+机:   → ACCEPTANCE → 验收未通过 → ACCEPTANCE_REJECTED (evaluator_reject=1)
+机:   → BUILD → CODE_REVIEW → DEPLOY_GATE → TEST → ACCEPTANCE → 验收未通过 (evaluator_reject=2)
+🛑   熔断：回 SPEC_DRAFTED，重审 AC 与实现路径
 ```
 
 ```

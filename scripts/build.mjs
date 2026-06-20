@@ -266,6 +266,10 @@ function buildPreset(presetName) {
   n = copyDir(join(coreSrc, 'schemas'), join(dst, 'schemas'));
   console.log(`  core schemas: ${n} 个文件`);
 
+  // 5b. core/rules → dst/rules/
+  n = copyDir(join(coreSrc, 'rules'), join(dst, 'rules'));
+  if (n > 0) console.log(`  core rules: ${n} 个文件`);
+
   // 6. core/i18n → dst/i18n/（不覆盖 preset 已有的）
   n = copyDir(join(coreSrc, 'i18n'), join(dst, 'i18n'), { skipExisting: true });
   console.log(`  core i18n: 新增 ${n} 个`);

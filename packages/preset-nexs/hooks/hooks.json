@@ -1,5 +1,5 @@
 {
-  "description": "cc-nexs preset-nexs hooks: 角色边界、唯一人工 gate、合并主干前置检查。",
+  "description": "cc-nexs preset-nexs hooks: 角色边界、人工 gate（G1 spec + G2 deploy）、合并主干前置检查。",
   "hooks": {
     "PreToolUse": [
       {

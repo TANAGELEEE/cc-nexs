@@ -183,7 +183,7 @@ Claude Code 里是 slash command；Codex 里可以直接输入同样的文本，
 
 ```bash
 /cc-nexs:init "需求描述"          # 一句话起新需求，自动续号 + slug + 默认建独立 worktree
-/cc-nexs:run [编号]               # 自动状态机，跑到唯一人工 gate 停下（必须在对应 worktree 内运行）
+/cc-nexs:run [编号]               # 自动状态机，跑到人工 gate 停下（G1: spec 审批, G2: 部署确认）
 /cc-nexs:approve-spec [编号]      # 人工放行 spec
 /cc-nexs:status [编号]            # 只读看状态
 /cc-nexs:build [--phase=...]      # 按 git diff 自动选 build/test 命令并跑
@@ -241,7 +241,7 @@ cd <repo-root>             → 回主仓库
 ## 设计原则
 
 1. **状态机驱动** —— 每个需求目录下 `progress.md` 持久化状态，编排器按状态自动推进
-2. **唯一人工 checkpoint** —— 默认仅在 spec 通过评审后停一次（preset 可关闭）
+2. **两个人工 checkpoint** —— G1: spec 通过评审后停一次；G2: 代码评审通过后部署确认（preset 可关闭）
 3. **三档熔断** —— review 反复打回、修复反复失败、验收反复未过分别升级到不同状态
 4. **角色边界硬隔离** —— hooks 通过 `CC_NEXS_ROLE` 环境变量拦截越权操作
 5. **预设可插拔** —— 新项目栈写新 preset，不动 core

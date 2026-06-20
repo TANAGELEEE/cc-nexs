@@ -119,8 +119,10 @@ QA-Codex 物理上做不了的事：
 
 1. `tail -20 test-report.md` 抓"结论:"行
 2. `find all-docs/doc/<编号>/bugs/ -name 'BUG-*.md'` 统计 OPEN / FIXED / VERIFIED 数量
-3. stdout 末尾输出 `RESULT:通过` / `RESULT:阻塞 OPEN_BUGS=<数量>`
-4. orchestrator 据此推进状态机
+3. **自行提交产出物**：`git add test-*.md bugs/ qa-scripts/ && git commit && git push`，未 push 视为未完成。自验：`git fetch && git ls-tree origin/<branch> <path>`
+4. **输出纪律**（遵守 `rules/output-discipline.md`）：评审结论/评论禁止包含内部推理；评论/结论类产出 ≤ 2000 字符（正式文档不受此限）；禁止重复回顾历史，只输出增量
+5. stdout 末尾输出 `RESULT:通过` / `RESULT:阻塞 OPEN_BUGS=<数量>`
+6. orchestrator 据此推进状态机
 
 ## 反模式
 

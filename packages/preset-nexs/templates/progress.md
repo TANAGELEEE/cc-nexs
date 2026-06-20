@@ -23,7 +23,7 @@ updated_at: null
 | SPEC_DRAFTED | spec.md 已写，待 SA 评审 |
 | SPEC_REVIEWING | SA 在评审 spec |
 | SPEC_NEEDS_REVISION | SA 评审未通过，回 Planner 修订 |
-| **SPEC_PENDING_HUMAN** | ⏸️ 唯一人工 gate，等 `/cc-nexs:approve-spec` |
+| **SPEC_PENDING_HUMAN** | ⏸️ 人工 gate G1，等 `/cc-nexs:approve-spec` |
 | SPEC_APPROVED | 人工放行，进入 Sprint 循环 |
 | SPRINT_<N>_KICKOFF | Sprint N 启动 |
 | SPRINT_<N>_QA_CASES | QA 在写 Sprint N 测试用例 |
@@ -31,6 +31,7 @@ updated_at: null
 | SPRINT_<N>_SA_TEST_REVIEW | SA 在审 Sprint N 测试用例 |
 | SPRINT_<N>_DOC_SYNC | Tech Lead 同步 deploy.md / api-doc.md |
 | SPRINT_<N>_SA_CODE | SA 在评审 Sprint N 代码 |
+| **SPRINT_<N>_DEPLOY_GATE** | ⏸️ 人工 gate G2，等 `/cc-nexs:approve-deploy` |
 | SPRINT_<N>_QA_RUN | QA 执行 Sprint N 用例 |
 | SPRINT_<N>_FIX | Tech Lead 修 Sprint N bug |
 | SPRINT_<N>_QA_REGRESSION | QA 回归 Sprint N |
@@ -50,16 +51,19 @@ updated_at: null
 | SPEC_DRAFTED | spec.md 已写，待 Reviewer 评审 |
 | SPEC_REVIEWING | Reviewer 在评审 spec |
 | SPEC_NEEDS_REVISION | Reviewer 评审未通过，回 Fullstack 修订 |
-| **SPEC_PENDING_HUMAN** | ⏸️ 唯一人工 gate，等 `/cc-nexs:approve-spec` |
+| **SPEC_PENDING_HUMAN** | ⏸️ 人工 gate G1，等 `/cc-nexs:approve-spec` |
 | SPEC_APPROVED | 人工放行，进入实现阶段 |
 | BUILD | Fullstack 在写代码 + 同步 dev-plan/api-doc/deploy |
+| CODE_REVIEW | Reviewer 评审代码（仅 sa-code-review.md） |
+| CODE_REVIEW_NEEDS_REVISION | 代码评审未通过，回 Fullstack 修 |
+| **DEPLOY_GATE** | ⏸️ 人工 gate G2，等 `/cc-nexs:approve-deploy` |
 | TEST | Verifier 一次产 test-cases.md + test-report.md（initial） |
 | TEST_BLOCKED | Verifier 报阻塞，进入修复 |
 | FIX | Fullstack 在修指定 BUG |
 | REGRESSION | Verifier 在回归（重跑 BUG repro + sprint P0/P1） |
-| TEST_PASSED | Verifier 通过，进入合并验收 |
-| ACCEPT | Reviewer 一次产 sa-code-review.md + acceptance.md |
-| ACCEPT_NEEDS_REVISION | 代码评审 NEEDS_REVISION 或契约验收未通过，回 BUILD |
+| TEST_PASSED | Verifier 通过，进入契约验收 |
+| ACCEPTANCE | Reviewer 产 acceptance.md（此时 test-report.md 已就绪） |
+| ACCEPTANCE_REJECTED | 契约验收未通过，回 BUILD |
 | HUMAN_INTERVENTION | 🛑 熔断：同 BUG 修 ≥2 次，停下要人工 |
 | COMPLETE | 全部通过，feature 分支可合并 |
 
@@ -91,10 +95,23 @@ sprint_status:
 
 ## 人工 gate
 
+### G1: Spec 审批
+
 ```yaml
 human_approved_at: null
 human_approver: null
 spec_summary_for_human: null    # orchestrator 在 SPEC_PENDING_HUMAN 时填
+```
+
+### G2: 部署测试环境确认
+
+```yaml
+g2_approved: false              # fast 模式用（单 sprint）
+# full 模式 per-sprint 标记（approve-deploy 时按当前 sprint 写入）：
+# g2_sprint_1_approved: true
+# g2_sprint_2_approved: true
+g2_approved_at: null
+g2_approver: null
 ```
 
 ## 历史轨迹

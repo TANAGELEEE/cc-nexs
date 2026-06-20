@@ -50,6 +50,7 @@ paths:
 workflow:
   sprint_enabled: false
   human_gate_after: spec_reviewing_pass
+  g2_enabled: false             # minimal preset: no deploy gate, single human gate only
   thresholds:
     review_revision: 3
     fix_per_bug: 3

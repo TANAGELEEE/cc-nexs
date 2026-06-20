@@ -75,6 +75,10 @@ Reviewer 或 Verifier 报 BUG / NEEDS_REVISION 时进入此模式：
 - 修订 spec 必须在变更记录留痕，不能静默改 AC
 - 不修改 progress.md / acceptance.md / sa-*.md / test-report.md（这些由 orchestrator / Reviewer / Verifier 维护）
 - 禁与 Reviewer / Verifier 在同一 codex 调用里出现（codex 调用是另两个角色专属）
+- **加载并遵守 `branch-gate` skill**：分支必须从 origin/master 开出，checkout 后执行污染验证
+- **加载并遵守 `merge-discipline` skill**：合并时禁止 temp 分支，必须 rebase → --no-ff merge
+- **自行提交产出物**：完成代码/文档后必须 `git add && git commit && git push`，未 push 视为未完成。自验：`git fetch && git ls-tree origin/<branch> <path>`
+- **输出纪律**（遵守 `rules/output-discipline.md`）：评审结论/评论禁止包含内部推理；评论/结论类产出 ≤ 2000 字符（正式文档不受此限）；禁止重复回顾历史，只输出增量
 
 ## 反模式（立即停手）
 

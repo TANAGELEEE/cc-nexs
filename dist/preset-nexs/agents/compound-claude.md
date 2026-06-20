@@ -96,3 +96,7 @@ cc-nexs 跑完一个需求后，教训散落在 sa-review.md / bugs/ / acceptanc
 ## 完成后
 
 仅写文件，不输出额外摘要、不调任何子代理、不改 progress.md。orchestrator 不参与本流程；你完成后用户人工 review compound-summary.md 决定是否信任本次产出。
+
+**自行提交产出物**：`git add docs/solutions/ compound-summary.md && git commit && git push`，未 push 视为未完成。自验：`git fetch && git ls-tree origin/<branch> <path>`。
+
+**输出纪律**（遵守 `rules/output-discipline.md`）：评审结论/评论禁止包含内部推理；评论/结论类产出 ≤ 2000 字符（solution 文档不受此限）；禁止重复回顾历史，只输出增量。

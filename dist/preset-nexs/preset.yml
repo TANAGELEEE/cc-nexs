@@ -88,6 +88,7 @@ modes:
       - evaluator
     state_machine: full
     sprint_enabled: true
+    g2_enabled: true            # G2 deploy gate: 代码评审通过后停下等人工部署确认
 
   fast:
     description: 单 sprint 三角色合并。Fullstack（Planner+Tech Lead）/ Reviewer（SA+Evaluator）/ Verifier（QA cases+run+regression）。
@@ -96,6 +97,7 @@ modes:
       - reviewer
       - verifier
     state_machine: fast
+    g2_enabled: true            # G2 deploy gate: 代码评审通过后停下等人工部署确认
     sprint_enabled: false      # fast 模式强制单 sprint，无需 sprint 切片
     thresholds_override:
       review_revision: 2       # 比 full 更严：2 轮即熔断

@@ -60,11 +60,11 @@ test('full mode: SPRINT_1_KICKOFF → SPRINT_1_DEV with parallel QA cases', () =
   assert.equal(r.parallel.action, 'write_cases');
 });
 
-test('full mode: SPRINT_1_DEV → SPRINT_1_DOC_SYNC (tech-lead syncs docs after coding)', () => {
+test('full mode: SPRINT_1_DEV → SPRINT_1_SA_TEST_REVIEW (SA reviews cases after parallel DEV+QA_CASES)', () => {
   const r = nextStep({ ...baseFull, state: 'SPRINT_1_DEV', enabledRoles: fullRoles });
-  assert.equal(r.next, 'SPRINT_1_DOC_SYNC');
-  assert.equal(r.role, 'tech-lead');
-  assert.equal(r.action, 'sync_docs');
+  assert.equal(r.next, 'SPRINT_1_SA_TEST_REVIEW');
+  assert.equal(r.role, 'sa');
+  assert.equal(r.action, 'review_test_cases');
 });
 
 test('full mode: SPRINT_1_DOC_SYNC → SPRINT_1_SA_CODE (SA reviews code after doc sync)', () => {

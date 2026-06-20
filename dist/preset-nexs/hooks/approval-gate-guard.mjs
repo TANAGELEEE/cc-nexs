@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 // cc-nexs cross-platform PreToolUse hook: approval gate enforcement.
-// When any progress.md in cwd has current_state == SPEC_PENDING_HUMAN (or whatever the preset's
-// configured human_gate_state is), block all "advancement" commands until /cc-nexs:approve-spec runs.
+// G1 (SPEC_PENDING_HUMAN): blocks all advancement commands.
+// G2 (DEPLOY_GATE): blocks coding/testing/codex but ALLOWS git merge/push to test
+//    (since human needs to merge+deploy during this phase before approving G2).
 
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-const FORBIDDEN_PATTERNS = [
+// Commands blocked during G1 (spec gate) — everything advancement-related
+const G1_FORBIDDEN = [
   /\bcodex\b/,
   /\bmvn\b/,
   /\bgit\s+commit\b/,
@@ -15,6 +17,17 @@ const FORBIDDEN_PATTERNS = [
   /\bnpm\s+(test|run\s+build)\b/,
   /\bcargo\s+(test|build|run)\b/,
   /\bgo\s+(test|build|run)\b/,
+];
+
+// Commands blocked during G2 (deploy gate) — only testing/codex, NOT build/merge/push.
+// Human needs to merge feature→test, verify build, and push during G2.
+const G2_FORBIDDEN = [
+  /\bcodex\b/,
+  /\bmvn\s+test\b/,
+  /\bpnpm\s+test\b/,
+  /\bnpm\s+test\b/,
+  /\bcargo\s+(test|run)\b/,
+  /\bgo\s+(test|run)\b/,
 ];
 
 let input = '';
@@ -49,7 +62,10 @@ const cwd = process.cwd();
 const docDir = existsSync(join(cwd, 'doc')) ? join(cwd, 'doc') : cwd;
 const progressFiles = findProgressFiles(docDir);
 
-const HUMAN_GATE_STATES = (process.env.CC_NEXS_HUMAN_GATE_STATES || 'SPEC_PENDING_HUMAN').split(',');
+const HUMAN_GATE_STATES = (process.env.CC_NEXS_HUMAN_GATE_STATES || 'SPEC_PENDING_HUMAN,DEPLOY_GATE').split(',');
+
+// Also match sprint-prefixed deploy gates: SPRINT_1_DEPLOY_GATE, SPRINT_2_DEPLOY_GATE, etc.
+const DEPLOY_GATE_RE = /^(SPRINT_\d+_)?DEPLOY_GATE$/;
 
 for (const pf of progressFiles) {
   let text;
@@ -57,16 +73,20 @@ for (const pf of progressFiles) {
   const m = text.match(/current_state:\s*(\S+)/);
   if (!m) continue;
   const state = m[1];
-  if (!HUMAN_GATE_STATES.includes(state)) continue;
+  if (!HUMAN_GATE_STATES.includes(state) && !DEPLOY_GATE_RE.test(state)) continue;
+
+  const isG2 = DEPLOY_GATE_RE.test(state);
+  const approveCmd = isG2 ? '/cc-nexs:approve-deploy' : '/cc-nexs:approve-spec';
+  const forbidden = isG2 ? G2_FORBIDDEN : G1_FORBIDDEN;
 
   // Check write paths to src/ are also blocked
   if (filePath && /(^|\/)src\/(main|test)\//.test(filePath)) {
-    console.error(`[cc-nexs approval-gate] State ${state}: cannot edit ${filePath} until /cc-nexs:approve-spec runs`);
+    console.error(`[cc-nexs approval-gate] State ${state}: cannot edit ${filePath} until ${approveCmd} runs`);
     process.exit(2);
   }
 
-  if (cmd && FORBIDDEN_PATTERNS.some((p) => p.test(cmd))) {
-    console.error(`[cc-nexs approval-gate] State ${state}: command blocked until /cc-nexs:approve-spec runs`);
+  if (cmd && forbidden.some((p) => p.test(cmd))) {
+    console.error(`[cc-nexs approval-gate] State ${state}: command blocked until ${approveCmd} runs`);
     console.error(`[cc-nexs approval-gate] Blocked: ${cmd}`);
     process.exit(2);
   }

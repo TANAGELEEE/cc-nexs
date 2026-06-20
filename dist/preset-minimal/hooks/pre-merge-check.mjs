@@ -31,17 +31,24 @@ if (!cmd) process.exit(0);
 // ---- trigger detection -----------------------------------------------------
 
 function isPushToTrunk(c) {
-  return /\bgit\s+push\b/.test(c) && /\b(master|main)\b/.test(c);
-}
-function isPlainGitMerge(c) {
-  // Match "git merge <branch>", reject "git merge-base / merge-tree / ..."
-  return /\bgit\s+merge(?:\s+(?!-)\S+)/.test(c);
+  // Explicit: `git push <remote> master` or `git push <remote> main`
+  if (/\bgit\s+push\b/.test(c) && /\b(master|main)\b/.test(c)) return true;
+  // Implicit: `git push` with no refspec while on master/main (detected via current branch)
+  if (/\bgit\s+push\s*$/.test(c) || /\bgit\s+push\s+origin\s*$/.test(c)) {
+    try {
+      const branch = execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
+      if (branch === 'master' || branch === 'main') return true;
+    } catch { /* not in git repo, skip */ }
+  }
+  return false;
 }
 function isGhPrMerge(c) {
   return /\bgh\s+pr\s+merge\b/.test(c);
 }
 
-const isMerge = isPushToTrunk(cmd) || isPlainGitMerge(cmd) || isGhPrMerge(cmd);
+// Only block pushes to trunk (master/main) and GH PR merges (which target default branch).
+// Plain `git merge <branch>` is allowed — feature → test merges happen during G2 deploy phase.
+const isMerge = isPushToTrunk(cmd) || isGhPrMerge(cmd);
 if (!isMerge) process.exit(0);
 
 // ---- locate repo root ------------------------------------------------------
@@ -104,13 +111,31 @@ let fail = 0;
 // ---- 1. build_cmd ----------------------------------------------------------
 
 // Skip build if the cd target doesn't exist (preset designed for a different repo layout).
+// Also skip if the build tool's config file is missing (e.g. mvn without pom.xml).
 function buildCmdApplicable(buildCmd, root) {
   if (!buildCmd) return false;
   // Parse out leading `cd <dir>` patterns
   const cdMatch = buildCmd.match(/^cd\s+(\S+)/);
+  let effectiveRoot = root;
   if (cdMatch) {
     const cdTarget = cdMatch[1];
     if (!existsSync(join(root, cdTarget))) {
+      return false;
+    }
+    effectiveRoot = join(root, cdTarget);
+  }
+  // Check build tool config file existence
+  const toolConfigs = [
+    [/\bmvn\b/, 'pom.xml'],
+    [/\bgradle\b/, 'build.gradle'],
+    [/\bcargo\b/, 'Cargo.toml'],
+    [/\bpnpm\b/, 'package.json'],
+    [/\bnpm\b/, 'package.json'],
+    [/\byarn\b/, 'package.json'],
+    [/\bmake\b/, 'Makefile'],
+  ];
+  for (const [pattern, configFile] of toolConfigs) {
+    if (pattern.test(buildCmd) && !existsSync(join(effectiveRoot, configFile))) {
       return false;
     }
   }

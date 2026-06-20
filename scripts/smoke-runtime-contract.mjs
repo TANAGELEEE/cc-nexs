@@ -167,13 +167,32 @@ async function assertStateMachine() {
   );
   expectStep(
     mod.nextStep({ state: 'BUILD', enabledRoles: fastRoles, mode: 'fast' }),
+    { next: 'CODE_REVIEW', role: 'reviewer', action: 'review_code' },
+    'fast BUILD → CODE_REVIEW',
+  );
+  expectStep(
+    mod.nextStep({ state: 'DEPLOY_GATE', enabledRoles: fastRoles, mode: 'fast', workflow: { g2_enabled: true } }),
+    { next: 'DEPLOY_GATE', role: null, action: 'await_deploy_approval' },
+    'fast DEPLOY_GATE unapproved stops',
+  );
+  assert(
+    mod.nextStep({ state: 'DEPLOY_GATE', enabledRoles: fastRoles, mode: 'fast', workflow: { g2_enabled: true } }).stop === true,
+    'fast DEPLOY_GATE must stop when g2 not approved',
+  );
+  expectStep(
+    mod.nextStep({ state: 'DEPLOY_GATE', enabledRoles: fastRoles, mode: 'fast', workflow: { g2_enabled: true, g2_approved: true } }),
     { next: 'TEST', role: 'verifier', action: 'verify_initial' },
-    'fast BUILD',
+    'fast DEPLOY_GATE approved → TEST',
+  );
+  expectStep(
+    mod.nextStep({ state: 'DEPLOY_GATE', enabledRoles: fastRoles, mode: 'fast', workflow: { g2_enabled: false } }),
+    { next: 'TEST', role: 'verifier', action: 'verify_initial' },
+    'fast DEPLOY_GATE disabled → skip to TEST',
   );
   expectStep(
     mod.nextStep({ state: 'TEST_PASSED', enabledRoles: fastRoles, mode: 'fast' }),
-    { next: 'ACCEPT', role: 'reviewer', action: 'review_and_accept' },
-    'fast TEST_PASSED',
+    { next: 'ACCEPTANCE', role: 'reviewer', action: 'accept' },
+    'fast TEST_PASSED → ACCEPTANCE',
   );
   const fastBreaker = mod.nextStep({
     state: 'FIX',
