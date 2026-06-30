@@ -266,12 +266,14 @@ When `action == 'await_deploy_approval'` and `stop: true`, output the G2 gate su
 
 ═══════════════════════════════════════════════════════════════
 👉 请按 merge-discipline 完整流程完成部署确认:
-   1. git fetch origin test && git rebase origin/test
-   2. 构建验证通过（mvn compile / pnpm build 等）
-   3. git push --force-with-lease origin <feature-branch>
-   4. git checkout test && git merge --no-ff <feature-branch>
+   1. git fetch origin test
+   2. git checkout test && git pull origin test
+   3. git merge --no-ff <feature-branch>
+   4. 如有冲突，在 test 分支上直接解决
    5. git push origin test → 部署测试环境
    6. 功能验证通过后执行: /cc-nexs:approve-deploy <id>
+
+   ⚠️ 禁止 rebase origin/test（并行流：feature 独立合入 test 和 master）
 ═══════════════════════════════════════════════════════════════
 ```
 

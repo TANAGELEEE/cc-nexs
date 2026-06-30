@@ -20,28 +20,49 @@ description: Merge discipline — no temp branches, rebase before merge, resolve
 
 ---
 
-## Standard Flow (feature → test)
+## Standard Flow
+
+> **Parallel workflow**: feature branches merge into test and master independently. Feature is based on master; test is only for integration verification. Never rebase onto origin/test — it pulls other unreleased features into your feature history, contaminating master on merge.
+
+### Flow A: feature → test (deploy to test env)
 
 ```bash
 # 1. Fetch latest target
 git fetch origin test
 
-# 2. Rebase feature onto target
+# 2. Merge into target
+git checkout test
+git pull origin test
+git merge --no-ff feature/{branch-name}
+
+# 3. Push target
+git push origin test
+```
+
+No rebase onto test. If conflicts arise, resolve on the test branch directly.
+
+### Flow B: feature → master (release)
+
+```bash
+# 1. Fetch latest target
+git fetch origin master
+
+# 2. Rebase feature onto master
 git checkout feature/{branch-name}
-git rebase origin/test
+git rebase origin/master
 
 # 3. If conflicts: resolve on feature, then git rebase --continue
 
 # 4. Push rebased feature
 git push --force-with-lease origin feature/{branch-name}
 
-# 5. Merge into target
-git checkout test
-git pull origin test
+# 5. Merge into master
+git checkout master
+git pull origin master
 git merge --no-ff feature/{branch-name}
 
-# 6. Push target
-git push origin test
+# 6. Push master
+git push origin master
 ```
 
 ---
@@ -49,7 +70,7 @@ git push origin test
 ## Pre-merge Checklist
 
 - [ ] Deploy gate passed (if enabled)?
-- [ ] On feature branch, ready to rebase?
 - [ ] No temp/merge branches created?
-- [ ] Build passes after rebase?
+- [ ] **To test**: direct merge, no rebase onto origin/test?
+- [ ] **To master**: rebased onto origin/master, build passes?
 - [ ] Clean merge commit in target history?
