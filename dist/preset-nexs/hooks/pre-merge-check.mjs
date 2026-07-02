@@ -13,11 +13,14 @@
 //
 // Checks (only if any progress.md found in this repo):
 //   1. preset.stack.build_cmd succeeds at repo root (skipped if cd target missing)
-//   2. every progress.md has current_state = COMPLETE
+//   2. every progress.md TOUCHED BY THE COMMITS BEING PUSHED has current_state = COMPLETE
+//      (scoped via `git diff --name-only <base>...HEAD`; falls back to checking every
+//      progress.md in the repo if the base ref can't be resolved, so we fail safe —
+//      never fail open — when the diff can't be computed)
 
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { join, resolve, dirname } from 'node:path';
+import { join, resolve, dirname, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 let input = '';
@@ -158,9 +161,65 @@ if (stack.build_cmd) {
   console.error(`[cc-nexs pre-merge] (no build_cmd in preset, skipping build check)`);
 }
 
-// ---- 2. progress.md COMPLETE -----------------------------------------------
+// ---- 2. progress.md COMPLETE (scoped to files touched by this push) --------
 
-for (const pf of pfs) {
+// Base ref = the remote state this push would land on top of. Diffing against
+// it (not just "every progress.md in the repo") means an unrelated in-flight
+// requirement (still SPRINT_M1 elsewhere) never blocks a push that doesn't
+// touch it.
+function resolveBaseRef() {
+  try {
+    const upstream = execSync('git rev-parse --abbrev-ref --symbolic-full-name @{u}', {
+      cwd: repoRoot, encoding: 'utf-8',
+    }).trim();
+    if (upstream) return upstream;
+  } catch { /* current branch has no upstream configured */ }
+
+  // gh pr merge (or no upstream): fall back to the remote's default branch.
+  try {
+    const head = execSync('git symbolic-ref refs/remotes/origin/HEAD', {
+      cwd: repoRoot, encoding: 'utf-8',
+    }).trim();
+    return head.replace(/^refs\/remotes\//, '');
+  } catch { /* no origin/HEAD */ }
+
+  for (const guess of ['origin/master', 'origin/main']) {
+    try {
+      execSync(`git rev-parse --verify ${guess}`, { cwd: repoRoot, stdio: 'ignore' });
+      return guess;
+    } catch { /* try next */ }
+  }
+  return null;
+}
+
+// Returns null when the diff can't be scoped (unknown base ref, or `git diff`
+// itself fails) so the caller can fail SAFE — check every progress.md — rather
+// than fail OPEN by assuming nothing changed.
+function findTouchedProgressFiles(baseRef) {
+  if (!baseRef) return null;
+  let out;
+  try {
+    out = execSync(`git diff --name-only ${baseRef}...HEAD`, {
+      cwd: repoRoot, encoding: 'utf-8',
+    });
+  } catch {
+    return null;
+  }
+  const changed = new Set(out.split('\n').map((l) => l.trim()).filter(Boolean));
+  return pfs.filter((pf) => changed.has(relative(repoRoot, pf).split(sep).join('/')));
+}
+
+const baseRef = resolveBaseRef();
+const touched = findTouchedProgressFiles(baseRef);
+const pfsToCheck = touched === null ? pfs : touched;
+
+if (touched === null) {
+  console.error('[cc-nexs pre-merge] could not scope diff to this push — falling back to checking every progress.md');
+} else if (touched.length === 0) {
+  console.error('[cc-nexs pre-merge] this push touches no progress.md — skipping COMPLETE check');
+}
+
+for (const pf of pfsToCheck) {
   const text = readFileSync(pf, 'utf-8');
   const m = text.match(/current_state:\s*(\S+)/);
   if (!m) continue;
