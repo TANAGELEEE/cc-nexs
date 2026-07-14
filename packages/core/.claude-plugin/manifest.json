@@ -1,0 +1,29 @@
+{
+  "name": "@cc-nexs/core",
+  "version": "0.2.0-dev",
+  "description": "cc-nexs core: state-machine driven multi-role SOP framework. Not a standalone Claude Code plugin — install via a preset (preset-nexs, preset-minimal, etc.).",
+  "_note": "This manifest exists for symlink scenarios where someone might point a plugin slot directly at core. Real usage installs a preset that re-exports core commands.",
+  "commands": [
+    "commands/run.md",
+    "commands/approve-spec.md",
+    "commands/status.md",
+    "commands/init.md",
+    "commands/build.md"
+  ],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|Write|Read",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/role-boundary-guard.mjs"
+      },
+      {
+        "matcher": "Bash|Edit|Write",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/approval-gate-guard.mjs"
+      },
+      {
+        "matcher": "Bash",
+        "command": "node ${CLAUDE_PLUGIN_ROOT}/hooks/pre-merge-check.mjs"
+      }
+    ]
+  }
+}

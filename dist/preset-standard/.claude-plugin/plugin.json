@@ -1,0 +1,17 @@
+{
+  "name": "cc-nexs",
+  "version": "0.4.0",
+  "description": "五方异构 SOP 的 Claude Code Plugin：Planner / Tech Lead / SA / QA / Evaluator 五角色，状态机驱动的自循环开发流水线，两个人工 checkpoint（G1 spec 审批 + G2 部署确认）。",
+  "author": {
+    "name": "cc-nexs"
+  },
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "plugin",
+    "sop",
+    "workflow",
+    "state-machine",
+    "multi-role"
+  ]
+}

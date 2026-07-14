@@ -1,0 +1,6 @@
+{
+  "presets": [
+    "preset-minimal",
+    "preset-standard"
+  ]
+}

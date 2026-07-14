@@ -1,0 +1,7 @@
+{
+  "messages": {
+    "human_gate_summary_header": "🚦 Human checkpoint: spec passed review, awaiting your approval",
+    "human_gate_approve": "Run /cc-nexs-minimal:approve-spec <id> to approve and continue.",
+    "human_gate_revise": "If unsatisfied, edit spec.md then re-run /cc-nexs-minimal:run <id>."
+  }
+}

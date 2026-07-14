@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "cc-nexs progress.json v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "feature", "preset", "mode", "state", "revision", "counters", "sprint", "gates", "repositories", "events"],
+  "properties": {
+    "schema_version": { "const": 2 },
+    "feature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "slug"],
+      "properties": { "id": { "type": "string" }, "slug": { "type": "string" } }
+    },
+    "preset": { "type": "string" },
+    "mode": { "enum": ["fast", "full", "hotfix", "lite"] },
+    "state": { "type": "string", "minLength": 1 },
+    "revision": { "type": "integer", "minimum": 0 },
+    "created_at": { "type": ["string", "null"] },
+    "updated_at": { "type": ["string", "null"] },
+    "counters": {
+      "type": "object",
+      "required": ["review_revision", "fix_per_bug", "evaluator_reject"],
+      "properties": {
+        "review_revision": { "type": "integer", "minimum": 0 },
+        "fix_per_bug": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } },
+        "evaluator_reject": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "sprint": { "type": "object" },
+    "gates": { "type": "object" },
+    "repositories": { "type": "object" },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "sequence", "timestamp", "type", "actor"],
+        "properties": {
+          "id": { "type": "string" },
+          "sequence": { "type": "integer", "minimum": 1 },
+          "timestamp": { "type": "string" },
+          "type": { "type": "string" },
+          "actor": { "type": "string" },
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "reason": { "type": "string" },
+          "data": { "type": "object" }
+        }
+      }
+    }
+  }
+}

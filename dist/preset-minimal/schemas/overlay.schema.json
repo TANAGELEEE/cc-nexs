@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "cc-nexs private preset overlay",
+  "description": "Project or organization rules merged over a public preset. Keep this file outside the public cc-nexs repository.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "stack": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string" },
+        "build_cmd": { "type": "string" },
+        "test_cmd": { "type": "string" },
+        "lint_cmd": { "type": "string" },
+        "src_paths": { "type": "array", "items": { "type": "string" } },
+        "forbidden_patterns": { "type": "array" },
+        "custom_review_rules": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "paths": { "type": "object" },
+    "workflow": { "type": "object" }
+  }
+}

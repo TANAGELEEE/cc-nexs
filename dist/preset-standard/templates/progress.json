@@ -1,0 +1,30 @@
+{
+  "schema_version": 2,
+  "feature": {
+    "id": "{编号}",
+    "slug": "{需求短名}"
+  },
+  "preset": "preset-standard",
+  "mode": "fast",
+  "state": "INIT",
+  "revision": 0,
+  "created_at": null,
+  "updated_at": null,
+  "counters": {
+    "review_revision": 0,
+    "fix_per_bug": {},
+    "evaluator_reject": 0
+  },
+  "sprint": {
+    "enabled": false,
+    "current": 0,
+    "total": 0,
+    "status": {}
+  },
+  "gates": {
+    "g1": { "approved": false },
+    "g2": { "approved": false, "sprints": {} }
+  },
+  "repositories": {},
+  "events": []
+}
