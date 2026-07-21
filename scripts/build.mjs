@@ -50,6 +50,59 @@ const DIST = join(ROOT, 'dist');
 const ROOT_PKG = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf-8'));
 const VERSION = ROOT_PKG.version;
 const RELEASE_PRESETS = readReleasePresets();
+const PI_ROOT = join(ROOT, 'pi');
+const PI_P2_COMMANDS = new Set([
+  'approve-deploy',
+  'approve-spec',
+  'brainstorm',
+  'build',
+  'doctor',
+  'fullstack',
+  'git-custodian',
+  'hotfix',
+  'init',
+  'migrate-progress',
+  'recon',
+  'review',
+  'run',
+  'status',
+  'verify',
+]);
+const PI_ROLE_SOURCES = {
+  'repo-scout': 'repo-scout-claude.md',
+  fullstack: 'fullstack-claude.md',
+  reviewer: 'reviewer-codex.md',
+  verifier: 'verifier-codex.md',
+};
+const PI_ROLE_ADDENDA = {
+  fullstack: `# Pi Hotfix Override
+
+When the parent task explicitly declares a cc-nexs hotfix phase, this section supersedes the fast-only statements in the role contract below. Do not reject the task because the associated feature uses full mode.
+
+- \`phase=hotfix-p3\`: make only a single-file, non-logic correction with a final diff of at most 20 lines. Do not create a BUG artifact.
+- \`phase=hotfix-implement\`: create or update \`bugs/BUG-<N>.md\`, create an executable \`qa-scripts/BUG-<N>-repro.*\`, fix only the documented root cause, run the configured build/test commands, and move the BUG from \`OPEN\` to \`FIXED\` only after they pass.
+- \`phase=hotfix-revise\`: address only the latest \`NEEDS_REVISION\` findings appended to the BUG file and keep the BUG at \`FIXED\` after local checks pass.
+- \`phase=hotfix-regression\`: run the BUG repro and the affected module's existing P0 checks, append exact evidence to the BUG \`## 回归\` section, and move \`FIXED\` to \`VERIFIED\` only when every required check passes.
+- \`phase=hotfix-rollback\`: for an already deployed P0/P1 fix, append a concrete \`## 生产回滚步骤 - BUG-<N>\` section to \`deploy.md\`.
+
+Never edit \`spec.md\`, acceptance/review/test-report artifacts, or progress state. Never mutate Git; return exact changed paths to the parent Git Custodian.
+`,
+  reviewer: `# Pi Hotfix Override
+
+When the parent task explicitly declares a cc-nexs hotfix target, this section supersedes the fast-only target list below. Each target must run in a fresh Pi child session and must remain separate from implementation and verification.
+
+- \`target=hotfix-code\`: read the injected diff and \`bugs/BUG-<N>.md\`, but never browse \`src/\`. Review root-cause coverage, side effects, related paths, and missing regression coverage. Append \`## Round N - YYYY-MM-DD - 结论\` to that BUG file and end with exactly \`结论: PASS\` or \`结论: NEEDS_REVISION\`.
+- \`target=hotfix-accept\` (P0/P1 only): do not reuse the hotfix-code session. Read only the relevant AC subset, the VERIFIED BUG evidence, and the linked regression case. Append \`## 线上缺陷修复 - BUG-<N>\` with an AC scoring table to \`acceptance.md\`, ending with exactly \`验收结果: 通过\` or \`验收结果: 未通过\`.
+
+Never edit code, tests, progress state, or Git. The parent supplies the diff and owns all transitions and candidate commits.
+`,
+  verifier: `# Pi Hotfix Override
+
+When the parent task explicitly declares \`target=hotfix-regression-case\` for a P0/P1 hotfix, this section supersedes the fast-only mode list below.
+
+Read only the relevant AC/API contract, \`bugs/BUG-<N>.md\`, and its executable repro asset. Append a regression case marked \`关联BUG: BUG-<N>\` to \`test-cases.md\`, run the repro as a black-box check, and append the exact result to the BUG's regression evidence. Never browse or edit source code, never perform the implementation fix, and never mutate progress state or Git.
+`,
+};
 
 // ---- helpers ---------------------------------------------------------------
 
@@ -143,7 +196,6 @@ function generateCodexSkills(dst) {
       `当用户输入 "${commandName}"、"${commandName} ..."、"$${skillName}" 或要求执行 cc-nexs ${commandBase} 流程时触发。`,
       extractDescription(commandText, commandName),
     ].join(' ');
-
     const skillRoot = join(codexSkillsDir, skillName);
     mkdirSync(skillRoot, { recursive: true });
     const relCommand = `../../commands/${fileName}`;
@@ -198,6 +250,139 @@ The command is complete only when the artifact, state, and summary expected by \
     generated += 1;
   }
   return generated;
+}
+
+function parseAgentSource(text, file) {
+  const frontmatter = text.match(/^---\n([\s\S]*?)\n---\n?/);
+  if (!frontmatter) throw new Error(`Pi agent source has no frontmatter: ${file}`);
+  const description = frontmatter[1].match(/^description:\s*(.+)$/m)?.[1]?.trim() || `cc-nexs role from ${file}`;
+  const declaredTools = frontmatter[1].match(/^tools:\s*(.+)$/m)?.[1]?.split(',').map((tool) => tool.trim()) || [];
+  const toolMap = new Map([
+    ['Read', 'read'],
+    ['Write', 'write'],
+    ['Edit', 'edit'],
+    ['Glob', 'find'],
+    ['Grep', 'grep'],
+    ['Bash', 'bash'],
+  ]);
+  const tools = [...new Set(declaredTools.map((tool) => toolMap.get(tool)).filter(Boolean))];
+  if ((tools.includes('find') || tools.includes('grep')) && !tools.includes('ls')) tools.push('ls');
+  const body = text.slice(frontmatter[0].length)
+    .replace(/codex CLI/gi, 'isolated Pi reviewer session')
+    .replace(/codex 调用/g, 'Pi child session')
+    .replace(/codex 子会话/g, 'Pi child session')
+    .replace(/^(\s*)codex\b[^"\n]*"/gm, '$1')
+    .replace(/^(\s*)"\s*$/gm, '$1')
+    .replace(/"(?=\n```)/g, '');
+  return { description, tools, body };
+}
+
+function generatePiResources() {
+  const standardSource = join(PACKAGES, 'preset-standard');
+  const standardDist = join(DIST, 'preset-standard');
+  const agentsDir = join(PI_ROOT, 'agents');
+  const skillsDir = join(PI_ROOT, 'skills');
+  safeRemoveWithin(ROOT, agentsDir);
+  safeRemoveWithin(ROOT, skillsDir);
+  mkdirSync(agentsDir, { recursive: true });
+  mkdirSync(skillsDir, { recursive: true });
+
+  for (const [role, sourceFile] of Object.entries(PI_ROLE_SOURCES)) {
+    const sourcePath = join(standardSource, 'agents', sourceFile);
+    const { description, tools, body } = parseAgentSource(readFileSync(sourcePath, 'utf8'), sourceFile);
+    const header = [
+      '---',
+      `name: ${role}`,
+      'package: cc-nexs',
+      `description: ${JSON.stringify(description.replace(/codex CLI/gi, 'Pi subagent').replace(/Claude/gi, 'Pi'))}`,
+      `tools: ${tools.join(', ')}`,
+      'defaultContext: fresh',
+      'systemPromptMode: replace',
+      'inheritProjectContext: true',
+      'inheritSkills: false',
+      '---',
+      '',
+      '# Pi Runtime Override',
+      '',
+      'You are already running as an isolated cc-nexs Pi child agent. Execute this role directly.',
+      'Any Claude Task-tool, Claude subagent, Codex CLI, or nested agent invocation shown below is legacy runtime syntax only.',
+      'Never invoke `claude`, `codex`, another `pi` process, `/cc-nexs:*`, or the `subagent` tool from this child.',
+      'The parent orchestrator owns progress transitions and Git Custodian operations. Do not run Git mutation commands.',
+      'Your model is selected externally by pi-subagents settings; do not choose or persist a model ID.',
+      '',
+      PI_ROLE_ADDENDA[role] || '',
+      '# Authoritative Role Contract',
+      '',
+    ].join('\n');
+    writeFileSync(join(agentsDir, `${role}.md`), `${header}${body}`, 'utf8');
+  }
+
+  const commandsDir = join(standardDist, 'commands');
+  let generated = 0;
+  for (const fileName of readdirSync(commandsDir).filter((entry) => entry.endsWith('.md')).sort()) {
+    const commandBase = basename(fileName, '.md');
+    if (!PI_P2_COMMANDS.has(commandBase)) continue;
+    const commandText = readFileSync(join(commandsDir, fileName), 'utf8');
+    const commandName = extractCommandName(commandText, fileName);
+    const skillName = normalizeSkillName(commandName);
+    const supportsHotfix = commandBase === 'hotfix';
+    const description = [
+      `${commandName} 的 Pi P2 适配 skill。`,
+      supportsHotfix
+        ? '支持 preset-standard hotfix 旁路流程，并通过 pi-subagents 运行隔离角色。'
+        : '支持 preset-standard fast 模式，并通过 pi-subagents 运行隔离角色。',
+      extractDescription(commandText, commandName).replace(/codex CLI/gi, 'Pi subagent'),
+    ].join(' ');
+    const modelGuard = supportsHotfix
+      ? 'Before the first Reviewer dispatch, confirm that `cc-nexs.reviewer` resolves to an authenticated model different from the implementation model. P0/P1 must also confirm `cc-nexs.verifier` before verification. Accept ordered `fallbackModels`; if a required mapping is absent, unavailable, or resolves to the implementation model, stop and explain how to configure it.'
+      : 'Before the first review or verification dispatch, confirm that `cc-nexs.reviewer` and `cc-nexs.verifier` resolve to an authenticated model different from the implementation model. Accept ordered `fallbackModels`. If the mapping is absent, unavailable, or resolves to the implementation model, stop and explain how to configure it; independent context alone is not heterogeneous review.';
+    const skillDir = join(skillsDir, skillName);
+    mkdirSync(skillDir, { recursive: true });
+    const body = `---
+name: ${skillName}
+description: ${description}
+---
+
+# ${commandName} for Pi
+
+Read and follow \`../../../dist/preset-standard/commands/${fileName}\` as the authoritative command. Treat the text after \`${commandName}\` as its arguments.
+
+## P2 Runtime Contract
+
+1. Pi support is experimental and limited to \`preset-standard\` fast mode plus the \`/cc-nexs:hotfix\` bypass. Full orchestration and compound remain unsupported. Do not silently downgrade an existing feature.
+2. Use the installed \`pi-subagents\` tool for every role dispatch. Use package-qualified agents and foreground fresh context:
+   - Repo Scout: \`cc-nexs.repo-scout\`
+   - Fullstack: \`cc-nexs.fullstack\`
+   - Reviewer: \`cc-nexs.reviewer\`
+   - Verifier: \`cc-nexs.verifier\`
+3. Never invoke Claude Code, the Claude Task tool, Codex CLI, or a nested \`pi\` CLI. Legacy invocation snippets in the authoritative command are role task descriptions, not commands to execute in Pi.
+4. The Fullstack agent inherits the active Pi default unless the user configured an override. Reviewer and Verifier model selection belongs exclusively to Pi settings under \`subagents.agentOverrides\`; cc-nexs ships no fixed model IDs.
+5. ${modelGuard}
+6. Role children never mutate Git or progress state. The parent orchestrator owns state transitions and invokes the Git Custodian command itself.
+7. Set or preserve \`CC_NEXS_RUNTIME=pi\` and \`CC_NEXS_PLUGIN_ROOT\` for shell helpers. Resolve all feature paths through the existing workspace/progress contracts.
+8. Preserve the command's artifact locations, human gates, counters, validation, and stop behavior exactly. Runtime adaptation changes dispatch mechanics only.
+
+${supportsHotfix ? `## Pi Hotfix Dispatch Contract
+
+1. Hotfix is a bypass workflow, not a full/fast state-machine transition. Do not reject it solely because the associated feature's progress mode is \`full\`; do not advance \`progress.json\` or \`progress.md\`.
+2. The parent classifies P0/P1/P2/P3 exactly as the authoritative command requires, honors an explicit \`--level\`, prints the classification and reason before mutation, and resolves the existing feature/worktree before dispatch.
+3. P3: dispatch \`cc-nexs.fullstack\` once with \`phase=hotfix-p3\`. Re-check the single-file, at-most-20-line, non-logic boundary after the edit. If it is exceeded, reclassify before recording a candidate.
+4. P2: dispatch \`cc-nexs.fullstack\` with \`phase=hotfix-implement\`; then dispatch \`cc-nexs.reviewer\` with \`target=hotfix-code\` and an injected diff. On \`NEEDS_REVISION\`, dispatch a fresh Fullstack \`phase=hotfix-revise\` and a fresh Reviewer, stopping after the third failed review and escalating to the full SOP. After \`PASS\`, dispatch a fresh Fullstack \`phase=hotfix-regression\`; only successful evidence may move the BUG to \`VERIFIED\`.
+5. P0/P1: complete P2 first, then dispatch \`cc-nexs.verifier\` with \`target=hotfix-regression-case\`, followed by a fresh \`cc-nexs.reviewer\` with \`target=hotfix-accept\`. An unpassed acceptance result stops completion. If \`deploy.md\` says the change is already deployed, dispatch Fullstack \`phase=hotfix-rollback\` before recording candidates.
+6. Before the first review or verification dispatch, confirm the package role resolves to an authenticated model different from the Fullstack implementation model. Reviewer and Verifier may use their configured fallback chains, but the public package never supplies a model ID.
+7. Child roles never commit. After all required checks pass, the parent invokes the cc-nexs Git Custodian contract to record only declared code and docs candidate paths. Merge, push, and cleanup still require the normal explicit release authorization.
+8. Preserve every escalation boundary: AC/spec changes, a diff over 500 lines, cross-module refactoring, or three failed review rounds must stop hotfix and direct the user to a new full workflow.
+` : ''}
+
+## Required Pi Prerequisite
+
+\`pi-subagents\` must be installed and its \`subagent\` tool must expose the package agents above. Run \`/subagents-doctor\`, then open \`/subagents\` to inspect package-agent model mappings. \`/subagents-models\` is only for builtin agents and must not be used for cc-nexs package roles.
+`;
+    writeFileSync(join(skillDir, 'SKILL.md'), body, 'utf8');
+    generated += 1;
+  }
+
+  console.log(`\n✓ Pi P2 resources: ${Object.keys(PI_ROLE_SOURCES).length} agents, ${generated} skills`);
 }
 
 function deepMergeJSON(a, b) {
@@ -460,6 +645,7 @@ console.log(`  version: ${VERSION}`);
 console.log(`  targets: ${targets.join(', ')}`);
 
 for (const t of targets) buildPreset(t);
+if (targets.includes('preset-standard')) generatePiResources();
 // 总是基于全量 preset 列表刷新 marketplace.json，保证根目录入口与 dist/ 中产物一致。
 buildClaudeMarketplace(allPresets);
 buildCodexMarketplace(allPresets);

@@ -16,6 +16,7 @@ node_modules/
 *.sqlite*
 .cc-nexs/
 .worktrees/
+.pi/
 cc-nexs.config.yml
 cc-nexs.config.yaml
 cc-nexs.config.json

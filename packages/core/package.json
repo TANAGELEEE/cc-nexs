@@ -1,6 +1,6 @@
 {
   "name": "@cc-nexs/core",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "Core framework for cc-nexs: state machine, role registry, reviewer adapter, cross-platform hooks, i18n.",
   "type": "module",

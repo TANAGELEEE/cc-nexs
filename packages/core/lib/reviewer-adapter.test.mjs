@@ -14,3 +14,10 @@ test('reviewer invocation keeps hostile prompt text in a single argv element', (
 test('custom reviewer requires argv template', () => {
   assert.throws(() => planReviewerInvocation({ tool: 'custom', prompt: 'x', customTemplate: 'tool {prompt}' }), /argv array/);
 });
+
+test('Pi reviewer uses a structured pi-subagent plan without a CLI model id', () => {
+  const plan = planReviewerInvocation({ tool: 'pi-subagent', prompt: 'review the diff' });
+  assert.equal(plan.mode, 'pi-subagent');
+  assert.equal(plan.instruction, 'review the diff');
+  assert.equal('executable' in plan, false);
+});

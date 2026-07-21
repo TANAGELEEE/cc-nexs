@@ -10,7 +10,7 @@ const withHistory = process.argv.includes('--history');
 
 const forbiddenPaths = [
   /(^|\/)\.env(?:\.|$)/,
-  /(^|\/)(?:\.claude-runtime|\.in_use|\.cc-nexs|\.worktrees)(?:\/|$)/,
+  /(^|\/)(?:\.claude-runtime|\.in_use|\.cc-nexs|\.worktrees|\.pi)(?:\/|$)/,
   /\.(?:pem|key|p12|pfx|jks|keystore|dump|sqlite\d*)$/i,
 ];
 

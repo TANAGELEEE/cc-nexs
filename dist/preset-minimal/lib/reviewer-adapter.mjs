@@ -5,6 +5,7 @@
 //   - "claude-subagent" : invoke Claude as a subagent within the same plugin session (handled by orchestrator command, not this lib)
 //   - "gemini"          : `gemini -p "<prompt>"`  (hypothetical, command varies)
 //   - "openai-cli"      : `openai api chat.completions.create ...`
+//   - "pi-subagent"     : invoke an isolated agent through the pi-subagents extension
 //   - "custom"          : preset must provide `command_template` (e.g. "mytool --in {file} --prompt '{prompt}'")
 //
 // This module returns an argv plan rather than a shell command. Callers must use
@@ -60,6 +61,14 @@ export function planReviewerInvocation({
         mode: 'native-agent',
         instruction: prompt,
         notes: 'Spawn an independent native agent and inherit the active session model/channel.',
+      };
+
+    case 'pi-subagent':
+      return {
+        tool,
+        mode: 'pi-subagent',
+        instruction: prompt,
+        notes: 'Invoke the package-qualified cc-nexs role through pi-subagents with fresh context. Model selection is owned by Pi settings.',
       };
 
     case 'gemini':

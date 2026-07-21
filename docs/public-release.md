@@ -13,8 +13,8 @@ The existing development repository may contain rewritten refs, personal author 
    ```
 
 2. Export the reviewed working tree into a new empty directory without `.git`, `.cc-nexs`, runtime state, worktrees, or ignored files. Use the repository's tracked file list after the release changes are committed; do not copy `.git` or use `git push --mirror`.
-3. Initialize a new Git repository with `main`, configure a GitHub noreply author address, make one audited `v0.4.0` import commit, and run `pnpm audit:public:history` there.
-4. Create a new GitHub repository, enable private vulnerability reporting and branch protection, then push only `main` and the signed `v0.4.0` tag.
+3. Initialize a new Git repository with `main`, configure a GitHub noreply author address, make one audited import commit for the version in `package.json`, and run `pnpm audit:public:history` there.
+4. Create a new GitHub repository, enable private vulnerability reporting and branch protection, then push only `main` and the signed release tag.
 5. Verify GitHub Actions before making the repository discoverable.
 
 The private denylist file must stay outside this repository. Diagnostics intentionally print only finding codes and locations, never the matched value.

@@ -1,9 +1,28 @@
 {
   "name": "cc-nexs",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "packageManager": "pnpm@10.33.2",
-  "description": "Multi-role state-machine driven SOP for Claude Code, with pluggable presets.",
+  "description": "Multi-role state-machine driven SOP for Claude Code, Codex, and Pi, with pluggable presets.",
+  "keywords": [
+    "pi-package",
+    "coding-agent",
+    "workflow",
+    "multi-agent"
+  ],
+  "pi": {
+    "extensions": [
+      "./pi/extensions/cc-nexs.ts"
+    ],
+    "skills": [
+      "./pi/skills"
+    ],
+    "subagents": {
+      "agents": [
+        "./pi/agents"
+      ]
+    }
+  },
   "workspaces": [
     "packages/*"
   ],
@@ -17,10 +36,12 @@
     "install:local:codex": "node scripts/install-local-codex.mjs",
     "install:local:codex:all": "node scripts/install-local-codex.mjs --all",
     "install:local:codex:minimal": "node scripts/install-local-codex.mjs preset-minimal",
+    "install:local:pi": "node scripts/install-local-pi.mjs",
     "install:local:standard": "node scripts/install-local.mjs preset-standard",
     "install:local:minimal": "node scripts/install-local.mjs preset-minimal",
     "smoke:claude-install": "node scripts/smoke-claude-install.mjs",
     "smoke:runtime-contract": "node scripts/smoke-runtime-contract.mjs",
+    "smoke:pi-install": "node scripts/smoke-pi-install.mjs",
     "smoke:public-release": "node scripts/smoke-public-release.mjs",
     "audit:public": "node scripts/public-audit.mjs",
     "audit:public:history": "node scripts/public-audit.mjs --history",
@@ -31,7 +52,8 @@
     "test:hooks": "node --test packages/core/lib/*.test.mjs",
     "validate:claude": "node scripts/validate-claude-plugins.mjs",
     "validate:codex": "node scripts/validate-codex-plugins.mjs",
-    "validate:plugins": "pnpm validate:claude && pnpm validate:codex && pnpm validate:sop && pnpm validate:runtime && pnpm smoke:claude-install && pnpm smoke:runtime-contract",
+    "validate:pi": "node scripts/validate-pi-package.mjs",
+    "validate:plugins": "pnpm validate:claude && pnpm validate:codex && pnpm validate:pi && pnpm validate:sop && pnpm validate:runtime && pnpm smoke:claude-install && pnpm smoke:pi-install && pnpm smoke:runtime-contract",
     "validate:json": "node packages/core/lib/validate-json.mjs",
     "validate:sop": "node scripts/validate-sop-parity.mjs",
     "validate:runtime": "node scripts/validate-runtime-portability.mjs"

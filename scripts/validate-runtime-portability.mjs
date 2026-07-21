@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
 const errors = [];
-const checkedRoots = [join(root, 'packages/core'), join(root, 'packages/preset-standard')];
+const checkedRoots = [join(root, 'packages/core'), join(root, 'packages/preset-standard'), join(root, 'pi')];
 
 function walk(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -21,8 +21,13 @@ function walk(dir) {
 for (const dir of checkedRoots) walk(dir);
 
 const preset = readFileSync(join(root, 'packages/preset-standard/preset.yml'), 'utf8');
-for (const marker of ['runtimes:', 'claude:', 'codex:', 'model_policy: inherit', 'force_native_agents: true']) {
+for (const marker of ['runtimes:', 'claude:', 'codex:', 'pi:', 'model_policy: inherit', 'force_native_agents: true', 'force_pi_subagents: true']) {
   if (!preset.includes(marker)) errors.push(`preset-standard/preset.yml: missing ${marker}`);
+}
+
+const piSkill = readFileSync(join(root, 'pi/skills/cc-nexs-run/SKILL.md'), 'utf8');
+for (const marker of ['fast mode', 'pi-subagents', 'different from the implementation model', 'ships no fixed model IDs']) {
+  if (!piSkill.includes(marker)) errors.push(`Pi run skill: missing ${marker}`);
 }
 
 const codexSkill = readFileSync(join(root, 'dist/preset-standard/codex-skills/cc-nexs-run/SKILL.md'), 'utf8');
@@ -35,4 +40,4 @@ if (errors.length) {
   for (const error of errors) console.error(`- ${error}`);
   process.exit(1);
 }
-console.log('Runtime portability passed: Claude hybrid, Codex native-only, inherited models.');
+console.log('Runtime portability passed: Claude hybrid, Codex native-only, Pi subagents with external model overrides.');

@@ -86,7 +86,7 @@ Use core's `loadConfig({ projectRoot: pwd })` to get:
 - `preset.modes?.[MODE]?.g2_enabled` — whether G2 deploy gate is active (default: `true` for nexs, `false` for minimal)
 - `i18n.locale` — for state names + conclusion strings
 
-Resolve every dispatched role through `resolveRoleRuntime(preset, role)`. In Claude Code this preserves Claude implementer subagents and Codex CLI reviewers. In Codex it forces independent native agents for all roles and forbids invoking Claude Code or nested Codex CLI. Model policy is always `inherit`; never pass a hard-coded model id.
+Resolve every dispatched role through `resolveRoleRuntime(preset, role)`. In Claude Code this preserves Claude implementer subagents and Codex CLI reviewers. In Codex it forces independent native agents for all roles and forbids invoking Claude Code or nested Codex CLI. In Pi P2, every role resolves to a package-qualified `pi-subagents` agent; only `preset-standard` fast mode is supported, and Reviewer/Verifier must use Pi settings to resolve a different authenticated model from the implementer. Model policy in public preset files is always `inherit`; never persist a hard-coded model id.
 
 Every dispatch also receives `CC_NEXS_REQ_DIR=<absolute-doc-feature-dir>/` (with trailing separator) and a repository-id → worktree map. Commands must prefer this value over legacy relative-path discovery. Any `all-docs/doc/<id>` wording inside older role prompts is logical artifact notation and resolves to `CC_NEXS_REQ_DIR`, not a required repository name or topology.
 

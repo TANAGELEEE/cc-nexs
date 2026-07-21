@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
 const target = mkdtempSync(join(tmpdir(), 'cc-nexs-public-release-'));
+const version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version;
 
 function git(cwd, args, options = {}) {
   return execFileSync('git', ['-C', cwd, ...args], {
@@ -32,7 +33,7 @@ try {
   git(target, ['config', 'user.name', 'cc-nexs release bot']);
   git(target, ['config', 'user.email', 'cc-nexs@users.noreply.github.com']);
   git(target, ['add', '--all']);
-  git(target, ['commit', '-m', 'chore: public v0.4.0 import']);
+  git(target, ['commit', '-m', `chore: public v${version} import`]);
   execFileSync(process.execPath, [join(target, 'scripts/public-audit.mjs'), '--history'], {
     cwd: target, stdio: 'inherit', env: { ...process.env, CC_NEXS_PUBLIC_DENYLIST_FILE: process.env.CC_NEXS_PUBLIC_DENYLIST_FILE || '' },
   });

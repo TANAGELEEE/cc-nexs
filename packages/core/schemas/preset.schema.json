@@ -32,7 +32,7 @@
               "agent": { "type": "string", "description": "Path to agent .md file relative to preset root" },
               "tool": {
                 "type": "string",
-                "enum": ["claude-subagent", "codex", "native-agent", "gemini", "openai-cli", "custom"],
+                "enum": ["claude-subagent", "codex", "native-agent", "pi-subagent", "gemini", "openai-cli", "custom"],
                 "description": "Which reviewer tool drives this role"
               },
               "alias": { "type": "string", "description": "Display name (e.g. 'PM' instead of 'planner')" },
@@ -51,7 +51,8 @@
       "type": "object",
       "properties": {
         "claude": { "$ref": "#/definitions/runtime" },
-        "codex": { "$ref": "#/definitions/runtime" }
+        "codex": { "$ref": "#/definitions/runtime" },
+        "pi": { "$ref": "#/definitions/runtime" }
       }
     },
     "stack": {
@@ -162,6 +163,7 @@
       "properties": {
         "model_policy": { "const": "inherit" },
         "force_native_agents": { "type": "boolean" },
+        "force_pi_subagents": { "type": "boolean" },
         "session_isolation": { "enum": ["independent", "shared"] },
         "roles": { "type": "object" }
       }

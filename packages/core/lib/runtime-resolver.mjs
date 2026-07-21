@@ -1,4 +1,4 @@
-const RUNTIMES = new Set(['claude', 'codex']);
+const RUNTIMES = new Set(['claude', 'codex', 'pi']);
 
 export function detectRuntime(env = process.env) {
   if (env.CC_NEXS_RUNTIME) {
@@ -6,6 +6,10 @@ export function detectRuntime(env = process.env) {
     return env.CC_NEXS_RUNTIME;
   }
   if (env.CODEX_HOME || env.CODEX_THREAD_ID || env.CODEX_SANDBOX) return 'codex';
+  // The Pi extension sets CC_NEXS_RUNTIME=pi in its own process. Only the
+  // child marker is safe for implicit detection; PI_CODING_AGENT_DIR may be
+  // exported in shells that also launch Claude Code or Codex.
+  if (env.PI_SUBAGENT_CHILD === '1') return 'pi';
   return 'claude';
 }
 
@@ -21,6 +25,9 @@ export function resolveRoleRuntime(preset, role, runtime = detectRuntime()) {
   resolved.model = 'inherit';
   if (runtime === 'codex') {
     resolved.tool = 'native-agent';
+    resolved.session_isolation = 'independent';
+  } else if (runtime === 'pi') {
+    resolved.tool = 'pi-subagent';
     resolved.session_isolation = 'independent';
   }
   return resolved;
