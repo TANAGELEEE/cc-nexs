@@ -13,9 +13,13 @@ function git(repo, args) {
   }).trim();
 }
 
-function configure(repo) {
-  git(repo, ['config', 'user.name', 'Example User']);
-  git(repo, ['config', 'user.email', 'example@example.com']);
+function configure(repo, name = 'Example User', email = 'example@example.com') {
+  git(repo, ['config', 'user.name', name]);
+  git(repo, ['config', 'user.email', email]);
+}
+
+function commitIdentity(repo, commit) {
+  return git(repo, ['show', '-s', '--format=%an%x00%ae%x00%cn%x00%ce', commit]).split('\0');
 }
 
 function workspace(root, docs) {
@@ -45,12 +49,20 @@ test('docs reservations are visible on remote master and allocate across develop
   git(seed, ['push', '-u', 'origin', 'master']);
   git(root, ['clone', origin, devA]);
   git(root, ['clone', origin, devB]);
+  configure(devA, 'Developer A', 'developer-a@example.com');
+  configure(devB, 'Developer B', 'developer-b@example.com');
   try {
     const first = publishDocsReservation(workspace(join(root, 'workspace-a'), devA), { featureSlug: 'first-feature' });
     const second = publishDocsReservation(workspace(join(root, 'workspace-b'), devB), { featureSlug: 'second-feature' });
     assert.equal(first.featureId, '02');
     assert.equal(second.featureId, '03');
     git(seed, ['fetch', 'origin', 'master']);
+    assert.deepEqual(commitIdentity(seed, first.commit), [
+      'Developer A', 'developer-a@example.com', 'Developer A', 'developer-a@example.com',
+    ]);
+    assert.deepEqual(commitIdentity(seed, second.commit), [
+      'Developer B', 'developer-b@example.com', 'Developer B', 'developer-b@example.com',
+    ]);
     assert.match(git(seed, ['show', 'origin/master:doc/02.first-feature/.cc-nexs-reservation.json']), /"status": "RESERVED"/);
     assert.match(git(seed, ['show', 'origin/master:doc/03.second-feature/README.md']), /Feature number reserved/);
 

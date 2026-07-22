@@ -269,7 +269,7 @@ cd <workspace-root>
 
 ## 状态
 
-`v0.5.0` 增加 Pi P2 experimental 支持，承诺 standard fast + hotfix 流程。
+`v0.5.1` 提供 Pi P2 standard fast + hotfix 流程，并修复跨运行时占号提交的 Git 身份继承。
 
 ## License
 

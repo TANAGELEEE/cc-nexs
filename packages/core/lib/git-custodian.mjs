@@ -2,12 +2,14 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, realpathSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 
+import { gitIdentityEnv, resolveGitIdentity } from './git-identity.mjs';
 import { recordRepositoryCandidatePrepared } from './progress-v2.mjs';
 
 function git(repo, args, options = {}) {
   return execFileSync('git', ['-C', repo, ...args], {
     encoding: 'utf8',
     stdio: options.stdio || ['ignore', 'pipe', 'pipe'],
+    env: options.env || process.env,
   }).trim();
 }
 
@@ -83,6 +85,7 @@ export function commitCandidate({ repositoryId, repo, worktree, branch, featureK
   const realWorktree = realpathSync(worktree);
   if (!registered.split('\n').includes(`worktree ${realWorktree}`)) throw new Error('[cc-nexs] unregistered worktree');
   if (git(worktree, ['branch', '--show-current']) !== branch) throw new Error(`[cc-nexs] worktree branch mismatch: expected ${branch}`);
+  const identity = resolveGitIdentity(repo);
   if (git(worktree, ['diff', '--cached', '--name-only'])) {
     throw new Error('[cc-nexs] refusing candidate while unrelated staged changes exist');
   }
@@ -116,7 +119,7 @@ export function commitCandidate({ repositoryId, repo, worktree, branch, featureK
     git(worktree, ['reset']);
     throw new Error('[cc-nexs] refusing candidate containing a symbolic link');
   }
-  git(worktree, ['commit', '-m', message]);
+  git(worktree, ['commit', '-m', message], { env: gitIdentityEnv(identity) });
   const commit = git(worktree, ['rev-parse', 'HEAD']);
   git(repo, ['update-ref', candidateRef, commit]);
   if (progressFile && !progressInsideWorktree) {
@@ -137,7 +140,10 @@ export function prepareFeatureForMerge({ repo, worktree, branch, baseBranch, can
   const base = fetchBase(repo, baseBranch);
   const oldHead = git(worktree, ['rev-parse', 'HEAD']);
   try {
-    if (!isAncestor(repo, base, `refs/heads/${branch}`)) git(worktree, ['merge', '--no-edit', base]);
+    if (!isAncestor(repo, base, `refs/heads/${branch}`)) {
+      const identity = resolveGitIdentity(repo);
+      git(worktree, ['merge', '--no-edit', base], { env: gitIdentityEnv(identity) });
+    }
   } catch {
     try { git(worktree, ['merge', '--abort']); } catch {}
     throw new Error(`[cc-nexs] ${branch} conflicts with latest origin/${baseBranch}; resolve before release`);

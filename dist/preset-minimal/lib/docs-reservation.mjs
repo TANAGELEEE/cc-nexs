@@ -4,10 +4,12 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
 import { recordPublishedFeatureReservation } from './feature-reservation.mjs';
+import { gitIdentityEnv, resolveGitIdentity } from './git-identity.mjs';
 
-function git(repo, args) {
+function git(repo, args, options = {}) {
   return execFileSync('git', ['-C', repo, ...args], {
     encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+    env: options.env || process.env,
   }).trim();
 }
 
@@ -116,6 +118,7 @@ export function publishDocsReservation(workspace, {
       continue;
     }
 
+    const identity = resolveGitIdentity(docs.absolute_path);
     const temp = assertWithin(workspace.worktree_root, join(workspace.worktree_root, '.reservations', randomUUID()));
     mkdirSync(dirname(temp), { recursive: true });
     let registered = false;
@@ -124,7 +127,9 @@ export function publishDocsReservation(workspace, {
       registered = true;
       writeReservationFiles(temp, { featureId: chosenId, featureSlug, description });
       git(temp, ['add', '--', `doc/${chosenId}.${featureSlug}`]);
-      git(temp, ['-c', 'user.name=cc-nexs Git Custodian', '-c', 'user.email=cc-nexs@localhost', 'commit', '-m', `docs: reserve feature ${chosenId} ${featureSlug}`]);
+      git(temp, ['commit', '-m', `docs: reserve feature ${chosenId} ${featureSlug}`], {
+        env: gitIdentityEnv(identity),
+      });
       const commit = git(temp, ['rev-parse', 'HEAD']);
       try {
         git(temp, ['push', 'origin', `${commit}:refs/heads/${baseBranch}`]);

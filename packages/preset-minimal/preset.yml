@@ -1,5 +1,5 @@
 name: preset-minimal
-version: 0.5.0
+version: 0.5.1
 description: Minimal generic preset. Three roles. Claude-only (subagent isolation). No stack assumption. English by default.
 language: en-US
 

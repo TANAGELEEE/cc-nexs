@@ -1,5 +1,5 @@
 name: preset-standard
-version: 0.5.0
+version: 0.5.1
 description: 通用多角色开发 SOP。默认 fast，显式 mode=full 时启用完整角色隔离；不绑定语言、框架、仓库名或组织规范。
 language: zh-CN
 

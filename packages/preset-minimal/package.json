@@ -1,6 +1,6 @@
 {
   "name": "@cc-nexs/preset-minimal",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "description": "Minimal generic preset for cc-nexs: 3 roles (Planner / Developer / Reviewer), Claude single-tool with subagent isolation, English docs, no language-stack assumptions.",
   "main": "preset.yml",

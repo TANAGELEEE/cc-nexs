@@ -19,6 +19,29 @@ function configure(repo) {
   git(repo, ['config', 'user.email', 'example@example.com']);
 }
 
+function commitIdentity(repo, commit = 'HEAD') {
+  return git(repo, ['show', '-s', '--format=%an%x00%ae%x00%cn%x00%ce', commit]).split('\0');
+}
+
+function withToolIdentity(callback) {
+  const keys = ['GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL'];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {
+    GIT_AUTHOR_NAME: 'Tool Agent',
+    GIT_AUTHOR_EMAIL: 'tool-agent@example.com',
+    GIT_COMMITTER_NAME: 'Tool Agent',
+    GIT_COMMITTER_EMAIL: 'tool-agent@example.com',
+  });
+  try {
+    return callback();
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  }
+}
+
 test('custodian starts from latest remote base, avoids false upstream arrows, refreshes, and cleans', () => {
   const root = mkdtempSync(join(tmpdir(), 'cc-nexs-git-'));
   const origin = join(root, 'origin.git');
@@ -55,10 +78,13 @@ test('custodian starts from latest remote base, avoids false upstream arrows, re
     writeProgressV2(progressFile, createProgressV2({ featureId: '01', featureSlug: 'demo', preset: 'preset-standard' }));
     recordRepositoryAssignments(progressFile, [item], { workspaceRoot: root });
     writeFileSync(join(item.worktree, 'feature.md'), 'candidate\n');
-    const candidate = commitCandidate({
+    const candidate = withToolIdentity(() => commitCandidate({
       repositoryId: 'docs', repo, worktree: item.worktree, branch: item.branch,
       featureKey: '01-demo', paths: ['feature.md', 'progress.json'], message: 'docs: candidate', progressFile,
-    });
+    }));
+    assert.deepEqual(commitIdentity(repo, candidate.commit), [
+      'Example User', 'example@example.com', 'Example User', 'example@example.com',
+    ]);
     assert.equal(git(item.worktree, ['status', '--porcelain']), '');
     assert.equal(readProgressV2(progressFile).repositories.docs.candidate.commit, null);
     assert.equal(git(repo, ['rev-parse', candidate.candidateRef]), candidate.commit);
@@ -70,10 +96,13 @@ test('custodian starts from latest remote base, avoids false upstream arrows, re
     git(updater, ['add', 'upstream.md']);
     git(updater, ['commit', '-m', 'advance master']);
     git(updater, ['push', 'origin', 'master']);
-    const prepared = prepareFeatureForMerge({
+    const prepared = withToolIdentity(() => prepareFeatureForMerge({
       repo, worktree: item.worktree, branch: item.branch, baseBranch: 'master', candidateRef: candidate.candidateRef,
-    });
+    }));
     assert.equal(prepared.updated, true);
+    assert.deepEqual(commitIdentity(repo, prepared.head), [
+      'Example User', 'example@example.com', 'Example User', 'example@example.com',
+    ]);
     assert.equal(git(item.worktree, ['show', 'HEAD:upstream.md']), 'new base');
     assert.throws(() => git(item.worktree, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}']));
 
