@@ -18,6 +18,12 @@ test('fullstack cannot mutate orchestrator-owned artifacts', () => {
   assert.equal(roleBoundaryViolation({ role: 'cc-nexs.fullstack', toolName: 'edit', filePath: 'api/src/main.ts' }), null);
 });
 
+test('planner blocks the Codex executable without mistaking .codex paths for commands', () => {
+  assert.match(roleBoundaryViolation({ role: 'planner', command: 'codex exec review' }), /cannot write code/);
+  assert.match(roleBoundaryViolation({ role: 'planner', command: 'cd repo && codex exec review' }), /cannot write code/);
+  assert.equal(roleBoundaryViolation({ role: 'planner', command: "sed -n '1,40p' /tmp/.codex/skills/demo/SKILL.md" }), null);
+});
+
 test('git mutation detection covers history and worktree changes', () => {
   assert.equal(isGitMutation('git status --short'), false);
   assert.equal(isGitMutation('git -C api commit -m test'), true);

@@ -1,7 +1,9 @@
+const CODEX_COMMAND = /(?:^|[;&|]\s*)(?:env\s+)?(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*codex(?:\s|$)/;
+
 const DEFAULT_RULES = {
   planner: {
     forbidWritePaths: [/(^|\/)src\//, /(^|\/)progress\.md$/],
-    forbidCommands: [/\bmvn\b/, /\bcodex\b/, /\bgit\s+commit\b/],
+    forbidCommands: [/\bmvn\b/, CODEX_COMMAND, /\bgit\s+commit\b/],
     message: 'Planner role: cannot write code or run build/review commands',
   },
   'tech-lead': {

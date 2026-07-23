@@ -11,6 +11,16 @@ This skill is the Codex mirror for `/cc-nexs:approve-spec`. It exists so the Cod
 
 Read and follow `../../commands/approve-spec.md` as the single source of truth for this command. Treat the user's original message after `/cc-nexs:approve-spec` as the command arguments.
 
+## Deterministic Approval Control
+
+Resolve `../../lib/cc-nexs-cli.mjs` relative to this SKILL.md and execute the packaged control program:
+
+```text
+node <resolved-cli-path> approve-spec <feature-id>
+```
+
+Never execute `/cc-nexs:approve-spec` as a shell path and never edit `progress.json` or `progress.md` directly. After the control program succeeds, continue the current runtime's run workflow.
+
 ## Execution Contract
 
 1. Preserve every document path declared by the command file. Do not relocate `all-docs/doc/{id}.{slug}/`, `doc/{id}.{slug}/`, `bugs/`, `qa-scripts/`, `docs/solutions/`, or any command-specific artifact.

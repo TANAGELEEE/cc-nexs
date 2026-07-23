@@ -199,20 +199,49 @@ export function transitionState(path, { from, to, reason = '' }) {
 }
 
 export function approveHumanGate(path, { approver }) {
+  let ts = new Date().toISOString();
   if (hasProgressV2(path)) {
-    approveProgressGate(progressJsonForMarkdown(path), { gate: 'g1', approver });
+    const progress = approveProgressGate(progressJsonForMarkdown(path), { gate: 'g1', approver });
+    ts = progress.gates.g1.approved_at;
   }
   const text = readFileSync(path, 'utf-8');
-  const keys = detectKeys(text);
-  const ts = new Date().toISOString();
-  let updated = text;
-  // Replace approved_at and approver under gate section
-  updated = updated.replace(/(approved_at:\s*)\S+/, `$1${ts}`);
-  updated = updated.replace(/(approver:\s*)\S+/, `$1${approver}`);
-  if (!updated.includes('approved_at:')) {
-    const gateRe = new RegExp(`(## ${escape(keys.gate)}[^\\n]*\\n)`);
-    updated = updated.replace(gateRe, `$1\napproved_at: ${ts}\napprover: ${approver}\n\n`);
-  }
+  let updated = setGateValue(text, 'human_approved_at', ts);
+  updated = setGateValue(updated, 'human_approver', approver);
   writeFileSync(path, updated, 'utf-8');
   return { ts, approver };
+}
+
+export function approveDeployGate(path, { approver, sprint = null }) {
+  let ts = new Date().toISOString();
+  if (hasProgressV2(path)) {
+    const progress = approveProgressGate(progressJsonForMarkdown(path), { gate: 'g2', approver, sprint });
+    const approval = sprint === null
+      ? progress.gates.g2
+      : progress.gates.g2.sprints[String(sprint)];
+    ts = approval.approved_at;
+  }
+
+  const text = readFileSync(path, 'utf-8');
+  const approvalKey = sprint === null ? 'g2_approved' : `g2_sprint_${sprint}_approved`;
+  let updated = setGateValue(text, approvalKey, 'true', { insertBefore: 'g2_approved_at' });
+  updated = setGateValue(updated, 'g2_approved_at', ts);
+  updated = setGateValue(updated, 'g2_approver', approver);
+  writeFileSync(path, updated, 'utf-8');
+  return { ts, approver, sprint };
+}
+
+function setGateValue(text, key, value, { insertBefore = null } = {}) {
+  const line = `${key}: ${value}`;
+  const keyRe = new RegExp(`^(\\s*${escape(key)}:\\s*).*$`, 'm');
+  if (keyRe.test(text)) return text.replace(keyRe, `$1${value}`);
+
+  if (insertBefore) {
+    const beforeRe = new RegExp(`^(\\s*${escape(insertBefore)}:.*)$`, 'm');
+    if (beforeRe.test(text)) return text.replace(beforeRe, `${line}\n$1`);
+  }
+
+  const keys = detectKeys(text);
+  const gateRe = new RegExp(`(## ${escape(keys.gate)}[^\\n]*\\n)`);
+  if (gateRe.test(text)) return text.replace(gateRe, `$1\n${line}\n`);
+  return `${text.trimEnd()}\n\n## ${keys.gate}\n\n${line}\n`;
 }

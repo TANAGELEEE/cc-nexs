@@ -23,7 +23,7 @@ updated_at: null
 | SPEC_DRAFTED | spec.md 已写，待 SA 评审 |
 | SPEC_REVIEWING | SA 在评审 spec |
 | SPEC_NEEDS_REVISION | SA 评审未通过，回 Planner 修订 |
-| **SPEC_PENDING_HUMAN** | ⏸️ 人工 gate G1，等 `/cc-nexs:approve-spec` |
+| **SPEC_PENDING_HUMAN** | ⏸️ 人工 gate G1，等当前运行时的 approve-spec 入口 |
 | SPEC_APPROVED | 人工放行，进入 Sprint 循环 |
 | SPRINT_<N>_KICKOFF | Sprint N 启动 |
 | SPRINT_<N>_QA_CASES | QA 在写 Sprint N 测试用例 |
@@ -31,7 +31,7 @@ updated_at: null
 | SPRINT_<N>_SA_TEST_REVIEW | SA 在审 Sprint N 测试用例 |
 | SPRINT_<N>_DOC_SYNC | Tech Lead 同步 deploy.md / api-doc.md |
 | SPRINT_<N>_SA_CODE | SA 在评审 Sprint N 代码 |
-| **SPRINT_<N>_DEPLOY_GATE** | ⏸️ 人工 gate G2，等 `/cc-nexs:approve-deploy` |
+| **SPRINT_<N>_DEPLOY_GATE** | ⏸️ 人工 gate G2，等当前运行时的 approve-deploy 入口 |
 | SPRINT_<N>_QA_RUN | QA 执行 Sprint N 用例 |
 | SPRINT_<N>_FIX | Tech Lead 修 Sprint N bug |
 | SPRINT_<N>_QA_REGRESSION | QA 回归 Sprint N |
@@ -51,12 +51,12 @@ updated_at: null
 | SPEC_DRAFTED | spec.md 已写，待 Reviewer 评审 |
 | SPEC_REVIEWING | Reviewer 在评审 spec |
 | SPEC_NEEDS_REVISION | Reviewer 评审未通过，回 Fullstack 修订 |
-| **SPEC_PENDING_HUMAN** | ⏸️ 人工 gate G1，等 `/cc-nexs:approve-spec` |
+| **SPEC_PENDING_HUMAN** | ⏸️ 人工 gate G1，等当前运行时的 approve-spec 入口 |
 | SPEC_APPROVED | 人工放行，进入实现阶段 |
 | BUILD | Fullstack 在写代码 + 同步 dev-plan/api-doc/deploy |
 | CODE_REVIEW | Reviewer 评审代码（仅 sa-code-review.md） |
 | CODE_REVIEW_NEEDS_REVISION | 代码评审未通过，回 Fullstack 修 |
-| **DEPLOY_GATE** | ⏸️ 人工 gate G2，等 `/cc-nexs:approve-deploy` |
+| **DEPLOY_GATE** | ⏸️ 人工 gate G2，等当前运行时的 approve-deploy 入口 |
 | TEST | Verifier 一次产 test-cases.md + test-report.md（initial） |
 | TEST_BLOCKED | Verifier 报阻塞，进入修复 |
 | FIX | Fullstack 在修指定 BUG |

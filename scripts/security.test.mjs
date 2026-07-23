@@ -72,7 +72,7 @@ test('build rejects traversal before touching an outside sentinel', () => {
   }
 });
 
-test('git mutation hook allows reads but restricts writes to custodian role', () => {
+test('git mutation hook leaves the parent session in control and restricts role children', () => {
   const hook = join(REPO_ROOT, 'packages/core/hooks/git-custodian-guard.mjs');
   const run = (command, role = '') => spawnSync(process.execPath, [hook], {
     input: JSON.stringify({ tool_input: { command } }),
@@ -80,25 +80,15 @@ test('git mutation hook allows reads but restricts writes to custodian role', ()
     env: { ...process.env, CC_NEXS_ROLE: role },
   });
   assert.equal(run('git status --short').status, 0);
-  assert.equal(run('git commit -m test').status, 2);
-  assert.equal(run('git worktree remove /tmp/example').status, 2);
+  assert.equal(run('git commit -m user-authorized').status, 0);
+  assert.equal(run('git commit -m test', 'tech-lead').status, 2);
+  assert.equal(run('git worktree remove /tmp/example', 'reviewer').status, 2);
   assert.equal(run('git commit -m candidate', 'git-custodian').status, 0);
 });
 
-test('approval gate reads progress.json v2 as authoritative state', () => {
-  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-gate-v2-'));
-  const feature = join(root, 'doc/01.demo');
-  mkdirSync(feature, { recursive: true });
-  writeFileSync(join(feature, 'progress.json'), JSON.stringify({ state: 'DEPLOY_GATE' }));
-  try {
-    const result = spawnSync(process.execPath, [join(REPO_ROOT, 'packages/core/hooks/approval-gate-guard.mjs')], {
-      cwd: root,
-      input: JSON.stringify({ tool_input: { command: 'npm test' } }),
-      encoding: 'utf8',
-    });
-    assert.equal(result.status, 2);
-    assert.match(result.stderr, /DEPLOY_GATE/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
+test('human checkpoints do not install a global tool-blocking hook', () => {
+  for (const preset of ['preset-standard', 'preset-minimal']) {
+    const hooks = readFileSync(join(REPO_ROOT, 'packages', preset, 'hooks', 'hooks.json'), 'utf8');
+    assert.doesNotMatch(hooks, /approval-gate-guard/);
   }
 });

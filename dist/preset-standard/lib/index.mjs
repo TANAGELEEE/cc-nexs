@@ -3,7 +3,8 @@ export { loadConfig, loadWorkspaceConfig } from './config-loader.mjs';
 export { loadI18n } from './i18n.mjs';
 export { RoleRegistry } from './role-registry.mjs';
 export { planReviewerInvocation } from './reviewer-adapter.mjs';
-export { readProgress, transitionState, approveHumanGate } from './progress-io.mjs';
+export { readProgress, transitionState, approveDeployGate, approveHumanGate } from './progress-io.mjs';
+export { approveFeatureGate, normalizeSprint, resolveFeatureProgress } from './approval-command.mjs';
 export {
   PROGRESS_SCHEMA_VERSION,
   appendProgressEvent,

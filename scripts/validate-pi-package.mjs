@@ -46,6 +46,9 @@ else {
   for (const marker of ['CC_NEXS_RUNTIME = "pi"', 'PI_SUBAGENT_CHILD_AGENT', 'pi.registerCommand', 'isGitMutation', 'roleBoundaryViolation']) {
     if (!extension.includes(marker)) fail(`Pi extension: missing ${marker}`);
   }
+  for (const marker of ['runCcNexsCommand', 'splitCommandArguments']) {
+    if (!extension.includes(marker)) fail(`Pi extension: missing deterministic approval marker ${marker}`);
+  }
   for (const command of expectedCommands) {
     if (!extension.includes(`"${command}"`)) fail(`Pi extension: missing command ${command}`);
   }
@@ -59,9 +62,13 @@ for (const command of expectedCommands) {
   const skillPath = join(skillsRoot, name, 'SKILL.md');
   if (!existsSync(skillPath)) continue;
   const skill = readFileSync(skillPath, 'utf8');
-  for (const marker of ['preset-standard', 'fast mode', 'pi-subagents', 'different from the implementation model', 'ships no fixed model IDs']) {
-    if (!skill.includes(marker)) fail(`${name}: missing P2 contract marker ${marker}`);
-  }
+    for (const marker of ['preset-standard', 'fast mode', 'pi-subagents', 'different from the implementation model', 'ships no fixed model IDs']) {
+      if (!skill.includes(marker)) fail(`${name}: missing P2 contract marker ${marker}`);
+    }
+    if (['cc-nexs-approve-deploy', 'cc-nexs-approve-spec'].includes(name)
+      && !skill.includes('../../../packages/core/lib/cc-nexs-cli.mjs')) {
+      fail(`${name}: approval skill must invoke the deterministic control CLI`);
+    }
 }
 for (const unexpected of skillNames.filter((name) => !expectedCommands.includes(name.replace(/^cc-nexs-/, '')))) {
   fail(`Pi P2 exposes unsupported command skill: ${unexpected}`);

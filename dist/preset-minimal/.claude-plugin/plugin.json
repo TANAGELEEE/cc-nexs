@@ -1,6 +1,6 @@
 {
   "name": "cc-nexs-minimal",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "cc-nexs minimal preset: 3 roles (Planner / Developer / Reviewer), Claude-only with subagent isolation, English by default, no language stack assumption.",
   "license": "MIT",
   "keywords": [

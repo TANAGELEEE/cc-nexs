@@ -176,7 +176,7 @@ COMPLETE → 人工合并到 main
 三道 PreToolUse hook：
 
 1. **role-boundary-guard.sh** — 通过 `CC_NEXS_ROLE` 拦截身份越界（Planner 编辑 src/、Tech Lead 改 spec.md 等）
-2. **spec-gate-guard.sh** — `SPEC_PENDING_HUMAN` 状态下拦截推进性命令（codex/mvn/git commit/git push）
+2. **状态机人工 checkpoint** — `SPEC_PENDING_HUMAN` / `DEPLOY_GATE` 返回 `stop: true`，只暂停 cc-nexs 角色派发；不拦截通用 Git、SQL、SSH、构建或读取工具
 3. **pre-merge-check.sh** — 合并主干前强制检查 mvn compile + 中文字符串 + progress.md COMPLETE + acceptance.md 通过
 
 hook 是最后一道安全网，主防线在身份 prompt 和 orchestrator 的状态机。

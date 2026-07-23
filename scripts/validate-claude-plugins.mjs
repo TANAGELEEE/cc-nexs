@@ -114,6 +114,10 @@ function validateClaudeSkillsAreUnchanged(pluginRoot) {
     if (!existsSync(codexMirrorPath)) {
       fail(`${codexMirrorPath}: Codex command mirror missing from codex-skills/`);
     }
+    if (['approve-deploy.md', 'approve-spec.md'].includes(fileName)
+      && !commandText.includes('lib/cc-nexs-cli.mjs')) {
+      fail(`${join(commandsRoot, fileName)}: approval command must invoke the deterministic control CLI`);
+    }
   }
 }
 

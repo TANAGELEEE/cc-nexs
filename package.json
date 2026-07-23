@@ -1,6 +1,6 @@
 {
   "name": "cc-nexs",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "private": true,
   "packageManager": "pnpm@10.33.2",
   "description": "Multi-role state-machine driven SOP for Claude Code, Codex, and Pi, with pluggable presets.",
@@ -10,6 +10,9 @@
     "workflow",
     "multi-agent"
   ],
+  "bin": {
+    "cc-nexs": "./packages/core/lib/cc-nexs-cli.mjs"
+  },
   "pi": {
     "extensions": [
       "./pi/extensions/cc-nexs.ts"
@@ -47,6 +50,7 @@
     "audit:public:history": "node scripts/public-audit.mjs --history",
     "doctor": "node packages/core/lib/doctor.mjs",
     "migrate:progress": "node packages/core/lib/migrate-progress-cli.mjs",
+    "cc-nexs": "node packages/core/lib/cc-nexs-cli.mjs",
     "verify:reproducible": "node scripts/verify-reproducible-build.mjs",
     "test:security": "node --test scripts/security.test.mjs",
     "test:hooks": "node --test packages/core/lib/*.test.mjs",

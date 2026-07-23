@@ -1,6 +1,6 @@
 {
   "name": "cc-nexs-minimal",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Minimal cc-nexs Codex Plugin: mirrors the lightweight planner / developer / reviewer SOP with the same command and document semantics as the Claude Code preset.",
   "author": {
     "name": "cc-nexs"

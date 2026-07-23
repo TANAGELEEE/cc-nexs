@@ -7,6 +7,16 @@ description: /cc-nexs:approve-deploy 的 Pi P2 适配 skill。 支持 preset-sta
 
 Read and follow `../../../dist/preset-standard/commands/approve-deploy.md` as the authoritative command. Treat the text after `/cc-nexs:approve-deploy` as its arguments.
 
+## Deterministic Approval Control
+
+Resolve `../../../packages/core/lib/cc-nexs-cli.mjs` relative to this SKILL.md and execute the packaged control program:
+
+```text
+node <resolved-cli-path> approve-deploy <feature-id> [M<N>]
+```
+
+Never execute `/cc-nexs:approve-deploy` as a shell path and never edit `progress.json` or `progress.md` directly. After the control program succeeds, continue the current runtime's run workflow.
+
 ## P2 Runtime Contract
 
 1. Pi support is experimental and limited to `preset-standard` fast mode plus the `/cc-nexs:hotfix` bypass. Full orchestration and compound remain unsupported. Do not silently downgrade an existing feature.

@@ -171,6 +171,22 @@ function extractDescription(commandText, commandName) {
   return desc.replace(/^["']|["']$/g, '');
 }
 
+function deterministicControlBlock(commandBase, cliPath) {
+  if (!['approve-deploy', 'approve-spec'].includes(commandBase)) return '';
+  const sprint = commandBase === 'approve-deploy' ? ' [M<N>]' : '';
+  return `## Deterministic Approval Control
+
+Resolve \`${cliPath}\` relative to this SKILL.md and execute the packaged control program:
+
+\`\`\`text
+node <resolved-cli-path> ${commandBase} <feature-id>${sprint}
+\`\`\`
+
+Never execute \`/cc-nexs:${commandBase}\` as a shell path and never edit \`progress.json\` or \`progress.md\` directly. After the control program succeeds, continue the current runtime's run workflow.
+
+`;
+}
+
 function generateCodexSkills(dst) {
   const commandsDir = join(dst, 'commands');
   const codexSkillsDir = join(dst, 'codex-skills');
@@ -199,6 +215,7 @@ function generateCodexSkills(dst) {
     const skillRoot = join(codexSkillsDir, skillName);
     mkdirSync(skillRoot, { recursive: true });
     const relCommand = `../../commands/${fileName}`;
+    const controlBlock = deterministicControlBlock(commandBase, '../../lib/cc-nexs-cli.mjs');
     const body = `---
 name: ${skillName}
 description: ${description}
@@ -212,7 +229,7 @@ This skill is the Codex mirror for \`${commandName}\`. It exists so the Codex pl
 
 Read and follow \`${relCommand}\` as the single source of truth for this command. Treat the user's original message after \`${commandName}\` as the command arguments.
 
-## Execution Contract
+${controlBlock}## Execution Contract
 
 1. Preserve every document path declared by the command file. Do not relocate \`all-docs/doc/{id}.{slug}/\`, \`doc/{id}.{slug}/\`, \`bugs/\`, \`qa-scripts/\`, \`docs/solutions/\`, or any command-specific artifact.
 2. Preserve the command's state-machine contract. If the command says a single-step command must not advance \`progress.md\`, do not advance it; if \`run\` is the orchestrator, let \`run\` own state transitions.
@@ -326,6 +343,7 @@ function generatePiResources() {
     const commandName = extractCommandName(commandText, fileName);
     const skillName = normalizeSkillName(commandName);
     const supportsHotfix = commandBase === 'hotfix';
+    const controlBlock = deterministicControlBlock(commandBase, '../../../packages/core/lib/cc-nexs-cli.mjs');
     const description = [
       `${commandName} 的 Pi P2 适配 skill。`,
       supportsHotfix
@@ -347,7 +365,7 @@ description: ${description}
 
 Read and follow \`../../../dist/preset-standard/commands/${fileName}\` as the authoritative command. Treat the text after \`${commandName}\` as its arguments.
 
-## P2 Runtime Contract
+${controlBlock}## P2 Runtime Contract
 
 1. Pi support is experimental and limited to \`preset-standard\` fast mode plus the \`/cc-nexs:hotfix\` bypass. Full orchestration and compound remain unsupported. Do not silently downgrade an existing feature.
 2. Use the installed \`pi-subagents\` tool for every role dispatch. Use package-qualified agents and foreground fresh context:

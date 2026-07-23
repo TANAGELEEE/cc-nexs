@@ -54,7 +54,7 @@ Codex plugin 中每个 command 都有镜像 skill：
 - `/cc-nexs:hotfix` → `$cc-nexs-hotfix`
 - fast 单步：`$cc-nexs-fullstack` / `$cc-nexs-review` / `$cc-nexs-verify`
 
-用户直接输入 `/cc-nexs:run 01` 时，Codex 也应按同一个 command mirror skill 执行。镜像 skill 的第一步永远是读 `commands/<name>.md`，然后按该 command 声明的路径写入 `all-docs/doc/<编号>.<slug>/`、`bugs/`、`qa-scripts/`、`docs/solutions/` 等原位置。
+Codex 的确定性入口是 `$cc-nexs-run 01`；原始 `/cc-nexs:run 01` 只能作为兼容文本提示，不能作为 shell 命令执行。镜像 skill 的第一步永远是读 `commands/<name>.md`，然后按该 command 声明的路径写入 `all-docs/doc/<编号>.<slug>/`、`bugs/`、`qa-scripts/`、`docs/solutions/` 等原位置。审批 skill 必须调用打包的 `lib/cc-nexs-cli.mjs`，禁止直接编辑 progress 文件。
 
 ## 流水线行为速记
 

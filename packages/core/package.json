@@ -1,6 +1,6 @@
 {
   "name": "@cc-nexs/core",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "private": true,
   "description": "Core framework for cc-nexs: state machine, role registry, reviewer adapter, cross-platform hooks, i18n.",
   "type": "module",
@@ -12,6 +12,8 @@
     "./reviewer-adapter": "./lib/reviewer-adapter.mjs",
     "./role-registry": "./lib/role-registry.mjs",
     "./progress-io": "./lib/progress-io.mjs",
+    "./approval-command": "./lib/approval-command.mjs",
+    "./cli": "./lib/cc-nexs-cli.mjs",
     "./i18n": "./lib/i18n.mjs"
   },
   "engines": {

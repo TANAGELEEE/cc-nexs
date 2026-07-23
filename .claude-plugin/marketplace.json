@@ -5,13 +5,13 @@
   },
   "metadata": {
     "description": "cc-nexs: 多角色 + 状态机驱动的 SOP 流水线，spec 通过评审后唯一一次人工 checkpoint。",
-    "version": "0.5.1"
+    "version": "0.5.2"
   },
   "plugins": [
     {
       "name": "cc-nexs-minimal",
       "description": "cc-nexs minimal preset: 3 roles (Planner / Developer / Reviewer), Claude-only with subagent isolation, English by default, no language stack assumption.",
-      "version": "0.5.1",
+      "version": "0.5.2",
       "author": {
         "name": "cc-nexs"
       },
@@ -20,7 +20,7 @@
     {
       "name": "cc-nexs",
       "description": "五方异构 SOP 的 Claude Code Plugin：Planner / Tech Lead / SA / QA / Evaluator 五角色，状态机驱动的自循环开发流水线，两个人工 checkpoint（G1 spec 审批 + G2 部署确认）。",
-      "version": "0.5.1",
+      "version": "0.5.2",
       "author": {
         "name": "cc-nexs"
       },

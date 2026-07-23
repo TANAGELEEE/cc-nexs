@@ -1,5 +1,5 @@
 {
-  "description": "cc-nexs preset-standard hooks: 角色边界、人工 gate（G1 spec + G2 deploy）、合并主干前置检查。",
+  "description": "cc-nexs preset-standard hooks: 角色边界、Git Custodian 边界与合并主干前置检查。人工 gate 由状态机暂停实现，不封锁通用工具。",
   "hooks": {
     "PreToolUse": [
       {
@@ -8,16 +8,6 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CODEX_PLUGIN_ROOT:-${CC_NEXS_PLUGIN_ROOT:-.}}}}/hooks/role-boundary-guard.mjs\"",
-            "timeout": 3
-          }
-        ]
-      },
-      {
-        "matcher": "Bash|Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CODEX_PLUGIN_ROOT:-${CC_NEXS_PLUGIN_ROOT:-.}}}}/hooks/approval-gate-guard.mjs\"",
             "timeout": 3
           }
         ]

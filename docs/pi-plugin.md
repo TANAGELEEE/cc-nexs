@@ -97,6 +97,10 @@ Pi registers the same P2 slash surface:
 
 Each slash command forwards to a generated Pi skill. The skill reads the same `dist/preset-standard/commands/*.md` document used by the other runtimes, then replaces only the role-dispatch mechanism.
 
+`approve-spec` and `approve-deploy` are exceptions to prompt-only dispatch: the Pi extension calls the shared deterministic core command first, then resumes `/skill:cc-nexs-run`. Pi never edits progress files through model-generated patches.
+
+G1/G2 only pause cc-nexs role dispatch. They do not block the parent Pi session from performing user-authorized Git, SQL, SSH, deployment, diagnostics, or documentation work.
+
 Hotfix remains a bypass flow. It does not advance the feature progress state and may attach to an existing fast or full feature. P3 is limited to a non-logic single-file diff of at most 20 lines; P2 adds BUG/repro, isolated review, and regression; P0/P1 additionally requires a regression case, local AC scoring, and a production rollback section when applicable. Boundary violations stop and escalate to a new full workflow.
 
 ## Security boundary

@@ -144,17 +144,18 @@ pnpm install:local:codex
 
 然后重启 Codex 或开新 thread。可以在 `/plugins` 中检查 `cc-nexs@cc-nexs` 是否已启用；hooks 第一次运行前需要在 `/hooks` 中 review + trust。
 
-Codex 中保留同一套命令语义：
+Codex 使用显式 skill 入口；`/cc-nexs:*` 仅作为兼容文本提示，不是可执行 shell/slash command：
 
 ```text
-/cc-nexs:init "需求描述"             # 默认 fast
-/cc-nexs:init "复杂需求" --mode=full # 只有显式指定才走 full
-/cc-nexs:run 01
-/cc-nexs:approve-spec 01
-/cc-nexs:hotfix "现象描述"
+$cc-nexs-init "需求描述"             # 默认 fast
+$cc-nexs-init "复杂需求" --mode=full # 只有显式指定才走 full
+$cc-nexs-run 01
+$cc-nexs-approve-spec 01
+$cc-nexs-approve-deploy 01
+$cc-nexs-hotfix "现象描述"
 ```
 
-Codex 侧实现方式是 command mirror skills。比如 `/cc-nexs:run` 会触发 `$cc-nexs-run`，该 skill 读取 `commands/run.md` 作为唯一事实来源，所以 full / fast / hotfix 的文档写入位置和状态机逻辑不会分叉。详见 [docs/codex-plugin.md](./docs/codex-plugin.md)。
+Codex 侧实现方式是 command mirror skills。`$cc-nexs-run` 读取 `commands/run.md` 作为唯一事实来源，所以 full / fast / hotfix 的文档写入位置和状态机逻辑不会分叉。审批 skill 会调用确定性的 `cc-nexs` 控制程序，不会手工修改 progress。详见 [docs/codex-plugin.md](./docs/codex-plugin.md)。
 
 ### Claude Code 本地开发（一条命令）
 
@@ -205,7 +206,14 @@ Pi 不调用 Codex CLI。Fullstack 默认继承当前 Pi 模型；Reviewer/Verif
 
 ## 日常命令
 
-Claude Code、Codex 和 Pi 都保留 `/cc-nexs:*` 语义。Codex 使用 mirror skill；Pi 通过 extension command 转发到 P2 skill。三边都以 `commands/*.md` 为事实来源。
+Claude Code、Codex 和 Pi 共享同一命令语义，但使用各运行时的原生入口。三边都以 `commands/*.md` 为流程事实来源，审批状态统一由 `cc-nexs` 核心命令写入。
+
+| 运行时 | 推荐入口 |
+| --- | --- |
+| Claude Code | `/cc-nexs:run 01`、`/cc-nexs:approve-deploy 01` |
+| Codex Desktop / CLI | `$cc-nexs-run 01`、`$cc-nexs-approve-deploy 01` |
+| Pi | `/cc-nexs:run 01`、`/cc-nexs:approve-deploy 01` |
+| 普通终端 | `cc-nexs approve-spec 01`、`cc-nexs approve-deploy 01 [M1]` |
 
 ```bash
 /cc-nexs:init "需求描述"          # 默认 fast；按 workspace 为每个仓库建独立 worktree
@@ -216,6 +224,8 @@ Claude Code、Codex 和 Pi 都保留 `/cc-nexs:*` 语义。Codex 使用 mirror s
 
 /cc-nexs:hotfix "现象描述"        # 旁路 bug 修复（按现象自动判档 P0/P1/P2/P3）
 ```
+
+G1/G2 是状态机暂停点，不是全局工具锁。等待人工确认时，父会话仍可执行用户授权的 Git、SQL、SSH、部署、诊断和文档操作；只有 cc-nexs 的下一角色不会被派发。
 
 ### 多模块项目按目录自动选 build 命令（v0.3 起）
 
@@ -269,7 +279,7 @@ cd <workspace-root>
 
 ## 状态
 
-`v0.5.1` 提供 Pi P2 standard fast + hotfix 流程，并修复跨运行时占号提交的 Git 身份继承。
+`v0.5.2` 将 G1/G2 改为纯状态机 checkpoint，移除全局 approval PreToolUse 封锁，并为 Claude Code、Codex、Pi 和普通终端提供同源的确定性审批控制命令。
 
 ## License
 

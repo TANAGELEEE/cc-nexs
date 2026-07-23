@@ -49,16 +49,20 @@ Codex plugins expose reusable workflows through skills. During build, every `com
 | `/cc-nexs:fullstack` | `$cc-nexs-fullstack` |
 | `/cc-nexs:review` | `$cc-nexs-review` |
 | `/cc-nexs:verify` | `$cc-nexs-verify` |
+| `/cc-nexs:approve-deploy` | `$cc-nexs-approve-deploy` |
 
-The same raw command text also appears in the generated skill description, so typing the original slash-style command as a normal Codex prompt still routes to the mirror skill:
+The original slash-style text remains in skill descriptions as a compatibility hint, but it is not a native Codex slash command and must never be executed as a shell path. Use the explicit `$cc-nexs-*` skill form:
 
 ```text
-/cc-nexs:init "添加 /api/health 健康检查接口" --mode=fast
-/cc-nexs:run 01
-/cc-nexs:hotfix "支付回调偶现 500"
+$cc-nexs-init "添加 /api/health 健康检查接口" --mode=fast
+$cc-nexs-run 01
+$cc-nexs-approve-deploy 01
+$cc-nexs-hotfix "支付回调偶现 500"
 ```
 
 Each generated skill reads its matching `commands/*.md` file as the single source of truth and preserves its arguments, stop conditions, state transitions, and artifact paths.
+
+Approval skills additionally execute `lib/cc-nexs-cli.mjs`. They never edit `progress.json` directly. G1/G2 pause role dispatch through the state machine; they do not install a global tool-blocking hook.
 
 ## Document Write Locations
 
@@ -86,7 +90,7 @@ Generated Codex skills explicitly forbid relocating these paths.
 5. QA writes cases, runs tests, writes bug reports, and runs regression
 6. Evaluator writes `acceptance.md`
 
-`/cc-nexs:run` remains the only command that advances `progress.md`, except `/cc-nexs:approve-spec` for the human gate.
+`$cc-nexs-run` remains the orchestrator entry. `$cc-nexs-approve-spec` records G1 and advances to `SPEC_APPROVED` through the shared control program.
 
 ### Fast
 

@@ -146,7 +146,7 @@ deep-merge core 的 zh-CN.json / en-US.json 与 preset 的 i18n/<locale>/strings
 跨平台 Node.js hook（取代 v0.1 的 bash hook）：
 
 - `role-boundary-guard.mjs` 按 `CC_NEXS_ROLE` 拦截越权读 / 写 / 命令
-- `approval-gate-guard.mjs` `SPEC_PENDING_HUMAN` 状态拦截推进性命令
+- G1/G2 由状态机返回 `stop: true` 暂停角色派发；不使用全局 PreToolUse 封锁。审批只能通过 `cc-nexs approve-*` 核心命令记录事件和推进状态
 - `pre-merge-check.mjs` 合并主干前跑 build_cmd + 检查 progress=COMPLETE
 
 通过 stdin JSON 协议接收工具调用入参，exit 0 放行 / 2 阻断。

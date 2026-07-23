@@ -3,6 +3,10 @@ import { dirname, resolve } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import {
+  runCcNexsCommand,
+  splitCommandArguments,
+} from "../../packages/core/lib/cc-nexs-cli.mjs";
+import {
   isGitMutation,
   normalizeRole,
   roleBoundaryViolation,
@@ -87,6 +91,19 @@ export default function ccNexsPiExtension(pi: ExtensionAPI) {
       handler: async (args, ctx) => {
         if (!ctx.isIdle()) {
           ctx.ui.notify("cc-nexs commands must start while the Pi agent is idle.", "warning");
+          return;
+        }
+        if (name === "approve-deploy" || name === "approve-spec") {
+          try {
+            const result = runCcNexsCommand([name, ...splitCommandArguments(args)], { cwd: process.cwd() });
+            const sprint = result.sprint === null ? "" : ` M${result.sprint}`;
+            const status = result.alreadyApproved ? "already approved" : "approved";
+            ctx.ui.notify(`cc-nexs ${result.gate.toUpperCase()}${sprint} ${status} for ${result.feature.id}`, "info");
+            pi.sendUserMessage(`/skill:cc-nexs-run ${result.feature.id}`);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            ctx.ui.notify(`cc-nexs approval failed: ${message}`, "error");
+          }
           return;
         }
         const suffix = args.trim() ? ` ${args.trim()}` : "";

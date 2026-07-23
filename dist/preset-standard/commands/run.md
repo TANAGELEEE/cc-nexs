@@ -196,7 +196,7 @@ When `next == 'SPEC_PENDING_HUMAN'` and `humanGateApproved == false`, **first ca
 ═══════════════════════════════════════════════════════════════
 ```
 
-Then **return**. Do not call any tool that the approval-gate-guard hook would block.
+Then **return**. This is a workflow pause, not a tool lock: status inspection, document work, deployment preparation, Git, SQL, and SSH remain available to the user-authorized parent session.
 
 ## Step 3.5: Deploy gate output (G2)
 

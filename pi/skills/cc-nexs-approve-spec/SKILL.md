@@ -7,6 +7,16 @@ description: /cc-nexs:approve-spec 的 Pi P2 适配 skill。 支持 preset-stand
 
 Read and follow `../../../dist/preset-standard/commands/approve-spec.md` as the authoritative command. Treat the text after `/cc-nexs:approve-spec` as its arguments.
 
+## Deterministic Approval Control
+
+Resolve `../../../packages/core/lib/cc-nexs-cli.mjs` relative to this SKILL.md and execute the packaged control program:
+
+```text
+node <resolved-cli-path> approve-spec <feature-id>
+```
+
+Never execute `/cc-nexs:approve-spec` as a shell path and never edit `progress.json` or `progress.md` directly. After the control program succeeds, continue the current runtime's run workflow.
+
 ## P2 Runtime Contract
 
 1. Pi support is experimental and limited to `preset-standard` fast mode plus the `/cc-nexs:hotfix` bypass. Full orchestration and compound remain unsupported. Do not silently downgrade an existing feature.

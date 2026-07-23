@@ -10,17 +10,13 @@ G2 人工门禁：确认代码已部署到测试环境，QA 可以开始执行�
 
 ## Steps
 
-1. Locate `progress.md` (same logic as `/cc-nexs:run`)
-2. Verify current state matches deploy gate:
-   - full mode: `current_state` matches `SPRINT_<N>_DEPLOY_GATE`
-   - fast mode: `current_state == DEPLOY_GATE`
-   - If neither, print current state and return.
-3. Call `approveProgressGate(progress.json, { gate: 'g2', approver, sprint })`:
-   - **full mode**: parse N from `current_state` and pass `sprint: N`
-   - **fast mode**: pass `sprint: null`
-   - The function atomically records approver, timestamp, and an immutable event
-   - Do NOT manually change `current_state` or edit progress.json
-   - progress.md may be refreshed as a human-readable mirror only
+1. Resolve the installed plugin root containing this command. Run the deterministic control command; do not edit `progress.json` or `progress.md` directly:
+   ```bash
+   node "<plugin-root>/lib/cc-nexs-cli.mjs" approve-deploy <feature_id> [M<N>]
+   ```
+   Claude Code resolves `<plugin-root>` from `CLAUDE_PLUGIN_ROOT`. Codex resolves it relative to the active mirror skill. Pi's registered command calls the same core implementation directly.
+2. The control command verifies the state, derives the full-mode sprint from `SPRINT_<N>_DEPLOY_GATE`, records the G2 approval event, and refreshes the Markdown mirror. Fast mode stores a single G2 approval. It never changes the deploy-gate state directly; the orchestrator owns the next transition.
+3. Never execute `/cc-nexs:approve-deploy` as a shell path. It is a Claude Code/Pi command alias; Codex uses `$cc-nexs-approve-deploy`; a regular shell uses `cc-nexs approve-deploy`.
 4. Print:
    ```
    ✅ Deploy gate approved (G2)
@@ -30,7 +26,7 @@ G2 人工门禁：确认代码已部署到测试环境，QA 可以开始执行�
       Approved at: <ts>
       Next: QA testing begins
    ```
-5. Auto-continue: immediately invoke `/cc-nexs:run <id>` to resume the pipeline.
+5. Continue the current runtime's `run` workflow so the state machine can enter QA. Do not launch the slash-style alias as a shell command.
 
 ## Per-sprint semantics (full mode)
 
@@ -40,4 +36,4 @@ Full mode 每个 Sprint 都有独立的 DEPLOY_GATE。M1 的 approve 不放行 M
 
 ## Why not manually transition state
 
-The state machine (`nextStep`) already handles `DEPLOY_GATE` + per-sprint approval → next state. Manually overriding `current_state` here would bypass the orchestrator's conclusion parsing and README sync logic. Only set the flag; let `/cc-nexs:run` drive the transition.
+The state machine (`nextStep`) already handles `DEPLOY_GATE` + per-sprint approval → next state. Manually overriding `current_state` here would bypass the orchestrator's conclusion parsing and README sync logic. Only the deterministic control command sets the flag; the `run` workflow drives the transition.
