@@ -7,12 +7,23 @@ import { execFileSync } from 'node:child_process';
 import { loadConfig, loadWorkspaceConfig } from './config-loader.mjs';
 import { readProgressV2 } from './progress-v2.mjs';
 
-const root = resolve(process.argv[2] || process.cwd());
+const args = process.argv.slice(2);
+const strictRelease = args.includes('--release-test');
+const root = resolve(args.find((arg) => !arg.startsWith('-')) || process.cwd());
 const errors = [];
 const warnings = [];
 let workspace = null;
+let config = null;
 try { workspace = loadWorkspaceConfig({ projectRoot: root }); } catch (error) { errors.push(error.message); }
-try { loadConfig({ projectRoot: root }); } catch (error) { errors.push(error.message); }
+try {
+  const pluginRoot = [
+    process.env.CC_NEXS_PLUGIN_ROOT,
+    process.env.CLAUDE_PLUGIN_ROOT,
+    process.env.CODEX_PLUGIN_ROOT,
+    process.env.PLUGIN_ROOT,
+  ].find((candidate) => candidate && existsSync(join(candidate, 'preset.yml')));
+  config = loadConfig({ projectRoot: root, ...(pluginRoot && { presetRoot: pluginRoot }) });
+} catch (error) { errors.push(error.message); }
 
 if (!workspace) warnings.push('workspace config not found; single-repository mode only');
 else {
@@ -25,6 +36,8 @@ else {
     catch { errors.push(`not a git repository: ${repo.id}`); }
   }
 }
+
+if (config) validateReleaseReadiness({ config, workspace, strictRelease, errors, warnings });
 
 function findProgressFiles(dir, depth = 0) {
   if (!existsSync(dir) || depth > 5) return [];
@@ -79,3 +92,64 @@ for (const warning of warnings) console.warn(`WARN ${warning}`);
 for (const error of errors) console.error(`ERROR ${error}`);
 if (errors.length) process.exitCode = 1;
 else console.log(`cc-nexs doctor passed (${workspace?.repositories.length || 1} repository configuration).`);
+
+function validateReleaseReadiness({ config, workspace, strictRelease, errors, warnings }) {
+  const policy = config.mergedWorkflow?.test_release?.policy;
+  if (policy !== 'auto_if_ready' && !strictRelease) return;
+  const report = (message) => (strictRelease ? errors : warnings).push(message);
+  if (!workspace) {
+    report('automatic test release requires .cc-nexs/workspace.yml or workspace.json');
+    return;
+  }
+  const codeRepositories = workspace.repositories.filter((repo) => repo.id !== workspace.docs_repository && repo.docs !== true);
+  if (codeRepositories.length === 0) report('automatic test release requires at least one code repository');
+  for (const repo of codeRepositories) {
+    if (!repo.test_branch) report(`repository ${repo.id} is missing test_branch`);
+  }
+
+  const release = config.mergedRelease?.test || {};
+  if ((release.environment || 'test').toLowerCase() !== 'test') report('automatic release environment must be test');
+  if (!release.driver?.command) report('release.test.driver.command is required for automatic test release');
+  if (release.browser?.required !== false) {
+    for (const field of ['claude_provider', 'codex_provider', 'pi_provider']) {
+      if (!release.browser?.[field]) report(`release.test.browser.${field} is required`);
+    }
+  }
+  const allowed = new Set(release.allowed_hosts || []);
+  for (const [name, value] of [['app_url', release.app_url], ['operations_url', release.operations_url]]) {
+    if (!value) { report(`release.test.${name} is required`); continue; }
+    let url;
+    try { url = new URL(value); }
+    catch { report(`release.test.${name} is invalid: ${value}`); continue; }
+    if (url.protocol !== 'https:' && url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') {
+      report(`release.test.${name} must use https`);
+    }
+    if (!allowed.has(url.hostname)) report(`${url.hostname} is missing from release.test.allowed_hosts`);
+    if (/(^|[.-])(prod|production|live)([.-]|$)/i.test(url.hostname)) report(`production-like host is forbidden: ${url.hostname}`);
+  }
+  for (const finding of findPlaintextCredentialFields({ project: config.project, overlay: config.overlay })) {
+    errors.push(`plaintext credential field is forbidden: ${finding}`);
+  }
+
+  if (process.env.CC_NEXS_RUNTIME === 'pi') {
+    try {
+      const installed = execFileSync('pi', ['list'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+      if (!installed.includes('injaneity/pi-computer-use') && !installed.includes('@injaneity/pi-computer-use')) {
+        report('Pi automatic browser verification requires @injaneity/pi-computer-use@0.4.3');
+      }
+    } catch {
+      report('unable to inspect installed Pi computer-use package');
+    }
+  }
+}
+
+function findPlaintextCredentialFields(value, path = '') {
+  if (!value || typeof value !== 'object') return [];
+  const findings = [];
+  for (const [key, child] of Object.entries(value)) {
+    const next = path ? `${path}.${key}` : key;
+    if (/^(password|passwd|credential|credentials|secret_value)$/i.test(key) && child) findings.push(next);
+    else findings.push(...findPlaintextCredentialFields(child, next));
+  }
+  return findings;
+}

@@ -2,7 +2,7 @@
 name: verifier
 package: cc-nexs
 description: "fast 模式的 Verifier 身份，通过 Pi subagent 调用（黑盒测试）。一次调用完成测试用例编写 + 执行 + 报告。仅 fast 模式启用。"
-tools: bash, read, write, edit
+tools: bash, read, write, edit, find_roots, observe_ui, search_ui, inspect_ui, act_ui, wait_for
 defaultContext: fresh
 systemPromptMode: replace
 inheritProjectContext: true
@@ -30,6 +30,8 @@ Read only the relevant AC/API contract, `bugs/BUG-<N>.md`, and its executable re
 > 仅 fast 模式启用。Verifier 合并了 full 模式 QA 三阶段（cases / run / regression）：
 > - **首次**调用：读 spec → 写 test-cases → 立即执行 → 出 test-report
 > - **回归**调用：读 FIXED BUG 的复现脚本 → 重跑 → 同 sprint P0/P1 再跑一遍 → 更新 test-report
+
+initial 必须发生在首次成功 test release 后，regression 必须发生在更新 candidate 再次成功发布后。两者都记录 release attempt/environment_revision，并在配置的 test URL 上黑盒验证。浏览器按 runtime 复用：Claude `chrome-devtools-mcp`、Codex 当前登录会话、Pi `@injaneity/pi-computer-use@0.4.3`。只访问 allowed_hosts，不读取项目中的明文凭据。
 
 ## 黑盒纪律（铁律）
 

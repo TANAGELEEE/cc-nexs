@@ -320,6 +320,8 @@ export function loadConfig({ projectRoot = process.cwd(), presetRoot = null } = 
     fix_per_bug: projectThresholds.fix_per_bug ?? presetThresholds.fix_per_bug ?? 3,
     evaluator_reject: projectThresholds.evaluator_reject ?? presetThresholds.evaluator_reject ?? 2,
   };
+  const mergedWorkflow = deepMerge(preset?.workflow || {}, project.workflow || {});
+  const mergedRelease = deepMerge(preset?.release || {}, project.release || {});
 
   // Project-level paths_override merges into preset.stack.
   // Use case: public preset ships with generic placeholders like "src/main/java/**";
@@ -360,6 +362,8 @@ export function loadConfig({ projectRoot = process.cwd(), presetRoot = null } = 
     locale,
     mergedThresholds,
     mergedStack,
+    mergedWorkflow,
+    mergedRelease,
   };
 }
 
@@ -398,6 +402,8 @@ export function loadWorkspaceConfig({ projectRoot = process.cwd(), configPath = 
     return {
       ...repo,
       base_branch: repo.base_branch || 'main',
+      test_branch: repo.test_branch || null,
+      release_order: Number.isInteger(repo.release_order) ? repo.release_order : 100,
       absolute_path: absolutePath,
     };
   });

@@ -11,7 +11,7 @@ updated_at: null
 
 ## 状态机字典
 
-> 状态分两套：full 模式按 SPRINT 循环，fast 模式单 sprint 直跑到底。
+> 状态分两套：full 模式可按多个 Sprint 开发，fast 模式固定单 Sprint。新需求均在全部开发完成后只发布/验收一次。
 > 由 progress.json.mode 决定走哪一套，并要求与 config.json.mode 一致。
 
 ### full 模式（mode=full）
@@ -29,18 +29,26 @@ updated_at: null
 | SPRINT_<N>_QA_CASES | QA 在写 Sprint N 测试用例 |
 | SPRINT_<N>_DEV | Tech Lead 在写 Sprint N 代码 |
 | SPRINT_<N>_SA_TEST_REVIEW | SA 在审 Sprint N 测试用例 |
+| SPRINT_<N>_SA_TEST_REVIEW_NEEDS_REVISION | SA 打回测试用例，待 QA 修订后重新评审 |
 | SPRINT_<N>_DOC_SYNC | Tech Lead 同步 deploy.md / api-doc.md |
+| SPRINT_<N>_DOC_SYNC_DONE | Sprint 文档同步完成，待代码评审 |
 | SPRINT_<N>_SA_CODE | SA 在评审 Sprint N 代码 |
-| **SPRINT_<N>_DEPLOY_GATE** | ⏸️ 人工 gate G2，等当前运行时的 approve-deploy 入口 |
-| SPRINT_<N>_QA_RUN | QA 执行 Sprint N 用例 |
-| SPRINT_<N>_FIX | Tech Lead 修 Sprint N bug |
-| SPRINT_<N>_QA_REGRESSION | QA 回归 Sprint N |
-| SPRINT_<N>_EVAL | Evaluator 按 AC 打分 |
-| SPRINT_<N>_DONE | Sprint N 通过 |
+| SPRINT_<N>_FIX / FIX_DONE | 修复 Sprint 评审项并重新评审 |
+| SPRINT_<N>_DEV_DONE | Sprint N 开发闭环完成；不部署、不验收 |
+| ALL_SPRINTS_DEV_DONE | 全部 Sprint 开发完成 |
+| INTEGRATION_REVIEW | 完整 candidate 跨 Sprint/跨仓评审 |
+| INTEGRATION_FIX | 集成修订完成，待重新评审 |
+| TEST_RELEASE | 完整需求合入 test + 发布；默认 auto_if_ready |
+| TEST_RELEASE_BLOCKED | test 合并/driver/发布失败，停止处理 |
+| TEST_DEPLOYED_NEEDS_MANUAL_VERIFY | 已部署但自动环境验证不能完成 |
+| FINAL_QA | QA 在已部署 test 环境执行累计用例 |
+| FINAL_QA_BLOCKED | 部署后测试发现问题 |
+| FINAL_FIX / FINAL_FIX_REVIEW | 修复、独立复审，之后必须重新 TEST_RELEASE |
 | SPRINT_<N>_TECH_LEAD_REVIEW | 🛑 熔断：同 BUG 修 3 次升级 |
-| ALL_SPRINTS_DONE | 所有 sprint 完成，待最终验收 |
 | FINAL_EVAL | Evaluator 最终全量打分 |
 | COMPLETE | 全部通过，feature 分支可合并 |
+
+`SPRINT_<N>_DEPLOY_GATE / QA_RUN / QA_REGRESSION / EVAL / DONE / ALL_SPRINTS_DONE` 仅用于没有 `delivery` 字段的 legacy `per_sprint` 需求。
 
 ### fast 模式（mode=fast，单 sprint 三角色合并）
 
@@ -56,11 +64,12 @@ updated_at: null
 | BUILD | Fullstack 在写代码 + 同步 dev-plan/api-doc/deploy |
 | CODE_REVIEW | Reviewer 评审代码（仅 sa-code-review.md） |
 | CODE_REVIEW_NEEDS_REVISION | 代码评审未通过，回 Fullstack 修 |
-| **DEPLOY_GATE** | ⏸️ 人工 gate G2，等当前运行时的 approve-deploy 入口 |
+| TEST_RELEASE | 完整 candidate 默认自动发布 test；能力不足时在此回退人工 G2 |
 | TEST | Verifier 一次产 test-cases.md + test-report.md（initial） |
 | TEST_BLOCKED | Verifier 报阻塞，进入修复 |
 | FIX | Fullstack 在修指定 BUG |
-| REGRESSION | Verifier 在回归（重跑 BUG repro + sprint P0/P1） |
+| FIX_REVIEW | Reviewer 评审修复 candidate；PASS 后重新 TEST_RELEASE |
+| REGRESSION | 新 test 部署后 Verifier 回归（重跑 BUG repro + sprint P0/P1） |
 | TEST_PASSED | Verifier 通过，进入契约验收 |
 | ACCEPTANCE | Reviewer 产 acceptance.md（此时 test-report.md 已就绪） |
 | ACCEPTANCE_REJECTED | 契约验收未通过，回 BUILD |
@@ -70,18 +79,17 @@ updated_at: null
 ## 计数器
 
 ```yaml
-sa_spec_revision_count: 0       # SA 评审 spec NEEDS_REVISION 次数
-sa_code_revision_count: 0       # SA 评审代码 NEEDS_REVISION 累计次数（per sprint）
-qa_fix_count: {}                # 每个 BUG 的修复轮次：BUG-001: 0
-evaluator_未通过_count: 0       # Evaluator 未通过累计次数
+review_revision: 0              # 当前 review 循环连续 NEEDS_REVISION 次数；PASS 后清零
+fix_per_bug: {}                 # 同一 BUG 连续部署回归失败次数；VERIFIED 后清除
+evaluator_reject: 0             # 当前 acceptance 循环连续拒绝次数；PASS 后清零
 ```
 
 ## 熔断阈值
 
 ```yaml
-sa_code_revision_threshold: 3   # 累计 ≥3 次升级回 SPEC_REVIEWING
-qa_fix_threshold: 3             # 同 BUG ≥3 次升级到 SPRINT_<N>_TECH_LEAD_REVIEW
-evaluator_threshold: 2          # 累计 ≥2 次升级回 spec
+review_revision: 3              # 当前 review 循环连续 ≥3 次升级回 SPEC_REVIEWING
+fix_per_bug: 3                  # 同 BUG 连续 ≥3 次升级到 TECH_LEAD_REVIEW
+evaluator_reject: 2             # 当前 acceptance 循环连续 ≥2 次升级回 spec
 ```
 
 ## Sprint 进度
@@ -103,11 +111,11 @@ human_approver: null
 spec_summary_for_human: null    # orchestrator 在 SPEC_PENDING_HUMAN 时填
 ```
 
-### G2: 部署测试环境确认
+### G2: 手工 test 发布确认（仅显式退出或前置能力不足）
 
 ```yaml
-g2_approved: false              # fast 模式用（单 sprint）
-# full 模式 per-sprint 标记（approve-deploy 时按当前 sprint 写入）：
+g2_approved: false              # final_only/fast 的完整需求手工发布确认
+# legacy full per-sprint 标记：
 # g2_sprint_1_approved: true
 # g2_sprint_2_approved: true
 g2_approved_at: null

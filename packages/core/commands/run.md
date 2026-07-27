@@ -1,12 +1,12 @@
 ---
-description: Generic orchestrator. Reads authoritative progress.json v2, dispatches enabled roles, and runs until COMPLETE or a human gate.
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Skill, Task
-argument-hint: [feature_id] [--sprint=N | --resume]
+description: Generic orchestrator. Develops across one or more sprints, then performs one test release and final acceptance unless explicitly opted out or prerequisites are unavailable.
+allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Skill, Task, mcp__chrome-devtools__*
+argument-hint: [feature_id] [--sprint=N | --resume] [--no-auto-test-release]
 ---
 
 # /cc-nexs:run
 
-> **Core rule**: after a stage completes, immediately enter the next stage. Do NOT print a summary and wait for user input. **The exceptions** are human gates (`SPEC_PENDING_HUMAN` and `*_DEPLOY_GATE`) — in those cases stop and return.
+> **Core rule**: after a stage completes, immediately enter the next stage. Do NOT print a summary and wait for user input. Stop only at a human gate (`SPEC_PENDING_HUMAN`, legacy `*_DEPLOY_GATE`, or manual fallback at `TEST_RELEASE`), a release/verification block, a circuit breaker, or a genuine tool failure.
 
 This command is the generic orchestrator. It loads `cc-nexs.config.yml` + the active `preset.yml`, then drives the state machine in `@cc-nexs/core/lib/state-machine.mjs`.
 
@@ -97,14 +97,44 @@ The `workflow` object passed to `nextStep` is assembled from **preset config + p
 ```js
 const presetG2 = preset.modes?.[MODE]?.g2_enabled ?? preset.workflow?.g2_enabled ?? true;
 const progress = readProgress(progressPath);
+const progressV2 = readProgressV2(PROGRESS_JSON);
+const featureConfig = JSON.parse(readFileSync(join(REQ_DIR, 'config.json'), 'utf8'));
+// readProgress() exposes a normalized workflow view. `attempt` is derived from
+// persisted delivery.test.attempts.length; it is not a progress.json field.
+const normalizedTestRelease = progress.workflow?.test_release || { policy: 'manual', status: 'idle', attempt: 0 };
+const attemptCount = normalizedTestRelease.attempt || 0;
+const delivery = {
+  strategy: progress.workflow?.sprint_delivery || 'per_sprint',
+  test: normalizedTestRelease,
+};
+const releaseOptOut = ARGS.includes('--no-auto-test-release');
+const configuredOverride = project.workflow?.test_release?.policy
+  ?? overlay?.workflow?.test_release?.policy;
+const persistedPolicy = resolveTestReleasePolicy({
+  progress: progressV2,
+  featureConfig,
+  configured: mergedWorkflow?.test_release?.policy,
+  configuredOverride,
+});
 const workflow = {
   g2_enabled: presetG2,
   g2_approved: progress.workflow.g2_approved,
   g2_approved_sprints: progress.workflow.g2_approved_sprints,
+  sprint_delivery: delivery.strategy,
+  test_release: {
+    policy: releaseOptOut ? 'manual' : persistedPolicy,
+    status: delivery.test.status,
+    attempt: attemptCount,
+    prerequisites_met: true,
+  },
 };
 ```
 
-This ensures `g2_enabled: false` in minimal preset causes the state machine to skip DEPLOY_GATE entirely.
+New features default to `final_only + auto_if_ready`. Explicit project/overlay `manual` or `disabled` policy overrides that default. A legacy progress file without `delivery` is always interpreted as `per_sprint + manual`; upgrading cc-nexs must never grant an existing feature new remote-write authority. `--no-auto-test-release` changes only the current orchestration invocation. A feature may persist the opt-out with `config.json.release.test=manual`.
+
+In full final-only mode, Sprint PASS advances through `SPRINT_<N>_DEV_DONE` to `ALL_SPRINTS_DEV_DONE`, then exactly one `INTEGRATION_REVIEW -> TEST_RELEASE -> FINAL_QA -> FINAL_EVAL` delivery chain.
+
+`g2_enabled: false` still disables test delivery for presets such as minimal. It does not authorize production release.
 
 ## Step 2: Dispatch loop
 
@@ -114,10 +144,11 @@ Repeatedly:
 2. Call `nextStep({state, counters, thresholds, enabledRoles, sprint, humanGateApproved, workflow, mode})` from core/lib/state-machine.mjs (mode = `'full'` or `'fast'`)
 3. Examine the returned `{next, role, action, stop, parallel, circuitBreaker}`:
    - `circuitBreaker` set → append a progress.json event + spec.md changelog, then transition
-   - `stop: true` → output human-gate summary (Step 3) and return
+   - `stop: true` → output the matching human/release-block summary (Step 3) and return
    - `role` set → invoke that role's command per the dispatch table below
    - `parallel` set → **必须**在同一条消息中使用多个 Agent tool call 并发 dispatch 两个角色（见 "并行 dispatch 规则"），两者都完成后再推进状态机
-   - `action == 'parse_*_conclusion'` → tail the corresponding md file's conclusion line, choose next state accordingly
+   - `action == 'release_test'` → run the release capability preflight below, invoke `/cc-nexs:release-test`, then re-read progress without writing a same-state transition
+   - `action == 'parse_*_conclusion'` → tail the corresponding md file's conclusion line, choose next state according to Step 4
 4. After the action completes, call `transitionState(progress.md path, {from, to, reason})`; it atomically appends the authoritative v2 event before refreshing the Markdown view. Stale or mismatched transitions fail closed.
 4.5. **Sync the per-feature README** so users entering the worktree see fresh state (the README's first line promises "进入目录第一件事：读本文件"). Best-effort, never blocks orchestration:
    ```js
@@ -144,17 +175,27 @@ Per-mode mapping. The orchestrator selects the correct slash command based on `M
 | `planner` / `pm` | `draft_spec` / `revise_spec` | `/cc-nexs:planner` | (n/a) |
 | `tech-lead` / `dev` | `implement` | `/cc-nexs:dev <id> --mode=feat --sprint=N` | (n/a) |
 | `tech-lead` / `dev` | `sync_docs` | `/cc-nexs:dev <id> --mode=doc --sprint=N` | (n/a) |
+| `tech-lead` / `dev` | `revise_integration` | `/cc-nexs:dev <id> --mode=integration` | (n/a) |
+| `tech-lead` / `dev` | `fix_bug` | `/cc-nexs:dev <id> --mode=fix --bug=<BUG-ID>` | (n/a) |
+| `tech-lead` / `dev` | `revise_implementation` | `/cc-nexs:dev <id> --mode=review-fix [--sprint=N]` | `/cc-nexs:fullstack <id> --phase=review-fix` |
 | `sa` / `reviewer` | `review_spec` | `/cc-nexs:sa spec` | `/cc-nexs:review spec <id>` |
 | `sa` / `reviewer` | `review_test_cases` | `/cc-nexs:sa test-cases` | (n/a) |
 | `sa` / `reviewer` | `review_code` | `/cc-nexs:sa code` | `/cc-nexs:review code <id>` |
+| `sa` / `reviewer` | `review_final_fix` | `/cc-nexs:sa code <id> --scope=final-fix` | (n/a) |
+| `sa` / `reviewer` | `review_integration` | `/cc-nexs:sa integration <id>` | (n/a) |
 | `sa` / `reviewer` | `accept` | (n/a) | `/cc-nexs:review accept <id>` |
-| `qa` / `verifier` | `write_cases` | `/cc-nexs:qa cases` | `/cc-nexs:verify initial <id>` |
+| `qa` / `verifier` | `write_cases` | `/cc-nexs:qa cases <id> --sprint=N` | `/cc-nexs:verify initial <id>` |
+| `qa` | `revise_cases` | `/cc-nexs:qa cases <id> --sprint=N --revise` | (n/a) |
 | `qa` / `verifier` | `run` | `/cc-nexs:qa run` | (folded into `/cc-nexs:verify initial`) |
 | `qa` / `verifier` | `regression` | `/cc-nexs:qa regression` | `/cc-nexs:verify regression <id>` |
-| `evaluator` | `final_acceptance` | `/cc-nexs:evaluator` | (n/a) |
+| `qa` / `verifier` | `run_final` | `/cc-nexs:qa final <id>` | (n/a) |
+| `qa` / `verifier` | `regression_final` | `/cc-nexs:qa final-regression <id>` | (n/a) |
+| `evaluator` | `final_acceptance` | `/cc-nexs:evaluator <id> --scope=final` | (n/a) |
 | `fullstack` | `draft_spec` / `revise_spec` | (n/a) | `/cc-nexs:fullstack <id> --phase=spec` |
 | `fullstack` | `implement` / `revise_implementation` | (n/a) | `/cc-nexs:fullstack <id> --phase=build` |
 | `fullstack` | `fix_bug` | (n/a) | `/cc-nexs:fullstack <id> --phase=fix --bug=<BUG-ID>` |
+
+`release_test` is a parent control action, not a role dispatch. Invoke `/cc-nexs:release-test <id>` (or the runtime's mirror skill) exactly once for the current immutable candidate fingerprint. On a failed attempt, only a deliberate retry uses `--retry`.
 
 Key fast mode distinction:
 - `review_code` → `/cc-nexs:review code <id>` — **only** generates `sa-code-review.md` (no acceptance)
@@ -198,9 +239,21 @@ When `next == 'SPEC_PENDING_HUMAN'` and `humanGateApproved == false`, **first ca
 
 Then **return**. This is a workflow pause, not a tool lock: status inspection, document work, deployment preparation, Git, SQL, and SSH remain available to the user-authorized parent session.
 
-## Step 3.5: Deploy gate output (G2)
+## Step 3.5: Test release preflight and manual G2 fallback
 
-When `action == 'await_deploy_approval'` and `stop: true`, output the G2 gate summary:
+When `action == 'release_test'`, perform every check below before the deterministic controller is allowed to push:
+
+1. Run `/cc-nexs:doctor --release-test` for repository test branches, release driver, URL allowlist, non-production hosts, and secret-reference policy.
+2. Confirm the configured runtime browser provider is callable:
+   - Claude Code: `chrome-devtools-mcp`
+   - Codex: the current in-app/Chrome browser session, reusing its signed-in profile
+   - Pi: `@injaneity/pi-computer-use@0.4.3` and its `find_roots`, `observe_ui`, `search_ui`, `inspect_ui`, `act_ui`, `wait_for` tools
+3. Open only `release.test.allowed_hosts`, prove the current session is authenticated to the configured test app/operations console, and prove the visible environment is test rather than production.
+4. Never read a password or token from project memory, Markdown, Git, config, or a prompt. Reuse an existing login; if login is required, resolve only an opaque `credential_ref` through an external secret provider and never persist secret material.
+
+If any check fails, do not call the release controller and do not push. Re-evaluate `nextStep` with `workflow.test_release.prerequisites_met=false`; this produces the manual G2 gate at `TEST_RELEASE`.
+
+When `action == 'await_deploy_approval'` and `stop: true`, output the G2 gate summary. For `final_only`, the approval attests that the complete requirement candidate was integrated to test, released, and its required environment checks were performed. For legacy `per_sprint`, retain the existing sprint-scoped meaning:
 
 ```
 ═══════════════════════════════════════════════════════════════
@@ -210,7 +263,7 @@ When `action == 'await_deploy_approval'` and `stop: true`, output the G2 gate su
 [i18n: labels.feature]: <id> <slug>
 [i18n: labels.branch]: $(git branch --show-current)
 [i18n: labels.mode]: <full|fast>
-[i18n: labels.sprint]: M<N>          ← full 模式有
+[i18n: labels.sprint]: M<N>          ← 仅 legacy per_sprint 有
 
 【SA Code Review 结论】
 (tail -5 sa-code-review.md 结论行)
@@ -222,13 +275,13 @@ When `action == 'await_deploy_approval'` and `stop: true`, output the G2 gate su
 (grep -A5 'DDL\|DML\|ALTER\|CREATE' deploy.md)
 
 ═══════════════════════════════════════════════════════════════
-👉 Git Custodian 已为各仓记录 candidate commit。请由人工或 CI 将对应 candidate
-   部署到测试环境；确认部署成功后执行 /cc-nexs:approve-deploy <id>。
+👉 Git Custodian 已为各仓记录 candidate commit。请由人工或 CI 将完整 candidate
+   合入 test、部署测试环境并完成必要环境验证；确认后执行 /cc-nexs:approve-deploy <id>。
    角色和 Orchestrator 不直接 merge/push 目标分支。
 ═══════════════════════════════════════════════════════════════
 ```
 
-Then **return**. Pipeline halts until human runs `/cc-nexs:approve-deploy`.
+Then **return**. Pipeline halts until human runs `/cc-nexs:approve-deploy`. Production merge/release is never implied by G2 and always remains an explicit human action.
 
 ## Step 4: Conclusion parsing rules
 
@@ -247,8 +300,31 @@ i18n: the literal strings (`PASS`, `通过`, `PASSED`, etc.) come from preset's 
 
 | SA_CODE 结论 | 下一状态 | 说明 |
 |---|---|---|
-| PASS | `SPRINT_<N>_DEPLOY_GATE` | 代码评审通过 → 等待人工部署测试环境 |
-| NEEDS_REVISION | `SPRINT_<N>_FIX` | 代码评审未通过 → 开发修复 |
+| PASS + `final_only` | `SPRINT_<N>_DEV_DONE` | 本 sprint 开发闭环完成；不部署，继续下一 sprint |
+| PASS + legacy `per_sprint` | `SPRINT_<N>_DEPLOY_GATE` | 保持旧需求逐 sprint 部署行为 |
+| NEEDS_REVISION | `SPRINT_<N>_FIX` | 开发修复 → `FIX_DONE` → 重新代码评审 |
+
+`SPRINT_<N>_FIX` in the development loop addresses code-review findings and then returns through doc sync/code review. It is not deployment regression. Only post-release `FINAL_FIX` may lead to a new test release.
+
+### final_only integration and acceptance routing
+
+| Parse action | PASS / 通过 | FAIL / 阻塞 / 未通过 |
+|---|---|---|
+| `PARSE_INTEGRATION_REVIEW` | `TEST_RELEASE` | `INTEGRATION_REVIEW_NEEDS_REVISION` (`review_revision++`) |
+| `PARSE_FINAL_QA` | `FINAL_QA_PASSED` | `FINAL_QA_BLOCKED` and create/update BUG artifacts |
+| `PARSE_FINAL_FIX_REVIEW` | record new candidates, then `TEST_RELEASE` | `FINAL_FIX_REVIEW_NEEDS_REVISION` (`review_revision++`) |
+| `PARSE_FINAL_EVAL` | `COMPLETE` | `FINAL_ACCEPTANCE_REJECTED` (`evaluator_reject++`) |
+
+After final QA/regression parses, call `recordTestVerification()` for the current release attempt with the result and report/evidence references. A blocked deployed round must follow this complete loop:
+
+```text
+FINAL_QA_BLOCKED -> FINAL_FIX -> FINAL_FIX_REVIEW -> TEST_RELEASE
+                 -> FINAL_QA (regression_final) -> FINAL_EVAL
+```
+
+Local checks may move a BUG from `OPEN` to `FIXED`; only the deployed `regression_final` run may move it from `FIXED` to `VERIFIED`.
+
+Transitions to `TEST_BLOCKED`, `FINAL_QA_BLOCKED`, `ACCEPTANCE_REJECTED`, or `FINAL_ACCEPTANCE_REJECTED` invalidate the aggregate test-release status and requirement-level G2 approval while retaining immutable attempt evidence. A repaired candidate therefore re-enters `TEST_RELEASE`; it can never reuse an earlier deployment as proof.
 
 ### full 模式 SA_TEST_REVIEW 结论路由
 
@@ -257,7 +333,7 @@ i18n: the literal strings (`PASS`, `通过`, `PASSED`, etc.) come from preset's 
 | SA_TEST_REVIEW 结论 | 下一状态 | 说明 |
 |---|---|---|
 | PASS | `SPRINT_<N>_DOC_SYNC` | 用例评审通过 → Tech Lead 同步文档 |
-| NEEDS_REVISION | `SPRINT_<N>_QA_CASES` | 用例评审未通过 → QA 修订用例 |
+| NEEDS_REVISION | `SPRINT_<N>_SA_TEST_REVIEW_NEEDS_REVISION` | 用例评审未通过 → 状态机派发 QA `revise_cases` → `QA_CASES` → SA 新轮次复审 |
 
 ### fast 模式解析（拆分后）
 
@@ -271,7 +347,8 @@ CODE=$(tail -20 ${REQ_DIR}sa-code-review.md | grep -E '^结论:' | tail -1 | awk
 
 | CODE 结论 | 下一状态 | 计数器 |
 |---|---|---|
-| PASS | DEPLOY_GATE | — |
+| PASS + `auto_if_ready` | TEST_RELEASE | — |
+| PASS + manual/legacy | DEPLOY_GATE | — |
 | NEEDS_REVISION | CODE_REVIEW_NEEDS_REVISION | review_revision++ |
 
 #### PARSE_ACCEPTANCE（ACCEPTANCE 之后）
@@ -287,11 +364,11 @@ ACC=$(tail -30 ${REQ_DIR}acceptance.md | grep -E '^验收结果:' | tail -1 | aw
 | 通过 | COMPLETE | — |
 | 未通过 | ACCEPTANCE_REJECTED | evaluator_reject++ |
 
-`mode=fast` 在 `state == 'TEST'` 后解析 `test-report.md` 末尾结论；`通过 → TEST_PASSED`，`阻塞 → TEST_BLOCKED`。
+`mode=fast` 在 `state == 'TEST'` 后解析 `test-report.md` 末尾结论；`通过 → TEST_PASSED`，`阻塞 → TEST_BLOCKED`。`PARSE_FIX_REVIEW` PASS 必须先记录新的 candidate 并回 `TEST_RELEASE`；NEEDS_REVISION 到 `FIX_REVIEW_NEEDS_REVISION`，先重新实现再复审。后续 release attempt > 1 时只允许 `verify regression`，不能用本地验证替代部署后回归。
 
-## Step 4.5: Artifact completeness gate (full mode, before EVAL)
+## Step 4.5: Artifact completeness gate (full mode, before final EVAL)
 
-Before transitioning from `SPRINT_<N>_QA_RUN` (or `QA_REGRESSION` PASS) → `SPRINT_<N>_EVAL`, the orchestrator runs a pre-flight check:
+Before transitioning from `FINAL_QA_PASSED` to `FINAL_EVAL`, the orchestrator runs a pre-flight check over the accumulated requirement artifacts:
 
 ```bash
 FAILED=0
@@ -306,26 +383,28 @@ for f in deploy.md api-doc.md test-report.md; do
   fi
 done
 if [ $FAILED -ne 0 ]; then
-  echo "⚠️ 产物不完整。回退到 SPRINT_${N}_DOC_SYNC 让 Tech Lead 补充文档。"
-  # transition back to DOC_SYNC
+  echo "⚠️ 产物不完整。回退到 INTEGRATION_REVIEW_NEEDS_REVISION 让 Tech Lead 补充文档并重新评审。"
 fi
 ```
 
 This is the final guardrail — even if earlier steps were skipped, the completeness gate catches template-only artifacts before Evaluator wastes a scoring cycle on incomplete input.
 
-## Step 5: Counter increments
+## Step 5: Circuit counter lifecycle
 
-- `*_NEEDS_REVISION` after a review parse → `counters.review_revision++`
-- BUG file state regression to FIXED again → `counters.fix_per_bug[BUG-id]++`
-- Acceptance fail → `counters.evaluator_reject++`
+Circuit counters track **consecutive failures in the active loop**, not lifetime failures across unrelated sprints or phases:
 
-Counters live in progress.json. Update them through an event-aware core helper; progress.md counters are a rendered mirror and must not be edited as state.
+- Review parse `NEEDS_REVISION` → `counters.review_revision++`; the next PASS in that review loop resets it to `0` before transition.
+- A deployed regression fails the same BUG again → `counters.fix_per_bug[BUG-id]++`; when that BUG becomes `VERIFIED`, delete/reset its counter.
+- Acceptance fail → `counters.evaluator_reject++`; acceptance PASS resets it to `0` before `COMPLETE`.
+- The state machine evaluates each breaker only in its corresponding failure/retry state. High legacy counters cannot redirect `TEST_RELEASE`, gates, normal development states, or `COMPLETE`.
+
+Counters live in progress.json. Increment and reset them through an event-aware core helper; progress.md counters are a rendered mirror and must not be edited as state.
 
 ## Step 6: Termination
 
 Loop exits when:
 - `current_state == COMPLETE` → call `syncFeatureReadme({ reqDir: REQ_DIR })` one last time so the README reflects the final state, then print final summary (completed AC × passed users × pending human items × branch state) **and** the worktree cleanup hint below
-- `stop: true` from state machine (human gate, or fast-mode `HUMAN_INTERVENTION` circuit breaker)
+- `stop: true` from state machine (human/manual release gate, release block, manual verification requirement, or fast-mode `HUMAN_INTERVENTION` circuit breaker)
 - A tool call genuinely fails after self-repair attempts
 
 No other condition causes the orchestrator to stop and wait for user input.

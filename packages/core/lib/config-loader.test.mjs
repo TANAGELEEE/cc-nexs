@@ -19,6 +19,9 @@ test('private overlay overrides public preset without mutating unrelated default
     '  src_paths:',
     '    - "src/**"',
     'workflow:',
+    '  sprint_delivery: final_only',
+    '  test_release:',
+    '    policy: auto_if_ready',
     '  thresholds:',
     '    review_revision: 3',
   ].join('\n'));
@@ -28,6 +31,9 @@ test('private overlay overrides public preset without mutating unrelated default
     '  build_cmd: "tool build"',
     '  src_paths:',
     '    - "service/**"',
+    'release:',
+    '  test:',
+    '    app_url: "https://test.example.com"',
   ].join('\n'));
 
   try {
@@ -36,6 +42,9 @@ test('private overlay overrides public preset without mutating unrelated default
     assert.equal(config.mergedStack.build_cmd, 'tool build');
     assert.deepEqual(config.mergedStack.src_paths, ['service/**']);
     assert.equal(config.mergedThresholds.review_revision, 3);
+    assert.equal(config.mergedWorkflow.sprint_delivery, 'final_only');
+    assert.equal(config.mergedWorkflow.test_release.policy, 'auto_if_ready');
+    assert.equal(config.mergedRelease.test.app_url, 'https://test.example.com');
     assert.equal(config.overlayPath, join(root, '.cc-nexs/overlay.yml'));
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -68,10 +77,14 @@ test('workspace config resolves repositories and rejects path escapes', () => {
       '  - id: api',
       '    path: api',
       '    base_branch: develop',
+      '    test_branch: test',
+      '    release_order: 20',
     ].join('\n'));
     const workspace = loadWorkspaceConfig({ projectRoot: root });
     assert.equal(workspace.repositories[0].base_branch, 'main');
     assert.equal(workspace.repositories[1].base_branch, 'develop');
+    assert.equal(workspace.repositories[1].test_branch, 'test');
+    assert.equal(workspace.repositories[1].release_order, 20);
     assert.equal(workspace.repositories[1].absolute_path, join(root, 'api'));
   } finally {
     rmSync(root, { recursive: true, force: true });

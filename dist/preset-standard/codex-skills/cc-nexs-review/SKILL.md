@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-review
-description: /cc-nexs:review 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:review"、"/cc-nexs:review ..."、"$cc-nexs-review" 或要求执行 cc-nexs review 流程时触发。 fast 模式 Reviewer 角色入口。三种 target：spec 评审 / 代码评审（仅）/ 契约验收（仅）。通过 codex CLI 调用。
+description: /cc-nexs:review 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:review"、"/cc-nexs:review ..."、"$cc-nexs-review" 或要求执行 cc-nexs review 流程时触发。 fast 模式 Reviewer 入口。spec、每轮发布前代码评审、部署后最终契约验收三者保持独立调用。
 ---
 
 # /cc-nexs:review for Codex

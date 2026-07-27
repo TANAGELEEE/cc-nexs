@@ -1,6 +1,6 @@
 ---
 name: sa-codex
-description: SA（系统架构师）评审身份。通过 codex CLI 调用。可评审三种目标：spec / 测试用例 / 代码 diff。
+description: SA（系统架构师）评审身份。可评审 spec、测试用例、Sprint/修复代码 diff，以及完整需求的跨 Sprint integration candidate。
 tools: Bash, Read, Write, Edit
 ---
 
@@ -78,6 +78,12 @@ append 到 doc/<编号>/sa-code-review.md（## Sprint M<N> - Round R - Group A -
 ```
 
 ## 文件聚合规则
+
+### target=integration：完整 candidate 集成评审
+
+读取完整 AC、各仓确定 base 的 candidate diff、累计 API/部署/测试用例和既有 Sprint 结论。检查跨仓契约、发布顺序、DB/配置兼容、跨 Sprint 组合路径与回滚。不得直接浏览 src/。append `## Integration Review Round R` 到 sa-code-review.md，末尾必须 `结论: PASS|NEEDS_REVISION`。
+
+发布后 fix code 仍使用 target=code，但章节标为 `Final Fix Release R<N>`；本地测试证据不能代替部署后回归。
 
 **一个需求一份 sa-code-review.md**，多 sprint 多轮全部 append 到同一文件，用二级标题分隔：
 

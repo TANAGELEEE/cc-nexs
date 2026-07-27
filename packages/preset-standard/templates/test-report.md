@@ -2,7 +2,7 @@
 
 > **负责人**：QA（Codex，黑盒）
 > **本文件产出**：执行记录 + 覆盖审计。**不做验收结论**——验收结论在 acceptance.md（Evaluator 产）。
-> **规则**：按 sprint × round append，同一文件承载全部轮次。
+> **规则**：Sprint 阶段累计用例；默认只在完整需求发布 test 后按 Final Release × Round append 执行记录。legacy per_sprint 可保留原章节。
 
 ---
 
@@ -83,10 +83,22 @@
 
 ---
 
-## FINAL — 全量汇总
+## Final Release R1 — YYYY-MM-DD
 
-> 仅在所有 sprint 回归通过后 append。
-> **本节不做验收结论**，仅汇总执行面数据供 Evaluator 参考。
+> 完整 candidate 首次发布 test 后执行。修复重新发布使用 `## Final Regression Release R<N>`，不得覆盖历史。
+
+### 发布证据
+
+| release attempt | environment_revision | pipeline | deployment | test URLs |
+|---|---|---|---|---|
+| test-release-1 |  |  |  |  |
+
+### 累计执行范围
+
+- 全部 Sprint P0/P1：
+- 跨 Sprint/跨仓集成路径：
+- 前端/运维台浏览器检查：
+- 未执行的必需用例（非空则结论必须阻塞）：
 
 ### 总量统计
 - 用例总数：
@@ -95,11 +107,11 @@
 - 覆盖的 AC-ID：N/N
 
 ### 遗留待人工接入清单
-（合并各 sprint 的"待人工接入"）
+（可选/生产专属项可列出；必需 P0/P1 不得以待人工接入冒充通过）
 
 ### 移交给 Evaluator
 - spec.md 验收契约（全部 AC-ID）
 - 本文件各 sprint 执行记录
 - bugs/ 下 VERIFIED 列表
 
-**结论: 通过**（执行层面——最终验收以 acceptance.md 为准）
+**结论: 通过**（执行层面；最终契约验收以 acceptance.md 为准）

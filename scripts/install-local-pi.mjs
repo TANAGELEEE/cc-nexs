@@ -26,6 +26,11 @@ if (!installed.includes('pi-subagents')) {
   process.exit(1);
 }
 
+if (!installed.includes('pi-computer-use')) {
+  console.warn('WARN @injaneity/pi-computer-use@0.4.3 is not installed; automatic browser verification will fall back to manual G2.');
+  console.warn('Install: pi install git:github.com/injaneity/pi-computer-use@v0.4.3');
+}
+
 run('pi', ['install', root, '--approve'], { stdio: 'inherit' });
 console.log('cc-nexs Pi package installed. Restart Pi or run /reload.');
 console.log('Configure a different model for cc-nexs.reviewer and cc-nexs.verifier before /cc-nexs:run or reviewed hotfix flows.');

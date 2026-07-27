@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-run
-description: /cc-nexs:run 的 Pi P2 适配 skill。 支持 preset-standard fast 模式，并通过 pi-subagents 运行隔离角色。 Generic orchestrator. Reads authoritative progress.json v2, dispatches enabled roles, and runs until COMPLETE or a human gate.
+description: /cc-nexs:run 的 Pi P2 适配 skill。 支持 preset-standard fast 模式，并通过 pi-subagents 运行隔离角色。 Generic orchestrator. Develops across one or more sprints, then performs one test release and final acceptance unless explicitly opted out or prerequisites are unavailable.
 ---
 
 # /cc-nexs:run for Pi
@@ -27,3 +27,5 @@ Read and follow `../../../dist/preset-standard/commands/run.md` as the authorita
 ## Required Pi Prerequisite
 
 `pi-subagents` must be installed and its `subagent` tool must expose the package agents above. Run `/subagents-doctor`, then open `/subagents` to inspect package-agent model mappings. `/subagents-models` is only for builtin agents and must not be used for cc-nexs package roles.
+
+Automatic browser verification additionally requires `@injaneity/pi-computer-use@0.4.3` installed with `pi install git:github.com/injaneity/pi-computer-use@v0.4.3`. If it is absent, keep cc-nexs available and use the manual test-release fallback; do not silently claim browser verification.

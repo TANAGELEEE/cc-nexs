@@ -108,6 +108,12 @@ export function readProgress(path) {
       workflow: {
         g2_approved: progress.gates?.g2?.approved === true,
         g2_approved_sprints: g2Sprints,
+        sprint_delivery: progress.delivery?.strategy || 'per_sprint',
+        test_release: {
+          policy: progress.delivery?.test?.policy || 'manual',
+          status: progress.delivery?.test?.status || 'idle',
+          attempt: progress.delivery?.test?.attempts?.length || 0,
+        },
       },
       history: progress.events.map((event) => `${event.timestamp} ${event.from || '-'} → ${event.to || '-'}  ${event.reason || event.type}`),
       schema_version: 2,

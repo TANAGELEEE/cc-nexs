@@ -3,9 +3,13 @@
 import { pathToFileURL } from 'node:url';
 
 import { approveFeatureGate } from './approval-command.mjs';
+import { runTestRelease } from './test-release.mjs';
 
 export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   const [command, ...args] = argv;
+  if (command === 'release-test') {
+    return runTestRelease({ cwd, ...parseReleaseOptions(args) });
+  }
   const gate = command === 'approve-spec'
     ? 'g1'
     : command === 'approve-deploy' ? 'g2' : null;
@@ -13,6 +17,25 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
 
   const options = parseApprovalOptions(args);
   return approveFeatureGate({ cwd, gate, ...options });
+}
+
+function parseReleaseOptions(args) {
+  const positional = [];
+  const options = { featureId: null, progressPath: null, retry: false, dryRun: false, hotfix: false, capabilityAttested: false };
+  for (let index = 0; index < args.length; index += 1) {
+    const token = args[index];
+    if (token === '--progress') options.progressPath = requireValue(args, ++index, token);
+    else if (token.startsWith('--progress=')) options.progressPath = token.slice('--progress='.length);
+    else if (token === '--retry') options.retry = true;
+    else if (token === '--dry-run') options.dryRun = true;
+    else if (token === '--hotfix') options.hotfix = true;
+    else if (token === '--capability-attested') options.capabilityAttested = true;
+    else if (token.startsWith('-')) throw new Error(`unknown option: ${token}`);
+    else positional.push(token);
+  }
+  options.featureId = positional[0] || null;
+  if (positional.length > 1) throw new Error(`unexpected arguments: ${positional.slice(1).join(' ')}`);
+  return options;
 }
 
 export function splitCommandArguments(text = '') {
@@ -49,6 +72,18 @@ function requireValue(args, index, option) {
 }
 
 function printResult(result) {
+  if (result.kind === 'test-release') {
+    const status = result.dryRun ? 'preflight passed' : result.attempt?.status || 'unknown';
+    console.log(`cc-nexs test release ${status}`);
+    console.log(`Feature: ${result.feature.id} ${result.feature.slug}`);
+    console.log(`Environment: ${result.environment}`);
+    for (const repo of result.repositories) {
+      console.log(`Repository: ${repo.id} ${repo.sourceCommit} -> ${repo.targetBranch}`);
+    }
+    if (result.attempt) console.log(`Attempt: ${result.attempt.id}`);
+    console.log(`Progress: ${result.progressFile}`);
+    return;
+  }
   const gate = result.gate.toUpperCase();
   const sprint = result.sprint === null ? '' : ` M${result.sprint}`;
   const status = result.alreadyApproved ? 'already approved' : 'approved';
@@ -64,6 +99,7 @@ function printUsage() {
   console.error('Usage:');
   console.error('  cc-nexs approve-spec <feature-id> [--approver <name>] [--progress <path>]');
   console.error('  cc-nexs approve-deploy <feature-id> [M<N>] [--approver <name>] [--progress <path>]');
+  console.error('  cc-nexs release-test <feature-id> [--retry] [--dry-run] [--hotfix] [--capability-attested] [--progress <path>]');
 }
 
 const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;

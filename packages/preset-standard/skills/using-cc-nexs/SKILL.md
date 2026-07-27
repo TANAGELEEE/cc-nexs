@@ -1,107 +1,82 @@
 ---
 name: using-cc-nexs
-description: cc-nexs 入口被动触发 skill。当用户说"做新需求"、"开发功能"、"start a feature"、"开个分支做"、"build new requirement"、"按 SOP 跑"、"五方流程"、"plan + implement + test"、"全流程开发"、"feature 开发"、"端到端做这个需求" 时自动激活，引导用户进入 cc-nexs 编排流水线。
+description: 引导新功能、跨模块需求、完整开发测试验收或“按 SOP 跑”进入 cc-nexs。支持 full/fast、多 Sprint 开发、完整需求 test 发布、自动浏览器验收、manual fallback 和 hotfix 分流。
 ---
 
-# 使用 cc-nexs 流水线
+# 使用 cc-nexs
 
-本 skill 在用户表达"做新需求"或类似意图时被动触发，引导进入 cc-nexs 状态机编排开发流水线。Claude Code 与 Codex 都必须以 `commands/*.md` 为事实来源；Codex 安装时会为每个 `/cc-nexs:*` command 生成同名镜像 skill，但文档写入位置、状态推进和角色边界不允许分叉。
+以 `commands/*.md` 为流程事实来源。Claude Code、Codex 和 Pi 只适配入口/角色工具，不得分叉状态、产物或 Git 语义。
 
-## 何时建议用户走 cc-nexs
+## 选择入口
 
-- 新功能开发（不是 typo / 文案修复）
-- 跨多个 commit 的工作
-- 需要 spec → 评审 → 实现 → 测试 → 验收的完整闭环
-- 涉及多模块（后端 + 前端）改动
+- 新功能、跨多个 commit、前后端/多仓、需要 spec 到验收闭环：`init -> run`。
+- 单模块、单 Sprint、低复杂度：默认 `mode=fast`。
+- 跨模块、DB/外部契约/高风险或需要多个 Sprint：显式 `--mode=full`。
+- 小于 50 行常规 BUG：`hotfix`；typo 可直接修。
+- 探索 spike 或纯文档任务不强制进入主流程。
 
-## 何时**不**建议
+## 启动
 
-- 单文件 typo 修复 → 直接改即可
-- 探索性 spike（写完就丢）
-- 文档撰写
-- 小于 50 行的 bug 修复 → 用 `/cc-nexs:hotfix`
-
-## 两种模式：full vs fast
-
-cc-nexs 支持两种模式，在 `all-docs/doc/<编号>/config.json` 的 `mode` 字段选择：
-
-| 模式 | 角色数 | 状态机 | 适用场景 | 子代理调用量 |
-|------|--------|--------|---------|---------------|
-| **full** | 5 方异构（Planner / Tech Lead / SA / QA / Evaluator） | 多 sprint，full 状态机 | 跨模块、含 DB schema 变更、对外契约、合规风险、Sprint 切片 ≥ 2 | 基线 |
-| **fast** | 3 角色合并（Fullstack / Reviewer / Verifier） | 单 sprint，fast 状态机 | 单模块单接口、改动 ≤ 800 行 diff、无并发/事务复杂度 | 比 full 少 ~50% |
-
-**默认 fast**。只有跨模块、高风险或需要多 Sprint 分工时，才在 init 显式传 `--mode=full`。
-
-## 启动顺序
-
-```
-/cc-nexs:init <一句话需求>      ← 建目录 + 写一句话诉求
-/cc-nexs:brainstorm <编号>      ← 可选：用 Socratic 对话把诉求展成 requirements.md
-/cc-nexs:run <编号>             ← 跑全流程到人工 gate（G1: spec 审批, G2: 部署确认）
+```text
+/cc-nexs:init <需求> [--mode=full|fast]
+/cc-nexs:brainstorm <id>          # requirements 模糊时可选
+/cc-nexs:run <id>
 ```
 
-`brainstorm` 在需求"还很模糊 / PM 自己一句话写不出完整 requirements.md"时强烈推荐。如果 PM 已经线下把 requirements.md 填得很完整，可以跳过直接 `run`。
+Codex 使用 `$cc-nexs-*` mirror skill；不要把 `/cc-nexs:*` 当 shell path。Pi/Claude 使用 slash command。
 
-`run` 自动按 config.json 里的 mode 选择对应状态机和角色，正常流程**只需** `/cc-nexs:run`。
+## 默认交付
 
-## Codex 侧使用约定
+新需求默认：
 
-Codex plugin 中每个 command 都有镜像 skill：
-
-- `/cc-nexs:init` → `$cc-nexs-init`
-- `/cc-nexs:run` → `$cc-nexs-run`
-- `/cc-nexs:approve-spec` → `$cc-nexs-approve-spec`
-- `/cc-nexs:hotfix` → `$cc-nexs-hotfix`
-- fast 单步：`$cc-nexs-fullstack` / `$cc-nexs-review` / `$cc-nexs-verify`
-
-Codex 的确定性入口是 `$cc-nexs-run 01`；原始 `/cc-nexs:run 01` 只能作为兼容文本提示，不能作为 shell 命令执行。镜像 skill 的第一步永远是读 `commands/<name>.md`，然后按该 command 声明的路径写入 `all-docs/doc/<编号>.<slug>/`、`bugs/`、`qa-scripts/`、`docs/solutions/` 等原位置。审批 skill 必须调用打包的 `lib/cc-nexs-cli.mjs`，禁止直接编辑 progress 文件。
-
-## 流水线行为速记
-
-1. 一次触发，自动跑到人工 gate G1（spec 评审通过后）
-2. 人工审核 spec.md 满意后跑 `/cc-nexs:approve-spec`
-3. 再跑 `/cc-nexs:run`，自动跑到 G2（代码评审通过后等部署确认）
-4. 部署测试环境后跑 `/cc-nexs:approve-deploy`，自动跑完 QA 直到 COMPLETE
-4. 任何阶段失败：自循环重试，超阈值自动熔断
-5. 物理不可为的（生产部署等）落"待人工接入"清单，不阻塞
-
-fast 模式没有 TECH_LEAD_REVIEW 兜底岗：同一 BUG 修 2 次失败直接停下要人工。
-
-## 启动检查清单
-
-引导用户启动新需求前确认：
-
-- [ ] `all-docs/all-docs/doc/<编号>.<短名>/` 目录已建（用户手动 cp templates/ 过去 或 `/cc-nexs:init`）
-- [ ] `requirements.md` 已填业务需求（不会填？跑 `/cc-nexs:brainstorm <编号>` 用对话补全）
-- [ ] `config.json` 的 `mode` 字段已确认（默认 fast；复杂需求显式改 full）
-- [ ] 已切到 `feature/<编号>-<短名>` 分支
-- [ ] 当前工作目录是项目根（含 `all-docs/doc/` 和代码模块目录）
-
-任一缺失 → 提醒用户补，不要替用户做（避免误操作）。
-
-## 与单步命令的关系
-
-```
-/cc-nexs:init           ← 第 0 步：建目录 + 写一句话诉求
-/cc-nexs:brainstorm     ← 第 1 步（可选）：把诉求 Socratic 展成 requirements.md
-/cc-nexs:run            ← 默认入口，自动状态机（按 mode 路由）
-                          ┌─ full 模式 ──────────────────┐
-                          ├─ /cc-nexs:planner   ← 单步：展开 spec
-                          ├─ /cc-nexs:sa        ← 单步：SA 评审
-                          ├─ /cc-nexs:dev       ← 单步：Tech Lead 编码
-                          ├─ /cc-nexs:qa        ← 单步：QA 测试
-                          ├─ /cc-nexs:evaluator ← 单步：Evaluator 打分
-                          └────────────────────────────────┘
-                          ┌─ fast 模式 ──────────────────┐
-                          ├─ /cc-nexs:fullstack ← 单步：Fullstack（spec / build / fix 三阶段）
-                          ├─ /cc-nexs:review    ← 单步：Reviewer（spec 评审 / 代码 + 契约验收合并）
-                          ├─ /cc-nexs:verify    ← 单步：Verifier（首次 cases+run / 回归）
-                          └────────────────────────────────┘
-                          /cc-nexs:hotfix       ← 旁路：bug 修复（绕开主流程）
-
-/cc-nexs:approve-spec   ← G1 人工 gate 放行
-/cc-nexs:approve-deploy ← G2 人工 gate 放行（部署确认后）
-/cc-nexs:status         ← 只读状态查询
+```yaml
+workflow:
+  sprint_delivery: final_only
+  test_release:
+    policy: auto_if_ready
 ```
 
-记住：`/cc-nexs:run` 是默认入口。其他单步命令**不会**自动推进 progress.md，只在调试或重跑某段时用。
+- Sprint 只做开发、本地验证、测试用例和代码评审，不逐 Sprint 部署/验收。
+- 全部 Sprint 完成后统一 integration review、TEST_RELEASE、FINAL_QA 和最终验收。
+- 发布后失败必须修复、独立复审、重新发布、部署后回归；本地验证只能把 BUG 写到 FIXED，不能写 VERIFIED。
+- `--no-auto-test-release` 或 feature `release.test=manual` 显式改走人工 test handoff。
+- driver/test branch/browser/login/host 安全前置不足时，在 push 前自动回退 manual G2。
+- 没有 `delivery` 字段的历史需求保持 `per_sprint + manual`。
+- 生产 merge/release 始终人工。
+
+## Browser 前置
+
+- Claude Code：`chrome-devtools-mcp` 可调用。
+- Codex：复用当前已登录的 in-app/Chrome session。
+- Pi：安装 `@injaneity/pi-computer-use@0.4.3`。
+
+只访问 `release.test.allowed_hosts`。URL 可从项目说明发现，但自动执行前必须进入结构化 `release.test` 配置。禁止从 memory、Markdown、Git 或 config 读取明文账号密码；优先复用登录，必要时仅使用 opaque `credential_ref` 对接外部 secret provider。
+
+## 人工点
+
+1. G1 固定：spec review PASS 后由人决定是否批准。
+2. G2 fallback：显式退出自动发布、前置不足或 legacy per_sprint 时使用。
+
+Gate 只暂停 cc-nexs 角色派发，不阻断父会话的用户授权工具。
+
+## 运行时命令映射
+
+```text
+run                 主编排
+approve-spec        G1
+release-test        确定性合入 test + release driver
+approve-deploy      manual G2 fallback
+status              只读状态和 release evidence
+doctor --release-test 严格发布前置检查
+hotfix              P0/P1/P2/P3 旁路，仍默认 candidate -> test release -> 回归
+```
+
+单步角色命令不推进 progress；只有 `run`/确定性 core controls 可以推进或记录事件。
+
+## 启动检查
+
+- workspace/repository worktree 与 branch assignment 正确；
+- requirements、config.mode 和 progress mode 一致；
+- full 多 Sprint 切片覆盖全部 AC；
+- 自动 test 发布项目已配置 test_branch、driver、test URLs 和 allowed_hosts；
+- 当前 runtime 的 browser prerequisite 满足，否则接受 manual fallback。

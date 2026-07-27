@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-evaluator
-description: /cc-nexs:evaluator 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:evaluator"、"/cc-nexs:evaluator ..."、"$cc-nexs-evaluator" 或要求执行 cc-nexs evaluator 流程时触发。 Evaluator 契约验收入口。两种 scope：sprint（单 sprint 打分）/ final（全量最终验收）。通过 codex CLI，禁读 src/、禁读 sa-*.md。
+description: /cc-nexs:evaluator 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:evaluator"、"/cc-nexs:evaluator ..."、"$cc-nexs-evaluator" 或要求执行 cc-nexs evaluator 流程时触发。 Evaluator 契约验收入口。新流程默认 final，仅在完整需求发布并通过最终 QA 后全量验收；sprint 仅供 legacy per_sprint。
 ---
 
 # /cc-nexs:evaluator for Codex

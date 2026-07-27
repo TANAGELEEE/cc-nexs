@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-verify
-description: /cc-nexs:verify 的 Pi P2 适配 skill。 支持 preset-standard fast 模式，并通过 pi-subagents 运行隔离角色。 fast 模式 Verifier 角色入口。两种 mode：initial（写 cases + 立即执行）/ regression（回归）。通过 Pi subagent 调用，黑盒。
+description: /cc-nexs:verify 的 Pi P2 适配 skill。 支持 preset-standard fast 模式，并通过 pi-subagents 运行隔离角色。 fast 模式 Verifier 入口。initial 在首次 test 发布后执行，regression 在修复重新发布后执行；两者都是黑盒环境验证。
 ---
 
 # /cc-nexs:verify for Pi
@@ -27,3 +27,5 @@ Read and follow `../../../dist/preset-standard/commands/verify.md` as the author
 ## Required Pi Prerequisite
 
 `pi-subagents` must be installed and its `subagent` tool must expose the package agents above. Run `/subagents-doctor`, then open `/subagents` to inspect package-agent model mappings. `/subagents-models` is only for builtin agents and must not be used for cc-nexs package roles.
+
+Automatic browser verification additionally requires `@injaneity/pi-computer-use@0.4.3` installed with `pi install git:github.com/injaneity/pi-computer-use@v0.4.3`. If it is absent, keep cc-nexs available and use the manual test-release fallback; do not silently claim browser verification.

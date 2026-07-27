@@ -1,7 +1,7 @@
 ---
-description: Bug 修复入口。按现象自动分档 P0/P1/P2/P3，走对应简化流程。P3 直改、P2 标准 4 步、P0/P1 加码必须 Evaluator 局部打分 + 回归用例。
+description: Bug 修复入口。P0/P1/P2/P3 均先形成 candidate；默认自动发布 test，独立执行部署后回归，生产发布始终人工。
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task
-argument-hint: <bug 现象描述> [需求编号]
+argument-hint: <bug 现象描述> [需求编号] [--level=P0|P1|P2|P3] [--no-auto-test-release]
 ---
 
 # /cc-nexs:hotfix
@@ -91,32 +91,24 @@ NEEDS_REVISION → 回 Step 2.2 修 → 再审，至 PASS。
 **Step 2.4 — Tech Lead 自测回归**
 
 ```
-跑 ${REQ_DIR}qa-scripts/BUG-<N>-repro.* → 通过 → BUG 状态 FIXED → VERIFIED
+跑 ${REQ_DIR}qa-scripts/BUG-<N>-repro.* 做本地验证；通过后 BUG 仍保持 FIXED
 跑原 spec 该模块的 P0 用例（防回归）
 append 到 BUG 文件的 ## 回归 章节
+本地验证禁止写 VERIFIED；只有新 candidate 发布到 test 后的独立回归可以写 VERIFIED
 ```
 
 #### 🔴 P0/P1 流程（P2 + 加码）
 
 **先做完 P2 全部 4 步**，然后追加：
 
-**Step 3.1 — Evaluator 局部打分**
-
-```
-调起 evaluator-codex，scope=sprint 但只针对受影响的 AC 子集。
-append 到 ${REQ_DIR}acceptance.md 的 ## 线上缺陷修复 - BUG-<N> 章节。
-必须输出契约打分表（仅相关 AC）。
-末尾 验收结果: 通过 或 未通过。
-```
-
-**Step 3.2 — 补回归用例**
+**Step 3.1 — 补回归用例**
 
 ```
 在 ${REQ_DIR}test-cases.md 追加一条用例，标 关联BUG: BUG-<N>。
 P0/P1 必须，否则下次还会复发。
 ```
 
-**Step 3.3 — 已上线则补回滚步骤**
+**Step 3.2 — 已上线则补回滚步骤**
 
 ```bash
 if grep -q "已上线" ${REQ_DIR}deploy.md; then
@@ -124,7 +116,18 @@ if grep -q "已上线" ${REQ_DIR}deploy.md; then
 fi
 ```
 
-### 3. 触发完整 SOP 升级
+### 4. Candidate、test 发布与部署后回归（所有档位）
+
+1. Orchestrator 让 Git Custodian 记录本次精确 code/docs candidate。角色不得自行 commit/push。
+2. 默认执行 `/cc-nexs:release-test <id> --hotfix`。它只能合入配置的 test_branch、调用结构化 test release driver，禁止生产发布。
+3. `--no-auto-test-release`、feature policy=manual 或 browser/driver/test branch 前置不足时，不调用控制器；输出人工 test 合并/发布/验证清单后停止，不能把本地验证当成交付完成。
+4. 自动发布成功后，必须用与实现 session 隔离的 QA/Verifier 在新 environment_revision 上重跑 BUG repro、受影响 P0/P1 和必要冒烟。P2/P0/P1 仅此处成功后可把 FIXED 改为 VERIFIED；P3 记录 test smoke 证据。
+5. 部署后回归失败则回到实现、轻量复审、更新 candidate、再次 `/cc-nexs:release-test --hotfix --retry`，直到通过或触发三轮熔断。
+6. P0/P1 部署后回归通过后，再调 Evaluator 对受影响 AC 子集打分，append 到 `${REQ_DIR}acceptance.md` 的 `## 线上缺陷修复 - BUG-<N>`，末尾必须 `验收结果: 通过|未通过`。
+
+账号策略与主流程相同：优先复用当前已登录浏览器；不得从项目 memory、Markdown、Git 或 config 读取明文账号密码，只允许 opaque `credential_ref` 对接外部 secret provider。
+
+### 5. 触发完整 SOP 升级
 
 满足以下任一 → 立即停 hotfix，提示走完整 SOP（`/cc-nexs:run`）：
 
@@ -141,7 +144,7 @@ fi
   下一步: 把 BUG 转化为新需求 all-docs/doc/<编号>，跑 /cc-nexs:run
 ```
 
-### 4. 输出
+### 6. 输出
 
 ```
 ✅ Hotfix 完成: BUG-<N>
@@ -149,7 +152,8 @@ fi
    diff 行数: <N>
    涉及文件: <数量>
    commit: <hash> fix(...) (BUG-<N>)
-   BUG 状态: VERIFIED
+   BUG 状态: <FIXED（待人工 test 验证）|VERIFIED>
+   test release: <attempt/environment_revision|manual fallback>
    <P0/P1 时输出 Evaluator 验收结果 + 回归用例 ID>
    <已上线时输出回滚步骤 append 位置>
 
@@ -157,6 +161,6 @@ fi
 📦 code candidate: <repository-id> <candidate-ref> <commit>
 ```
 
-### 5. Candidate recording
+### 7. Candidate recording
 
-Hotfix 代码和 BUG 文档都由 Orchestrator 交给 Git Custodian。只 stage 本次声明的路径，绝不直接提交或 push docs base branch。发布和合并属于显式 release 动作。
+Hotfix 代码和 BUG 文档都由 Orchestrator 交给 Git Custodian。只 stage 本次声明的路径，绝不直接提交或 push docs base branch。自动化只允许 test；生产发布和主分支合并始终需要显式人工授权。

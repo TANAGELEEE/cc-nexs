@@ -47,7 +47,7 @@ export function approveFeatureGate({
     });
   } else {
     const stateSprint = parseDeployGateSprint(before.state);
-    if (before.state !== 'DEPLOY_GATE' && stateSprint === null) {
+    if (before.state !== 'DEPLOY_GATE' && before.state !== 'TEST_RELEASE' && stateSprint === null) {
       const requestedSprint = normalizeSprint(sprint);
       const existing = requestedSprint === null
         ? before.gates.g2
@@ -55,7 +55,7 @@ export function approveFeatureGate({
       if (existing?.approved) {
         return approvalResult({ progressFile, progress: before, gate, sprint: requestedSprint, approval: existing, alreadyApproved: true });
       }
-      throw new Error(`G2 requires DEPLOY_GATE or SPRINT_<N>_DEPLOY_GATE, found ${before.state}`);
+      throw new Error(`G2 requires TEST_RELEASE, DEPLOY_GATE, or SPRINT_<N>_DEPLOY_GATE, found ${before.state}`);
     }
 
     let requestedSprint = normalizeSprint(sprint);
@@ -65,7 +65,7 @@ export function approveFeatureGate({
       }
       requestedSprint = stateSprint;
     } else {
-      // Fast mode has a single deploy gate. Accept an optional M1 for a uniform CLI surface.
+      // Fast mode and final-only delivery have a single deploy gate. Accept an optional M1 for a uniform CLI surface.
       if (requestedSprint !== null && requestedSprint !== 1) {
         throw new Error(`fast-mode DEPLOY_GATE does not accept sprint M${requestedSprint}`);
       }

@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-hotfix
-description: /cc-nexs:hotfix 的 Pi P2 适配 skill。 支持 preset-standard hotfix 旁路流程，并通过 pi-subagents 运行隔离角色。 Bug 修复入口。按现象自动分档 P0/P1/P2/P3，走对应简化流程。P3 直改、P2 标准 4 步、P0/P1 加码必须 Evaluator 局部打分 + 回归用例。
+description: /cc-nexs:hotfix 的 Pi P2 适配 skill。 支持 preset-standard hotfix 旁路流程，并通过 pi-subagents 运行隔离角色。 Bug 修复入口。P0/P1/P2/P3 均先形成 candidate；默认自动发布 test，独立执行部署后回归，生产发布始终人工。
 ---
 
 # /cc-nexs:hotfix for Pi
@@ -37,3 +37,5 @@ Read and follow `../../../dist/preset-standard/commands/hotfix.md` as the author
 ## Required Pi Prerequisite
 
 `pi-subagents` must be installed and its `subagent` tool must expose the package agents above. Run `/subagents-doctor`, then open `/subagents` to inspect package-agent model mappings. `/subagents-models` is only for builtin agents and must not be used for cc-nexs package roles.
+
+Automatic browser verification additionally requires `@injaneity/pi-computer-use@0.4.3` installed with `pi install git:github.com/injaneity/pi-computer-use@v0.4.3`. If it is absent, keep cc-nexs available and use the manual test-release fallback; do not silently claim browser verification.

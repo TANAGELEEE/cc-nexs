@@ -76,7 +76,7 @@ try {
   if (!listed.includes(root) && !listed.includes('cc-nexs')) throw new Error('pi list did not show cc-nexs');
   const commands = await queryCommands(env);
   const names = new Set(commands.map((command) => command.name));
-  for (const required of ['cc-nexs:init', 'cc-nexs:run', 'cc-nexs:hotfix', 'cc-nexs:doctor', 'skill:cc-nexs-run', 'skill:cc-nexs-hotfix']) {
+  for (const required of ['cc-nexs:init', 'cc-nexs:run', 'cc-nexs:release-test', 'cc-nexs:hotfix', 'cc-nexs:doctor', 'skill:cc-nexs-run', 'skill:cc-nexs-release-test', 'skill:cc-nexs-hotfix']) {
     if (!names.has(required)) throw new Error(`Pi did not load required command: ${required}`);
   }
   if (withSubagents && !names.has('subagents-doctor')) throw new Error('pi-subagents did not load beside cc-nexs');

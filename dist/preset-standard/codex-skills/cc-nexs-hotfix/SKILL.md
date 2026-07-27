@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-hotfix
-description: /cc-nexs:hotfix 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:hotfix"、"/cc-nexs:hotfix ..."、"$cc-nexs-hotfix" 或要求执行 cc-nexs hotfix 流程时触发。 Bug 修复入口。按现象自动分档 P0/P1/P2/P3，走对应简化流程。P3 直改、P2 标准 4 步、P0/P1 加码必须 Evaluator 局部打分 + 回归用例。
+description: /cc-nexs:hotfix 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:hotfix"、"/cc-nexs:hotfix ..."、"$cc-nexs-hotfix" 或要求执行 cc-nexs hotfix 流程时触发。 Bug 修复入口。P0/P1/P2/P3 均先形成 candidate；默认自动发布 test，独立执行部署后回归，生产发布始终人工。
 ---
 
 # /cc-nexs:hotfix for Codex

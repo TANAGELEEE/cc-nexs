@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-fullstack
-description: /cc-nexs:fullstack 的 Pi P2 适配 skill。 支持 preset-standard fast 模式，并通过 pi-subagents 运行隔离角色。 fast 模式 Fullstack 角色入口。一手包办 spec 起草 + 编码 + 文档同步 + bug 修复。仅 fast 模式可用。
+description: /cc-nexs:fullstack 的 Pi P2 适配 skill。 支持 preset-standard fast 模式，并通过 pi-subagents 运行隔离角色。 fast 模式 Fullstack 入口。负责 spec、实现、文档和评审修订；发布后 BUG 只修到 FIXED，部署回归由 Verifier 完成。
 ---
 
 # /cc-nexs:fullstack for Pi
@@ -27,3 +27,5 @@ Read and follow `../../../dist/preset-standard/commands/fullstack.md` as the aut
 ## Required Pi Prerequisite
 
 `pi-subagents` must be installed and its `subagent` tool must expose the package agents above. Run `/subagents-doctor`, then open `/subagents` to inspect package-agent model mappings. `/subagents-models` is only for builtin agents and must not be used for cc-nexs package roles.
+
+Automatic browser verification additionally requires `@injaneity/pi-computer-use@0.4.3` installed with `pi install git:github.com/injaneity/pi-computer-use@v0.4.3`. If it is absent, keep cc-nexs available and use the manual test-release fallback; do not silently claim browser verification.

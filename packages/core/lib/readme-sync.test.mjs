@@ -190,3 +190,18 @@ test('isAfterState: SPRINT_<N>_X normalized to >SPEC_APPROVED', () => {
   assert.equal(isAfterState('SPRINT_2_QA_RUN', 'RECON_DONE'), true);
   assert.equal(isAfterState('INIT', 'SPEC_APPROVED'), false);
 });
+
+test('final-only delivery states retain completed spec artifacts', () => {
+  const root = makeReqDir('TEST_RELEASE', {
+    'repo-context.md': '# context\n',
+    'spec.md': '# spec\n',
+  });
+  writeFileSync(join(root, 'README.md'), readmeWithAnchor());
+  try {
+    syncFeatureReadme({ reqDir: root });
+    const readme = readFileSync(join(root, 'README.md'), 'utf8');
+    assert.match(readme, /\| spec\.md \| Planner \| 🟢 \|/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

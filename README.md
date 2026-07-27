@@ -20,6 +20,8 @@
 
 新增预设按 [docs/extending-presets.md](./docs/extending-presets.md) 操作。fast 模式选择见 `preset-standard` 的 [docs/role-map.md](./packages/preset-standard/docs/role-map.md)。
 
+`preset-standard` 新需求默认 `final_only + auto_if_ready`：开发可分多个 Sprint，但 Sprint 不部署；全部开发完成后统一做 integration review、合入 test、发布、最终 QA 和契约验收。显式 `--no-auto-test-release`、feature policy=manual 或前置能力不足时回退人工 G2。没有 `delivery` 字段的历史需求保持逐 Sprint + manual，不会因升级自动获得远端写权限。生产发布始终人工。
+
 ## 目录结构
 
 ```
@@ -151,6 +153,7 @@ $cc-nexs-init "需求描述"             # 默认 fast
 $cc-nexs-init "复杂需求" --mode=full # 只有显式指定才走 full
 $cc-nexs-run 01
 $cc-nexs-approve-spec 01
+$cc-nexs-release-test 01
 $cc-nexs-approve-deploy 01
 $cc-nexs-hotfix "现象描述"
 ```
@@ -182,6 +185,7 @@ Pi 当前为实验性 P2 支持，承诺 `preset-standard` fast 和 hotfix 流�
 
 ```bash
 pi install npm:pi-subagents@0.35.1
+pi install git:github.com/injaneity/pi-computer-use@v0.4.3
 pi install git:github.com/<github-owner>/cc-nexs
 ```
 
@@ -192,7 +196,9 @@ pnpm install
 pnpm install:local:pi
 ```
 
-Pi 不调用 Codex CLI。Fullstack 默认继承当前 Pi 模型；Reviewer/Verifier 通过 `.pi/settings.json` 的 `subagents.agentOverrides` 选择另一个已认证模型，并可配置 `fallbackModels`。没有配置不同审核模型时，`/cc-nexs:run` 和需要审核的 hotfix 必须停止。详见 [Pi P2 支持](./docs/pi-plugin.md)。
+Pi 不调用 Codex CLI。Fullstack 默认继承当前 Pi 模型；Reviewer/Verifier 通过 `.pi/settings.json` 的 `subagents.agentOverrides` 选择另一个已认证模型，并可配置 `fallbackModels`。`@injaneity/pi-computer-use@0.4.3` 提供自动浏览器验收；缺失时基础插件仍可用，但 test release 回退人工。详见 [Pi P2 支持](./docs/pi-plugin.md)。
+
+Claude Code 自动环境验收要求 `chrome-devtools-mcp` 已配置并可调用。Codex 复用当前已登录的 in-app/Chrome 会话。三端都只访问 `release.test.allowed_hosts`；不得从项目 memory、Markdown 或 Git 读取明文账号密码，必要登录只允许通过 opaque `credential_ref` 对接外部 secret provider。
 
 ### Claude Code 从 GitHub 装（其他机器 / 协作者）
 
@@ -210,14 +216,16 @@ Claude Code、Codex 和 Pi 共享同一命令语义，但使用各运行时的�
 
 | 运行时 | 推荐入口 |
 | --- | --- |
-| Claude Code | `/cc-nexs:run 01`、`/cc-nexs:approve-deploy 01` |
-| Codex Desktop / CLI | `$cc-nexs-run 01`、`$cc-nexs-approve-deploy 01` |
-| Pi | `/cc-nexs:run 01`、`/cc-nexs:approve-deploy 01` |
-| 普通终端 | `cc-nexs approve-spec 01`、`cc-nexs approve-deploy 01 [M1]` |
+| Claude Code | `/cc-nexs:run 01`、`/cc-nexs:release-test 01`、`/cc-nexs:approve-deploy 01` |
+| Codex Desktop / CLI | `$cc-nexs-run 01`、`$cc-nexs-release-test 01`、`$cc-nexs-approve-deploy 01` |
+| Pi | `/cc-nexs:run 01`、`/cc-nexs:release-test 01`、`/cc-nexs:approve-deploy 01` |
+| 普通终端 | `cc-nexs release-test 01`、`cc-nexs approve-spec 01`、`cc-nexs approve-deploy 01 [M1]` |
 
 ```bash
 /cc-nexs:init "需求描述"          # 默认 fast；按 workspace 为每个仓库建独立 worktree
-/cc-nexs:run [编号]               # 自动状态机，跑到人工 gate 停下（G1: spec 审批, G2: 部署确认）
+/cc-nexs:run [编号]               # 自动状态机；默认仅 G1 固定暂停，G2 是 test 自动化的 fallback
+/cc-nexs:run [编号] --no-auto-test-release # 本次显式改走人工 test 发布
+/cc-nexs:release-test [编号]      # 完整 candidate 确定性合入 test + 调 release driver
 /cc-nexs:approve-spec [编号]      # 人工放行 spec
 /cc-nexs:status [编号]            # 只读看状态
 /cc-nexs:build [--phase=...]      # 按 git diff 自动选 build/test 命令并跑
@@ -270,7 +278,7 @@ cd <workspace-root>
 ## 设计原则
 
 1. **事件状态机** —— `progress.json` v2 是带 revision 的权威事件记录，`progress.md` 仅作人类可读视图
-2. **两个人工 checkpoint** —— G1: spec 通过评审后停一次；G2: 代码评审通过后部署确认（preset 可关闭）
+2. **G1 固定、G2 fallback** —— G1 是 spec 人工决策；G2 只在显式退出、能力不足或 legacy 流程中暂停
 3. **三档熔断** —— review 反复打回、修复反复失败、验收反复未过分别升级到不同状态
 4. **角色边界硬隔离** —— hooks 通过 `CC_NEXS_ROLE` 环境变量拦截越权操作
 5. **预设可插拔** —— 新项目栈写新 preset，不动 core
@@ -279,7 +287,7 @@ cd <workspace-root>
 
 ## 状态
 
-`v0.5.2` 将 G1/G2 改为纯状态机 checkpoint，移除全局 approval PreToolUse 封锁，并为 Claude Code、Codex、Pi 和普通终端提供同源的确定性审批控制命令。
+当前版本将开发 Sprint 与需求交付分离：所有 Sprint 完成后一次 test release 和最终验收，支持自动前置检查、确定性 test 集成、跨端浏览器验证与失败后的重新发布回归。
 
 ## License
 

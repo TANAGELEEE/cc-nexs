@@ -43,6 +43,7 @@ Codex plugins expose reusable workflows through skills. During build, every `com
 | `/cc-nexs:init` | `$cc-nexs-init` |
 | `/cc-nexs:run` | `$cc-nexs-run` |
 | `/cc-nexs:approve-spec` | `$cc-nexs-approve-spec` |
+| `/cc-nexs:release-test` | `$cc-nexs-release-test` |
 | `/cc-nexs:status` | `$cc-nexs-status` |
 | `/cc-nexs:build` | `$cc-nexs-build` |
 | `/cc-nexs:hotfix` | `$cc-nexs-hotfix` |
@@ -56,13 +57,16 @@ The original slash-style text remains in skill descriptions as a compatibility h
 ```text
 $cc-nexs-init "添加 /api/health 健康检查接口" --mode=fast
 $cc-nexs-run 01
+$cc-nexs-release-test 01
 $cc-nexs-approve-deploy 01
 $cc-nexs-hotfix "支付回调偶现 500"
 ```
 
 Each generated skill reads its matching `commands/*.md` file as the single source of truth and preserves its arguments, stop conditions, state transitions, and artifact paths.
 
-Approval skills additionally execute `lib/cc-nexs-cli.mjs`. They never edit `progress.json` directly. G1/G2 pause role dispatch through the state machine; they do not install a global tool-blocking hook.
+Approval skills execute the deterministic approval core. `$cc-nexs-release-test` first checks the current signed-in in-app/Chrome session and allowlisted test environment, then executes the deterministic release controller in `lib/cc-nexs-cli.mjs`. These skills never edit `progress.json` directly or implement ad hoc Git integration.
+
+Codex reuses the browser profile already logged into the test app/operations console. URL candidates may be discovered from project instructions, but automatic execution requires configured `release.test.*_url` and `allowed_hosts`. Plaintext account/password values in memory, Markdown, Git, or config are forbidden; only opaque external `credential_ref` values are allowed.
 
 ## Document Write Locations
 
@@ -85,10 +89,10 @@ Generated Codex skills explicitly forbid relocating these paths.
 
 1. Repo Scout writes `repo-context.md`
 2. Planner writes or revises `spec.md`
-3. SA reviews `spec.md`, test cases, and code
-4. Tech Lead implements, syncs docs, and fixes bugs
-5. QA writes cases, runs tests, writes bug reports, and runs regression
-6. Evaluator writes `acceptance.md`
+3. SA reviews `spec.md`, Sprint cases/code, then the complete integration candidate
+4. Tech Lead implements Sprint slices, syncs docs, and fixes review/deployed defects
+5. All Sprint development completes before one deterministic test release
+6. QA runs accumulated tests on the deployed environment; Evaluator writes final `acceptance.md`
 
 `$cc-nexs-run` remains the orchestrator entry. `$cc-nexs-approve-spec` records G1 and advances to `SPEC_APPROVED` through the shared control program.
 
@@ -101,6 +105,8 @@ Generated Codex skills explicitly forbid relocating these paths.
 3. Reviewer performs spec review and the combined code-review plus acceptance pass
 
 Fast remains single-sprint only, uses stricter thresholds, skips SA test-case review, and has no TECH_LEAD_REVIEW fallback.
+
+Both modes default to `auto_if_ready`; `--no-auto-test-release` or failed prerequisites retain manual G2. Production release remains explicit and human-authorized.
 
 ### Hotfix
 

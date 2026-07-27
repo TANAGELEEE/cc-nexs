@@ -17,6 +17,7 @@ const expectedCommands = [
   'init',
   'migrate-progress',
   'recon',
+  'release-test',
   'review',
   'run',
   'status',
@@ -116,6 +117,19 @@ for (const [role, marker] of Object.entries({
   const text = readFileSync(join(agentsRoot, `${role}.md`), 'utf8');
   if (!text.includes('# Pi Hotfix Override') || !text.includes(marker)) {
     fail(`${role}.md: missing Pi hotfix role override`);
+  }
+}
+
+const verifierTools = readFileSync(join(agentsRoot, 'verifier.md'), 'utf8');
+for (const tool of ['find_roots', 'observe_ui', 'search_ui', 'inspect_ui', 'act_ui', 'wait_for']) {
+  if (!verifierTools.match(new RegExp(`^tools:.*\\b${tool}\\b`, 'm'))) fail(`verifier.md: missing computer-use tool ${tool}`);
+}
+
+const releaseSkillPath = join(skillsRoot, 'cc-nexs-release-test', 'SKILL.md');
+if (existsSync(releaseSkillPath)) {
+  const releaseSkill = readFileSync(releaseSkillPath, 'utf8');
+  for (const marker of ['Deterministic Test Release Control', 'release-test <feature-id>', '@injaneity/pi-computer-use@0.4.3']) {
+    if (!releaseSkill.includes(marker)) fail(`cc-nexs-release-test: missing ${marker}`);
   }
 }
 

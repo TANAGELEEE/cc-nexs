@@ -1,5 +1,5 @@
 ---
-description: Evaluator 契约验收入口。两种 scope：sprint（单 sprint 打分）/ final（全量最终验收）。通过 codex CLI，禁读 src/、禁读 sa-*.md。
+description: Evaluator 契约验收入口。新流程默认 final，仅在完整需求发布并通过最终 QA 后全量验收；sprint 仅供 legacy per_sprint。
 allowed-tools: Read, Write, Edit, Bash, Task
 argument-hint: [需求编号] [--scope=sprint|final] [--sprint=N]
 ---
@@ -10,7 +10,7 @@ argument-hint: [需求编号] [--scope=sprint|final] [--sprint=N]
 
 参数：
 - `$1` = 需求编号
-- `--scope=sprint` （默认） / `final`
+- `--scope=final`（默认）/ `sprint`（仅 legacy per_sprint）
 - `--sprint=N` （scope=sprint 必需）
 
 ## 执行步骤
@@ -20,7 +20,7 @@ argument-hint: [需求编号] [--scope=sprint|final] [--sprint=N]
 ```bash
 REQ_NUM=$1
 SCOPE=$(echo "$@" | grep -oE 'scope=[a-z]+' | cut -d= -f2)
-SCOPE=${SCOPE:-sprint}
+SCOPE=${SCOPE:-final}
 SPRINT=$(echo "$@" | grep -oE 'sprint=[0-9]+' | cut -d= -f2)
 [ -n "$CC_NEXS_REQ_DIR" ] && REQ_DIR="$CC_NEXS_REQ_DIR" || REQ_DIR=$(ls -d all-docs/doc/${REQ_NUM}*/ | head -1)
 ```
@@ -33,8 +33,10 @@ scope=sprint 模式：
 - ${REQ_DIR}bugs/ 下不能有 OPEN 或 FIXED 的 BUG（必须全部 VERIFIED）
 
 scope=final 模式：
-- 所有 sprint 的 acceptance.md 章节都存在且 验收结果: 通过
-- ${REQ_DIR}test-report.md 末尾汇总章节存在
+- 当前 delivery.test attempt 必须成功，且存在 environment_revision
+- ${REQ_DIR}test-report.md 末尾必须是 Final Release / Final Regression 的 `结论: 通过`
+- ${REQ_DIR}bugs/ 下不能有 OPEN 或 FIXED BUG
+- 不要求每个 Sprint 先产 acceptance；Sprint 是开发切片，不是交付/验收切片
 
 任一前置不满足 → 报错 + 提示先跑相应阶段。
 
@@ -67,8 +69,8 @@ append 到 ${REQ_DIR}acceptance.md 的 ## Sprint M${SPRINT} - YYYY-MM-DD。
 
 输入：
 - ${REQ_DIR}spec.md 全部 AC
-- ${REQ_DIR}acceptance.md 各 sprint 章节
-- ${REQ_DIR}test-report.md 最终汇总
+- ${REQ_DIR}test-report.md 最终发布/回归章节及环境证据
+- ${REQ_DIR}acceptance.md 既有历史（如 legacy 或前一轮最终验收）
 - ${REQ_DIR}bugs/ 全部 VERIFIED BUG
 
 append 到 ${REQ_DIR}acceptance.md ## 最终验收 - YYYY-MM-DD。
@@ -96,7 +98,7 @@ echo "RESULT:${RESULT}"
 - scope=sprint + 通过 → SPRINT_<N>_DONE
 - scope=sprint + 未通过 → 按 acceptance.md 建议回退
 - scope=final + 通过 → COMPLETE
-- scope=final + 未通过 → SPEC_REVIEWING（说明 AC 或实现严重偏离）
+- scope=final + 未通过 → FINAL_ACCEPTANCE_REJECTED → 集成修订、复审、重新发布和最终回归
 
 ## 输出
 

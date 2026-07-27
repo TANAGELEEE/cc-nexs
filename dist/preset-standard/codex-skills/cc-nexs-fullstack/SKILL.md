@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-fullstack
-description: /cc-nexs:fullstack 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:fullstack"、"/cc-nexs:fullstack ..."、"$cc-nexs-fullstack" 或要求执行 cc-nexs fullstack 流程时触发。 fast 模式 Fullstack 角色入口。一手包办 spec 起草 + 编码 + 文档同步 + bug 修复。仅 fast 模式可用。
+description: /cc-nexs:fullstack 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:fullstack"、"/cc-nexs:fullstack ..."、"$cc-nexs-fullstack" 或要求执行 cc-nexs fullstack 流程时触发。 fast 模式 Fullstack 入口。负责 spec、实现、文档和评审修订；发布后 BUG 只修到 FIXED，部署回归由 Verifier 完成。
 ---
 
 # /cc-nexs:fullstack for Codex

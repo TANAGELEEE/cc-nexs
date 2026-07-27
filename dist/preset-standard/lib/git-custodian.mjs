@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, realpathSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
 
 import { gitIdentityEnv, resolveGitIdentity } from './git-identity.mjs';
@@ -28,6 +29,14 @@ function assertWithin(root, target) {
 
 function refExists(repo, ref) {
   try { git(repo, ['show-ref', '--verify', '--quiet', ref]); return true; } catch { return false; }
+}
+
+export function resolveCandidateCommit({ repo, candidateRef }) {
+  if (typeof candidateRef !== 'string' || !candidateRef.startsWith('refs/cc-nexs/candidates/')) {
+    throw new Error(`[cc-nexs] invalid candidate ref: ${candidateRef || '<missing>'}`);
+  }
+  if (!refExists(repo, candidateRef)) throw new Error(`[cc-nexs] candidate ref not found: ${candidateRef}`);
+  return git(repo, ['rev-parse', candidateRef]);
 }
 
 function remoteBranchExists(repo, branch) {
@@ -151,6 +160,68 @@ export function prepareFeatureForMerge({ repo, worktree, branch, baseBranch, can
   const head = git(worktree, ['rev-parse', 'HEAD']);
   if (candidateRef) git(repo, ['update-ref', candidateRef, head]);
   return { branch, baseBranch, baseCommit: git(repo, ['rev-parse', base]), oldHead, head, updated: oldHead !== head };
+}
+
+export function integrateCandidateToTest({ repo, repositoryId, candidateRef, expectedSourceCommit = null, targetBranch }) {
+  assertSegment(repositoryId, 'repository id');
+  assertSegment(targetBranch, 'test branch');
+  const sourceCommit = resolveCandidateCommit({ repo, candidateRef });
+  if (expectedSourceCommit !== null && sourceCommit !== expectedSourceCommit) {
+    throw new Error(`[cc-nexs] candidate ref changed during test release for ${repositoryId}`);
+  }
+  const target = fetchBase(repo, targetBranch);
+  const targetBefore = git(repo, ['rev-parse', target]);
+  if (isAncestor(repo, sourceCommit, targetBefore)) {
+    return {
+      repository: repositoryId,
+      sourceCommit,
+      targetBranch,
+      targetBefore,
+      integrationCommit: targetBefore,
+      alreadyIntegrated: true,
+    };
+  }
+
+  const tempRoot = mkdtempSync(join(tmpdir(), `cc-nexs-test-release-${repositoryId}-`));
+  const integrationWorktree = join(tempRoot, 'worktree');
+  let registered = false;
+  try {
+    git(repo, ['worktree', 'add', '--detach', integrationWorktree, target]);
+    registered = true;
+    const identity = resolveGitIdentity(repo);
+    try {
+      git(integrationWorktree, ['merge', '--no-ff', '--no-edit', sourceCommit], { env: gitIdentityEnv(identity) });
+    } catch {
+      try { git(integrationWorktree, ['merge', '--abort']); } catch {}
+      throw new Error(`[cc-nexs] candidate ${candidateRef} conflicts with latest origin/${targetBranch}`);
+    }
+    const integrationCommit = git(integrationWorktree, ['rev-parse', 'HEAD']);
+    try {
+      git(integrationWorktree, ['push', 'origin', `${integrationCommit}:refs/heads/${targetBranch}`]);
+    } catch {
+      throw new Error(`[cc-nexs] origin/${targetBranch} advanced during test integration; retry from the new remote tip`);
+    }
+    const remote = fetchBase(repo, targetBranch);
+    const remoteCommit = git(repo, ['rev-parse', remote]);
+    if (!isAncestor(repo, sourceCommit, remoteCommit) || !isAncestor(repo, integrationCommit, remoteCommit)) {
+      throw new Error(`[cc-nexs] remote test integration proof failed for ${repositoryId}`);
+    }
+    return {
+      repository: repositoryId,
+      sourceCommit,
+      targetBranch,
+      targetBefore,
+      integrationCommit,
+      remoteCommit,
+      alreadyIntegrated: false,
+    };
+  } finally {
+    if (registered) {
+      try { git(repo, ['worktree', 'remove', '--force', integrationWorktree]); } catch {}
+      try { git(repo, ['worktree', 'prune']); } catch {}
+    }
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
 }
 
 function isAncestor(repo, ancestor, descendant) {

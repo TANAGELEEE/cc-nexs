@@ -13,6 +13,23 @@ thresholds:
 # 可选：项目本地化覆盖 preset 默认 language
 # language: zh-CN
 
+# 新需求默认在所有开发 Sprint 完成后，一次性合并到 test、发布并验收。
+# 显式设为 manual 可退回人工 G2；外部 driver 和 URL 通常放私有 overlay。
+# workflow:
+#   sprint_delivery: final_only
+#   test_release:
+#     policy: auto_if_ready
+#     on_prerequisite_failure: manual_gate
+# release:
+#   test:
+#     app_url: "https://test.example.com"
+#     operations_url: "https://ops.example.com"
+#     allowed_hosts: ["test.example.com", "ops.example.com"]
+#     driver:
+#       command: "node"
+#       args: [".cc-nexs/release-driver.mjs"]
+#       timeout_seconds: 1800
+
 # 可选：项目级路径覆盖。
 # 公开发布的 preset 用通用占位符（src/main/java/**），
 # 在你自己的多模块项目里通过下面的 paths_override 注入真实路径，无需 fork preset。

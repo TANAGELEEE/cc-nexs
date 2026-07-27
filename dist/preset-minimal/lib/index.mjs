@@ -8,18 +8,31 @@ export { approveFeatureGate, normalizeSprint, resolveFeatureProgress } from './a
 export {
   PROGRESS_SCHEMA_VERSION,
   appendProgressEvent,
+  beginTestRelease,
+  completeTestRelease,
   approveProgressGate,
   createProgressV2,
   readProgressV2,
   recordRepositoryAssignments,
   recordRepositoryCandidate,
   recordRepositoryCandidatePrepared,
+  recordTestIntegration,
+  recordTestVerification,
   updateProgressCounters,
   validateProgressV2,
   writeProgressV2,
 } from './progress-v2.mjs';
 export { nextStep, STATES } from './state-machine.mjs';
-export { cleanupMergedWorktree, commitCandidate, createWorkspaceWorktrees, finalizeMergedWorktree, prepareFeatureForMerge } from './git-custodian.mjs';
+export {
+  cleanupMergedWorktree,
+  commitCandidate,
+  createWorkspaceWorktrees,
+  finalizeMergedWorktree,
+  integrateCandidateToTest,
+  prepareFeatureForMerge,
+  resolveCandidateCommit,
+} from './git-custodian.mjs';
+export { acquireTestReleaseLock, preflightTestRelease, runTestRelease } from './test-release.mjs';
 export { nextFeatureId, recordPublishedFeatureReservation, releaseFeatureReservation, reserveFeatureId } from './feature-reservation.mjs';
 export { publishDocsReservation } from './docs-reservation.mjs';
 export { detectRuntime, resolveRoleRuntime, runtimeContract } from './runtime-resolver.mjs';

@@ -157,9 +157,12 @@ function validateCommandMirrors(pluginRoot, manifest) {
     if (!skillText.includes(`../../commands/${fileName}`)) {
       fail(`${skillPath}: does not reference ../../commands/${fileName}`);
     }
-    if (['approve-deploy.md', 'approve-spec.md'].includes(fileName)
+    if (['approve-deploy.md', 'approve-spec.md', 'release-test.md'].includes(fileName)
       && !skillText.includes('../../lib/cc-nexs-cli.mjs')) {
-      fail(`${skillPath}: approval skill must invoke the deterministic control CLI`);
+      fail(`${skillPath}: control skill must invoke the deterministic CLI`);
+    }
+    if (fileName === 'release-test.md' && !skillText.includes('Deterministic Test Release Control')) {
+      fail(`${skillPath}: release-test must include deterministic control block`);
     }
   }
 }

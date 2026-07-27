@@ -8,7 +8,7 @@ cc-nexs/                    monorepo 根
 │   ├── core/               框架：状态机、角色注册、reviewer 适配、hooks、i18n
 │   └── preset-*/           预设：声明角色清单 + 工具映射 + 栈检查 + 模板
 ├── scripts/build.mjs       build：core 物化进每个 preset
-├── dist/                   分发产物（git ignore）
+├── dist/                   分发产物（随 release commit）
 │   ├── .claude-plugin/marketplace.json
 │   └── preset-*/           扁平自包含 plugin
 └── examples/               真实使用样板
@@ -101,7 +101,7 @@ core/i18n/*.json         →   skipExisting               →    i18n/
 
 ```js
 loadConfig({ projectRoot, presetRoot? })
-  → { project, preset, presetRoot, projectRoot, locale, mergedThresholds }
+  → { project, preset, overlay, locale, mergedThresholds, mergedStack, mergedWorkflow, mergedRelease }
 ```
 
 读两份 YAML / JSON：项目级（`cc-nexs.config.yml`）+ preset 级（`preset.yml`）。
@@ -114,7 +114,11 @@ loadConfig({ projectRoot, presetRoot? })
 特点：
 - 三档熔断（review_revision / fix_per_bug / evaluator_reject）
 - 角色弹性（缺 evaluator 时 reviewer 兼任，缺 qa 时 reviewer 兼任）
-- stop 条件：`SPEC_PENDING_HUMAN`（G1）或 `*_DEPLOY_GATE`（G2）且未人工放行
+- 默认 stop：`SPEC_PENDING_HUMAN`（G1）；manual/legacy G2、test release block、manual verification 和熔断
+
+### `core/lib/test-release.mjs`
+
+把不可变 candidate ref 按仓库顺序合入最新 `origin/<test_branch>`，普通 non-force push 后调用结构化 test release driver，并把 integration/pipeline/deployment/environment_revision 写入 progress v2 attempt。controller 只允许 test，不处理生产。
 
 ### `core/lib/role-registry.mjs`
 
@@ -151,43 +155,27 @@ deep-merge core 的 zh-CN.json / en-US.json 与 preset 的 i18n/<locale>/strings
 
 通过 stdin JSON 协议接收工具调用入参，exit 0 放行 / 2 阻断。
 
-## 状态机骨架（保留 v0.1 设计）
+## 状态机骨架
 
 ```
-INIT → REQ_DRAFTED → SPEC_DRAFTED → SPEC_REVIEWING
-       │                                │
-       │                ┌───────────────┴──────────────┐
-       │                │ NEEDS_REVISION               │ PASS
-       │                ▼                              ▼
-       │          SPEC_NEEDS_REVISION          SPEC_PENDING_HUMAN  ⏸️ G1 人工 gate
-       │                │                              │
-       │                └────► SPEC_DRAFTED            │ /cc-nexs:approve-spec
-       │                                               ▼
-       │                                        SPEC_APPROVED
-       │                                               │
-       ▼                                               ▼
-                                       for N in 1..total_sprints:
-                                          SPRINT_<N>_KICKOFF
-                                               ↓
-                                          SPRINT_<N>_DEV
-                                               ↓
-                                          SPRINT_<N>_REVIEW (代码评审)
-                                               ↓ PASS
-                                          SPRINT_<N>_TEST
-                                               ↓ 有 BUG
-                                          SPRINT_<N>_FIX → SPRINT_<N>_REGRESSION
-                                               ↓ 全 VERIFIED
-                                          SPRINT_<N>_EVAL
-                                               ↓ 通过
-                                          SPRINT_<N>_DONE
-                                               ↓
-                                       ALL_SPRINTS_DONE → FINAL_EVAL → COMPLETE
+INIT → REQ_DRAFTED → RECON_DONE → SPEC_DRAFTED → SPEC_REVIEWING
+     → SPEC_PENDING_HUMAN (G1) → SPEC_APPROVED
+
+for N in 1..total_sprints:
+  KICKOFF → DEV + QA_CASES → SA_TEST_REVIEW → DOC_SYNC → SA_CODE → DEV_DONE
+
+ALL_SPRINTS_DEV_DONE → INTEGRATION_REVIEW → TEST_RELEASE
+                     → FINAL_QA → FINAL_EVAL → COMPLETE
+
+FINAL_QA_BLOCKED → FINAL_FIX → FINAL_FIX_REVIEW → TEST_RELEASE → FINAL_QA
 ```
+
+Sprint 是开发切片，不是部署/验收切片。新需求默认 `final_only + auto_if_ready`；旧 progress 无 delivery 时保持 `per_sprint + manual`。显式退出或 browser/driver/test branch 前置不足时，TEST_RELEASE 在任何 push 前回退人工 G2。生产发布始终人工。
 
 熔断箭头（不在主图）：
 - review_revision >= 3 → SPEC_REVIEWING（强制 Planner 重审）
 - fix_per_bug >= 3 → TECH_LEAD_REVIEW（实现路径重评）
-- evaluator_reject >= 2 → SPEC_REVIEWING（AC 或方案严重偏离）
+- evaluator_reject >= 2 → integration/spec 方案重评
 
 ## 数据流
 
@@ -201,11 +189,11 @@ INIT → REQ_DRAFTED → SPEC_DRAFTED → SPEC_REVIEWING
 - Developer → src/* + dev-plan.md + api-doc.md + deploy.md
 - QA → test-cases.md + test-report.md + bugs/ + qa-scripts/
 - Evaluator → acceptance.md
-- Orchestrator → progress.md
+- Orchestrator/core controls → progress.json v2 + progress.md mirror
 
 不变量：
 - spec.md 只能 Planner 改
-- progress.md 只能 orchestrator + approve-spec 改
+- progress 只能 orchestrator + deterministic approve/release controls 改
 - 各 review/test/acceptance md 只能 append，不能 overwrite
 
 ## 与上一版（v0.1 monolith）对比

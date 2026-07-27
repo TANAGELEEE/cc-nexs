@@ -16,7 +16,14 @@ const featureId = legacy.raw.match(/feature_id:\s*([^\s]+)/)?.[1] || 'unknown';
 const featureSlug = legacy.raw.match(/feature_slug:\s*([^\s]+)/)?.[1] || 'unknown';
 const preset = legacy.raw.match(/preset:\s*([^\s]+)/)?.[1] || 'preset-standard';
 const mode = legacy.raw.match(/mode:\s*(full|fast|hotfix|lite)/)?.[1] || 'fast';
-const progress = createProgressV2({ featureId, featureSlug, preset, mode });
+const progress = createProgressV2({
+  featureId,
+  featureSlug,
+  preset,
+  mode,
+  deliveryStrategy: 'per_sprint',
+  testReleasePolicy: 'manual',
+});
 progress.state = legacy.current_state;
 progress.counters = { ...progress.counters, ...legacy.counters };
 progress.sprint = { ...progress.sprint, ...legacy.sprint };

@@ -38,7 +38,7 @@ Never edit code, tests, progress state, or Git. The parent supplies the diff and
 |---|---|
 | SA 评审 spec → sa-review.md | `target=spec` 同名输出 |
 | SA 评审测试用例 → sa-test-review.md | **跳过**（fast 模式不评测试用例本身）|
-| SA 评审代码 → sa-code-review.md | `target=code`（仅代码评审，DEPLOY_GATE 前）|
+| SA 评审代码 → sa-code-review.md | `target=code`（仅代码评审，每轮 TEST_RELEASE 前）|
 | Evaluator 契约打分 → acceptance.md | `target=accept`（仅契约验收，TEST_PASSED 后）|
 | Evaluator 最终验收 | 单 sprint 即最终，无需独立 final 调用 |
 
@@ -66,7 +66,7 @@ append 到 all-docs/doc/<编号>/sa-review.md（## Round N - YYYY-MM-DD - 结论
 末尾必须 \`结论: PASS\` 或 \`结论: NEEDS_REVISION\`。
 ```
 
-### target=code：代码评审（DEPLOY_GATE 前调用）
+### target=code：代码评审（每轮 TEST_RELEASE 前调用）
 
 测试尚未执行，只产出 sa-code-review.md，**禁止产出 acceptance.md**。
 
@@ -99,7 +99,7 @@ append 到 all-docs/doc/<编号>/sa-code-review.md（## Sprint M1 - Round R - YY
 
 ```bash
 你是本项目的 Reviewer（fast 模式）。
-本次只做契约验收（代码评审已在 DEPLOY_GATE 前完成）。
+本次只做契约验收（代码评审已在 TEST_RELEASE 前完成）。
 
 【输入】
 - all-docs/doc/<编号>/spec.md 的验收契约 AC 表
@@ -139,7 +139,7 @@ ACCEPT_RESULT=$(tail -30 all-docs/doc/<编号>/acceptance.md | grep -E '^验收�
 
 | 结论 | 下一步 |
 |---|---|
-| PASS | → DEPLOY_GATE（等待人工部署确认）|
+| PASS | → TEST_RELEASE（auto_if_ready）；显式退出或能力不足时 manual G2 |
 | NEEDS_REVISION | → BUILD（review_revision++）|
 
 ### target=accept 结论推进

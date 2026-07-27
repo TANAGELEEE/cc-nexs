@@ -8,11 +8,11 @@ cc-nexs 按 `config.json.mode` 选择两套角色：
 
 | 维度 | Repo Scout | Planner | Tech Lead | SA | QA | Evaluator |
 |------|-----------|---------|-----------|----|----|-----------|
-| **工具** | Claude | Claude | Claude | Codex CLI | Codex CLI | Codex CLI |
+| **工具** | Claude | Claude | Claude | Codex CLI | Claude + chrome-devtools-mcp | Codex CLI |
 | **Session** | 独立 | 独立 | 独立 | 每次新调用 | 每次新调用 | 每次新调用 |
 | **入口 command** | `/cc-nexs:recon` | `/cc-nexs:planner` | `/cc-nexs:dev` | `/cc-nexs:sa` | `/cc-nexs:qa` | `/cc-nexs:evaluator` |
-| **agent 文件** | `agents/repo-scout-claude.md` | `agents/planner-claude.md` | `agents/tech-lead-claude.md` | `agents/sa-codex.md` | `agents/qa-codex.md` | `agents/evaluator-codex.md` |
-| **职责** | 扫 src/ 同类配置/Service/页面 → repo-context.md | 业务需求 + 现状清单 → spec.md（AC + Sprint 切片）| 实现代码、修 bug、同步部署文档 | 评审 spec/用例/代码 | 黑盒测试与回归 | 按契约逐条打分验收 |
+| **agent 文件** | `agents/repo-scout-claude.md` | `agents/planner-claude.md` | `agents/tech-lead-claude.md` | `agents/sa-codex.md` | `agents/qa-claude.md` | `agents/evaluator-codex.md` |
+| **职责** | 扫 src/ 同类配置/Service/页面 → repo-context.md | 业务需求 + 现状清单 → spec.md（AC + Sprint 切片）| Sprint 实现、集成修订、发布后修复、部署文档 | 评审 spec/用例/Sprint code/完整 integration/fix | 完整需求发布后的黑盒 final/regression | 最终 QA 通过后按全部 AC 打分 |
 | **可读** | requirements.md, **src/（只读）**, cc-nexs.config.yml | requirements.md, **repo-context.md**, spec.md, sa-review.md | spec.md, sa-code-review.md, src/, bugs/, dev-plan.md | spec.md, test-cases.md, code diff | spec.md, api-doc.md, test-cases.md, sa-test-review.md（仅修订时）| spec.md, test-report.md, acceptance.md, bugs/（VERIFIED）|
 | **可写** | repo-context.md | spec.md | src/, dev-plan.md, deploy.md, api-doc.md, bugs/<id>.md | sa-review.md, sa-test-review.md, sa-code-review.md | test-cases.md, test-report.md, bugs/, qa-scripts/ | acceptance.md |
 | **禁读** | spec/sa-*/acceptance/test-*（后续阶段产物）| **src/**, sa-code-review.md, sa-test-review.md, qa-*, acceptance.md | acceptance.md（参考可，不依赖）, sa-review.md, sa-test-review.md, test-report.md（自己写过的部分除外）| — | **src/, sa-review.md, sa-code-review.md, dev-plan.md, acceptance.md** | **src/, sa-*.md, dev-plan.md, qa-scripts/** |
@@ -50,8 +50,8 @@ Planner 仍**禁读 src/**——这是身份隔离的基础。但为了避免 Pl
 
 ### 3. 执行人 ≠ 验收人
 
-QA 跑测试 → test-report.md（执行记录）
-Evaluator 按契约打分 → acceptance.md（验收结论）
+QA 在完整 candidate 发布 test 后跑累计测试 → test-report.md（执行记录）
+Evaluator 在 final QA 通过后按全部契约打分 → acceptance.md（最终验收结论）
 
 两者**绝不能**是同一 codex 调用。如果合并：QA 自然倾向于"测过的就当过"，验收变成走过场。
 
@@ -133,7 +133,7 @@ SA 在评审代码 diff 时，会检查"这个 commit 是不是 Tech Lead 角色
 
 §十 hotfix P2/P3 流程下，**Tech Lead 允许**写复现脚本（本职是 QA 的活）。这是为了让小 bug 修复链路尽量短。
 
-但 hotfix P0/P1 必须升级为完整流程的子集：Tech Lead 写复现 → SA 轻量评审 → Evaluator 局部打分（仍要拉起 Evaluator codex 调用）。
+但 hotfix P0/P1 必须升级为完整流程的子集：Tech Lead 写复现 → SA 轻量评审 → candidate → test release → 独立部署后回归 → Evaluator 局部打分。P2/P0/P1 本地验证只能到 FIXED，只有部署后回归可写 VERIFIED。
 
 ## 五方在 progress.md 中的痕迹
 
@@ -162,7 +162,7 @@ fast 模式合并 5 个角色为 3 个，交付速度提升约 50%，代价是�
 | **入口 command** | `/cc-nexs:fullstack` | `/cc-nexs:review` | `/cc-nexs:verify` |
 | **agent 文件** | `agents/fullstack-claude.md` | `agents/reviewer-codex.md` | `agents/verifier-codex.md` |
 | **合并自** | Planner + Tech Lead | SA 代码评审 + Evaluator 契约打分 | QA cases + run + regression |
-| **职责** | spec.md + 代码 + 部署文档 + bug 修复 | 评审 spec / 评代码 + 契约验收（合并） | 写测试用例 + 立即跑 + 回归 |
+| **职责** | spec.md + 代码 + 部署文档 + bug 修复 | 独立 target 评审 spec / 每轮 release 前代码 / 最终契约 | test release 后写/跑用例 + 新部署回归 |
 | **可读** | requirements / spec / sa-review / sa-code-review / src/ / bugs/ | spec / test-report / bugs(VERIFIED) / 当次 diff | spec / api-doc / deploy / bugs/ |
 | **可写** | spec / src/ / dev-plan / api-doc / deploy / bugs/<id> | sa-review / sa-code-review / acceptance | test-cases / test-report / bugs/ / qa-scripts/ |
 | **禁读** | （无强制）| **src/** / dev-plan.md / sa-test-review.md | **src/** / sa-review.md / sa-code-review.md / sa-test-review.md / dev-plan.md |
@@ -180,7 +180,7 @@ fast 模式合并 5 个角色为 3 个，交付速度提升约 50%，代价是�
 |---|---|
 | Planner 不写代码 / Tech Lead 不改 spec | ❌ 合并到 Fullstack（接受同 session 风险）|
 | SA 评审用例（sa-test-review.md） | ❌ 跳过（fast 不评测试用例本身）|
-| Evaluator 与 SA 严格隔离 | ❌ 合并到 Reviewer（单次 codex 同时产 sa-code-review.md + acceptance.md）|
+| Evaluator 与 SA 严格角色隔离 | ⚠️ 合并到 Reviewer 身份，但 code/accept 必须是两次独立 target/session，不能同次产出 |
 | Sprint 切片防大改动 | ❌ 强制单 sprint M1 |
 | 熔断 3 次重审 | ⚠️ 收紧到 2 次（更早抬升决策层）|
 

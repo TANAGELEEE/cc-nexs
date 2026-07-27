@@ -63,6 +63,7 @@ const PI_P2_COMMANDS = new Set([
   'init',
   'migrate-progress',
   'recon',
+  'release-test',
   'review',
   'run',
   'status',
@@ -172,6 +173,19 @@ function extractDescription(commandText, commandName) {
 }
 
 function deterministicControlBlock(commandBase, cliPath) {
+  if (commandBase === 'release-test') {
+    return `## Deterministic Test Release Control
+
+Complete the runtime/browser capability preflight from the authoritative command before any remote mutation. Then resolve \`${cliPath}\` relative to this SKILL.md and execute:
+
+\`\`\`text
+node <resolved-cli-path> release-test <feature-id> --capability-attested [--retry] [--dry-run] [--hotfix]
+\`\`\`
+
+Never implement test-branch integration with ad hoc Git commands and never target production. If capability preflight fails, do not invoke the controller; preserve the manual fallback exactly as the command specifies.
+
+`;
+  }
   if (!['approve-deploy', 'approve-spec'].includes(commandBase)) return '';
   const sprint = commandBase === 'approve-deploy' ? ' [M<N>]' : '';
   return `## Deterministic Approval Control
@@ -307,6 +321,9 @@ function generatePiResources() {
   for (const [role, sourceFile] of Object.entries(PI_ROLE_SOURCES)) {
     const sourcePath = join(standardSource, 'agents', sourceFile);
     const { description, tools, body } = parseAgentSource(readFileSync(sourcePath, 'utf8'), sourceFile);
+    if (role === 'verifier') {
+      tools.push('find_roots', 'observe_ui', 'search_ui', 'inspect_ui', 'act_ui', 'wait_for');
+    }
     const header = [
       '---',
       `name: ${role}`,
@@ -395,6 +412,8 @@ ${supportsHotfix ? `## Pi Hotfix Dispatch Contract
 ## Required Pi Prerequisite
 
 \`pi-subagents\` must be installed and its \`subagent\` tool must expose the package agents above. Run \`/subagents-doctor\`, then open \`/subagents\` to inspect package-agent model mappings. \`/subagents-models\` is only for builtin agents and must not be used for cc-nexs package roles.
+
+Automatic browser verification additionally requires \`@injaneity/pi-computer-use@0.4.3\` installed with \`pi install git:github.com/injaneity/pi-computer-use@v0.4.3\`. If it is absent, keep cc-nexs available and use the manual test-release fallback; do not silently claim browser verification.
 `;
     writeFileSync(join(skillDir, 'SKILL.md'), body, 'utf8');
     generated += 1;

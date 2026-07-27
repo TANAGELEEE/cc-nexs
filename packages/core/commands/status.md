@@ -9,7 +9,7 @@ argument-hint: [feature_id]
 ## Steps
 
 1. Resolve workspace docs assignment and locate authoritative progress.json v2 plus its progress.md mirror
-2. Read mode/state/revision/gates/counters from progress.json; require config.json.mode to agree
+2. Read mode/state/revision/gates/counters/delivery from progress.json; require config.json.mode to agree
 3. Use `readProgressV2()` (or `readProgress(progress.md)` compatibility delegation)
 4. Print (Sprint progress 段在 fast 模式被替换为 BUILD/TEST/ACCEPT 阶段进度)：
 
@@ -24,6 +24,7 @@ Repositories: <repo id → branch/worktree/candidate>
 Mode:       <full | fast>
 Revision:   <event revision>
 Updated at: <updated_at>
+Delivery:   <final_only|per_sprint> / test <auto_if_ready|manual|disabled>
 
 🚦 Current state: <state> — <i18n description>
 
@@ -42,6 +43,11 @@ Updated at: <updated_at>
 
 📜 Recent history (last 5)
    <history tail>
+
+🚀 Test release
+   Status: <idle|running|succeeded|failed|deployed_needs_manual_verification|verified>
+   Latest: <attempt id / source fingerprint / integrated repos / pipeline / deployment / environment_revision>
+   Verification: <passed|blocked|not recorded + evidence refs>
 
 🚧 Human required
    <list, or "none">

@@ -13,6 +13,19 @@
 | test |      |      |
 | prod |      |      |
 
+> test/prod 不得共用 URL。自动流程只读取私有 overlay/project config 的 `release.test.app_url`、`operations_url`、`allowed_hosts` 和 driver；生产发布始终人工。
+
+## Test release driver
+
+| 项目 | 值 |
+|---|---|
+| test branch / 仓库顺序 | 见 `.cc-nexs/workspace.yml` 的 `test_branch` / `release_order` |
+| driver | `release.test.driver`（stdin/stdout JSON 契约） |
+| app URL | `release.test.app_url` |
+| operations URL | `release.test.operations_url` |
+| browser session | 复用当前已登录会话 |
+| credential ref | 仅记录 opaque ref；禁止账号、密码、token 明文 |
+
 ## 部署顺序
 
 1. DB 迁移（SQL 文件：`*.sql`）

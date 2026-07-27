@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-dev
-description: /cc-nexs:dev 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:dev"、"/cc-nexs:dev ..."、"$cc-nexs-dev" 或要求执行 cc-nexs dev 流程时触发。 Tech Lead 编码入口。三种模式：feat（sprint 编码）/ fix（修 bug）/ doc（同步文档）。每次完成后执行项目配置命中的验证命令。
+description: /cc-nexs:dev 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:dev"、"/cc-nexs:dev ..."、"$cc-nexs-dev" 或要求执行 cc-nexs dev 流程时触发。 Tech Lead 编码入口。支持 Sprint 开发、文档同步、评审修订、跨 Sprint 集成修订和发布后 BUG 修复。
 ---
 
 # /cc-nexs:dev for Codex

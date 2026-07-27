@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-run
-description: /cc-nexs:run 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:run"、"/cc-nexs:run ..."、"$cc-nexs-run" 或要求执行 cc-nexs run 流程时触发。 Generic orchestrator. Reads authoritative progress.json v2, dispatches enabled roles, and runs until COMPLETE or a human gate.
+description: /cc-nexs:run 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:run"、"/cc-nexs:run ..."、"$cc-nexs-run" 或要求执行 cc-nexs run 流程时触发。 Generic orchestrator. Develops across one or more sprints, then performs one test release and final acceptance unless explicitly opted out or prerequisites are unavailable.
 ---
 
 # /cc-nexs:run for Codex

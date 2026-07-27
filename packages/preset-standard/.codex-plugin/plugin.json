@@ -1,7 +1,7 @@
 {
   "name": "cc-nexs",
   "version": "0.4.0",
-  "description": "五方异构 SOP 的 Codex Plugin：完整复刻 cc-nexs full / fast / hotfix 流水线、文档落点、角色边界与状态机编排。",
+  "description": "多角色状态机开发流水线：支持多 Sprint 开发、完整需求 test 自动发布、跨端环境验收和人工 fallback。",
   "author": {
     "name": "cc-nexs"
   },
@@ -18,7 +18,7 @@
   "interface": {
     "displayName": "cc-nexs",
     "shortDescription": "Run cc-nexs SOP workflows in Codex",
-    "longDescription": "cc-nexs brings the same full, fast, and hotfix SOP workflows used in Claude Code into Codex. It mirrors command behavior, document write locations, role isolation, state-machine progression, and build/test selection.",
+    "longDescription": "cc-nexs provides full, fast, and hotfix workflows with role isolation, multi-sprint development, deterministic test release, post-deployment verification, and explicit production controls.",
     "developerName": "cc-nexs",
     "category": "Engineering",
     "capabilities": [

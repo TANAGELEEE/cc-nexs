@@ -5,7 +5,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { commitCandidate, createWorkspaceWorktrees, finalizeMergedWorktree, prepareFeatureForMerge } from './git-custodian.mjs';
+import {
+  commitCandidate,
+  createWorkspaceWorktrees,
+  finalizeMergedWorktree,
+  integrateCandidateToTest,
+  prepareFeatureForMerge,
+} from './git-custodian.mjs';
 import { createProgressV2, readProgressV2, recordRepositoryAssignments, writeProgressV2 } from './progress-v2.mjs';
 
 function git(repo, args) {
@@ -105,6 +111,34 @@ test('custodian starts from latest remote base, avoids false upstream arrows, re
     ]);
     assert.equal(git(item.worktree, ['show', 'HEAD:upstream.md']), 'new base');
     assert.throws(() => git(item.worktree, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}']));
+
+    const featureBeforeTestRelease = git(item.worktree, ['rev-parse', 'HEAD']);
+    assert.throws(() => integrateCandidateToTest({
+      repo,
+      repositoryId: 'docs',
+      candidateRef: candidate.candidateRef,
+      expectedSourceCommit: '0000000000000000000000000000000000000000',
+      targetBranch: 'test',
+    }), /candidate ref changed during test release/);
+    const integrated = withToolIdentity(() => integrateCandidateToTest({
+      repo,
+      repositoryId: 'docs',
+      candidateRef: candidate.candidateRef,
+      expectedSourceCommit: git(repo, ['rev-parse', candidate.candidateRef]),
+      targetBranch: 'test',
+    }));
+    assert.equal(integrated.alreadyIntegrated, false);
+    assert.equal(git(item.worktree, ['rev-parse', 'HEAD']), featureBeforeTestRelease);
+    assert.equal(git(repo, ['show', 'origin/test:feature.md']), 'candidate');
+    assert.equal(git(repo, ['show', 'origin/test:test-only.md']), 'must not leak');
+
+    const repeatedIntegration = integrateCandidateToTest({
+      repo,
+      repositoryId: 'docs',
+      candidateRef: candidate.candidateRef,
+      targetBranch: 'test',
+    });
+    assert.equal(repeatedIntegration.alreadyIntegrated, true);
 
     git(item.worktree, ['push', 'origin', `${item.branch}:${item.branch}`]);
     git(item.worktree, ['push', 'origin', `${item.branch}:master`]);

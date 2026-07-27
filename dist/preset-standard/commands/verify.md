@@ -1,5 +1,5 @@
 ---
-description: fast 模式 Verifier 角色入口。两种 mode：initial（写 cases + 立即执行）/ regression（回归）。通过 codex CLI 调用，黑盒。
+description: fast 模式 Verifier 入口。initial 在首次 test 发布后执行，regression 在修复重新发布后执行；两者都是黑盒环境验证。
 allowed-tools: Read, Write, Edit, Bash, Glob, Task
 argument-hint: <mode: initial|regression> [需求编号]
 ---
@@ -34,7 +34,7 @@ PMODE=$(grep -oE '"mode"\s*:\s*"[^"]*"' "${REQ_DIR}config.json" | head -1 | grep
 
 ### 2. 按 mode 分派
 
-#### mode=initial（首次）
+#### mode=initial（首次 test release 后）
 
 ```
 调起 verifier-codex agent，按 agents/verifier-codex.md 的 mode=initial 执行。
@@ -50,20 +50,22 @@ PMODE=$(grep -oE '"mode"\s*:\s*"[^"]*"' "${REQ_DIR}config.json" | head -1 | grep
   - ${REQ_DIR}test-report.md ## Sprint M1 Round 1（含 AC-ID × 用例 × 结果审计表）
   - ${REQ_DIR}bugs/BUG-*.md（如发现）+ qa-scripts/BUG-*-repro.*
 
-禁读 src/ 和 sa-*.md。禁修代码。
+必须核对当前 release attempt/environment_revision，并在配置的 test app/operations URL 上验证。Claude 使用 chrome-devtools-mcp，Codex 复用当前登录浏览器，Pi 使用 @injaneity/pi-computer-use@0.4.3。
+只访问 allowed_hosts；禁从项目文件或 memory 读取明文账号密码。禁读 src/ 和 sa-*.md。禁修代码。
 末尾 ${REQ_DIR}test-report.md 必须 结论: 通过 或 阻塞。
 ```
 
-#### mode=regression
+#### mode=regression（修复重新发布后）
 
 ```
 调起 verifier-codex agent，按 agents/verifier-codex.md 的 mode=regression 执行。
 
+前置：必须存在比阻塞轮次更新的成功 release attempt/environment_revision。
 输入：${REQ_DIR}bugs/ 下 Sprint M1 相关且状态为 FIXED 的 BUG。
 
 任务：
 1. 重跑每个 FIXED BUG 的 qa-scripts/BUG-<n>-repro.*
-2. 通过 → BUG 状态 FIXED → VERIFIED
+2. 部署后复现与受影响回归全部通过 → BUG 状态 FIXED → VERIFIED
 3. 失败 → 保留 FIXED + append 失败原因
 4. 重跑本 sprint P0/P1 auto 防回归
 
@@ -83,7 +85,7 @@ echo "RESULT:${RESULT} OPEN=${OPEN} FIXED=${FIXED} VERIFIED=${VERIFIED}"
 
 ### 4. 不推进状态
 
-orchestrator 读结论 + BUG 计数后推进：
+orchestrator 读结论 + BUG 计数后推进，并记录当前 release attempt 的 verification evidence：
 - initial 通过 → ACCEPTANCE
 - initial 阻塞（有 OPEN BUG）→ SPRINT_FIX
 - regression 通过（全 VERIFIED）→ ACCEPTANCE

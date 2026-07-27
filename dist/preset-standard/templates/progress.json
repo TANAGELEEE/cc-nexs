@@ -25,6 +25,14 @@
     "g1": { "approved": false },
     "g2": { "approved": false, "sprints": {} }
   },
+  "delivery": {
+    "strategy": "final_only",
+    "test": {
+      "policy": "auto_if_ready",
+      "status": "idle",
+      "attempts": []
+    }
+  },
   "repositories": {},
   "events": []
 }

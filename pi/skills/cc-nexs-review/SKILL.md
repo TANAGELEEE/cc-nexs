@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-review
-description: /cc-nexs:review 的 Pi P2 适配 skill。 支持 preset-standard fast 模式，并通过 pi-subagents 运行隔离角色。 fast 模式 Reviewer 角色入口。三种 target：spec 评审 / 代码评审（仅）/ 契约验收（仅）。通过 Pi subagent 调用。
+description: /cc-nexs:review 的 Pi P2 适配 skill。 支持 preset-standard fast 模式，并通过 pi-subagents 运行隔离角色。 fast 模式 Reviewer 入口。spec、每轮发布前代码评审、部署后最终契约验收三者保持独立调用。
 ---
 
 # /cc-nexs:review for Pi
@@ -27,3 +27,5 @@ Read and follow `../../../dist/preset-standard/commands/review.md` as the author
 ## Required Pi Prerequisite
 
 `pi-subagents` must be installed and its `subagent` tool must expose the package agents above. Run `/subagents-doctor`, then open `/subagents` to inspect package-agent model mappings. `/subagents-models` is only for builtin agents and must not be used for cc-nexs package roles.
+
+Automatic browser verification additionally requires `@injaneity/pi-computer-use@0.4.3` installed with `pi install git:github.com/injaneity/pi-computer-use@v0.4.3`. If it is absent, keep cc-nexs available and use the manual test-release fallback; do not silently claim browser verification.

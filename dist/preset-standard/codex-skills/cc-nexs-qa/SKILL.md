@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-qa
-description: /cc-nexs:qa 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:qa"、"/cc-nexs:qa ..."、"$cc-nexs-qa" 或要求执行 cc-nexs qa 流程时触发。 QA 黑盒测试入口。三种 phase：cases（起草用例）/ run（执行）/ regression（回归）。通过 codex CLI 调用，禁读 src/。
+description: /cc-nexs:qa 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:qa"、"/cc-nexs:qa ..."、"$cc-nexs-qa" 或要求执行 cc-nexs qa 流程时触发。 QA 黑盒测试入口。Sprint 阶段写/评用例；完整需求发布到 test 后执行 final 或 final-regression。禁读 src/。
 ---
 
 # /cc-nexs:qa for Codex

@@ -20,6 +20,8 @@
           "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
           "path": { "type": "string" },
           "base_branch": { "type": "string", "default": "main" },
+          "test_branch": { "type": ["string", "null"] },
+          "release_order": { "type": "integer", "minimum": 0, "default": 100 },
           "docs": { "type": "boolean", "default": false },
           "match": { "type": "array", "items": { "type": "string" } },
           "build_cmd": { "type": "string" },

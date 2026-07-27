@@ -90,6 +90,8 @@ Reviewer 或 Verifier 报 BUG / NEEDS_REVISION 时进入此模式：
 - 精准修复，避免顺手重构
 - BUG 文件状态置 `FIXED`，commit 格式 `fix(<模块>): <简述> (BUG-<n>)`
 - 配置命中的 build / test / lint 命令必须全部通过
+- 本地验证禁止把 BUG 改为 VERIFIED；只有新 candidate 发布到 test 后的独立 Verifier regression 可写 VERIFIED
+- Reviewer NEEDS_REVISION 使用独立 `review-fix` phase 修订并返回新 candidate，随后必须重新评审
 
 ## 硬纪律
 

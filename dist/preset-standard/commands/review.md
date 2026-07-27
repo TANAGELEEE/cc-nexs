@@ -1,5 +1,5 @@
 ---
-description: fast 模式 Reviewer 角色入口。三种 target：spec 评审 / 代码评审（仅）/ 契约验收（仅）。通过 codex CLI 调用。
+description: fast 模式 Reviewer 入口。spec、每轮发布前代码评审、部署后最终契约验收三者保持独立调用。
 allowed-tools: Read, Write, Edit, Bash, Task
 argument-hint: <target: spec|code|accept> [需求编号]
 ---
@@ -46,7 +46,7 @@ append 到 ${REQ_DIR}sa-review.md（## Round N 分隔）。
 末尾必须 结论: PASS 或 NEEDS_REVISION。
 ```
 
-#### target=code（仅代码评审，G2 前调用）
+#### target=code（仅代码评审，每次 test release 前调用）
 
 ```bash
 # 1. 准备 diff（base 取 config 或默认 origin/master）
@@ -67,7 +67,7 @@ fi
 ```
 你是本项目的 Reviewer（fast 模式）。
 diff: ${DIFF_FILE}
-本次只做代码评审，不做契约验收（测试尚未执行）。
+本次只做代码评审，不做契约验收。首次实现和每轮 FIX 都必须产生新的评审章节。
 
 关注：架构合理性、异常处理、并发安全、SQL 注入、资源泄漏、规范。
 按 P0/P1/P2 分级。
@@ -85,7 +85,7 @@ test-report.md 此时已存在。**仅产出 acceptance.md**（不产出 sa-code
 
 ```
 你是本项目的 Reviewer（fast 模式）。
-本次只做契约验收（代码评审已在 G2 前完成）。
+本次只做契约验收（代码评审已在 test release 前完成）。
 
 【输入】
 - ${REQ_DIR}spec.md 的验收契约 AC 表
@@ -124,8 +124,8 @@ fi
 
 orchestrator 读结论后决定：
 - spec PASS → SPEC_PENDING_HUMAN
-- code PASS → DEPLOY_GATE
-- code NEEDS_REVISION → CODE_REVIEW_NEEDS_REVISION
+- code PASS → TEST_RELEASE（auto_if_ready）；显式 opt-out/能力不足 → manual G2
+- 首次 code NEEDS_REVISION → CODE_REVIEW_NEEDS_REVISION；修复轮 → FIX_REVIEW_NEEDS_REVISION
 - accept 通过 → COMPLETE
 - accept 未通过 → ACCEPTANCE_REJECTED
 

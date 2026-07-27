@@ -18,6 +18,33 @@
       }
     },
     "paths": { "type": "object" },
-    "workflow": { "type": "object" }
+    "workflow": { "type": "object" },
+    "release": {
+      "type": "object",
+      "properties": {
+        "test": {
+          "type": "object",
+          "properties": {
+            "environment": { "type": "string" },
+            "app_url": { "type": "string" },
+            "operations_url": { "type": "string" },
+            "allowed_hosts": { "type": "array", "items": { "type": "string" } },
+            "credential_ref": { "type": "string" },
+            "driver": { "$ref": "#/definitions/driver" },
+            "browser": { "type": "object" }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "driver": {
+      "type": ["object", "null"],
+      "properties": {
+        "command": { "type": "string" },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "timeout_seconds": { "type": "integer", "minimum": 1 }
+      }
+    }
   }
 }

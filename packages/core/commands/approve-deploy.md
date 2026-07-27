@@ -6,7 +6,7 @@ argument-hint: [feature_id]
 
 # /cc-nexs:approve-deploy
 
-G2 人工门禁：确认代码已部署到测试环境，QA 可以开始执行测试。
+G2 人工 fallback：确认完整 candidate 已合入 test、发布并完成必要环境检查，QA 可以继续。仅显式退出自动 test 发布、前置能力不足或 legacy per_sprint 时使用。
 
 ## Steps
 
@@ -15,22 +15,24 @@ G2 人工门禁：确认代码已部署到测试环境，QA 可以开始执行�
    node "<plugin-root>/lib/cc-nexs-cli.mjs" approve-deploy <feature_id> [M<N>]
    ```
    Claude Code resolves `<plugin-root>` from `CLAUDE_PLUGIN_ROOT`. Codex resolves it relative to the active mirror skill. Pi's registered command calls the same core implementation directly.
-2. The control command verifies the state, derives the full-mode sprint from `SPRINT_<N>_DEPLOY_GATE`, records the G2 approval event, and refreshes the Markdown mirror. Fast mode stores a single G2 approval. It never changes the deploy-gate state directly; the orchestrator owns the next transition.
+2. The control command verifies `TEST_RELEASE`, legacy `DEPLOY_GATE`, or legacy `SPRINT_<N>_DEPLOY_GATE`, records the G2 approval event, and refreshes the Markdown mirror. Final-only/full and fast store a single approval; legacy per-sprint derives M<N>. It never changes state directly.
 3. Never execute `/cc-nexs:approve-deploy` as a shell path. It is a Claude Code/Pi command alias; Codex uses `$cc-nexs-approve-deploy`; a regular shell uses `cc-nexs approve-deploy`.
 4. Print:
    ```
    ✅ Deploy gate approved (G2)
       Feature: <id> <slug>
-      Sprint: M<N>               ← full 模式
+      Sprint: <final|M<N>>       ← M<N> 仅 legacy per_sprint
       Approver: <name>
       Approved at: <ts>
       Next: QA testing begins
    ```
 5. Continue the current runtime's `run` workflow so the state machine can enter QA. Do not launch the slash-style alias as a shell command.
 
-## Per-sprint semantics (full mode)
+## Delivery semantics
 
-Full mode 每个 Sprint 都有独立的 DEPLOY_GATE。M1 的 approve 不放行 M2。状态机读取 `workflow.g2_approved_sprints[N]` 判断当前 sprint 是否已批准。
+New final-only full mode and fast mode use one requirement-level G2 at `TEST_RELEASE`. Approval attests test integration, deployment, and required environment checks; it never attests production release.
+
+Legacy full mode keeps an independent DEPLOY_GATE per Sprint. M1 approval does not release M2.
 
 `progress.json.gates.g2.sprints["1"]` records M1 approval; M2 remains absent and therefore unapproved.
 

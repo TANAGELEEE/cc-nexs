@@ -70,6 +70,11 @@ function validatePresetModes() {
     'doc_dir: "all-docs/doc/{id}.{slug}/"',
     'doc_repo: "all-docs/"',
     'bugs_dir: "bugs/"',
+    'sprint_delivery: final_only',
+    'policy: auto_if_ready',
+    'claude_provider: chrome-devtools-mcp',
+    'codex_provider: current-browser-session',
+    'pi_provider: "@injaneity/pi-computer-use@0.4.3"',
   ]);
 }
 
@@ -115,6 +120,12 @@ function validateRunCommand() {
     'progress.json',
     'docs: <id> hotfix BUG-<N> 修复记录',
     'syncFeatureReadme',
+    '--no-auto-test-release',
+    'ALL_SPRINTS_DEV_DONE',
+    'INTEGRATION_REVIEW',
+    'TEST_RELEASE',
+    'FINAL_QA_BLOCKED',
+    '/cc-nexs:release-test',
   ]);
 }
 
@@ -141,6 +152,8 @@ function validateHotfixCommand() {
     'Git Custodian',
     'Candidate recording',
     'docs: <id> hotfix BUG-<N> 修复记录',
+    '/cc-nexs:release-test <id> --hotfix',
+    '本地验证禁止写 VERIFIED',
   ]);
 }
 
@@ -197,6 +210,7 @@ validateHotfixCommand();
 validateMirrorSkill('cc-nexs-init', 'init.md');
 validateMirrorSkill('cc-nexs-run', 'run.md');
 validateMirrorSkill('cc-nexs-hotfix', 'hotfix.md');
+validateMirrorSkill('cc-nexs-release-test', 'release-test.md');
 validateAllGeneratedMirrors();
 
 if (errors.length > 0) {

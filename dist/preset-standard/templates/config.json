@@ -1,9 +1,13 @@
 {
   "_comment": "cc-nexs 单需求配置。orchestrator 启动时读取本文件决定流水线模式。",
   "mode": "fast",
+  "release": {
+    "test": "inherit"
+  },
+  "_release_test_options": ["inherit", "auto", "manual", "disabled"],
   "_mode_options": {
-    "full": "完整五方流程（Planner → SA → 人工 gate → Tech Lead × QA × SA 闭环 → Evaluator）",
-    "fast": "三角色单 sprint（Fullstack 一手包办 spec+code → Reviewer 评 spec → 人工 gate → Fullstack 编码 → Reviewer 代码评审 → G2 部署门禁 → Verifier 写+跑用例 → Reviewer 契约验收）。比 full 少 ~50% 调用，适合单模块小改动",
+    "full": "完整五方流程；开发可分多个 Sprint，全部开发完成后统一 integration review、test release、final QA 和 Evaluator 验收",
+    "fast": "三角色单 Sprint；代码评审后统一 TEST_RELEASE，Verifier 在已部署 test 环境验证，失败修复复审后重新发布回归",
     "lite": "轻量流程（Tech Lead → 自测 → commit），跳过 spec 和 Evaluator，适合极小改动",
     "hotfix": "Bug 修复流程，按 P0/P1/P2/P3 自动分档"
   },

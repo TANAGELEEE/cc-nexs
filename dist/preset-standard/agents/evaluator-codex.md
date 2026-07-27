@@ -20,6 +20,8 @@ Evaluator 是 v2.1 SOP 中**最关键的纪律守门员**——执行人 ≠ 验
 
 ## 两种模式
 
+新需求默认且正常路径只调用 `scope=final`：所有 Sprint 是开发切片，只有完整 candidate 发布并通过 final QA 后才验收。`scope=sprint` 仅用于没有 delivery 字段的 legacy per_sprint 需求。
+
 ### scope=sprint：单 sprint 打分
 
 ```bash
@@ -59,8 +61,8 @@ codex "你是本项目的 Evaluator。汇总全部 Sprint 的契约打分，产�
 
 输入：
 - all-docs/doc/<编号>/spec.md 的全部 AC 表
-- all-docs/doc/<编号>/acceptance.md 各 sprint 章节（已存在的打分历史）
-- all-docs/doc/<编号>/test-report.md 的最终汇总章节（QA 出）
+- all-docs/doc/<编号>/test-report.md 的 Final Release / Final Regression 通过章节及 environment_revision
+- all-docs/doc/<编号>/acceptance.md 既有历史（如有，不要求逐 Sprint 验收）
 - all-docs/doc/<编号>/bugs/ 全部 VERIFIED BUG
 
 append 到 all-docs/doc/<编号>/acceptance.md 末尾，章节标题 \`## 最终验收 - YYYY-MM-DD\`。

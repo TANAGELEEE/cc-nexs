@@ -1,7 +1,7 @@
 ---
-description: fast 模式 Fullstack 角色入口。一手包办 spec 起草 + 编码 + 文档同步 + bug 修复。仅 fast 模式可用。
+description: fast 模式 Fullstack 入口。负责 spec、实现、文档和评审修订；发布后 BUG 只修到 FIXED，部署回归由 Verifier 完成。
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task
-argument-hint: [需求编号] [可选: --phase=spec|build|fix --bug=BUG-id]
+argument-hint: [需求编号] [--phase=spec|build|fix|review-fix --bug=BUG-id]
 ---
 
 # /cc-nexs:fullstack
@@ -14,6 +14,7 @@ argument-hint: [需求编号] [可选: --phase=spec|build|fix --bug=BUG-id]
 - `--phase=spec` 仅产 spec.md（在 REQ_DRAFTED → SPEC_DRAFTED 时调用）
 - `--phase=build` 仅做编码 + 文档同步（在 SPEC_APPROVED → BUILD 时调用）
 - `--phase=fix --bug=BUG-id` 修指定 BUG（在 SPRINT_FIX 时调用）
+- `--phase=review-fix` 修 Reviewer 最新 NEEDS_REVISION，不要求 BUG id
 - 不指定 phase 时按 progress.md 的 current_state 自动决定
 
 ## 执行步骤
@@ -41,7 +42,8 @@ else
   case "$STATE" in
     REQ_DRAFTED|SPEC_NEEDS_REVISION) PHASE=spec ;;
     SPEC_APPROVED|SPRINT_BUILD)      PHASE=build ;;
-    SPRINT_FIX)                       PHASE=fix ;;
+    SPRINT_FIX|TEST_BLOCKED)          PHASE=fix ;;
+    FIX_REVIEW_NEEDS_REVISION)        PHASE=review-fix ;;
     *)
       echo "❌ 当前状态 $STATE，不适合调 Fullstack"
       exit 1
@@ -54,7 +56,8 @@ fi
 
 - `phase=spec`：requirements.md 必须非空；**`repo-context.md` 必须存在**（fast 模式状态机不暴露 RECON_DONE，所以由本命令兜底校验，缺失则内部先调 `/cc-nexs:recon` 再继续）
 - `phase=build`：spec.md 必须存在且 progress.md.human_approved_at 非空
-- `phase=fix`：必须传 `--bug=BUG-<n>`，BUG 文件状态必须是 OPEN
+- `phase=fix`：必须传 `--bug=BUG-<n>`，BUG 文件状态必须是 OPEN；本地验证后只能到 FIXED
+- `phase=review-fix`：sa-code-review.md 最新结论必须 NEEDS_REVISION
 
 不满足直接报错 + 提示。
 
@@ -89,7 +92,8 @@ prompt:
 
 - `phase=spec`：spec.md 必须含五章节标题，AC ≥ 3 条
 - `phase=build`：mvn compile = 0；中文字符串自检；api-doc.md / deploy.md 已 append M1 章节
-- `phase=fix`：mvn compile = 0；BUG 文件状态 = FIXED
+- `phase=fix`：项目验证 = 0；BUG 文件状态 = FIXED，禁止写 VERIFIED
+- `phase=review-fix`：项目验证 = 0；返回精确 candidate 路径，等待新 Reviewer 调用
 
 ### 6. 不推进状态
 

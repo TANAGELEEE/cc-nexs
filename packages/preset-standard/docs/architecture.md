@@ -1,284 +1,170 @@
-# cc-nexs 架构
+# 架构
 
-## 设计目标
+## 分层
 
-把 本预设 SOP 从 monolith CLAUDE.md 拆成可独立加载、按状态自动衔接的原子组件，达成三个核心特性：
+```text
+packages/core/
+  state-machine.mjs     纯状态路由
+  progress-v2.mjs       revision + event + delivery attempts
+  git-custodian.mjs     唯一 Git mutation 边界
+  test-release.mjs      test 集成与 release driver 控制器
+  doctor.mjs            workspace/release 前置检查
+  commands/*.md         跨 runtime 流程事实来源
 
-1. **状态机驱动的自循环**：阶段完成自动进入下一阶段，零等待
-2. **两个人工 checkpoint**：G1 spec 通过 SA 评审后停一次；G2 代码评审通过后部署确认
-3. **五方异构身份隔离**：Planner / Tech Lead / SA / QA / Evaluator 五角色，跨工具（Claude × 2 + Codex × 3）+ session 级隔离
+packages/preset-standard/
+  preset.yml            默认策略、角色和 browser provider
+  commands/agents/      角色级执行契约
+  templates/docs/       需求产物与人类文档
 
-## 状态机
-
-```
-                          ┌────────────┐
-                          │    INIT    │
-                          └──────┬─────┘
-                                 │ requirements.md 已填
-                                 ▼
-                          ┌────────────┐
-                          │ REQ_DRAFTED│
-                          └──────┬─────┘
-                                 │ /cc-nexs:planner
-                                 ▼
-                          ┌────────────┐  ◄────────────┐
-                          │SPEC_DRAFTED│               │ 修订
-                          └──────┬─────┘               │
-                                 │ /cc-nexs:sa spec    │
-                                 ▼                     │
-                          ┌────────────┐               │
-                          │SPEC_REVIEW │───────────────┤
-                          └──────┬─────┘ NEEDS_REVISION
-                                 │ PASS
-                                 ▼
-              ┌────────────────────────────────────────┐
-              │  ⏸️  SPEC_PENDING_HUMAN  (G1 人工 gate)    │
-              └─────────────────────┬──────────────────┘
-                                    │ /cc-nexs:approve-spec
-                                    ▼
-                          ┌──────────────────┐
-                          │  SPEC_APPROVED   │
-                          └────────┬─────────┘
-                                   │ for N in 1..total_sprints
-                                   ▼
-                ┌──────────────────────────────────┐
-                │     SPRINT_<N>_KICKOFF           │
-                └──┬───────────────────────────────┘
-                   │ ┌────────────┐
-                   ├─┤ QA_CASES   │ QA 写本 sprint 用例
-                   │ └─────┬──────┘
-                   │       │
-                   ▼       ▼
-                ┌─────────────────┐
-                │  SPRINT_<N>_DEV │ Tech Lead 编码
-                └────────┬────────┘
-                         ▼
-                ┌──────────────────────┐
-                │ SA_TEST_REVIEW       │ SA 评审用例
-                └────────┬─────────────┘
-                         ▼
-                ┌──────────────────────┐
-                │  DOC_SYNC            │ 同步 api/deploy
-                └────────┬─────────────┘
-                         ▼
-                ┌──────────────────────┐  ◄────┐
-                │ SA_CODE              │       │ NEEDS_REVISION
-                └────────┬─────────────┘──────┤  (sa_code_revision_count++)
-                         │ PASS                │
-                         ▼                     │
-                ┌──────────────────────┐       │
-                │ QA_RUN               │ 有 BUG│
-                └────────┬─────────────┘──────►├───┐
-                         │ 无 BUG               │   │
-                         │                      │   ▼
-                         │                  ┌──────────┐
-                         │                  │   FIX    │ Tech Lead 修
-                         │                  └────┬─────┘
-                         │                       ▼
-                         │                  ┌────────────────┐
-                         │                  │ QA_REGRESSION  │
-                         │                  └────┬───────────┘
-                         │                       │ 通过
-                         │                       │
-                         ▼                       ▼
-                ┌──────────────────────┐
-                │ EVAL                 │ Evaluator 契约打分
-                └────────┬─────────────┘
-                         │ 通过
-                         ▼
-                ┌──────────────────────┐
-                │ SPRINT_<N>_DONE      │
-                └────────┬─────────────┘
-                         │
-                ┌────────┴────────┐
-                │                 │
-              N+1 还有          全部完
-                │                 │
-                ▼                 ▼
-       SPRINT_<N+1>_KICKOFF   ALL_SPRINTS_DONE
-                                  │
-                                  ▼
-                           FINAL_EVAL
-                                  │ 通过
-                                  ▼
-                           ┌──────────────┐
-                           │   COMPLETE   │
-                           └──────────────┘
+dist/preset-standard/   Claude/Codex 可安装物化产物
+pi/                     Pi extension、skills、package agents
 ```
 
-## 三档熔断
+Claude Code、Codex 和 Pi 共用 command 文档与 core 控制器。运行时适配只改变角色派发和浏览器 provider，不改变状态、产物或 Git 语义。
 
-| 熔断器 | 阈值 | 触发后 |
-|--------|------|--------|
-| `sa_code_revision_count` | ≥ 3 | 升级回 `SPEC_REVIEWING`，强制 Planner 重审方案，spec.md 变更记录写明熔断 |
-| `qa_fix_count[BUG-<id>]` | ≥ 3 | 升级到 `SPRINT_<N>_TECH_LEAD_REVIEW`，对应 BUG 升级 P0，Tech Lead 重评实现路径 |
-| `evaluator_未通过_count` | ≥ 2 | 升级回 `SPEC_REVIEWING`，AC 写得有问题或实现严重偏离 |
+## 权威状态
 
-熔断不是终点，是 *升级*——把决策从低层（修代码）抬到高层（改方案/改契约）。
+`progress.json` v2 保存：
 
-## 五方身份矩阵
+- `state`、`revision`、`events[]`；
+- role counters、Sprint 状态、G1/G2；
+- repository worktree/candidate assignments；
+- `delivery.strategy`；
+- `delivery.test.policy/status/attempts[]`。
 
-详见 [`role-map.md`](./role-map.md)。要点：
+`progress.md` 是渲染镜像。角色不能直接编辑二者；Orchestrator 通过带 revision 的 helper 追加事件。
 
-- 同 Claude 工具的两个角色（Planner / Tech Lead）必须分两个独立 session
-- 同 Codex 工具的三个角色（SA / QA / Evaluator）每次都用独立调用
-- 每个角色 prompt 开头声明身份，hooks 通过 `CC_NEXS_ROLE` 环境变量做硬拦截
+旧 progress 没有 `delivery` 时运行时注入安全默认：
 
-## 编排器
-
-`/cc-nexs:run` 是核心 orchestrator，行为：
-
-1. 读 `progress.md.current_state`
-2. 按状态分派表调起对应 command
-3. 等待 command 完成 → 解析输出 → 写新状态
-4. 检查熔断阈值
-5. **立即** 回到 1，自循环
-6. **例外**：`SPEC_PENDING_HUMAN` 或 `*_DEPLOY_GATE` 时 return 等人工
-
-## 数据流
-
-```
-PM 业务需求
-    │
-    ▼
-requirements.md (PM 写)
-    │
-    ▼ Planner
-spec.md (含 AC 表 + Sprint 切片)
-    │
-    ├─→ SA → sa-review.md
-    │
-    ├─→ ⏸️ 人工审 spec
-    │
-    └─→ for each Sprint:
-            ├─→ Planner spec.md (AC 子集)
-            │       │
-            │       ├─→ QA → test-cases.md
-            │       │       └─→ SA → sa-test-review.md
-            │       │
-            │       └─→ Tech Lead → src/* + dev-plan.md + api-doc.md + deploy.md
-            │               └─→ SA → sa-code-review.md
-            │                       └─→ QA → test-report.md + bugs/
-            │                               └─→ Tech Lead 修 → bugs/.状态=FIXED
-            │                                       └─→ QA 回归 → bugs/.状态=VERIFIED
-            │
-            └─→ Evaluator → acceptance.md (sprint 章节)
-    │
-    ▼
-Evaluator → acceptance.md (最终章节)
-    │
-    ▼
-COMPLETE → 人工合并到 main
+```json
+{"strategy":"per_sprint","test":{"policy":"manual","status":"idle","attempts":[]}}
 ```
 
-## Hooks 防线
+新 progress 默认 `final_only + auto_if_ready`。
 
-三道 PreToolUse hook：
+## 状态架构
 
-1. **role-boundary-guard.sh** — 通过 `CC_NEXS_ROLE` 拦截身份越界（Planner 编辑 src/、Tech Lead 改 spec.md 等）
-2. **状态机人工 checkpoint** — `SPEC_PENDING_HUMAN` / `DEPLOY_GATE` 返回 `stop: true`，只暂停 cc-nexs 角色派发；不拦截通用 Git、SQL、SSH、构建或读取工具
-3. **pre-merge-check.sh** — 合并主干前强制检查 mvn compile + 中文字符串 + progress.md COMPLETE + acceptance.md 通过
+Full 开发与交付分为两个区域：
 
-hook 是最后一道安全网，主防线在身份 prompt 和 orchestrator 的状态机。
+```text
+Development zone
+  SPRINT_N_KICKOFF -> DEV/CASES -> DOC_SYNC -> SA_CODE -> DEV_DONE
+  repeated until ALL_SPRINTS_DEV_DONE
 
-## 与 monolith CLAUDE.md 的对比
-
-| 维度 | monolith CLAUDE.md | cc-nexs |
-|------|--------------------|---------|
-| 加载方式 | 整个 700+ 行始终在上下文 | 按阶段加载，每次只占用当前阶段相关内容 |
-| 阶段衔接 | Claude 自记忆"当前到哪步" | progress.md 状态机持久化，不健忘 |
-| 越界控制 | 靠 prompt 提醒 | hooks 硬拦截 + 身份 prompt + session 隔离 |
-| 熔断 | 文档描述无机制 | 计数器 + 阈值，自动升级 |
-| 复用 | 整套绑死 | 各组件可单独触发 / 借鉴 |
-
-## fast 模式（0.3.0+）
-
-单 sprint 三角色合并流水线。比 full 模式少 ~50% 子代理调用。由 `all-docs/doc/<id>/config.json.mode = "fast"` 触发。
-
-### 状态机
-
-```
-INIT → REQ_DRAFTED → SPEC_DRAFTED → SPEC_REVIEWING ──┐
-                                                      │ NEEDS_REVISION
-                                                      ▼
-                              ┌────────────────────────────┐
-                              │  SPEC_PENDING_HUMAN  ⏸️    │
-                              └──────────────┬─────────────┘
-                                             ▼
-                                       SPEC_APPROVED
-                                             │
-                                             ▼
-                                      ┌──────────────┐ ◄──┐
-                                      │    BUILD     │    │ ACCEPTANCE_REJECTED
-                                      └──────┬───────┘    │
-                                             ▼            │
-                                      ┌──────────────┐    │
-                                      │ CODE_REVIEW  │    │
-                                      └──────┬───────┘    │
-                                    PASS │   │ NEEDS_REV  │
-                                         │   └────────────┘
-                                         ▼
-                                      ┌──────────────┐
-                                      │ DEPLOY_GATE ⏸️│
-                                      └──────┬───────┘
-                                             ▼
-                                      ┌──────────┐
-                                      │   TEST   │
-                                      └────┬─────┘
-                                  阻塞 │    │ 通过
-                                       ▼    ▼
-                              ┌──────────┐  TEST_PASSED
-                              │   FIX    │      │
-                              └────┬─────┘      │
-                                   ▼            │
-                              ┌────────────┐    │
-                              │REGRESSION  │────┘
-                              └────────────┘
-                                       │
-                                       ▼
-                                   ┌────────────┐
-                                   │ ACCEPTANCE │────┐ 验收未通过
-                                   └─────┬──────┘    │ → ACCEPTANCE_REJECTED
-                                         │ 通过      │   → 回 BUILD
-                                         ▼           │
-                                   ┌──────────┐      │
-                                   │ COMPLETE │      │
-                                   └──────────┘      │
+Delivery zone
+  INTEGRATION_REVIEW -> TEST_RELEASE -> FINAL_QA -> FINAL_EVAL -> COMPLETE
 ```
 
-### 三角色对照
+这个边界避免前后端只完成一半时发布 M1。Sprint 仍可独立评审和形成 candidate，但只有完整需求进入 delivery zone。
 
-| full 角色 | fast 等价物 | 合并差异 |
-|---|---|---|
-| Planner + Tech Lead | **Fullstack** | 同 session 写 spec + 写代码（但仍要先写完五章节才能开 src/） |
-| SA 评审 spec | **Reviewer** target=spec | 同名输出 sa-review.md |
-| SA 评审代码 + Evaluator 契约打分 | **Reviewer** target=accept | 单次 codex 同时产 sa-code-review.md + acceptance.md |
-| QA cases + run + regression | **Verifier** initial / regression | initial 一次产 test-cases.md + test-report.md |
+Fast 是单 Sprint 压缩版，同样在 CODE_REVIEW 后进入 TEST_RELEASE。
 
-### 熔断（更严）
+## Git Custodian
 
-| 熔断器 | 阈值 | 触发后 |
-|---|---|---|
-| review_revision | ≥ 2 | 回 SPEC_REVIEWING，Fullstack 重写方案 |
-| evaluator_reject | ≥ 2 | 回 SPEC_REVIEWING，重审 AC 与实现路径 |
-| fix_per_bug | ≥ 2 | **HUMAN_INTERVENTION**：直接停下要人工介入（fast 模式没有 TECH_LEAD_REVIEW 兜底岗）|
+角色和 Orchestrator 不执行任意 Git mutation。Git Custodian 负责：
 
-### 何时用 fast
+- 创建 workspace worktree；
+- 按角色声明的精确路径 stage/commit candidate；
+- 维护 `refs/cc-nexs/candidates/<feature>/<repo>`；
+- test integration；
+- 用户显式授权后的 main merge/finalize。
 
-| 用 full | 用 fast |
+Test integration 不修改 feature worktree：
+
+```text
+candidate ref -> source SHA
+latest origin/test -> temp detached worktree
+merge --no-ff -> non-force push -> fresh fetch -> ancestry proof
+```
+
+远端 test 并发推进导致 non-fast-forward 时停止并要求 retry；不会 force push。candidate 已在远端 ancestry 中时返回幂等成功。
+
+## Release driver
+
+项目通过私有配置提供：
+
+```yaml
+release:
+  test:
+    environment: test
+    app_url: https://test.example.com
+    operations_url: https://ops.example.com
+    allowed_hosts: [test.example.com, ops.example.com]
+    credential_ref: keychain://cc-nexs/test-console
+    driver:
+      command: node
+      args: [.cc-nexs/release-driver.mjs]
+      timeout_seconds: 1800
+```
+
+controller 通过 stdin 发送一份 JSON request。driver stdout 必须只写一份 JSON object：
+
+```json
+{
+  "status": "succeeded",
+  "pipeline": {"id": "...", "url": "..."},
+  "deployment": {"id": "...", "environment": "test"},
+  "environment_revision": {"api": "sha", "web": "sha"}
+}
+```
+
+其他终态为 `failed` 或 `deployed_needs_manual_verification`。成功但缺 pipeline/deployment/environment_revision 会失败关闭。
+
+## Browser capability
+
+Browser 是 test release 的前置能力和最终 QA 工具：
+
+| Runtime | 能力 |
 |---|---|
-| 跨模块、含 DB schema 变更 | 单模块单接口 |
-| 涉及对外契约、合规风险 | 改动 ≤ 800 行 diff |
-| Sprint 切片 ≥ 2 | 无并发/事务复杂度 |
+| Claude Code | `chrome-devtools-mcp` |
+| Codex | 当前登录的 in-app/Chrome session |
+| Pi | `@injaneity/pi-computer-use@0.4.3` tools |
 
-## 取舍声明
+URL 可以来自 versioned project config 或 private overlay。项目 memory/说明中的 URL 只能用于发现候选，自动流程必须先把 host 纳入 `allowed_hosts`。账号密码不能来自 memory、Markdown、Git 或普通 config；优先复用登录，必要时只传 opaque `credential_ref` 给外部 secret provider。
 
-v0.1.0 **不做**：
+MFA、CAPTCHA、过期登录、provider 不可用或环境身份不清晰都会在 push 前触发 manual fallback。
 
-- 自动 git worktree 隔离（用户用现有 feature 分支）
-- 自动 learning pipeline（先用 项目 tasks/lessons.md 静态写）
-- 流水线模式自动切换（用户改 config.json.mode 触发）
-- 30+ hooks 全套（先做 3 个核心 hook）
-- 自定义 marketplace 发布（先本地 link）
+## Release attempt
 
-这些放 v0.2+ 视使用反馈再决定。
+每次 attempt 使用排序后的 `{repository: sourceSHA}` 计算 fingerprint。事件顺序：
+
+```text
+delivery.test.started
+delivery.test.repository_integrated (per repository)
+delivery.test.succeeded | failed | deployed_needs_manual_verification
+delivery.test.verification_passed | verification_blocked
+```
+
+相同成功 fingerprint 重复调用复用历史 attempt。失败 fingerprint 只有显式 `--retry` 才新建 attempt。修复 candidate SHA 变化自然形成下一轮。
+
+## 失败一致性
+
+- 部分仓已合入：attempt 保留每仓证据，retry 幂等补齐。
+- driver 失败/超时/非法 JSON：attempt 标为 failed，进入 release block。
+- 已部署但 browser verification 不可完成：单独状态等待人工，不谎报成功。
+- QA 失败：本地修复到 FIXED，独立复审，重新发布，部署后回归到 VERIFIED。
+- 最终验收失败：回 integration 修订，不直接改状态通过。
+
+## 运行时物化
+
+`scripts/build.mjs`：
+
+- 把 core/preset 物化到 `dist/preset-*`；
+- 为 Codex 每个 command 生成 mirror skill；approval/release-test 包含确定性 CLI block；
+- 为 Pi 生成受限 P2 command skills 和 package agents；Verifier allowlist 增加 computer-use 工具；
+- 保持 Claude commands 为同一份事实来源。
+
+Pi 基础安装只强制 `pi-subagents`。computer-use 缺失产生警告并使自动浏览器验证回退 manual，不阻断 init/status/build 等能力。
+
+## 安全边界
+
+- 自动 controller 只接受 `environment=test` 和非 production-like allowlisted host。
+- 禁止 force push、生产 branch 和隐式 main merge。
+- 禁止明文 `password/passwd/credentials/secret_value` 配置字段。
+- Browser 只允许 configured hosts。
+- 角色子会话不能 mutation Git 或 progress。
+- G1/G2 是状态机 stop，不是全局工具阻断。
+
+## 完成与生产
+
+`COMPLETE` 只证明 test 环境和契约闭环。生产合并、生产部署、远端分支删除和 worktree cleanup 都属于后续显式人工授权操作。

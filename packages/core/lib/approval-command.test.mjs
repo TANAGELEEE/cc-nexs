@@ -93,6 +93,19 @@ test('fast G2 approval records the gate but leaves transition ownership to run',
   assert.match(markdown, /g2_approver: Local User/);
 });
 
+test('final-only G2 approval supports manual fallback from TEST_RELEASE', () => {
+  const fixture = createFeature({ id: '16', mode: 'full', state: 'TEST_RELEASE' });
+  const result = approveFeatureGate({
+    cwd: fixture.root,
+    featureId: '16',
+    gate: 'g2',
+    approver: 'manual-release-owner',
+  });
+  assert.equal(result.state, 'TEST_RELEASE');
+  assert.equal(result.sprint, null);
+  assert.equal(readProgressV2(fixture.progressFile).gates.g2.approved, true);
+});
+
 test('full G2 approval is scoped to the sprint encoded in the state', () => {
   const fixture = createFeature({ id: '03', mode: 'full', state: 'SPRINT_2_DEPLOY_GATE' });
   const result = approveFeatureGate({ cwd: fixture.root, featureId: '03', gate: 'g2', approver: 'Local User' });

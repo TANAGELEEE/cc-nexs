@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-sa
-description: /cc-nexs:sa 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:sa"、"/cc-nexs:sa ..."、"$cc-nexs-sa" 或要求执行 cc-nexs sa 流程时触发。 SA 评审入口。三种 target：spec / cases / code。通过 codex CLI 调用，落到对应 sa-*.md 文件。
+description: /cc-nexs:sa 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:sa"、"/cc-nexs:sa ..."、"$cc-nexs-sa" 或要求执行 cc-nexs sa 流程时触发。 SA 评审入口。支持 spec、cases、单 Sprint code、跨 Sprint integration 和发布后 fix code 评审。
 ---
 
 # /cc-nexs:sa for Codex

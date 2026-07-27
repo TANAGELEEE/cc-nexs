@@ -12,6 +12,7 @@ Supported end to end:
 - workspace-aware build and Git Custodian commands
 - progress v2 state, counters, artifacts, and status/doctor commands
 - P0/P1/P2/P3 hotfix grading, isolated repair/review/regression, and candidate recording
+- final-only test release control with manual fallback when browser prerequisites are unavailable
 
 Not yet advertised as supported:
 
@@ -25,6 +26,7 @@ The Pi skills fail closed for those modes instead of silently changing workflow 
 
 ```bash
 pi install npm:pi-subagents@0.35.1
+pi install git:github.com/injaneity/pi-computer-use@v0.4.3
 pi install git:github.com/<github-owner>/cc-nexs
 ```
 
@@ -34,7 +36,9 @@ For local development:
 pnpm install:local:pi
 ```
 
-The local installer requires `pi-subagents` to be installed first, then builds and validates cc-nexs before registering this repository as a Pi package.
+The local installer requires `pi-subagents` first, then builds and validates cc-nexs. Missing `@injaneity/pi-computer-use@0.4.3` produces a warning: init/status/build remain available, while automatic browser verification falls back to manual G2.
+
+The generated Verifier agent allowlist includes `find_roots`, `observe_ui`, `search_ui`, `inspect_ui`, `act_ui`, and `wait_for`. Browser checks reuse the current signed-in session and only visit `release.test.allowed_hosts`; plaintext credentials in memory/project files are forbidden.
 
 ## Configure heterogeneous review
 
@@ -90,6 +94,7 @@ Pi registers the same P2 slash surface:
 /cc-nexs:run 01
 /cc-nexs:approve-spec 01
 /cc-nexs:approve-deploy 01
+/cc-nexs:release-test 01
 /cc-nexs:hotfix "支付回调偶现 500" 01
 /cc-nexs:status 01
 /cc-nexs:doctor
@@ -97,7 +102,7 @@ Pi registers the same P2 slash surface:
 
 Each slash command forwards to a generated Pi skill. The skill reads the same `dist/preset-standard/commands/*.md` document used by the other runtimes, then replaces only the role-dispatch mechanism.
 
-`approve-spec` and `approve-deploy` are exceptions to prompt-only dispatch: the Pi extension calls the shared deterministic core command first, then resumes `/skill:cc-nexs-run`. Pi never edits progress files through model-generated patches.
+`approve-spec` and `approve-deploy` call the shared deterministic approval core. `release-test` performs its browser preflight, then calls the deterministic test-release controller for Git integration and driver evidence. Pi never edits progress files through model-generated patches.
 
 G1/G2 only pause cc-nexs role dispatch. They do not block the parent Pi session from performing user-authorized Git, SQL, SSH, deployment, diagnostics, or documentation work.
 
@@ -112,3 +117,5 @@ Package-qualified child roles run with explicit Pi tool allowlists. The cc-nexs 
 - Fullstack writing progress, review, acceptance, or test-report artifacts
 
 The parent orchestrator remains responsible for state transitions and Git Custodian operations. Pi packages and child tools still execute with the user's operating-system permissions; use Pi project trust and review package source before installation.
+
+Automatic control never targets production. Missing computer-use, expired login, MFA/CAPTCHA, host mismatch, or unavailable secret-provider resolution stops before push and yields the manual test-release handoff.

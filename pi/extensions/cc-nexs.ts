@@ -25,6 +25,7 @@ const P2_COMMANDS = [
   "init",
   "migrate-progress",
   "recon",
+  "release-test",
   "review",
   "run",
   "status",
@@ -36,6 +37,7 @@ function commandDescription(name: string): string {
   if (name === "init") return "Initialize a cc-nexs fast-mode feature";
   if (name === "hotfix") return "Run the cc-nexs P0/P1/P2/P3 hotfix workflow through isolated Pi subagents";
   if (name === "doctor") return "Validate cc-nexs workspace and Pi subagent prerequisites";
+  if (name === "release-test") return "Integrate final candidates, release test, and record deployment evidence";
   return `Execute the cc-nexs ${name} workflow`;
 }
 

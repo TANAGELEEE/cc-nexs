@@ -26,6 +26,8 @@ tools: Read, Write, Edit, Glob, Grep, Bash
 | `--mode=fix --bug=<id>` | bugs/BUG-<id>.md + 现有代码 |
 | `--mode=doc` | 已 PASS 的 sprint 代码 + api-doc.md / deploy.md |
 | `--mode=re-evaluate` | 🛑 熔断后的实现路径重评，spec.md + 既有 sa-code-review.md |
+| `--mode=review-fix` | 最新 Sprint/Final Fix 的 NEEDS_REVISION，只修评审项并等待新评审 |
+| `--mode=integration` | Integration Review / 最终验收反馈，修复跨 Sprint/跨仓问题 |
 
 ## 产出
 
@@ -58,6 +60,12 @@ tools: Read, Write, Edit, Glob, Grep, Bash
   - 需要重写哪些代码
 - **不动** AC 表、不动 Sprint 切片（除非确实需要重切，那要单独说明）
 - 完成后 orchestrator 会重新走 SA 评审
+
+### fix / review-fix / integration 状态纪律
+
+- 发布后 BUG 修复的本地构建与复现通过，只能把 BUG 从 OPEN 改为 FIXED；VERIFIED 仅由新 test 部署后的独立 QA 回归写入。
+- review-fix 和 integration 完成后返回精确 candidate 路径，必须进入全新 SA 评审，不得复用旧结论。
+- integration 若需要修改 AC，停止并回 Planner/G1，不能由 Tech Lead 自行改契约。
 
 ## 编码硬规则
 

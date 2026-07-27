@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-verify
-description: /cc-nexs:verify 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:verify"、"/cc-nexs:verify ..."、"$cc-nexs-verify" 或要求执行 cc-nexs verify 流程时触发。 fast 模式 Verifier 角色入口。两种 mode：initial（写 cases + 立即执行）/ regression（回归）。通过 codex CLI 调用，黑盒。
+description: /cc-nexs:verify 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:verify"、"/cc-nexs:verify ..."、"$cc-nexs-verify" 或要求执行 cc-nexs verify 流程时触发。 fast 模式 Verifier 入口。initial 在首次 test 发布后执行，regression 在修复重新发布后执行；两者都是黑盒环境验证。
 ---
 
 # /cc-nexs:verify for Codex
