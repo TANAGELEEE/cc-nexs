@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
 
@@ -58,6 +58,14 @@ function fetchBase(repo, branch) {
 export function createWorkspaceWorktrees(workspace, { featureId, featureSlug, repositoryIds = null }) {
   assertSegment(featureId, 'feature id');
   assertSegment(featureSlug, 'feature slug');
+  const reservationFile = join(workspace.projectRoot, '.cc-nexs', 'reservations', `${featureId}.json`);
+  if (!existsSync(reservationFile)) {
+    throw new Error(`[cc-nexs] no reservation for feature ${featureId}; run reserve first`);
+  }
+  const reservation = JSON.parse(readFileSync(reservationFile, 'utf8'));
+  if (reservation.feature_slug !== featureSlug) {
+    throw new Error(`[cc-nexs] feature ${featureId} is reserved for slug "${reservation.feature_slug}", not "${featureSlug}"`);
+  }
   const featureKey = `${featureId}-${featureSlug}`;
   const featureRoot = assertWithin(workspace.worktree_root, join(workspace.worktree_root, featureKey));
   mkdirSync(featureRoot, { recursive: true });

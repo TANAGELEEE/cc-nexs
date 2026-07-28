@@ -68,6 +68,11 @@ test('custodian starts from latest remote base, avoids false upstream arrows, re
   git(repo, ['commit', '-m', 'test only']);
   git(repo, ['push', '-u', 'origin', 'test']);
 
+  mkdirSync(join(root, '.cc-nexs', 'reservations'), { recursive: true });
+  writeFileSync(join(root, '.cc-nexs', 'reservations', '01.json'), JSON.stringify({
+    feature_id: '01', feature_slug: 'demo', reserved_at: new Date().toISOString(),
+  }));
+
   const workspace = {
     projectRoot: root,
     worktree_root: join(root, '.worktrees'),
@@ -147,6 +152,105 @@ test('custodian starts from latest remote base, avoids false upstream arrows, re
     assert.throws(() => git(repo, ['show-ref', '--verify', `refs/heads/${item.branch}`]));
     assert.throws(() => git(repo, ['show-ref', '--verify', candidate.candidateRef]));
     assert.equal(git(repo, ['ls-remote', '--heads', 'origin', `refs/heads/${item.branch}`]), '');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('createWorkspaceWorktrees rejects when no reservation exists', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-git-'));
+  const origin = join(root, 'origin.git');
+  const repo = join(root, 'docs');
+  mkdirSync(origin);
+  git(origin, ['init', '--bare']);
+  git(root, ['clone', origin, repo]);
+  configure(repo);
+  git(repo, ['checkout', '-b', 'master']);
+  writeFileSync(join(repo, 'README.md'), 'base\n');
+  git(repo, ['add', 'README.md']);
+  git(repo, ['commit', '-m', 'initial']);
+  git(repo, ['push', '-u', 'origin', 'master']);
+
+  const workspace = {
+    projectRoot: root,
+    worktree_root: join(root, '.worktrees'),
+    docs_repository: 'docs',
+    repositories: [{ id: 'docs', absolute_path: repo, base_branch: 'master' }],
+  };
+  try {
+    assert.throws(
+      () => createWorkspaceWorktrees(workspace, { featureId: '99', featureSlug: 'no-reservation' }),
+      /no reservation for feature 99/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('createWorkspaceWorktrees rejects when slug does not match reservation', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-git-'));
+  const origin = join(root, 'origin.git');
+  const repo = join(root, 'docs');
+  mkdirSync(origin);
+  git(origin, ['init', '--bare']);
+  git(root, ['clone', origin, repo]);
+  configure(repo);
+  git(repo, ['checkout', '-b', 'master']);
+  writeFileSync(join(repo, 'README.md'), 'base\n');
+  git(repo, ['add', 'README.md']);
+  git(repo, ['commit', '-m', 'initial']);
+  git(repo, ['push', '-u', 'origin', 'master']);
+
+  mkdirSync(join(root, '.cc-nexs', 'reservations'), { recursive: true });
+  writeFileSync(join(root, '.cc-nexs', 'reservations', '42.json'), JSON.stringify({
+    feature_id: '42', feature_slug: 'correct-slug', reserved_at: new Date().toISOString(),
+  }));
+
+  const workspace = {
+    projectRoot: root,
+    worktree_root: join(root, '.worktrees'),
+    docs_repository: 'docs',
+    repositories: [{ id: 'docs', absolute_path: repo, base_branch: 'master' }],
+  };
+  try {
+    assert.throws(
+      () => createWorkspaceWorktrees(workspace, { featureId: '42', featureSlug: 'wrong-slug' }),
+      /feature 42 is reserved for slug "correct-slug", not "wrong-slug"/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('createWorkspaceWorktrees succeeds when slug matches reservation', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-git-'));
+  const origin = join(root, 'origin.git');
+  const repo = join(root, 'docs');
+  mkdirSync(origin);
+  git(origin, ['init', '--bare']);
+  git(root, ['clone', origin, repo]);
+  configure(repo);
+  git(repo, ['checkout', '-b', 'master']);
+  writeFileSync(join(repo, 'README.md'), 'base\n');
+  git(repo, ['add', 'README.md']);
+  git(repo, ['commit', '-m', 'initial']);
+  git(repo, ['push', '-u', 'origin', 'master']);
+
+  mkdirSync(join(root, '.cc-nexs', 'reservations'), { recursive: true });
+  writeFileSync(join(root, '.cc-nexs', 'reservations', '50.json'), JSON.stringify({
+    feature_id: '50', feature_slug: 'my-feature', reserved_at: new Date().toISOString(),
+  }));
+
+  const workspace = {
+    projectRoot: root,
+    worktree_root: join(root, '.worktrees'),
+    docs_repository: 'docs',
+    repositories: [{ id: 'docs', absolute_path: repo, base_branch: 'master' }],
+  };
+  try {
+    const [item] = createWorkspaceWorktrees(workspace, { featureId: '50', featureSlug: 'my-feature' });
+    assert.equal(item.branch, 'feature/50-my-feature');
+    assert.equal(item.repository, 'docs');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
