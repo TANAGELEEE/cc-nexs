@@ -64,7 +64,7 @@ for (const file of progressFiles) {
       const progress = readProgressV2(file);
       const featureConfig = join(featureDir, 'config.json');
       if (existsSync(featureConfig)) {
-        const configuredMode = JSON.parse(readFileSync(featureConfig, 'utf8')).mode || 'fast';
+        const configuredMode = JSON.parse(readFileSync(featureConfig, 'utf8')).mode || 'lean';
         if (configuredMode !== progress.mode) errors.push(`${featureName}: config mode ${configuredMode} != progress mode ${progress.mode}`);
       }
       for (const [repoId, assignment] of Object.entries(progress.repositories || {})) {
@@ -97,6 +97,9 @@ function validateReleaseReadiness({ config, workspace, strictRelease, errors, wa
   const policy = config.mergedWorkflow?.test_release?.policy;
   if (policy !== 'auto_if_ready' && !strictRelease) return;
   const report = (message) => (strictRelease ? errors : warnings).push(message);
+  if (['lean', 'hotfix'].includes(config.mergedWorkflow?.default_mode) && !config.mergedWorkflow?.local_verify?.driver?.command) {
+    report(`${config.mergedWorkflow.default_mode} mode requires workflow.local_verify.driver.command for build/start/smoke verification`);
+  }
   if (!workspace) {
     report('automatic test release requires .cc-nexs/workspace.yml or workspace.json');
     return;

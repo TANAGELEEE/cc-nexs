@@ -16,7 +16,7 @@
 //        "_core/"      → ""        (例如 "_core/hooks/x.mjs" → "hooks/x.mjs")
 //        "../core/"    → ""        (例如 "../core/commands/run.md" → "commands/run.md")
 //   9. Codex 额外生成 command mirror skills：每个 commands/*.md 都成为一个可触发 skill，
-//      保证 /cc-nexs:* 的 full / fast / hotfix SOP 仍以同一份 command 文档为事实来源。
+//      保证 /cc-nexs:* 的 lean / full / fast / hotfix SOP 仍以同一份 command 文档为事实来源。
 //
 // 用法:
 //   node scripts/build.mjs                # 构建全部 preset
@@ -51,8 +51,18 @@ const ROOT_PKG = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf-8'));
 const VERSION = ROOT_PKG.version;
 const RELEASE_PRESETS = readReleasePresets();
 const PI_ROOT = join(ROOT, 'pi');
+const LEAN_ONLY_CORE_COMMANDS = new Set([
+  'approve-plan.md',
+  'approve-release.md',
+  'release-base.md',
+  'render-plan.md',
+  'request-release-changes.md',
+  'verify-local.md',
+]);
 const PI_P2_COMMANDS = new Set([
   'approve-deploy',
+  'approve-plan',
+  'approve-release',
   'approve-spec',
   'brainstorm',
   'build',
@@ -61,49 +71,36 @@ const PI_P2_COMMANDS = new Set([
   'git-custodian',
   'hotfix',
   'init',
+  'lean-review',
+  'lean-verify',
   'migrate-progress',
   'recon',
   'release-test',
+  'release-base',
+  'render-plan',
+  'request-release-changes',
   'review',
   'run',
   'status',
   'verify',
+  'verify-local',
+  'plan',
+  'execute',
 ]);
 const PI_ROLE_SOURCES = {
   'repo-scout': 'repo-scout-claude.md',
   fullstack: 'fullstack-claude.md',
   reviewer: 'reviewer-codex.md',
   verifier: 'verifier-codex.md',
+  'lean-planner': 'lean-planner.md',
+  'lean-developer': 'lean-developer.md',
+  'lean-reviewer': 'lean-reviewer.md',
+  'lean-verifier': 'lean-verifier.md',
+  'hotfix-developer': 'hotfix-developer.md',
+  'hotfix-reviewer': 'hotfix-reviewer.md',
+  'hotfix-verifier': 'hotfix-verifier.md',
 };
-const PI_ROLE_ADDENDA = {
-  fullstack: `# Pi Hotfix Override
-
-When the parent task explicitly declares a cc-nexs hotfix phase, this section supersedes the fast-only statements in the role contract below. Do not reject the task because the associated feature uses full mode.
-
-- \`phase=hotfix-p3\`: make only a single-file, non-logic correction with a final diff of at most 20 lines. Do not create a BUG artifact.
-- \`phase=hotfix-implement\`: create or update \`bugs/BUG-<N>.md\`, create an executable \`qa-scripts/BUG-<N>-repro.*\`, fix only the documented root cause, run the configured build/test commands, and move the BUG from \`OPEN\` to \`FIXED\` only after they pass.
-- \`phase=hotfix-revise\`: address only the latest \`NEEDS_REVISION\` findings appended to the BUG file and keep the BUG at \`FIXED\` after local checks pass.
-- \`phase=hotfix-regression\`: run the BUG repro and the affected module's existing P0 checks, append exact evidence to the BUG \`## 回归\` section, and move \`FIXED\` to \`VERIFIED\` only when every required check passes.
-- \`phase=hotfix-rollback\`: for an already deployed P0/P1 fix, append a concrete \`## 生产回滚步骤 - BUG-<N>\` section to \`deploy.md\`.
-
-Never edit \`spec.md\`, acceptance/review/test-report artifacts, or progress state. Never mutate Git; return exact changed paths to the parent Git Custodian.
-`,
-  reviewer: `# Pi Hotfix Override
-
-When the parent task explicitly declares a cc-nexs hotfix target, this section supersedes the fast-only target list below. Each target must run in a fresh Pi child session and must remain separate from implementation and verification.
-
-- \`target=hotfix-code\`: read the injected diff and \`bugs/BUG-<N>.md\`, but never browse \`src/\`. Review root-cause coverage, side effects, related paths, and missing regression coverage. Append \`## Round N - YYYY-MM-DD - 结论\` to that BUG file and end with exactly \`结论: PASS\` or \`结论: NEEDS_REVISION\`.
-- \`target=hotfix-accept\` (P0/P1 only): do not reuse the hotfix-code session. Read only the relevant AC subset, the VERIFIED BUG evidence, and the linked regression case. Append \`## 线上缺陷修复 - BUG-<N>\` with an AC scoring table to \`acceptance.md\`, ending with exactly \`验收结果: 通过\` or \`验收结果: 未通过\`.
-
-Never edit code, tests, progress state, or Git. The parent supplies the diff and owns all transitions and candidate commits.
-`,
-  verifier: `# Pi Hotfix Override
-
-When the parent task explicitly declares \`target=hotfix-regression-case\` for a P0/P1 hotfix, this section supersedes the fast-only mode list below.
-
-Read only the relevant AC/API contract, \`bugs/BUG-<N>.md\`, and its executable repro asset. Append a regression case marked \`关联BUG: BUG-<N>\` to \`test-cases.md\`, run the repro as a black-box check, and append the exact result to the BUG's regression evidence. Never browse or edit source code, never perform the implementation fix, and never mutate progress state or Git.
-`,
-};
+const PI_ROLE_ADDENDA = {};
 
 // ---- helpers ---------------------------------------------------------------
 
@@ -173,6 +170,19 @@ function extractDescription(commandText, commandName) {
 }
 
 function deterministicControlBlock(commandBase, cliPath) {
+  if (commandBase === 'hotfix') {
+    return `## Deterministic Hotfix Controls
+
+Resolve \`${cliPath}\` relative to this SKILL.md. Bind the completed hotfix scope with:
+
+\`\`\`text
+node <resolved-cli-path> start-hotfix <feature-id> [--level P0|P1|P2|P3] [--related <feature-id>]
+\`\`\`
+
+Subsequent local verification, Review recording, test release/verification, release approval, and base integration must use the packaged controls named by the authoritative command. Never edit progress state or perform ad hoc merge/push operations.
+
+`;
+  }
   if (commandBase === 'release-test') {
     return `## Deterministic Test Release Control
 
@@ -186,7 +196,33 @@ Never implement test-branch integration with ad hoc Git commands and never targe
 
 `;
   }
-  if (!['approve-deploy', 'approve-spec'].includes(commandBase)) return '';
+  if (commandBase === 'request-release-changes') {
+    return `## Deterministic Gateway B Change Control
+
+Resolve \`${cliPath}\` relative to this SKILL.md and execute:
+
+\`\`\`text
+node <resolved-cli-path> request-release-changes <feature-id> --type <evidence|implementation|scope> --feedback <text> [--ac <id>] [--path <path>]
+\`\`\`
+
+Never edit progress state directly or combine this request with release approval.
+
+`;
+  }
+  if (['verify-local', 'release-base', 'render-plan'].includes(commandBase)) {
+    return `## Deterministic Lean Control
+
+Resolve \`${cliPath}\` relative to this SKILL.md and execute:
+
+\`\`\`text
+node <resolved-cli-path> ${commandBase} <feature-id>
+\`\`\`
+
+Never replace this control with model-generated progress edits or ad hoc Git commands.
+
+`;
+  }
+  if (!['approve-deploy', 'approve-spec', 'approve-plan', 'approve-release'].includes(commandBase)) return '';
   const sprint = commandBase === 'approve-deploy' ? ' [M<N>]' : '';
   return `## Deterministic Approval Control
 
@@ -207,6 +243,8 @@ function generateCodexSkills(dst) {
   safeRemoveWithin(dst, codexSkillsDir);
   if (!existsSync(commandsDir)) return 0;
   mkdirSync(codexSkillsDir, { recursive: true });
+  const supportsLean = existsSync(join(dst, 'templates', 'lean'))
+    && readFileSync(join(dst, 'preset.yml'), 'utf8').includes('default_mode: lean');
 
   const commandFiles = readdirSync(commandsDir)
     .filter((entry) => entry.endsWith('.md'))
@@ -237,7 +275,7 @@ description: ${description}
 
 # ${commandName} for Codex
 
-This skill is the Codex mirror for \`${commandName}\`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and full / fast / hotfix behavior as the Claude Code plugin.
+This skill is the Codex mirror for \`${commandName}\`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and ${supportsLean ? 'lean / ' : ''}full / fast / hotfix behavior as the Claude Code plugin.
 
 ## Authoritative Command
 
@@ -249,10 +287,10 @@ ${controlBlock}## Execution Contract
 2. Preserve the command's state-machine contract. If the command says a single-step command must not advance \`progress.md\`, do not advance it; if \`run\` is the orchestrator, let \`run\` own state transitions.
 3. Preserve mode behavior exactly:
    - \`full\`: five-role SOP with Repo Scout pre-spec recon, Planner / Tech Lead / SA / QA / Evaluator isolation, and sprint loop.
-   - \`fast\`: three-role flow with Fullstack / Reviewer / Verifier, single sprint, stricter thresholds, and no TECH_LEAD_REVIEW fallback.
-   - \`hotfix\`: bypass flow with P0/P1/P2/P3 grading, BUG document writes, and escalation back to full SOP when the hotfix boundary is exceeded.
+${supportsLean ? '   - `lean`: default plan-first flow with two authored documents, two human gates, deterministic local verification, one consolidated Review, test verification, and approved base integration.\n' : ''}   - \`fast\`: legacy three-role flow with Fullstack / Reviewer / Verifier, single sprint, stricter thresholds, and no TECH_LEAD_REVIEW fallback.
+   - \`hotfix\`: standalone mini-Lean flow with its own latest-base feature worktrees, one hotfix.md, bounded Review, test verification, and a human base gate.
 4. In Codex, every role runs as an independent native subagent using the role prompt from \`../../agents/\`. Never invoke Claude Code, a Claude subagent tool, or a nested \`codex\` CLI process. Runtime adaptation overrides any Claude-specific shell snippet in the authoritative command.
-5. Keep implementation and review in distinct native agent sessions. This provides independent-context review even when the active provider channel exposes only one model. Never pass a literal model id: inherit the current Codex session/channel so channel switches cannot make the plugin unavailable.
+5. Keep implementation and review in distinct native agent sessions. ${supportsLean ? 'Resolve model profiles from preset < project < feature config. A Lean Reviewer may use a different model or the same model with higher reasoning effort. ' : ''}Provider-specific IDs are allowed only in private project/feature config; public preset defaults remain portable and inherit when unspecified.
 6. When a shell snippet references \`$CLAUDE_PLUGIN_ROOT\`, translate it to the installed Codex plugin root that contains this skill. In shell commands prefer \`PLUGIN_ROOT=<plugin-root>\` or \`CC_NEXS_PLUGIN_ROOT=<plugin-root>\` or substitute the absolute plugin root directly.
 7. Before editing or creating files, inspect the relevant command, agent, template, and current feature directory. Follow existing repo patterns and keep unrelated files untouched.
 8. Run the verification steps requested by the command. If a step cannot be run in the current Codex surface, record the exact limitation and preserve the command's expected stop/gate behavior.
@@ -262,15 +300,15 @@ ${controlBlock}## Execution Contract
 These are fixed cc-nexs locations, not Codex-specific alternatives:
 
 - Feature docs: \`all-docs/doc/{id}.{slug}/requirements.md\`, \`repo-context.md\`, \`spec.md\`, \`sa-review.md\`, \`dev-plan.md\`, \`api-doc.md\`, \`deploy.md\`, \`test-cases.md\`, \`sa-test-review.md\`, \`test-report.md\`, \`sa-code-review.md\`, \`acceptance.md\`, \`progress.md\`, and \`README.md\`.
-- Bug docs: \`all-docs/doc/{id}.{slug}/bugs/BUG-*.md\`, plus hotfix or QA repro assets under \`all-docs/doc/{id}.{slug}/qa-scripts/\`.
+- Hotfix record: \`all-docs/doc/{id}.{slug}/hotfix.md\` in an independently initialized hotfix feature.
 - Compound learnings: \`docs/solutions/<topic>.md\` plus the command-specific feature summary when \`/cc-nexs:compound\` requests it.
 - Document repo commits: when \`all-docs/\` is its own git repo, add only \`doc/{id}.{slug}/\` or the command-declared bug path and keep code-repo files out of that commit.
 
 ## Full / Fast / Hotfix Mode Locks
 
-- \`full\`: preserve Repo Scout pre-spec recon, Planner / Tech Lead / SA / QA / Evaluator isolation, sprint slicing, artifact completeness gate before Evaluator, single human gate after spec approval, and README sync around every state transition.
+${supportsLean ? '- `lean`: preserve the plan and release gates, two authored documents, exact worktree/candidate binding, deterministic local driver, one full Review plus at most one delta closure, and test-before-base integration.\n' : ''}- \`full\`: preserve Repo Scout pre-spec recon, Planner / Tech Lead / SA / QA / Evaluator isolation, sprint slicing, artifact completeness gate before Evaluator, single human gate after spec approval, and README sync around every state transition.
 - \`fast\`: preserve Fullstack / Reviewer / Verifier roles, single sprint, stricter counters, merged Reviewer acceptance parsing, Verifier black-box testing, no SA test-case review, and no TECH_LEAD_REVIEW fallback.
-- \`hotfix\`: preserve P0/P1/P2/P3 grading, P3 direct-fix boundary, P2 BUG file plus repro plus SA-light-review loop, P0/P1 Evaluator section plus regression case plus rollback section, and escalation to full SOP when hotfix boundaries are exceeded.
+- \`hotfix\`: preserve latest-base isolation, immutable scope binding, P0/P1/P2/P3 impact grading, deterministic P3 boundary, one Review plus at most one lifetime delta, test verification, and Gateway B before base integration.
 
 ## Completion Rule
 
@@ -321,7 +359,7 @@ function generatePiResources() {
   for (const [role, sourceFile] of Object.entries(PI_ROLE_SOURCES)) {
     const sourcePath = join(standardSource, 'agents', sourceFile);
     const { description, tools, body } = parseAgentSource(readFileSync(sourcePath, 'utf8'), sourceFile);
-    if (role === 'verifier') {
+    if (role === 'verifier' || role === 'lean-verifier' || role === 'hotfix-verifier') {
       tools.push('find_roots', 'observe_ui', 'search_ui', 'inspect_ui', 'act_ui', 'wait_for');
     }
     const header = [
@@ -342,7 +380,7 @@ function generatePiResources() {
       'Any Claude Task-tool, Claude subagent, Codex CLI, or nested agent invocation shown below is legacy runtime syntax only.',
       'Never invoke `claude`, `codex`, another `pi` process, `/cc-nexs:*`, or the `subagent` tool from this child.',
       'The parent orchestrator owns progress transitions and Git Custodian operations. Do not run Git mutation commands.',
-      'Your model is selected externally by pi-subagents settings; do not choose or persist a model ID.',
+      'The parent resolves the cc-nexs role profile and passes model/thinking to the Agent call; do not choose or persist a model ID.',
       '',
       PI_ROLE_ADDENDA[role] || '',
       '# Authoritative Role Contract',
@@ -364,13 +402,13 @@ function generatePiResources() {
     const description = [
       `${commandName} 的 Pi P2 适配 skill。`,
       supportsHotfix
-        ? '支持 preset-standard hotfix 旁路流程，并通过 pi-subagents 运行隔离角色。'
-        : '支持 preset-standard fast 模式，并通过 pi-subagents 运行隔离角色。',
+        ? '支持 preset-standard 独立 hotfix mini-Lean，并通过 pi-subagents 运行隔离角色。'
+        : '支持 preset-standard lean（默认）与 fast 模式，并通过 pi-subagents 运行隔离角色。',
       extractDescription(commandText, commandName).replace(/codex CLI/gi, 'Pi subagent'),
     ].join(' ');
     const modelGuard = supportsHotfix
-      ? 'Before the first Reviewer dispatch, confirm that `cc-nexs.reviewer` resolves to an authenticated model different from the implementation model. P0/P1 must also confirm `cc-nexs.verifier` before verification. Accept ordered `fallbackModels`; if a required mapping is absent, unavailable, or resolves to the implementation model, stop and explain how to configure it.'
-      : 'Before the first review or verification dispatch, confirm that `cc-nexs.reviewer` and `cc-nexs.verifier` resolve to an authenticated model different from the implementation model. Accept ordered `fallbackModels`. If the mapping is absent, unavailable, or resolves to the implementation model, stop and explain how to configure it; independent context alone is not heterogeneous review.';
+      ? 'Resolve Hotfix role profiles from project/feature config. Reviewer may use a different authenticated model or the same model with higher thinking, but always uses a fresh child context. P0/P1 heterogeneity is an optional private policy, not a public preset requirement. Accept ordered fallbackModels.'
+      : 'For lean, resolve role profiles from project/feature configuration: the Reviewer may use a different authenticated model or the same model with higher thinking, but must use a fresh child context. For legacy fast, preserve its configured heterogeneous-review guard. Accept ordered fallbackModels.';
     const skillDir = join(skillsDir, skillName);
     mkdirSync(skillDir, { recursive: true });
     const body = `---
@@ -384,14 +422,21 @@ Read and follow \`../../../dist/preset-standard/commands/${fileName}\` as the au
 
 ${controlBlock}## P2 Runtime Contract
 
-1. Pi support is experimental and limited to \`preset-standard\` fast mode plus the \`/cc-nexs:hotfix\` bypass. Full orchestration and compound remain unsupported. Do not silently downgrade an existing feature.
+1. Pi support covers \`preset-standard\` lean (default), standalone hotfix, and legacy fast. Full orchestration and compound remain unsupported. Do not silently downgrade an existing feature.
 2. Use the installed \`pi-subagents\` tool for every role dispatch. Use package-qualified agents and foreground fresh context:
    - Repo Scout: \`cc-nexs.repo-scout\`
    - Fullstack: \`cc-nexs.fullstack\`
    - Reviewer: \`cc-nexs.reviewer\`
    - Verifier: \`cc-nexs.verifier\`
+   - Lean Planner: \`cc-nexs.lean-planner\`
+   - Lean Developer: \`cc-nexs.lean-developer\`
+   - Lean Reviewer: \`cc-nexs.lean-reviewer\`
+   - Lean Verifier: \`cc-nexs.lean-verifier\`
+   - Hotfix Developer: \`cc-nexs.hotfix-developer\`
+   - Hotfix Reviewer: \`cc-nexs.hotfix-reviewer\`
+   - Hotfix Verifier: \`cc-nexs.hotfix-verifier\`
 3. Never invoke Claude Code, the Claude Task tool, Codex CLI, or a nested \`pi\` CLI. Legacy invocation snippets in the authoritative command are role task descriptions, not commands to execute in Pi.
-4. The Fullstack agent inherits the active Pi default unless the user configured an override. Reviewer and Verifier model selection belongs exclusively to Pi settings under \`subagents.agentOverrides\`; cc-nexs ships no fixed model IDs.
+4. Resolve Lean profiles from cc-nexs project/feature config and pass the selected \`model\` and \`thinking\` directly to the pi-subagents \`Agent\` call. Omit \`model\` when it is \`inherit\`. If the primary model is unavailable, retry the ordered cc-nexs \`fallback_models\` list. Project \`.pi/settings.json\` remains only the Pi authentication/\`enabledModels\` authority; do not duplicate role mappings there. Public cc-nexs files ship no provider-specific model IDs.
 5. ${modelGuard}
 6. Role children never mutate Git or progress state. The parent orchestrator owns state transitions and invokes the Git Custodian command itself.
 7. Set or preserve \`CC_NEXS_RUNTIME=pi\` and \`CC_NEXS_PLUGIN_ROOT\` for shell helpers. Resolve all feature paths through the existing workspace/progress contracts.
@@ -399,14 +444,14 @@ ${controlBlock}## P2 Runtime Contract
 
 ${supportsHotfix ? `## Pi Hotfix Dispatch Contract
 
-1. Hotfix is a bypass workflow, not a full/fast state-machine transition. Do not reject it solely because the associated feature's progress mode is \`full\`; do not advance \`progress.json\` or \`progress.md\`.
-2. The parent classifies P0/P1/P2/P3 exactly as the authoritative command requires, honors an explicit \`--level\`, prints the classification and reason before mutation, and resolves the existing feature/worktree before dispatch.
-3. P3: dispatch \`cc-nexs.fullstack\` once with \`phase=hotfix-p3\`. Re-check the single-file, at-most-20-line, non-logic boundary after the edit. If it is exceeded, reclassify before recording a candidate.
-4. P2: dispatch \`cc-nexs.fullstack\` with \`phase=hotfix-implement\`; then dispatch \`cc-nexs.reviewer\` with \`target=hotfix-code\` and an injected diff. On \`NEEDS_REVISION\`, dispatch a fresh Fullstack \`phase=hotfix-revise\` and a fresh Reviewer, stopping after the third failed review and escalating to the full SOP. After \`PASS\`, dispatch a fresh Fullstack \`phase=hotfix-regression\`; only successful evidence may move the BUG to \`VERIFIED\`.
-5. P0/P1: complete P2 first, then dispatch \`cc-nexs.verifier\` with \`target=hotfix-regression-case\`, followed by a fresh \`cc-nexs.reviewer\` with \`target=hotfix-accept\`. An unpassed acceptance result stops completion. If \`deploy.md\` says the change is already deployed, dispatch Fullstack \`phase=hotfix-rollback\` before recording candidates.
-6. Before the first review or verification dispatch, confirm the package role resolves to an authenticated model different from the Fullstack implementation model. Reviewer and Verifier may use their configured fallback chains, but the public package never supplies a model ID.
-7. Child roles never commit. After all required checks pass, the parent invokes the cc-nexs Git Custodian contract to record only declared code and docs candidate paths. Merge, push, and cleanup still require the normal explicit release authorization.
-8. Preserve every escalation boundary: AC/spec changes, a diff over 500 lines, cross-module refactoring, or three failed review rounds must stop hotfix and direct the user to a new full workflow.
+1. Hotfix must be initialized as \`mode=hotfix\` with its own id, \`feature/<id>-<slug>\`, and worktrees from the latest configured remote bases. A related feature is metadata only.
+2. Fill and bind the sole authored \`hotfix.md\` scope with \`start-hotfix\` before dispatch. AC/API/database/permission contract changes or broad refactoring stop and become a new Lean/Full change.
+3. Dispatch \`cc-nexs.hotfix-developer\` for implementation/fix. Candidate Git mutations remain parent Git Custodian work.
+4. P0/P1/P2 dispatch \`cc-nexs.hotfix-reviewer\` exactly once; a blocked result permits one fresh delta Review only. P3 skips the model Review only after deterministic one-file, at-most-20-line, non-behavioral proof.
+5. Run the configured local verification driver, then release the exact candidate with \`release-test --hotfix\`. Dispatch a fresh \`cc-nexs.hotfix-verifier\` on the deployed environment revision, including P3 smoke and P0/P1 rollback/AC evidence.
+6. Reviewer may use a different model or the same model with higher thinking. Session isolation is mandatory; heterogeneity is optional project policy. Public files never pin a model ID.
+7. Test failure or Gateway B implementation feedback consumes the same single lifetime delta Review, then requires a new candidate/test attempt. Delta blocking stops for human intervention.
+8. Only \`approve-release\` authorizes the verified feature candidate to merge into configured base branches. Never merge test into base and never force push.
 ` : ''}
 
 ## Required Pi Prerequisite
@@ -487,6 +532,11 @@ function buildPreset(presetName) {
 
   // 2. core/commands → dst/commands/（preset 同名优先，跳过已存在）
   n = copyDir(join(coreSrc, 'commands'), join(dst, 'commands'), { skipExisting: true });
+  if (presetName !== 'preset-standard') {
+    for (const fileName of LEAN_ONLY_CORE_COMMANDS) {
+      safeRemoveWithin(dst, join(dst, 'commands', fileName));
+    }
+  }
   console.log(`  core 共享 commands: 新增 ${n} 个`);
 
   // 3. core/hooks → dst/hooks/（hooks.json 由 preset 提供，这里只补 .mjs）
@@ -621,7 +671,7 @@ function buildClaudeMarketplace(presetNames) {
     name: 'cc-nexs',
     owner: { name: 'cc-nexs' },
     metadata: {
-      description: 'cc-nexs: 多角色 + 状态机驱动的 SOP 流水线，spec 通过评审后唯一一次人工 checkpoint。',
+      description: 'cc-nexs: Lean 默认的低 Token 多代理流水线，包含计划/发布双门禁、本地验证与一次集中 Review。',
       version: VERSION,
     },
     plugins,

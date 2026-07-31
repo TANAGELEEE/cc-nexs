@@ -1,7 +1,7 @@
 {
   "name": "cc-nexs",
-  "version": "0.4.0",
-  "description": "多角色状态机开发流水线：支持多 Sprint 开发、完整需求 test 自动发布、跨端环境验收和人工 fallback。",
+  "version": "0.5.2",
+  "description": "Lean 默认的低 Token 开发流水线：计划门禁、本地验证、一次集中 Review、test 验收与发布门禁；保留 fast/full。",
   "author": {
     "name": "cc-nexs"
   },
@@ -18,7 +18,7 @@
   "interface": {
     "displayName": "cc-nexs",
     "shortDescription": "Run cc-nexs SOP workflows in Codex",
-    "longDescription": "cc-nexs provides full, fast, and hotfix workflows with role isolation, multi-sprint development, deterministic test release, post-deployment verification, and explicit production controls.",
+    "longDescription": "cc-nexs defaults to a low-token Lean workflow with two human gates, per-repository worktrees, deterministic local verification, one consolidated Review, test verification, configurable per-role models, and approved base integration. Legacy full, fast, and hotfix workflows remain available.",
     "developerName": "cc-nexs",
     "category": "Engineering",
     "capabilities": [
@@ -28,8 +28,8 @@
     ],
     "defaultPrompt": [
       "/cc-nexs:init \"添加 /api/health 健康检查接口\"",
-      "/cc-nexs:run 01",
-      "/cc-nexs:hotfix \"支付回调偶现 500\""
+      "/cc-nexs:plan 01",
+      "/cc-nexs:run 01"
     ],
     "brandColor": "#2563EB",
     "screenshots": []

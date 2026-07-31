@@ -1,0 +1,20 @@
+# Hotfix {编号} · {需求短名}
+
+> 此文件是 `progress.json` 的只读人类视图；不得直接推进状态。
+
+## 当前状态
+
+```yaml
+current_state: INIT
+updated_at: null
+```
+
+## 状态骨架
+
+`INIT → HOTFIX_IMPLEMENTING → HOTFIX_IMPLEMENTED → HOTFIX_LOCAL_VERIFYING → HOTFIX_REVIEWING/P3_SKIP → HOTFIX_CANDIDATE_READY → HOTFIX_TEST_RELEASE → HOTFIX_TEST_VERIFYING → HOTFIX_RELEASE_PENDING_HUMAN → HOTFIX_BASE_MERGING → COMPLETE`
+
+任何修复最多经过一次 `HOTFIX_LOCAL_REVERIFYING → HOTFIX_DELTA_REVIEW`。再次阻塞进入 `HUMAN_INTERVENTION`。
+
+## 历史轨迹
+
+- (尚无)

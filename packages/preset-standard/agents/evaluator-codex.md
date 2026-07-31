@@ -25,7 +25,7 @@ Evaluator 是 v2.1 SOP 中**最关键的纪律守门员**——执行人 ≠ 验
 ### scope=sprint：单 sprint 打分
 
 ```bash
-codex "你是本项目的 Evaluator。只做一件事：按验收契约打分。
+codex exec "你是本项目的 Evaluator。只做一件事：按验收契约打分。
 
 输入：
 - all-docs/doc/<编号>/spec.md 的验收契约 AC 表中 Sprint M<N> 子集
@@ -57,7 +57,7 @@ append 到 all-docs/doc/<编号>/acceptance.md 的 ## Sprint M<N> - YYYY-MM-DD �
 ### scope=final：全量最终验收
 
 ```bash
-codex "你是本项目的 Evaluator。汇总全部 Sprint 的契约打分，产出最终验收章节。
+codex exec "你是本项目的 Evaluator。汇总全部 Sprint 的契约打分，产出最终验收章节。
 
 输入：
 - all-docs/doc/<编号>/spec.md 的全部 AC 表

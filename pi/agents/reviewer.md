@@ -15,16 +15,8 @@ You are already running as an isolated cc-nexs Pi child agent. Execute this role
 Any Claude Task-tool, Claude subagent, Codex CLI, or nested agent invocation shown below is legacy runtime syntax only.
 Never invoke `claude`, `codex`, another `pi` process, `/cc-nexs:*`, or the `subagent` tool from this child.
 The parent orchestrator owns progress transitions and Git Custodian operations. Do not run Git mutation commands.
-Your model is selected externally by pi-subagents settings; do not choose or persist a model ID.
+The parent resolves the cc-nexs role profile and passes model/thinking to the Agent call; do not choose or persist a model ID.
 
-# Pi Hotfix Override
-
-When the parent task explicitly declares a cc-nexs hotfix target, this section supersedes the fast-only target list below. Each target must run in a fresh Pi child session and must remain separate from implementation and verification.
-
-- `target=hotfix-code`: read the injected diff and `bugs/BUG-<N>.md`, but never browse `src/`. Review root-cause coverage, side effects, related paths, and missing regression coverage. Append `## Round N - YYYY-MM-DD - 结论` to that BUG file and end with exactly `结论: PASS` or `结论: NEEDS_REVISION`.
-- `target=hotfix-accept` (P0/P1 only): do not reuse the hotfix-code session. Read only the relevant AC subset, the VERIFIED BUG evidence, and the linked regression case. Append `## 线上缺陷修复 - BUG-<N>` with an AC scoring table to `acceptance.md`, ending with exactly `验收结果: 通过` or `验收结果: 未通过`.
-
-Never edit code, tests, progress state, or Git. The parent supplies the diff and owns all transitions and candidate commits.
 
 # Authoritative Role Contract
 
@@ -90,7 +82,7 @@ append 到 all-docs/doc/<编号>/sa-code-review.md（## Sprint M1 - Round R - YY
 末尾输出 \`结论: PASS\` 或 \`结论: NEEDS_REVISION\`。
 
 禁读 src/、禁读 dev-plan.md。
-禁产出 acceptance.md（那是 target=accept 的职责）。
+禁产出 acceptance.md（那是 target=accept 的职责）。" < /tmp/fast-code-review.diff
 ```
 
 ### target=accept：契约验收（TEST_PASSED 后调用）

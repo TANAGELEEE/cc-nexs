@@ -4,7 +4,7 @@
     "name": "cc-nexs"
   },
   "metadata": {
-    "description": "cc-nexs: 多角色 + 状态机驱动的 SOP 流水线，spec 通过评审后唯一一次人工 checkpoint。",
+    "description": "cc-nexs: Lean 默认的低 Token 多代理流水线，包含计划/发布双门禁、本地验证与一次集中 Review。",
     "version": "0.5.2"
   },
   "plugins": [
@@ -19,7 +19,7 @@
     },
     {
       "name": "cc-nexs",
-      "description": "多角色状态机开发流水线：支持多 Sprint 开发、完整需求 test 自动发布、跨端环境验收和人工 fallback。",
+      "description": "Lean 默认的低 Token 开发流水线：计划门禁、本地验证、一次集中 Review、test 验收与发布门禁；保留 fast/full。",
       "version": "0.5.2",
       "author": {
         "name": "cc-nexs"

@@ -29,3 +29,11 @@ test('git mutation detection covers history and worktree changes', () => {
   assert.equal(isGitMutation('git -C api commit -m test'), true);
   assert.equal(isGitMutation('git worktree remove .worktrees/01'), true);
 });
+
+test('Lean planning and evidence roles write only their two-document contract', () => {
+  assert.equal(roleBoundaryViolation({ role: 'lean-planner', toolName: 'write', filePath: 'docs/doc/01/plan.md' }), null);
+  assert.match(roleBoundaryViolation({ role: 'lean-planner', toolName: 'write', filePath: 'docs/doc/01/notes.md' }), /write denied/);
+  assert.equal(roleBoundaryViolation({ role: 'lean-reviewer', toolName: 'edit', filePath: 'docs/doc/01/plan.md' }), null);
+  assert.match(roleBoundaryViolation({ role: 'lean-reviewer', toolName: 'write', filePath: 'docs/doc/01/review.md' }), /write denied/);
+  assert.match(roleBoundaryViolation({ role: 'lean-verifier', toolName: 'write', filePath: 'docs/doc/01/test-report.md' }), /write denied/);
+});

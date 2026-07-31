@@ -4,6 +4,21 @@
 
 ## 默认策略
 
+新需求默认 `mode=lean`。完整链为：
+
+```text
+init -> plan -> PLAN_PENDING_HUMAN (Gateway A)
+-> implement -> local build/start/smoke/e2e
+-> one consolidated Review -> test release -> test verification
+-> RELEASE_PENDING_HUMAN (Gateway B) -> configured base merge -> COMPLETE
+```
+
+Lean 只维护 `requirements.md` 和 `plan.md` 两份人工文档。每仓仍强制独立 worktree、`feature/<id>-<slug>` 与 immutable candidate ref。Gateway A 绑定 requirements + plan approval scope 的哈希；Gateway B 绑定本地验证、Review 和 test 验收共享的精确 fingerprint。
+
+集中 Review 使用独立 session，可选择不同模型，也可用相同模型但提升 effort/thinking。只把 P0/P1 视为阻塞；修复后最多一次 delta closure，再失败转人工。
+
+Gateway B 若提出意见，必须结构化分类：证据补充留在门禁；批准范围内实现修改走同一 feature worktree、本地重验、一次 Gateway B delta Review、新 test attempt 和回归；需求/AC/方案边界变化使 Gateway A 哈希失效并返回 Planner。旧 candidate 与 test attempt 只保留为历史，不能继续授权 base merge。
+
 新需求初始化为：
 
 ```yaml
@@ -21,7 +36,7 @@ workflow:
 - 所有 Sprint 开发完成后，完整 candidate 只做一次集成评审、test 发布和最终验收。
 - `--no-auto-test-release` 或 feature `release.test=manual` 显式退出自动 test 发布。
 - driver、test branch、浏览器、登录会话或安全前置不足时，在任何 push 前回退人工 G2。
-- 生产发布和主分支合并始终人工，不受 test 自动化策略影响。
+- Lean 的主分支合并由 Gateway B 显式授权；fast/full 的生产/主分支合并仍保持旧的人工授权语义。
 
 没有 `delivery` 字段的旧 progress 固定解释为 `per_sprint + manual`。升级插件不能给历史需求自动增加远端写权限。
 
@@ -170,10 +185,21 @@ TEST_BLOCKED -> FIX -> FIX_REVIEW -> TEST_RELEASE -> REGRESSION
 
 ## Hotfix
 
-P0/P1/P2/P3 保留分档与简化评审，但交付统一：candidate -> `/cc-nexs:release-test --hotfix` -> 独立部署后回归。P0/P1 再做受影响 AC 局部验收。显式退出或前置不足时只输出人工 test handoff；生产发布仍人工。
+Hotfix 是独立 `mode=hotfix` 的 mini-Lean：从各仓最新 base 创建自己的 `feature/<id>-<slug>` 与 worktree，只维护 `hotfix.md` 和机器状态。关联旧需求只是元数据。
+
+```text
+scope bind -> implement -> local verify -> one Review (P3 machine skip)
+-> exact candidate -> test -> independent black-box verify
+-> HOTFIX_RELEASE_PENDING_HUMAN -> exact candidate -> base
+```
+
+P0/P1/P2 只做一次集中 Review；任何修复全生命周期只允许一次 delta Review。P3 仅在单文件、changed lines ≤ 20、无行为变化的确定性证明后跳过模型 Review，但仍须 test smoke。契约/schema/权限或大重构直接转新 Lean/Full 需求。Gateway B 的 evidence 意见只补文档，implementation 意见走唯一 delta + 新 test，scope 意见拒绝扩边。禁止从 test 合并 base；两条合并都使用同一 feature candidate。生产发布仍人工。
 
 ## Gate 与停止条件
 
+- Lean Gateway A：批准 requirements 与 plan scope。
+- Lean Gateway B：批准已本地验证、集中 Review 且 test 验收通过的 exact fingerprint。
+- Lean Gateway B change request：`evidence` 不改 candidate；`implementation` 走有界 delta；`scope` 返回 Gateway A。
 - G1：spec 评审 PASS 后唯一固定人工产品决策点。
 - G2：自动 test 发布显式退出或前置不足时的 fallback；legacy per_sprint 保留旧含义。
 - `TEST_RELEASE_BLOCKED`：test merge/push/driver 失败。
@@ -186,7 +212,9 @@ Gate 只暂停 cc-nexs 角色派发，不安装全局工具锁。
 
 ## 完成定义
 
-`COMPLETE` 表示完整 test 交付、部署后 QA 和最终契约验收通过。它不自动授权：
+Fast/full 的 `COMPLETE` 表示完整 test 交付、部署后 QA 和最终契约验收通过。Lean 只有 Gateway B 明确授权后才进入 base merge；它仍不自动授权生产部署。
+
+Legacy 模式不自动授权：
 
 - 合并 main/master；
 - 生产发布；

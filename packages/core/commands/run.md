@@ -6,7 +6,7 @@ argument-hint: [feature_id] [--sprint=N | --resume] [--no-auto-test-release]
 
 # /cc-nexs:run
 
-> **Core rule**: after a stage completes, immediately enter the next stage. Do NOT print a summary and wait for user input. Stop only at a human gate (`SPEC_PENDING_HUMAN`, legacy `*_DEPLOY_GATE`, or manual fallback at `TEST_RELEASE`), a release/verification block, a circuit breaker, or a genuine tool failure.
+> **Core rule**: after a stage completes, immediately enter the next stage. Stop only at Lean Gateway A/B, legacy spec/deploy gates, a release/verification block, a circuit breaker, or a genuine tool failure.
 
 This command is the generic orchestrator. It loads `cc-nexs.config.yml` + the active `preset.yml`, then drives the state machine in `@cc-nexs/core/lib/state-machine.mjs`.
 
@@ -50,7 +50,7 @@ If `progress.json` is missing but progress.md exists, stop and require `/cc-nexs
 
 ### Step 0.1: README catch-up sync (defensive)
 
-Every run invocation starts by syncing README to match current progress.md — this covers cases where the previous run was interrupted, manually driven, or crashed mid-step:
+Fast/full run invocations sync README to match current progress.md. Lean and hotfix deliberately have no README and skip this step.
 
 ```js
 import { syncFeatureReadme } from '@cc-nexs/core/lib/readme-sync.mjs';
@@ -61,32 +61,32 @@ This is idempotent: if README is already current, it returns `no_change` and cos
 
 ## Step 0.5: Resolve feature mode
 
-Read `${REQ_DIR}progress.json.mode` first and require `${REQ_DIR}config.json.mode` to agree. Missing values default to `fast`; full mode is opt-in only. A mismatch is a doctor error and must stop orchestration.
+Read `${REQ_DIR}progress.json.mode` first and require `${REQ_DIR}config.json.mode` to agree. New init writes `lean`; missing values on historical features still default to `fast` for compatibility. A mismatch is a doctor error.
 
 ```bash
 MODE=$(grep -oE '"mode"\s*:\s*"[^"]*"' "${REQ_DIR}config.json" 2>/dev/null \
   | head -1 | grep -oE '"[^"]*"$' | tr -d '"')
 [ -z "$MODE" ] && MODE=fast
 case "$MODE" in
-  full|fast|lite|hotfix) ;;
+  lean|full|fast|lite|hotfix) ;;
   *) echo "⚠ unknown mode '$MODE', falling back to fast"; MODE=fast ;;
 esac
 ```
 
 The mode controls two things downstream:
-1. Which `enabled` role list and state-machine flavor `nextStep` uses (`mode=fast` switches to the merged 3-role pipeline).
+1. Which `enabled` role list and state-machine flavor `nextStep` uses (`lean`, `hotfix`, `fast`, or `full`).
 2. Which slash command name maps to each role in the dispatch table (Step 2).
 
 ## Step 1: Load config + preset
 
 Use core's `loadConfig({ projectRoot: pwd })` to get:
 - `preset.modes[MODE].enabled` (preferred) or `preset.roles.enabled` (fallback) — ordered role list
-- `preset.modes[MODE].state_machine` — `'full'` or `'fast'` (passed to `nextStep` as `mode`)
+- `preset.modes[MODE].state_machine` — `'lean'`, `'hotfix'`, `'full'`, or `'fast'` (passed to `nextStep` as `mode`)
 - `preset.modes[MODE].thresholds_override` merged on top of `preset.workflow.thresholds`
 - `preset.modes?.[MODE]?.g2_enabled` — whether G2 deploy gate is active (default: `true` for nexs, `false` for minimal)
 - `i18n.locale` — for state names + conclusion strings
 
-Resolve every dispatched role through `resolveRoleRuntime(preset, role)`. In Claude Code this preserves Claude implementer subagents and Codex CLI reviewers. In Codex it forces independent native agents for all roles and forbids invoking Claude Code or nested Codex CLI. In Pi P2, every role resolves to a package-qualified `pi-subagents` agent; only `preset-standard` fast mode is supported, and Reviewer/Verifier must use Pi settings to resolve a different authenticated model from the implementer. Model policy in public preset files is always `inherit`; never persist a hard-coded model id.
+Resolve every dispatched role through `resolveRoleRuntime(preset, role, runtime, {models})`. Merge model configuration in this order: portable preset profiles, project `cc-nexs.config.yml.models`, then feature `config.json.models`. Claude applies `model`/`effort` to independent Claude Lean agents; Codex applies `model`/`reasoning_effort` to native agents; Pi passes `model`/`thinking` directly to the package-qualified `Agent` call and retries `fallback_models` in order. `inherit` keeps the active runtime model. Lean Reviewer may use a different model or the same model with a higher effort, but always runs in an independent session. Public presets never pin provider-specific model IDs; private project/feature configuration may.
 
 Every dispatch also receives `CC_NEXS_REQ_DIR=<absolute-doc-feature-dir>/` (with trailing separator) and a repository-id → worktree map. Commands must prefer this value over legacy relative-path discovery. Any `all-docs/doc/<id>` wording inside older role prompts is logical artifact notation and resolves to `CC_NEXS_REQ_DIR`, not a required repository name or topology.
 
@@ -117,6 +117,15 @@ const persistedPolicy = resolveTestReleasePolicy({
   configuredOverride,
 });
 const workflow = {
+  plan_approved: progressV2.gates?.plan?.approved === true,
+  release_approved: progressV2.gates?.release?.approved === true,
+  hotfix: progressV2.hotfix ? {
+    ...progressV2.hotfix,
+    delta_attempts: progressV2.review?.closure_attempts || 0,
+  } : null,
+  local_verification: {
+    context: progressV2.local_verification?.context || null,
+  },
   g2_enabled: presetG2,
   g2_approved: progress.workflow.g2_approved,
   g2_approved_sprints: progress.workflow.g2_approved_sprints,
@@ -134,6 +143,10 @@ New features default to `final_only + auto_if_ready`. Explicit project/overlay `
 
 In full final-only mode, Sprint PASS advances through `SPRINT_<N>_DEV_DONE` to `ALL_SPRINTS_DEV_DONE`, then exactly one `INTEGRATION_REVIEW -> TEST_RELEASE -> FINAL_QA -> FINAL_EVAL` delivery chain.
 
+In lean mode, `/cc-nexs:plan` owns `INIT -> PLANNING -> PLAN_PENDING_HUMAN`. After `/cc-nexs:approve-plan`, run performs implementation, deterministic local verification, exactly one consolidated Review, test release/verification, then stops at `RELEASE_PENDING_HUMAN`. `/cc-nexs:approve-release` authorizes the exact tested fingerprint; the next run invokes deterministic base integration. Gateway B feedback must use `/cc-nexs:request-release-changes`: evidence-only feedback stays at the gate, in-scope implementation feedback takes one bounded delta loop, and scope/AC feedback invalidates Gateway A and returns to Planner.
+
+In hotfix mode, `/cc-nexs:hotfix` binds `hotfix.md` scope and owns `INIT -> HOTFIX_IMPLEMENTING`. Run then follows the mini-Lean branch documented by that command: deterministic local verification, one consolidated Review (P3 skips only after machine boundary proof), test release with explicit `--hotfix`, independent environment verification, and `HOTFIX_RELEASE_PENDING_HUMAN`. Scope/contract feedback is rejected rather than expanding the patch.
+
 `g2_enabled: false` still disables test delivery for presets such as minimal. It does not authorize production release.
 
 ## Step 2: Dispatch loop
@@ -141,16 +154,22 @@ In full final-only mode, Sprint PASS advances through `SPRINT_<N>_DEV_DONE` to `
 Repeatedly:
 
 1. Read `state` and `revision` from progress.json
-2. Call `nextStep({state, counters, thresholds, enabledRoles, sprint, humanGateApproved, workflow, mode})` from core/lib/state-machine.mjs (mode = `'full'` or `'fast'`)
+2. Call `nextStep({state, counters, thresholds, enabledRoles, sprint, humanGateApproved, workflow, mode})` from core/lib/state-machine.mjs (mode = `'lean'`, `'hotfix'`, `'full'`, or `'fast'`)
 3. Examine the returned `{next, role, action, stop, parallel, circuitBreaker}`:
    - `circuitBreaker` set → append a progress.json event + spec.md changelog, then transition
    - `stop: true` → output the matching human/release-block summary (Step 3) and return
    - `role` set → invoke that role's command per the dispatch table below
    - `parallel` set → **必须**在同一条消息中使用多个 Agent tool call 并发 dispatch 两个角色（见 "并行 dispatch 规则"），两者都完成后再推进状态机
    - `action == 'release_test'` → run the release capability preflight below, invoke `/cc-nexs:release-test`, then re-read progress without writing a same-state transition
+   - `action == 'release_test_hotfix'` → invoke `/cc-nexs:release-test <id> --hotfix` only from `HOTFIX_TEST_RELEASE`
+   - `action == 'verify_local'` → invoke deterministic `/cc-nexs:verify-local`; never use an agent as a substitute. A failed initial check routes to `LOCAL_VERIFY_FAILED` / `HOTFIX_LOCAL_VERIFY_FAILED`; a failed repair check routes to `LOCAL_REVERIFY_FAILED` / `HOTFIX_LOCAL_REVERIFY_FAILED`. Lean uses the persisted `local_verification.context` to return to `REVIEW_FIXING`, `TEST_FIXING`, or `GATEWAY_B_FIXING`.
+   - `action == 'assert_p3_candidate'` → invoke deterministic `cc-nexs assert-hotfix-candidate <id>`; if it returns `blocked`, re-read progress and stop at `HOTFIX_P3_BOUNDARY_BLOCKED` instead of applying the stale candidate-ready transition
+   - `action == 'release_base'` → transition to mode-specific `BASE_MERGING` / `HOTFIX_BASE_MERGING`, invoke deterministic `/cc-nexs:release-base`, and stop on base-changed/protected-branch failure
+   - `action == 'fix_gateway_b_feedback'` → dispatch the Developer only for the current structured Gateway B request in `plan.md`
+   - `action == 'review_gateway_b_delta'` → dispatch one independent Reviewer only over the request, delta, affected surfaces, and fresh local evidence
    - `action == 'parse_*_conclusion'` → tail the corresponding md file's conclusion line, choose next state according to Step 4
-4. After the action completes, call `transitionState(progress.md path, {from, to, reason})`; it atomically appends the authoritative v2 event before refreshing the Markdown view. Stale or mismatched transitions fail closed.
-4.5. **Sync the per-feature README** so users entering the worktree see fresh state (the README's first line promises "进入目录第一件事：读本文件"). Best-effort, never blocks orchestration:
+4. After the action completes, call `transitionState(progress.md path, {from, to, reason})`; it atomically appends the authoritative v2 event before refreshing the Markdown view. Stale or mismatched transitions fail closed. For `release_base`, the pre-action transition already entered `BASE_MERGING`; after success record `BASE_MERGING -> COMPLETE`, create and integrate the final docs candidate as described below, and do not write progress again.
+4.5. In fast/full only, sync the per-feature README. Lean and hotfix skip it.
    ```js
    import { syncFeatureReadme } from '@cc-nexs/core/lib/readme-sync.mjs';
    try {
@@ -195,6 +214,37 @@ Per-mode mapping. The orchestrator selects the correct slash command based on `M
 | `fullstack` | `implement` / `revise_implementation` | (n/a) | `/cc-nexs:fullstack <id> --phase=build` |
 | `fullstack` | `fix_bug` | (n/a) | `/cc-nexs:fullstack <id> --phase=fix --bug=<BUG-ID>` |
 
+Lean mapping:
+
+| role/action | command |
+|---|---|
+| `lean-planner / draft_plan` | `/cc-nexs:plan <id>` (normally completed before run) |
+| `lean-developer / execute_plan` | `/cc-nexs:execute <id> --phase=implement` |
+| `lean-developer / fix_review` | `/cc-nexs:execute <id> --phase=review-fix` |
+| `lean-developer / fix_test` | `/cc-nexs:execute <id> --phase=test-fix` |
+| `lean-developer / fix_gateway_b_feedback` | `/cc-nexs:execute <id> --phase=gateway-b-fix` |
+| `lean-developer / sync_base` | `/cc-nexs:execute <id> --phase=base-sync` |
+| `lean-reviewer / review_candidate` | `/cc-nexs:lean-review <id>` |
+| `lean-reviewer / review_delta` | `/cc-nexs:lean-review <id> --closure` |
+| `lean-reviewer / review_gateway_b_delta` | `/cc-nexs:lean-review <id> --gateway-b-delta` |
+| `lean-verifier / verify_test*` | `/cc-nexs:lean-verify <id>` |
+| `verify_local` | deterministic `/cc-nexs:verify-local <id>` |
+| `release_base` | deterministic `/cc-nexs:release-base <id>` |
+
+Hotfix mapping:
+
+| role/action | command |
+|---|---|
+| `hotfix-developer / implement_hotfix, fix_hotfix, fix_local, sync_base` | dispatch `agents/hotfix-developer.md` in its assigned worktree |
+| `hotfix-reviewer / review_hotfix` | dispatch `agents/hotfix-reviewer.md`, then `record-review` |
+| `hotfix-reviewer / review_hotfix_delta` | independent delta session, then `record-review --closure` |
+| `hotfix-verifier / verify_hotfix_*` | dispatch `agents/hotfix-verifier.md`, then `record-test-verification` |
+| `verify_local` | deterministic `/cc-nexs:verify-local <id>` |
+| `release_test_hotfix` | deterministic `/cc-nexs:release-test <id> --hotfix` |
+| `release_base` | deterministic `/cc-nexs:release-base <id>` |
+
+Lean base release integrates only the exact code candidates bound to Gateway B. Once it succeeds, transition to `COMPLETE`; Git Custodian then commits the final five-file Lean docs set (`requirements.md`, `plan.md`, `config.json`, `progress.md`, `progress.json`), integrates the docs repository last, proves remote ancestry, and cleans its feature worktree/ref. This ordering avoids a self-modifying progress ledger and forbids any docs write after the final candidate.
+
 `release_test` is a parent control action, not a role dispatch. Invoke `/cc-nexs:release-test <id>` (or the runtime's mirror skill) exactly once for the current immutable candidate fingerprint. On a failed attempt, only a deliberate retry uses `--retry`.
 
 Key fast mode distinction:
@@ -204,6 +254,20 @@ Key fast mode distinction:
 Implementation hint: a small `dispatch(role, action, mode, reqId, extras)` helper picks the command name from this table; the `action` field from `nextStep` directly disambiguates which sub-command to invoke for multi-target roles.
 
 ## Step 3: Human gate output
+
+Lean `PLAN_PENDING_HUMAN` prints requirements scope, affected repositories, task waves, local/test validation matrices, risk/release summary, model profiles, and the temporary HTML path from `/cc-nexs:render-plan`. It then stops for `/cc-nexs:approve-plan <id>`.
+
+Lean `RELEASE_PENDING_HUMAN` prints exact candidate commits, consolidated Review result, local verification fingerprint, test attempt/environment revision, AC coverage, and base targets. It then stops for `/cc-nexs:approve-release <id>`. This approval is explicit authorization for the next run to perform non-force base integration.
+
+Hotfix `HOTFIX_RELEASE_PENDING_HUMAN` prints severity/scope hash, exact candidate, local verification, Review or P3 skip proof, test attempt/environment revision, P0/P1 rollback evidence, and base targets. It stops for the same `/cc-nexs:approve-release <id>` gate. Evidence/implementation feedback updates `hotfix.md`; scope feedback must become a new Lean/Full change.
+
+If the human requests changes instead of approving, invoke `/cc-nexs:request-release-changes <id> --type=... --feedback=...`. Never edit code while remaining in `RELEASE_PENDING_HUMAN`:
+
+- `evidence`: update only the execution/evidence section of `plan.md`, render new HTML, and remain at Gateway B.
+- `implementation`: `GATEWAY_B_CHANGE_REQUESTED -> GATEWAY_B_FIXING -> GATEWAY_B_LOCAL_REVERIFYING -> GATEWAY_B_DELTA_REVIEW`; a passing delta goes to a new `TEST_RELEASE`, deployed regression, and Gateway B. A blocked delta stops at `HUMAN_INTERVENTION` rather than starting another review loop.
+- `scope`: `SCOPE_CHANGE_REQUESTED -> PLANNING -> PLAN_PENDING_HUMAN`; Planner updates `requirements.md` plus the approval scope in `plan.md`, and Gateway A must approve the new hash before any code work.
+
+The controller keeps each Gateway B request row in `plan.md` synchronized with progress status. A later request marks the previous open item `addressed`; final release approval marks the current item `approved` before docs are archived.
 
 When `next == 'SPEC_PENDING_HUMAN'` and `humanGateApproved == false`, **first call `syncFeatureReadme({ reqDir: REQ_DIR })`** so the README mirrors the freshly produced spec / sa-review state before the human reads it. Then output the gate summary:
 
@@ -291,8 +355,32 @@ Then **return**. Pipeline halts until human runs `/cc-nexs:approve-deploy`. Prod
 | `sa-code-review.md` / `code-review.md` | same | same |
 | `test-report.md` | same | preset-defined `test_pass` / `test_fail` / `待人工执行`(= pass, 不阻塞) |
 | `acceptance.md` | `^[验收结果\|Acceptance]:\s*(\S+)` | `acceptance_pass` / `acceptance_fail` |
+| Lean `plan.md` Review section | `^结论:\s*(\S+)` | `PASS` / `NEEDS_REVISION` |
+| Lean `plan.md` Test section | `^测试结论:\s*(\S+)` | `通过` / `阻塞` |
 
 i18n: the literal strings (`PASS`, `通过`, `PASSED`, etc.) come from preset's `i18n.conclusion_*` settings.
+
+### lean 模式解析
+
+| Parse action | PASS / 通过 | FAIL / 阻塞 |
+|---|---|---|
+| `PARSE_CONSOLIDATED_REVIEW` | `CANDIDATE_READY` | `CONSOLIDATED_REVIEW_BLOCKED` |
+| `PARSE_REVIEW_CLOSURE` | `CANDIDATE_READY` | `REVIEW_CLOSURE_BLOCKED` → 人工介入 |
+| `PARSE_GATEWAY_B_DELTA_REVIEW` | `CANDIDATE_READY` → new test attempt | `GATEWAY_B_DELTA_REVIEW_BLOCKED` → 人工介入 |
+| `PARSE_TEST_VERIFY` | `TEST_VERIFIED` | `TEST_VERIFY_FAILED` |
+
+每次 Review 解析后调用 `record-review` 控制器，把结论绑定本地验证的相同 candidate fingerprint。完整 Review 只有一次；修复只允许一次 delta closure。Test 阻塞修复同样走本地重新验证和 delta closure，再产生新 test attempt。
+
+### hotfix 模式解析
+
+| Parse action | PASS | BLOCKED |
+|---|---|---|
+| `PARSE_HOTFIX_REVIEW` | `HOTFIX_CANDIDATE_READY` | `HOTFIX_REVIEW_BLOCKED` |
+| `PARSE_HOTFIX_DELTA_REVIEW` | `HOTFIX_CANDIDATE_READY` | `HOTFIX_DELTA_REVIEW_BLOCKED -> HUMAN_INTERVENTION` |
+| `PARSE_HOTFIX_TEST` | `HOTFIX_TEST_VERIFIED` | `HOTFIX_TEST_FAILED` |
+
+所有 Review 结论通过 `record-review` 绑定 exact candidate；test 结论通过 `record-test-verification` 绑定 exact attempt/environment revision。全生命周期只允许一次 delta Review。
+每次 Hotfix test 阻塞会递增 `counters.fix_per_bug.HOTFIX_TEST`。模式阈值为 1，因此第一次失败可进入唯一修复闭环；第二次失败或任何已消耗 delta Review 后的新修复请求都会熔断到人工介入。P3 边界不满足进入 `HOTFIX_P3_BOUNDARY_BLOCKED`，由人工选择新建 P0/P1/P2 Hotfix 或 Lean/Full 需求。
 
 ### full 模式 SA_CODE 结论路由
 
@@ -403,7 +491,7 @@ Counters live in progress.json. Increment and reset them through an event-aware 
 ## Step 6: Termination
 
 Loop exits when:
-- `current_state == COMPLETE` → call `syncFeatureReadme({ reqDir: REQ_DIR })` one last time so the README reflects the final state, then print final summary (completed AC × passed users × pending human items × branch state) **and** the worktree cleanup hint below
+- `current_state == COMPLETE` → fast/full sync README；Lean 输出 requirements/plan、AC evidence、base integration proof 和 cleanup 结果
 - `stop: true` from state machine (human/manual release gate, release block, manual verification requirement, or fast-mode `HUMAN_INTERVENTION` circuit breaker)
 - A tool call genuinely fails after self-repair attempts
 

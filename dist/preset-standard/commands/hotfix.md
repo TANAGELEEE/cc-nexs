@@ -1,166 +1,138 @@
 ---
-description: Bug 修复入口。P0/P1/P2/P3 均先形成 candidate；默认自动发布 test，独立执行部署后回归，生产发布始终人工。
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task
-argument-hint: <bug 现象描述> [需求编号] [--level=P0|P1|P2|P3] [--no-auto-test-release]
+description: 独立 Hotfix mini-Lean：latest-base worktree、本地验证、一次集中 Review、test 黑盒验收、人工 base 门禁。
+allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task, Skill
+argument-hint: <hotfix-id | bug 现象> [--level=P0|P1|P2|P3] [--related=<feature-id>] [--repos=a,b]
 ---
 
 # /cc-nexs:hotfix
 
-不经过完整 spec / sprint 流程，直接修 bug。按项目 SOP §十 hotfix 三档分级。
+Hotfix 是独立变更，不附着、复用或重开既有需求。参数若是已有 `mode=hotfix` id 就恢复它；若是 bug 描述，则本命令先按 `/cc-nexs:init "<描述>" --mode=hotfix --repos=...` 完成新编号、占号和 worktree 初始化，再继续。也可以显式分两步执行：
 
-参数：
-- `$1` = bug 现象描述（必填，简短一句话）
-- `$2` = 关联需求编号（可选，缺省时按当前分支推断）
-
-## 三档分流速查
-
-| 档位 | 触发条件 | 流程 | 跳过项 |
-|------|---------|------|--------|
-| 🟢 P3 | typo / 文案 / 样式 / 明显笔误，diff ≤ 20 行 / 单文件 / 无逻辑改动 | Tech Lead 直改 → commit | BUG 文件 / SA / Evaluator |
-| 🟡 P2 | 常规逻辑 bug / 边界 / 小范围缺陷 | 4 步：BUG 文件 → Tech Lead 修 → SA 轻量评审 → Tech Lead 自测回归 | spec 变更 / Evaluator |
-| 🔴 P0/P1 | 线上事故 / 数据错误 / 涉及契约变更 | P2 流程 + Evaluator 局部打分 + 必须补回归用例 + 已上线含回滚步骤 | (无可跳过) |
-
-## 执行步骤
-
-### 1. 自动分档
-
-agent 根据 `$1` 现象描述，按下表判档：
-
-```
-关键字命中 → 升档：
-  线上 / 生产 / 用户报错 / 数据错误 / 资金 / 鉴权 / 安全     → P0
-  接口 500 / 关键流程阻塞 / 测试环境核心功能崩 / 多用户影响 → P1
-  常规 bug / 单一接口 / 偶现                                → P2
-  typo / 文案 / 样式 / 颜色 / 拼写                          → P3
+```text
+/cc-nexs:init "<bug 现象>" --mode=hotfix --repos=<affected-repositories>
 ```
 
-判完档后**显式输出**判档结果 + 理由，不静默：
+Git Custodian 必须从各仓库最新 `origin/<base_branch>` 创建 `.worktrees/<id>-<slug>/<repo>/` 和 `feature/<id>-<slug>`。`--related` 只写关联元数据，不能改变分支、worktree、candidate 或旧需求状态。
 
-```
-🔍 判档: <P0|P1|P2|P3>
-   理由: <现象关键字命中规则>
-   流程: <对应流程的简述>
-👉 不同意可以手动覆盖：/cc-nexs:hotfix <现象> --level=P2
-```
+## 1. 分级与边界
 
-如果用户在命令里显式带 `--level=P0|P1|P2|P3` 强制档位，跳过自动判档。
+按影响和紧急性判定，不按单一关键词静默判级：
 
-### 2. 按档执行
+| 级别 | 影响 / 紧急性 | 流程加码 |
+|---|---|---|
+| P0 | 正在发生的生产事故、资金/数据损坏、安全事件 | P1 全部要求 + 事故负责人和立即可执行回滚 |
+| P1 | 关键流程不可用、多用户/核心数据受影响 | P2 + 受影响 AC 回归与回滚证明 |
+| P2 | 局部行为缺陷、影响面可界定 | 本地验证 + 一次集中 Review + test 回归 |
+| P3 | 单文件、总 changed lines ≤ 20、无行为/逻辑变化 | 机器边界证明后跳过模型 Review；仍做本地验证、test smoke 和 Gateway B |
 
-#### 🟢 P3 流程（直改）
+显式 `--level` 只覆盖分级判断，不能绕过结构边界。任何 AC、API 契约、数据库 schema、权限模型变化或大范围重构，立即停止 Hotfix，另建 `lean`/`full` 需求。P3 最终 diff 不满足边界时升级 P2。
 
-```bash
-# 调起 Tech Lead，diff 必须 ≤ 20 行 / 单文件 / 无逻辑改动
-# 直接 commit，message: fix: <简述>
-# 不建 BUG 文件、不调 SA、不调 Evaluator
-```
+先填写唯一人工维护文档 `hotfix.md`，尤其是 `HOTFIX-SCOPE` 标记内字段；P0/P1 必填受影响 AC、回滚负责人和回滚步骤。然后运行确定性绑定：
 
-#### 🟡 P2 流程（4 步单次闭环）
-
-**Step 2.1 — Tech Lead 写 BUG 文件 + 复现脚本**
-
-调起 `tech-lead-claude` 的特殊 prompt（hotfix 例外允许 Tech Lead 写复现脚本）：
-
-```
-建 ${REQ_DIR}bugs/BUG-<N>.md，按 templates/bugs/BUG-template.md。
-必填：现象 / 复现步骤 / 根因分析（含"为什么原测试没抓到"）/ 修复方案 / 影响范围。
-写可执行复现脚本到 ${REQ_DIR}qa-scripts/BUG-<N>-repro.*。
+```text
+node <plugin-root>/lib/cc-nexs-cli.mjs start-hotfix <id> [--level P2] [--related <feature-id>]
 ```
 
-**Step 2.2 — Tech Lead 修复**
+绑定后标记内任何变化都会 fail closed；不设额外 Gateway A，因为本命令及范围绑定本身就是 Hotfix 授权。
 
-```
-按 BUG 文件的修复方案修代码。
-mvn compile = 0、无中文字符串。
-commit: fix(<模块>): <简述> (BUG-<N>)
-BUG 状态 OPEN → FIXED。
-```
+## 2. 执行状态机
 
-**Step 2.3 — SA 轻量评审（不开独立 sa-code-review.md）**
-
-```bash
-git diff main...HEAD -- <修复涉及文件> > /tmp/bug-${BUG_ID}.diff
-codex --file /tmp/bug-${BUG_ID}.diff "你是本项目的 SA。评审 BUG-<N> 的修复 diff。
-关注：根因是否修到位、是否引入新副作用、是否影响同模块其他路径、是否需要补测试用例。
-**直接 append 到 ${REQ_DIR}bugs/BUG-<N>.md 的 ## 评审 章节**（## Round N - YYYY-MM-DD - 结论 分隔），不要单独建 sa-code-review.md。
-末尾 结论: PASS 或 NEEDS_REVISION。"
-```
-
-NEEDS_REVISION → 回 Step 2.2 修 → 再审，至 PASS。
-
-**Step 2.4 — Tech Lead 自测回归**
-
-```
-跑 ${REQ_DIR}qa-scripts/BUG-<N>-repro.* 做本地验证；通过后 BUG 仍保持 FIXED
-跑原 spec 该模块的 P0 用例（防回归）
-append 到 BUG 文件的 ## 回归 章节
-本地验证禁止写 VERIFIED；只有新 candidate 发布到 test 后的独立回归可以写 VERIFIED
+```text
+INIT --start-hotfix--> HOTFIX_IMPLEMENTING -> HOTFIX_IMPLEMENTED
+  -> HOTFIX_LOCAL_VERIFYING
+  -> P3: assert-hotfix-candidate
+       -> PASS: HOTFIX_CANDIDATE_READY
+       -> BLOCKED: HOTFIX_P3_BOUNDARY_BLOCKED -> HUMAN_INTERVENTION
+  -> P0/P1/P2: HOTFIX_REVIEWING -> PARSE_HOTFIX_REVIEW
+     -> PASS: HOTFIX_CANDIDATE_READY
+     -> BLOCKED: HOTFIX_FIXING -> HOTFIX_LOCAL_REVERIFYING
+                 -> HOTFIX_DELTA_REVIEW -> PASS/BLOCKED
+  -> HOTFIX_TEST_RELEASE -> HOTFIX_TEST_VERIFYING
+  -> HOTFIX_TEST_VERIFIED -> HOTFIX_RELEASE_PENDING_HUMAN
+  -> /approve-release -> HOTFIX_BASE_MERGING -> COMPLETE
 ```
 
-#### 🔴 P0/P1 流程（P2 + 加码）
+Review、test 或 Gateway B 实现意见导致修复时，整个 Hotfix 生命周期最多一次 delta Review；delta 再阻塞直接 `HUMAN_INTERVENTION`。不得回到无限 Review 循环。
+Test 阻塞同时递增 `counters.fix_per_bug.HOTFIX_TEST`；Hotfix 模式阈值为 1，第一次失败允许唯一修复，第二次失败直接人工介入。P3 虽跳过模型 Review，也受同一 test 熔断约束。
 
-**先做完 P2 全部 4 步**，然后追加：
+Orchestrator 按 `progress.json.mode=hotfix` 调用 `nextStep`，并把 `workflow.hotfix.severity`、最新 test attempt/status 和 release approval 传入。角色固定为 `hotfix-developer`、`hotfix-reviewer`、`hotfix-verifier`，每次 Review/Verifier 必须独立 session。
 
-**Step 3.1 — 补回归用例**
+## 3. 模型策略（三端一致）
 
-```
-在 ${REQ_DIR}test-cases.md 追加一条用例，标 关联BUG: BUG-<N>。
-P0/P1 必须，否则下次还会复发。
-```
+角色 profile 默认：Developer=`balanced`、Reviewer=`review`、Verifier=`balanced`。Claude Code 使用原生隔离 subagent；Codex 使用原生 agent；Pi 使用 package agent。项目或 feature 的 `models.roles` / `models.profiles` 可分别配置模型和 effort。
 
-**Step 3.2 — 已上线则补回滚步骤**
+集中 Review 可选择不同模型，也可选择同一模型但更高 effort/thinking；硬约束是与实现 session 隔离，不硬编码供应商或模型 ID。P0/P1 是否强制异构模型属于项目私有策略，不是公共 preset 的硬门槛。
 
-```bash
-if grep -q "已上线" ${REQ_DIR}deploy.md; then
-  在 ${REQ_DIR}deploy.md 追加 ## 生产回滚步骤 - BUG-<N> 章节
-fi
-```
+## 4. 本地验证与构建优化
 
-### 4. Candidate、test 发布与部署后回归（所有档位）
+Git Custodian 先记录精确 code candidate，再执行：
 
-1. Orchestrator 让 Git Custodian 记录本次精确 code/docs candidate。角色不得自行 commit/push。
-2. 默认执行 `/cc-nexs:release-test <id> --hotfix`。它只能合入配置的 test_branch、调用结构化 test release driver，禁止生产发布。
-3. `--no-auto-test-release`、feature policy=manual 或 browser/driver/test branch 前置不足时，不调用控制器；输出人工 test 合并/发布/验证清单后停止，不能把本地验证当成交付完成。
-4. 自动发布成功后，必须用与实现 session 隔离的 QA/Verifier 在新 environment_revision 上重跑 BUG repro、受影响 P0/P1 和必要冒烟。P2/P0/P1 仅此处成功后可把 FIXED 改为 VERIFIED；P3 记录 test smoke 证据。
-5. 部署后回归失败则回到实现、轻量复审、更新 candidate、再次 `/cc-nexs:release-test --hotfix --retry`，直到通过或触发三轮熔断。
-6. P0/P1 部署后回归通过后，再调 Evaluator 对受影响 AC 子集打分，append 到 `${REQ_DIR}acceptance.md` 的 `## 线上缺陷修复 - BUG-<N>`，末尾必须 `验收结果: 通过|未通过`。
-
-账号策略与主流程相同：优先复用当前已登录浏览器；不得从项目 memory、Markdown、Git 或 config 读取明文账号密码，只允许 opaque `credential_ref` 对接外部 secret provider。
-
-### 5. 触发完整 SOP 升级
-
-满足以下任一 → 立即停 hotfix，提示走完整 SOP（`/cc-nexs:run`）：
-
-- 修复需要修改 spec.md 的 AC（涉及契约变更）
-- 单次修复 diff > 500 行
-- 跨模块大范围重构才能修
-- 同一 BUG 修超过 3 轮 SA NEEDS_REVISION
-
-提示信息：
-
-```
-⚠️ 此 BUG 已超出 hotfix 边界，建议走完整 SOP：
-  原因: <具体哪条触发>
-  下一步: 把 BUG 转化为新需求 all-docs/doc/<编号>，跑 /cc-nexs:run
+```text
+node <plugin-root>/lib/cc-nexs-cli.mjs verify-local <id>
 ```
 
-### 6. 输出
+只允许调用项目配置的 `workflow.local_verify.driver`。driver 负责变更模块选择、依赖闭包、缓存、并行上限、build/start/smoke/E2E；不得在流程里写死 `npm build`、`mvn`、`main`、端口或某个 CLI。相同 candidate fingerprint 可复用已通过证据，candidate 改变会自动失效。
 
-```
-✅ Hotfix 完成: BUG-<N>
-   档位: <P0|P1|P2|P3>
-   diff 行数: <N>
-   涉及文件: <数量>
-   commit: <hash> fix(...) (BUG-<N>)
-   BUG 状态: <FIXED（待人工 test 验证）|VERIFIED>
-   test release: <attempt/environment_revision|manual fallback>
-   <P0/P1 时输出 Evaluator 验收结果 + 回归用例 ID>
-   <已上线时输出回滚步骤 append 位置>
+P3 本地验证通过后必须运行确定性边界控制器：
 
-📄 docs candidate: docs: <id> hotfix BUG-<N> 修复记录
-📦 code candidate: <repository-id> <candidate-ref> <commit>
+```text
+node <plugin-root>/lib/cc-nexs-cli.mjs assert-hotfix-candidate <id>
 ```
 
-### 7. Candidate recording
+边界不满足时控制器写入 `HOTFIX_P3_BOUNDARY_BLOCKED` 并返回结构化原因，不以异常中断 Orchestrator。人工需要另建 P0/P1/P2 Hotfix，或改走 Lean/Full；禁止原地扩张已绑定 scope。
 
-Hotfix 代码和 BUG 文档都由 Orchestrator 交给 Git Custodian。只 stage 本次声明的路径，绝不直接提交或 push docs base branch。自动化只允许 test；生产发布和主分支合并始终需要显式人工授权。
+P0/P1/P2 本地通过后只做一次集中 Review：
+
+```text
+node <plugin-root>/lib/cc-nexs-cli.mjs record-review <id> --passed|--blocked [--finding "P0/P1 ..."]
+```
+
+修复后使用 `--closure`；不得第二次 closure。
+
+## 5. Test 发布与独立验收
+
+候选就绪后先进入 `HOTFIX_TEST_RELEASE`，再执行：
+
+```text
+node <plugin-root>/lib/cc-nexs-cli.mjs release-test <id> --hotfix --capability-attested [--retry]
+```
+
+控制器仅接受 `mode=hotfix + HOTFIX_TEST_RELEASE`，只把精确 feature candidate 合入配置的 `test_branch`，然后调用结构化 release driver。`--hotfix` 不再是绕过 readiness 的开关。CI 不可避免时只运行最终 candidate 的一次发布；日常反馈由本地 driver 提前消化。
+
+发布成功后由独立 Hotfix Verifier 在新 `environment_revision` 上运行 BUG repro、受影响 AC/P0/P1 和必要冒烟，P3 也必须 smoke。将证据写入 `hotfix.md`，再绑定：
+
+```text
+node <plugin-root>/lib/cc-nexs-cli.mjs record-test-verification <id> --passed|--blocked --evidence "<url/request/result>"
+```
+
+BLOCKED 回实现并消耗唯一 delta Review，再产生新 candidate、新 test attempt 和新环境回归。本地通过不能替代 test 验收。
+
+## 6. Gateway B 与合并路径
+
+Test 验收通过后停在 `HOTFIX_RELEASE_PENDING_HUMAN`，展示 scope hash、candidate commits、本地证据、Review/P3 skip 证明、test attempt/environment revision、回滚信息和 base targets。
+
+人工意见使用 `/cc-nexs:request-release-changes`：
+
+- `evidence`：只追加 `hotfix.md`，不失效 candidate/test，仍停 Gateway B。
+- `implementation`：失效本地/Review/test 证明，进入 `HOTFIX_CHANGE_REQUESTED -> ... -> HOTFIX_DELTA_REVIEW -> HOTFIX_TEST_RELEASE`。
+- `scope`：Hotfix 拒绝扩边，另建 Lean/Full 需求。
+
+批准后：
+
+```text
+/cc-nexs:approve-release <id>
+/cc-nexs:run <id>
+```
+
+确定性 base controller 只合并 Gateway B 批准且已在 test 验证的同一 feature candidate：
+
+```text
+latest base -> feature/<id>-<slug> -> test
+                                  -> base (人工 Gateway B 后)
+```
+
+禁止 `test -> base`，禁止重新从 test 取 candidate，禁止 force push。base 在批准后变化则停止为 `HOTFIX_BASE_CHANGED`，同步最新 base 后重新本地验证、delta Review、test 验收和 Gateway B；不能悄悄 merge。
+
+## 7. 完成条件
+
+只有 `HOTFIX_BASE_MERGING -> COMPLETE` 且远端 ancestry 验证通过才完成。最后由 Git Custodian 合入只含 `hotfix.md/config.json/progress.md/progress.json` 的 docs candidate 并安全清理 worktree/feature ref。生产发布不属于本命令，始终由组织发布流程另行人工授权。

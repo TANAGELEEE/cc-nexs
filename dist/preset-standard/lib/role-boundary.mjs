@@ -30,6 +30,45 @@ const DEFAULT_RULES = {
     forbidWritePaths: [/(^|\/)progress\.md$/, /\/acceptance\.md$/, /\/sa-.*\.md$/, /\/test-report\.md$/],
     message: 'Fullstack role (fast): cannot edit progress / acceptance / sa-* / test-report',
   },
+  'lean-planner': {
+    allowWritePaths: [/(^|\/)(?:requirements|plan)\.md$/],
+    forbidWritePaths: [/(^|\/)src\//, /(^|\/)progress\.(?:md|json)$/],
+    forbidCommands: [CODEX_COMMAND, /\bgit\s+(?:add|commit|push|merge|rebase|checkout|switch|branch)\b/],
+    message: 'Lean Planner: may write requirements/plan only, never code, progress, or Git state',
+  },
+  'lean-developer': {
+    forbidWritePaths: [/(^|\/)requirements\.md$/, /(^|\/)progress\.(?:md|json)$/],
+    message: 'Lean Developer: cannot edit requirements or progress',
+  },
+  'lean-reviewer': {
+    allowWritePaths: [/(^|\/)plan\.md$/],
+    forbidReadPaths: [/(^|\/)src\//],
+    forbidWritePaths: [/(^|\/)requirements\.md$/, /(^|\/)progress\.(?:md|json)$/],
+    message: 'Lean Reviewer: review injected diffs and plan evidence only',
+  },
+  'lean-verifier': {
+    allowWritePaths: [/(^|\/)plan\.md$/],
+    forbidReadPaths: [/(^|\/)src\//],
+    forbidWritePaths: [/(^|\/)requirements\.md$/, /(^|\/)progress\.(?:md|json)$/],
+    message: 'Lean Verifier: black-box test evidence only',
+  },
+  'hotfix-developer': {
+    forbidWritePaths: [/(^|\/)progress\.(?:md|json)$/],
+    forbidCommands: [/\bgit\s+(?:add|commit|push|merge|rebase|checkout|switch|branch)\b/],
+    message: 'Hotfix Developer: cannot edit progress or mutate Git',
+  },
+  'hotfix-reviewer': {
+    allowWritePaths: [/(^|\/)hotfix\.md$/],
+    forbidReadPaths: [/(^|\/)src\//],
+    forbidWritePaths: [/(^|\/)progress\.(?:md|json)$/],
+    message: 'Hotfix Reviewer: review injected diff and hotfix.md only',
+  },
+  'hotfix-verifier': {
+    allowWritePaths: [/(^|\/)hotfix\.md$/],
+    forbidReadPaths: [/(^|\/)src\//],
+    forbidWritePaths: [/(^|\/)progress\.(?:md|json)$/],
+    message: 'Hotfix Verifier: black-box evidence in hotfix.md only',
+  },
 };
 
 const ROLE_ALIASES = { pm: 'planner', developer: 'tech-lead', dev: 'tech-lead' };
@@ -57,6 +96,9 @@ export function roleBoundaryViolation({ role, toolName = '', filePath = '', comm
   const isWrite = ['edit', 'write', 'notebookedit'].includes(normalizedTool);
   const isRead = normalizedTool === 'read';
 
+  if (isWrite && rule.allowWritePaths && !matches(rule.allowWritePaths, filePath)) {
+    return `${rule.message} (write denied: ${filePath})`;
+  }
   if (isWrite && matches(rule.forbidWritePaths, filePath)) {
     return `${rule.message} (path: ${filePath})`;
   }

@@ -15,12 +15,47 @@
 
 | Preset | 适用场景 | 角色 | 工具 | 语言 |
 |--------|---------|------|------|------|
-| `preset-standard` | 通用多仓项目；具体技术栈由私有 overlay 注入 | 支持 **fast（默认）/ full（显式）**；Pi P2 支持 fast + hotfix，使用 pi-subagents 隔离角色 | 运行时继承或使用本地模型覆盖，不固定公开模型 ID | 中文 |
+| `preset-standard` | 通用多仓项目；具体技术栈由私有 overlay 注入 | 支持 **lean（默认）/ hotfix / fast / full**；Pi 使用 pi-subagents 隔离角色 | 每个 Lean/Hotfix 角色可配置模型与 effort/thinking；公开 preset 不固定模型 ID | 中文 |
 | `preset-minimal` | 通用 / 个人项目 / 跨语言起步 | 3 角色（Planner / Developer / Reviewer）| Claude 单工具 + 子代理隔离 | 英文 |
 
-新增预设按 [docs/extending-presets.md](./docs/extending-presets.md) 操作。fast 模式选择见 `preset-standard` 的 [docs/role-map.md](./packages/preset-standard/docs/role-map.md)。
+新增预设按 [docs/extending-presets.md](./docs/extending-presets.md) 操作。模式和角色选择见 `preset-standard` 的 [docs/role-map.md](./packages/preset-standard/docs/role-map.md)。
 
-`preset-standard` 新需求默认 `final_only + auto_if_ready`：开发可分多个 Sprint，但 Sprint 不部署；全部开发完成后统一做 integration review、合入 test、发布、最终 QA 和契约验收。显式 `--no-auto-test-release`、feature policy=manual 或前置能力不足时回退人工 G2。没有 `delivery` 字段的历史需求保持逐 Sprint + manual，不会因升级自动获得远端写权限。生产发布始终人工。
+`preset-standard` 新需求默认 Lean：计划批准后按 worktree/feature branch 并行实现，本地 build/start/smoke 通过后做一次集中 Review，再合入 test 验收；第二个人工门禁批准精确 candidate 后才合入配置的 base 分支。Fast/Full 需显式指定；没有 `delivery` 字段的历史需求继续保持旧的逐 Sprint + manual 语义。
+
+Lean 模型按 `preset < cc-nexs.config.yml < feature config.json` 合并。公开 preset 只有 `inherit` profile；私有配置可让 Review 使用不同模型，或沿用实现模型但提高推理等级：
+
+```yaml
+models:
+  profiles:
+    implementation:
+      claude:
+        model: inherit
+        effort: medium
+      codex:
+        model: inherit
+        effort: medium
+      pi:
+        model: inherit
+        effort: medium
+    review:
+      claude:
+        model: inherit
+        effort: high
+      codex:
+        model: inherit
+        effort: high
+      pi:
+        model: inherit
+        effort: high
+        fallback_models: []
+  roles:
+    lean-developer: implementation
+    lean-reviewer: review
+```
+
+将任一 `model: inherit` 换成该运行时已认证的私有模型 ID 即可做异构 Review；三端始终使用独立 Reviewer session。
+
+Claude Code 的 Lean 四角色全部使用独立 Claude 子代理；Codex 的 Lean 四角色全部使用独立 native agent；Pi 由父代理把 profile 的 `model`/`thinking` 直接传给 pi-subagents `Agent`，无需在 `.pi/settings.json` 再维护一份角色映射。Pi 的 `fallback_models` 按顺序重试。
 
 ## 目录结构
 
@@ -90,7 +125,7 @@ cc-nexs/
 │   └── extending-presets.md        写新预设指南
 ├── pi/
 │   ├── extensions/cc-nexs.ts       Pi slash command + child role guard
-│   ├── skills/                      fast + hotfix P2 command mirrors
+│   ├── skills/                      lean + fast + hotfix P2 command mirrors
 │   └── agents/                      pi-subagents package roles
 │
 ├── pnpm-workspace.yaml
@@ -107,7 +142,7 @@ pnpm build:minimal     # 仅构建 preset-minimal
 pnpm validate:claude   # 校验 Claude Code marketplace / install 脚本入口 / skills 隔离
 pnpm validate:codex    # 校验 Codex manifest / marketplace / command mirror skills
 pnpm validate:pi       # 校验 Pi package / P2 skills / package agents / 无固定模型
-pnpm validate:sop      # 校验 full / fast / hotfix 的关键文档落点和 mirror 契约
+pnpm validate:sop      # 校验 lean / full / fast / hotfix 的关键文档落点和 mirror 契约
 pnpm smoke:claude-install # 用临时 HOME 烟测 Claude Code 本地安装形态，不碰真实 ~/.claude
 pnpm smoke:pi-install  # 用临时 PI_CODING_AGENT_DIR 验证本地 Pi package 注册
 pnpm validate:plugins  # 同时校验 Claude Code + Codex 两边 plugin 产物与安装形态
@@ -123,7 +158,7 @@ build 做什么：
 5. `.claude-plugin/marketplace.json` 自动生成，列出所有 preset 作为 Claude Code plugin
 6. `.agents/plugins/marketplace.json` 自动生成，列出所有 preset 作为 Codex plugin
 7. 为 Codex 生成 `codex-skills/`：每个 `commands/*.md` 都会生成一个 `$cc-nexs-*` mirror skill，仍回指原 command 文档；原 `skills/` 不写入 Codex mirror，避免影响 Claude Code plugin
-8. 为 Pi 生成 P2 fast + hotfix command skills 和 package-qualified role agents；模型选择留给 Pi/pi-subagents settings
+8. 为 Pi 生成 lean + fast + hotfix command skills 和 package-qualified role agents；模型由项目/feature profile 解析后直接传给 pi-subagents Agent
 
 dist 是真正的 plugin 载体。Claude Code 读取 `.claude-plugin/marketplace.json`；Codex 读取 `.agents/plugins/marketplace.json`。两者都指向同一批 `dist/preset-*`。
 
@@ -149,16 +184,20 @@ pnpm install:local:codex
 Codex 使用显式 skill 入口；`/cc-nexs:*` 仅作为兼容文本提示，不是可执行 shell/slash command：
 
 ```text
-$cc-nexs-init "需求描述"             # 默认 fast
+$cc-nexs-init "需求描述"             # 默认 lean
+$cc-nexs-plan 01
+$cc-nexs-approve-plan 01
 $cc-nexs-init "复杂需求" --mode=full # 只有显式指定才走 full
 $cc-nexs-run 01
-$cc-nexs-approve-spec 01
+$cc-nexs-approve-release 01
+$cc-nexs-release-base 01
 $cc-nexs-release-test 01
 $cc-nexs-approve-deploy 01
-$cc-nexs-hotfix "现象描述"
+$cc-nexs-init "现象描述" --mode=hotfix
+$cc-nexs-hotfix 02                 # Hotfix 使用自己的新编号，不附着旧需求
 ```
 
-Codex 侧实现方式是 command mirror skills。`$cc-nexs-run` 读取 `commands/run.md` 作为唯一事实来源，所以 full / fast / hotfix 的文档写入位置和状态机逻辑不会分叉。审批 skill 会调用确定性的 `cc-nexs` 控制程序，不会手工修改 progress。详见 [docs/codex-plugin.md](./docs/codex-plugin.md)。
+Codex 侧实现方式是 command mirror skills。`$cc-nexs-run` 读取 `commands/run.md` 作为唯一事实来源，所以 lean / full / fast / hotfix 的文档写入位置和状态机逻辑不会分叉。审批 skill 会调用确定性的 `cc-nexs` 控制程序，不会手工修改 progress。详见 [docs/codex-plugin.md](./docs/codex-plugin.md)。
 
 ### Claude Code 本地开发（一条命令）
 
@@ -181,7 +220,7 @@ pnpm install:local:minimal
 
 ### Pi P2 安装
 
-Pi 当前为实验性 P2 支持，承诺 `preset-standard` fast 和 hotfix 流程。公开 GitHub 安装：
+Pi 当前为实验性 P2 支持，承诺 `preset-standard` lean、fast 和 hotfix 流程。公开 GitHub 安装：
 
 ```bash
 pi install npm:pi-subagents@0.35.1
@@ -196,7 +235,7 @@ pnpm install
 pnpm install:local:pi
 ```
 
-Pi 不调用 Codex CLI。Fullstack 默认继承当前 Pi 模型；Reviewer/Verifier 通过 `.pi/settings.json` 的 `subagents.agentOverrides` 选择另一个已认证模型，并可配置 `fallbackModels`。`@injaneity/pi-computer-use@0.4.3` 提供自动浏览器验收；缺失时基础插件仍可用，但 test release 回退人工。详见 [Pi P2 支持](./docs/pi-plugin.md)。
+Pi 不调用 Codex CLI。Lean 各角色从 cc-nexs profile 解析 `model`、`thinking` 和 `fallback_models`，由父代理直接传入 pi-subagents `Agent`；Reviewer 可用不同模型，也可用相同模型但更高 thinking，主模型不可用时按 fallback 顺序重试。`.pi/settings.json` 只保留 Pi 认证与 `enabledModels` 范围。`@injaneity/pi-computer-use@0.4.3` 提供自动浏览器验收；缺失时基础插件仍可用，但 test release 回退人工。详见 [Pi P2 支持](./docs/pi-plugin.md)。
 
 Claude Code 自动环境验收要求 `chrome-devtools-mcp` 已配置并可调用。Codex 复用当前已登录的 in-app/Chrome 会话。三端都只访问 `release.test.allowed_hosts`；不得从项目 memory、Markdown 或 Git 读取明文账号密码，必要登录只允许通过 opaque `credential_ref` 对接外部 secret provider。
 
@@ -216,21 +255,27 @@ Claude Code、Codex 和 Pi 共享同一命令语义，但使用各运行时的�
 
 | 运行时 | 推荐入口 |
 | --- | --- |
-| Claude Code | `/cc-nexs:run 01`、`/cc-nexs:release-test 01`、`/cc-nexs:approve-deploy 01` |
-| Codex Desktop / CLI | `$cc-nexs-run 01`、`$cc-nexs-release-test 01`、`$cc-nexs-approve-deploy 01` |
-| Pi | `/cc-nexs:run 01`、`/cc-nexs:release-test 01`、`/cc-nexs:approve-deploy 01` |
-| 普通终端 | `cc-nexs release-test 01`、`cc-nexs approve-spec 01`、`cc-nexs approve-deploy 01 [M1]` |
+| Claude Code | `/cc-nexs:plan 01`、`/cc-nexs:run 01`、`/cc-nexs:approve-release 01` |
+| Codex Desktop / CLI | `$cc-nexs-plan 01`、`$cc-nexs-run 01`、`$cc-nexs-approve-release 01` |
+| Pi | `/cc-nexs:plan 01`、`/cc-nexs:run 01`、`/cc-nexs:approve-release 01` |
+| 普通终端 | `cc-nexs approve-plan 01`、`cc-nexs verify-local 01`、`cc-nexs approve-release 01` |
 
 ```bash
-/cc-nexs:init "需求描述"          # 默认 fast；按 workspace 为每个仓库建独立 worktree
-/cc-nexs:run [编号]               # 自动状态机；默认仅 G1 固定暂停，G2 是 test 自动化的 fallback
+/cc-nexs:init "需求描述"          # 默认 lean；每仓独立 worktree + feature/<id>-<slug>
+/cc-nexs:plan [编号]               # 生成 requirements/plan 与临时 HTML，停 Gateway A
+/cc-nexs:approve-plan [编号]       # 批准 plan 哈希
+/cc-nexs:run [编号]                # 实现 → 本地验证 → 一次集中 Review → test 验收
+/cc-nexs:approve-release [编号]    # Gateway B，批准精确 tested fingerprint
+/cc-nexs:request-release-changes [编号] --type=... --feedback="..."  # Gateway B 提意见并安全回流
+/cc-nexs:release-base [编号]       # 批准后合并配置 base，docs 最后归档
 /cc-nexs:run [编号] --no-auto-test-release # 本次显式改走人工 test 发布
 /cc-nexs:release-test [编号]      # 完整 candidate 确定性合入 test + 调 release driver
 /cc-nexs:approve-spec [编号]      # 人工放行 spec
 /cc-nexs:status [编号]            # 只读看状态
 /cc-nexs:build [--phase=...]      # 按 git diff 自动选 build/test 命令并跑
 
-/cc-nexs:hotfix "现象描述"        # 旁路 bug 修复（按现象自动判档 P0/P1/P2/P3）
+/cc-nexs:init "现象描述" --mode=hotfix --repos=api  # 独立 latest-base worktree/feature 分支
+/cc-nexs:hotfix [新编号]           # mini-Lean：P0/P1/P2/P3、本地验证、一次 Review、test、Gateway B
 ```
 
 G1/G2 是状态机暂停点，不是全局工具锁。等待人工确认时，父会话仍可执行用户授权的 Git、SQL、SSH、部署、诊断和文档操作；只有 cc-nexs 的下一角色不会被派发。
@@ -256,7 +301,7 @@ paths_override:
       test_cmd:  "cd web && pnpm test"
 ```
 
-跨模块改动（同时改了 backend + web）：按 yml 顺序串行跑两套命令，任一失败 fail fast。Tech Lead / Fullstack 编码完应直接调 `/cc-nexs:build` 取代固定的 `mvn compile`。
+从任一需求 worktree 运行时会向上发现 workspace 根配置，也可显式传 `--config-root`。跨模块改动（同时改了 backend + web）默认最多并行 2 个独立模块；用 `depends_on` 声明顺序约束，命中下游模块时会自动补齐依赖闭包。成功结果绑定完整 Git candidate fingerprint 并缓存在仓库外，HEAD/base/diff/untracked/命令任一变化都会重新执行。`workflow.local_verify.reuse_passed=true` 还会复用同一 candidate 已通过的最终本地 driver 证据。
 
 ### 多仓 Worktree 与 Git Custodian（v0.4）
 
@@ -278,7 +323,7 @@ cd <workspace-root>
 ## 设计原则
 
 1. **事件状态机** —— `progress.json` v2 是带 revision 的权威事件记录，`progress.md` 仅作人类可读视图
-2. **G1 固定、G2 fallback** —— G1 是 spec 人工决策；G2 只在显式退出、能力不足或 legacy 流程中暂停
+2. **两类门禁语义明确** —— Lean 固定 Gateway A（计划）与 Gateway B（tested candidate）；legacy G1 固定，G2 仅在显式退出、能力不足或旧流程中 fallback
 3. **三档熔断** —— review 反复打回、修复反复失败、验收反复未过分别升级到不同状态
 4. **角色边界硬隔离** —— hooks 通过 `CC_NEXS_ROLE` 环境变量拦截越权操作
 5. **预设可插拔** —— 新项目栈写新 preset，不动 core

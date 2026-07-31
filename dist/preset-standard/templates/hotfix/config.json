@@ -1,0 +1,11 @@
+{
+  "mode": "hotfix",
+  "release": { "test": "inherit" },
+  "models": {
+    "roles": {
+      "hotfix-developer": "balanced",
+      "hotfix-reviewer": "review",
+      "hotfix-verifier": "balanced"
+    }
+  }
+}

@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-build
-description: /cc-nexs:build 的 Pi P2 适配 skill。 支持 preset-standard fast 模式，并通过 pi-subagents 运行隔离角色。 按 git diff + cc-nexs.config.yml 的 paths_override.modules 规则，自动选择并执行需要跑的 build / test 命令。跨模块改动会顺序跑命中的所有模块；任一失败 fail fast。
+description: /cc-nexs:build 的 Pi P2 适配 skill。 支持 preset-standard lean（默认）与 fast 模式，并通过 pi-subagents 运行隔离角色。 Run only changed modules with exact-candidate success caching and dependency-aware bounded parallelism.
 ---
 
 # /cc-nexs:build for Pi
@@ -9,15 +9,22 @@ Read and follow `../../../dist/preset-standard/commands/build.md` as the authori
 
 ## P2 Runtime Contract
 
-1. Pi support is experimental and limited to `preset-standard` fast mode plus the `/cc-nexs:hotfix` bypass. Full orchestration and compound remain unsupported. Do not silently downgrade an existing feature.
+1. Pi support covers `preset-standard` lean (default), standalone hotfix, and legacy fast. Full orchestration and compound remain unsupported. Do not silently downgrade an existing feature.
 2. Use the installed `pi-subagents` tool for every role dispatch. Use package-qualified agents and foreground fresh context:
    - Repo Scout: `cc-nexs.repo-scout`
    - Fullstack: `cc-nexs.fullstack`
    - Reviewer: `cc-nexs.reviewer`
    - Verifier: `cc-nexs.verifier`
+   - Lean Planner: `cc-nexs.lean-planner`
+   - Lean Developer: `cc-nexs.lean-developer`
+   - Lean Reviewer: `cc-nexs.lean-reviewer`
+   - Lean Verifier: `cc-nexs.lean-verifier`
+   - Hotfix Developer: `cc-nexs.hotfix-developer`
+   - Hotfix Reviewer: `cc-nexs.hotfix-reviewer`
+   - Hotfix Verifier: `cc-nexs.hotfix-verifier`
 3. Never invoke Claude Code, the Claude Task tool, Codex CLI, or a nested `pi` CLI. Legacy invocation snippets in the authoritative command are role task descriptions, not commands to execute in Pi.
-4. The Fullstack agent inherits the active Pi default unless the user configured an override. Reviewer and Verifier model selection belongs exclusively to Pi settings under `subagents.agentOverrides`; cc-nexs ships no fixed model IDs.
-5. Before the first review or verification dispatch, confirm that `cc-nexs.reviewer` and `cc-nexs.verifier` resolve to an authenticated model different from the implementation model. Accept ordered `fallbackModels`. If the mapping is absent, unavailable, or resolves to the implementation model, stop and explain how to configure it; independent context alone is not heterogeneous review.
+4. Resolve Lean profiles from cc-nexs project/feature config and pass the selected `model` and `thinking` directly to the pi-subagents `Agent` call. Omit `model` when it is `inherit`. If the primary model is unavailable, retry the ordered cc-nexs `fallback_models` list. Project `.pi/settings.json` remains only the Pi authentication/`enabledModels` authority; do not duplicate role mappings there. Public cc-nexs files ship no provider-specific model IDs.
+5. For lean, resolve role profiles from project/feature configuration: the Reviewer may use a different authenticated model or the same model with higher thinking, but must use a fresh child context. For legacy fast, preserve its configured heterogeneous-review guard. Accept ordered fallbackModels.
 6. Role children never mutate Git or progress state. The parent orchestrator owns state transitions and invokes the Git Custodian command itself.
 7. Set or preserve `CC_NEXS_RUNTIME=pi` and `CC_NEXS_PLUGIN_ROOT` for shell helpers. Resolve all feature paths through the existing workspace/progress contracts.
 8. Preserve the command's artifact locations, human gates, counters, validation, and stop behavior exactly. Runtime adaptation changes dispatch mechanics only.

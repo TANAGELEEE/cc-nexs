@@ -170,6 +170,16 @@ export function prepareFeatureForMerge({ repo, worktree, branch, baseBranch, can
   return { branch, baseBranch, baseCommit: git(repo, ['rev-parse', base]), oldHead, head, updated: oldHead !== head };
 }
 
+export function assertCandidateContainsRemoteBase({ repo, candidateRef, baseBranch }) {
+  const sourceCommit = resolveCandidateCommit({ repo, candidateRef });
+  const base = fetchBase(repo, baseBranch);
+  const baseCommit = git(repo, ['rev-parse', base]);
+  if (!isAncestor(repo, baseCommit, sourceCommit)) {
+    throw new Error(`[cc-nexs] BASE_CHANGED: candidate ${sourceCommit} does not contain latest origin/${baseBranch} ${baseCommit}`);
+  }
+  return { sourceCommit, baseCommit };
+}
+
 export function integrateCandidateToTest({ repo, repositoryId, candidateRef, expectedSourceCommit = null, targetBranch }) {
   assertSegment(repositoryId, 'repository id');
   assertSegment(targetBranch, 'test branch');

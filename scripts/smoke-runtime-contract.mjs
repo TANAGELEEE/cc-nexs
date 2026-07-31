@@ -2,7 +2,7 @@
 // Deterministic runtime contract smoke for cc-nexs document locations and mode semantics.
 //
 // This does not invoke an LLM. It proves the packaged templates, state-machine module,
-// and hotfix document locations line up with the SOP that Codex mirror skills must follow.
+// Lean/full/fast state and hotfix document locations line up with the shared SOP.
 
 import {
   copyFileSync,
@@ -81,6 +81,44 @@ function initFeature({ id, slug, mode }) {
   return reqDir;
 }
 
+function initLeanFeature({ id, slug }) {
+  const reqDir = join(allDocs, 'doc', `${id}.${slug}`);
+  copyDir(join(TEMPLATES, 'lean'), reqDir);
+  rewritePlaceholders(reqDir, id, slug);
+  return reqDir;
+}
+
+function initHotfixFeature({ id, slug }) {
+  const reqDir = join(allDocs, 'doc', `${id}.${slug}`);
+  copyDir(join(TEMPLATES, 'hotfix'), reqDir);
+  rewritePlaceholders(reqDir, id, slug);
+  return reqDir;
+}
+
+function assertHotfixDocs(reqDir) {
+  for (const rel of ['hotfix.md', 'config.json', 'progress.json', 'progress.md']) {
+    assert(existsSync(join(reqDir, rel)), `${reqDir}: missing Hotfix artifact ${rel}`);
+  }
+  for (const rel of ['README.md', 'requirements.md', 'plan.md', 'spec.md', 'bugs', 'qa-scripts']) {
+    assert(!existsSync(join(reqDir, rel)), `${reqDir}: Hotfix must not create ${rel}`);
+  }
+  assert(readFileSync(join(reqDir, 'hotfix.md'), 'utf8').includes('HOTFIX-SCOPE START'), 'Hotfix scope marker missing');
+  assert(JSON.parse(readFileSync(join(reqDir, 'config.json'), 'utf8')).mode === 'hotfix', 'Hotfix config mode must be hotfix');
+  assert(JSON.parse(readFileSync(join(reqDir, 'progress.json'), 'utf8')).mode === 'hotfix', 'Hotfix progress mode must be hotfix');
+}
+
+function assertLeanDocs(reqDir) {
+  for (const rel of ['requirements.md', 'plan.md', 'config.json', 'progress.json', 'progress.md']) {
+    assert(existsSync(join(reqDir, rel)), `${reqDir}: missing Lean artifact ${rel}`);
+  }
+  for (const rel of ['README.md', 'spec.md', 'test-report.md', 'acceptance.md', 'bugs']) {
+    assert(!existsSync(join(reqDir, rel)), `${reqDir}: Lean must not create ${rel}`);
+  }
+  assert(readFileSync(join(reqDir, 'plan.md'), 'utf8').includes('APPROVAL-SCOPE START'), 'Lean plan approval marker missing');
+  assert(JSON.parse(readFileSync(join(reqDir, 'config.json'), 'utf8')).mode === 'lean', 'Lean config mode must be lean');
+  assert(JSON.parse(readFileSync(join(reqDir, 'progress.json'), 'utf8')).mode === 'lean', 'Lean progress mode must be lean');
+}
+
 function assertFeatureDocs(reqDir, mode) {
   const required = [
     'README.md',
@@ -130,6 +168,41 @@ async function assertStateMachine() {
   const mod = await import(pathToFileURL(join(DIST, 'lib', 'state-machine.mjs')).href);
   const fullRoles = ['repo-scout', 'planner', 'tech-lead', 'sa', 'qa', 'evaluator'];
   const fastRoles = ['fullstack', 'reviewer', 'verifier'];
+  const leanRoles = ['lean-planner', 'lean-developer', 'lean-reviewer', 'lean-verifier'];
+  const hotfixRoles = ['hotfix-developer', 'hotfix-reviewer', 'hotfix-verifier'];
+
+  expectStep(
+    mod.nextStep({ state: 'INIT', enabledRoles: leanRoles, mode: 'lean' }),
+    { next: 'PLANNING', role: 'lean-planner', action: 'draft_plan' },
+    'lean INIT',
+  );
+  expectStep(
+    mod.nextStep({ state: 'IMPLEMENTING', enabledRoles: leanRoles, mode: 'lean' }),
+    { next: 'LOCAL_VERIFYING', role: null, action: 'verify_local' },
+    'lean local verification',
+  );
+  expectStep(
+    mod.nextStep({ state: 'LOCAL_VERIFYING', enabledRoles: leanRoles, mode: 'lean' }),
+    { next: 'CONSOLIDATED_REVIEW', role: 'lean-reviewer', action: 'review_candidate' },
+    'lean consolidated review',
+  );
+  const leanReleaseGate = mod.nextStep({ state: 'TEST_VERIFIED', enabledRoles: leanRoles, mode: 'lean' });
+  expectStep(leanReleaseGate, { next: 'RELEASE_PENDING_HUMAN', action: 'await_release_approval' }, 'lean release gate');
+  assert(leanReleaseGate.stop === true, 'Lean release gate must stop for human approval');
+
+  expectStep(
+    mod.nextStep({ state: 'HOTFIX_LOCAL_VERIFYING', enabledRoles: hotfixRoles, mode: 'hotfix', workflow: { hotfix: { severity: 'P2' } } }),
+    { next: 'HOTFIX_REVIEWING', role: 'hotfix-reviewer', action: 'review_hotfix' },
+    'hotfix concentrated Review',
+  );
+  expectStep(
+    mod.nextStep({ state: 'HOTFIX_LOCAL_VERIFYING', enabledRoles: hotfixRoles, mode: 'hotfix', workflow: { hotfix: { severity: 'P3' } } }),
+    { next: 'HOTFIX_CANDIDATE_READY', action: 'assert_p3_candidate' },
+    'hotfix P3 deterministic Review skip',
+  );
+  const hotfixGate = mod.nextStep({ state: 'HOTFIX_TEST_VERIFIED', enabledRoles: hotfixRoles, mode: 'hotfix' });
+  expectStep(hotfixGate, { next: 'HOTFIX_RELEASE_PENDING_HUMAN', action: 'await_release_approval' }, 'hotfix Gateway B');
+  assert(hotfixGate.stop === true, 'Hotfix release gate must stop for human approval');
 
   expectStep(
     mod.nextStep({ state: 'REQ_DRAFTED', enabledRoles: fullRoles, mode: 'full' }),
@@ -284,10 +357,16 @@ try {
   assertFeatureDocs(fastReq, 'fast');
   assertNoWrongLocations('02', 'runtime-fast');
 
+  const leanReq = initLeanFeature({ id: '03', slug: 'runtime-lean' });
+  assertLeanDocs(leanReq);
+  assertNoWrongLocations('03', 'runtime-lean');
+
+  const hotfixReq = initHotfixFeature({ id: '04', slug: 'runtime-hotfix' });
+  assertHotfixDocs(hotfixReq);
+  assertNoWrongLocations('04', 'runtime-hotfix');
+
   await assertStateMachine();
 
-  writeHotfixArtifacts(fullReq);
-  assertHotfixLocations(fullReq);
   assertAllDocsGitAddOnlyFeatureDir('01', 'runtime-full');
 
   const solutionDir = join(repo, 'docs', 'solutions');
@@ -301,7 +380,7 @@ try {
     for (const error of errors) console.error(`- ${error}`);
     process.exitCode = 1;
   } else {
-    console.log('Runtime contract smoke passed: full, fast, hotfix document locations and state semantics');
+    console.log('Runtime contract smoke passed: lean-default, standalone hotfix, full, and fast document/state semantics');
   }
 } finally {
   rmSync(tmp, { recursive: true, force: true });

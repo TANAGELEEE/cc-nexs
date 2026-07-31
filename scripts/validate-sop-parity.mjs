@@ -51,8 +51,12 @@ function validatePresetModes() {
   const text = read(path);
   mustContain(path, text, [
     'modes:',
+    'lean:',
+    'hotfix:',
     'full:',
     'fast:',
+    'state_machine: lean',
+    'state_machine: hotfix',
     'state_machine: full',
     'state_machine: fast',
     '- repo-scout',
@@ -64,6 +68,16 @@ function validatePresetModes() {
     '- fullstack',
     '- reviewer',
     '- verifier',
+    '- lean-planner',
+    '- lean-developer',
+    '- lean-reviewer',
+    '- lean-verifier',
+    '- hotfix-developer',
+    '- hotfix-reviewer',
+    '- hotfix-verifier',
+    'default_mode: lean',
+    'model_profile: review',
+    'local_verify:',
     'review_revision: 2',
     'fix_per_bug: 2',
     'evaluator_reject: 2',
@@ -82,16 +96,17 @@ function validateInitCommand() {
   const path = join(SRC_NEXS, 'commands', 'init.md');
   const text = read(path);
   mustContain(path, text, [
-    '--mode=full|fast',
+    '--mode=lean|hotfix|fast|full',
+    '默认 `lean`',
     'createWorkspaceWorktrees',
     '.worktrees/<id>-<slug>/<repo-id>/',
-    'cp -r "${CC_NEXS_RESOLVED_PLUGIN_ROOT}/templates/"* "${REQ_DIR}/"',
+    'templates/${MODE}/',
     '"mode"',
     'requirements.md',
     'progress.md',
     'progress.json',
     'config.json',
-    'bugs/BUG-template.md',
+    'plan.md',
   ]);
 }
 
@@ -99,10 +114,14 @@ function validateRunCommand() {
   const path = join(ROOT, 'packages', 'core', 'commands', 'run.md');
   const text = read(path);
   mustContain(path, text, [
+    'PLAN_PENDING_HUMAN',
+    'CONSOLIDATED_REVIEW',
+    'RELEASE_PENDING_HUMAN',
+    'BASE_MERGING',
     'SPEC_PENDING_HUMAN',
     'DEPLOY_GATE',
     'MODE=$(grep -oE',
-    'full|fast|lite|hotfix',
+    'lean|full|fast|lite|hotfix',
     'Role → command dispatch table',
     '/cc-nexs:recon',
     '/cc-nexs:planner',
@@ -118,7 +137,7 @@ function validateRunCommand() {
     'Git Custodian',
     'candidate commit',
     'progress.json',
-    'docs: <id> hotfix BUG-<N> 修复记录',
+    'HOTFIX_RELEASE_PENDING_HUMAN',
     'syncFeatureReadme',
     '--no-auto-test-release',
     'ALL_SPRINTS_DEV_DONE',
@@ -126,6 +145,15 @@ function validateRunCommand() {
     'TEST_RELEASE',
     'FINAL_QA_BLOCKED',
     '/cc-nexs:release-test',
+    '/cc-nexs:plan <id>',
+    '/cc-nexs:execute <id>',
+    '/cc-nexs:lean-review <id>',
+    '/cc-nexs:verify-local <id>',
+    '/cc-nexs:approve-release <id>',
+    '/cc-nexs:request-release-changes <id>',
+    'GATEWAY_B_CHANGE_REQUESTED',
+    'SCOPE_CHANGE_REQUESTED',
+    '完整 Review 只有一次；修复只允许一次 delta closure',
   ]);
 }
 
@@ -137,23 +165,19 @@ function validateHotfixCommand() {
     'P1',
     'P2',
     'P3',
-    'BUG-<N>.md',
-    '${REQ_DIR}bugs/BUG-<N>.md',
-    '${REQ_DIR}qa-scripts/BUG-<N>-repro.*',
-    'SA 轻量评审',
-    'append 到 ${REQ_DIR}bugs/BUG-<N>.md',
-    'Evaluator 局部打分',
-    '${REQ_DIR}acceptance.md',
-    '${REQ_DIR}test-cases.md',
-    '${REQ_DIR}deploy.md',
-    '超出 hotfix 边界',
-    'diff > 500 行',
-    '同一 BUG 修超过 3 轮 SA NEEDS_REVISION',
+    'mode=hotfix',
+    'hotfix.md',
+    'HOTFIX-SCOPE',
+    'start-hotfix',
+    'HOTFIX_LOCAL_VERIFYING',
+    'HOTFIX_DELTA_REVIEW',
+    'HOTFIX_TEST_RELEASE',
+    'HOTFIX_RELEASE_PENDING_HUMAN',
+    '同一模型但更高 effort/thinking',
     'Git Custodian',
-    'Candidate recording',
-    'docs: <id> hotfix BUG-<N> 修复记录',
-    '/cc-nexs:release-test <id> --hotfix',
-    '本地验证禁止写 VERIFIED',
+    'release-test <id> --hotfix',
+    '/cc-nexs:approve-release <id>',
+    '禁止 `test -> base`',
   ]);
 }
 
@@ -166,11 +190,11 @@ function validateMirrorSkill(commandName, commandFile) {
     'Document Write Map',
     'Full / Fast / Hotfix Mode Locks',
     'all-docs/doc/{id}.{slug}/',
-    'bugs/BUG-*.md',
-    'qa-scripts/',
+    'hotfix.md',
     'docs/solutions/',
     'progress.md',
     'full',
+    'lean',
     'fast',
     'hotfix',
   ]);
@@ -195,8 +219,7 @@ function validateAllGeneratedMirrors() {
       'Document Write Map',
       'Full / Fast / Hotfix Mode Locks',
       'all-docs/doc/{id}.{slug}/',
-      'bugs/BUG-*.md',
-      'qa-scripts/',
+      'hotfix.md',
       'docs/solutions/',
       'progress.md',
     ]);
@@ -219,4 +242,4 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log('SOP parity validation passed: full, fast, hotfix, document paths, Codex mirrors');
+console.log('SOP parity validation passed: lean-default, full, fast, hotfix, document paths, Codex mirrors');

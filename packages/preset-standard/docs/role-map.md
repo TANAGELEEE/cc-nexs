@@ -1,8 +1,22 @@
 # 角色身份矩阵
 
-cc-nexs 按 `config.json.mode` 选择两套角色：
+cc-nexs 按 `config.json.mode` 选择三套角色：
+- **lean 模式（默认）**：Lean Planner / Lean Developer / Lean Reviewer / Lean Verifier；一次集中 Review
 - **full 模式**：五方异构 + 现状勘察（Repo Scout / Planner / Tech Lead / SA / QA / Evaluator）
 - **fast 模式**：三角色合并（Fullstack / Reviewer / Verifier）—— recon 折叠到 Fullstack `--phase=spec` 内部，见文末
+
+## lean 模式：低 token 角色矩阵
+
+| 维度 | Lean Planner | Lean Developer | Lean Reviewer | Lean Verifier |
+|---|---|---|---|---|
+| Session | 独立 | 每个并行任务独立 | 独立完整 Review / 独立 delta closure | 独立 test 黑盒 |
+| 写入 | `requirements.md`, `plan.md` approval scope | plan 批准路径内的代码/测试 | `plan.md` Review 区 | `plan.md` Test 区 |
+| 禁止 | 代码、Git、progress | approval scope、Git、progress | 代码、Git、progress | 源码、Git、progress |
+| 模型 | profile 可配置 | profile 可配置 | 可不同模型，或相同模型更高 effort/thinking | profile 可配置 |
+
+运行时映射：Claude Code 的 Lean 四角色全部使用独立 Claude 子代理；Codex 全部使用独立 native agent；Pi 全部使用 pi-subagents `Agent`，由父代理把 profile 解析出的 `model`/`thinking` 直接传入调用。Legacy full/fast 仍保留原有异构工具边界。
+
+Lean 的完整 Review 只有一次：查看全部仓累计 diff、批准边界、本地证据和风险，一次性列出全部 P0/P1。修复后最多一次 delta closure；再次阻塞转人工，不继续消耗 token。P2/P3 记录但不阻塞。
 
 ## full 模式：矩阵速查
 
@@ -129,11 +143,13 @@ SA 在评审代码 diff 时，会检查"这个 commit 是不是 Tech Lead 角色
 > Planner session 读 sa-review.md（包含 Tech Lead 报告的问题）→ 修订 spec.md
 ```
 
-## Hotfix 例外
+## Hotfix mini-Lean 角色
 
-§十 hotfix P2/P3 流程下，**Tech Lead 允许**写复现脚本（本职是 QA 的活）。这是为了让小 bug 修复链路尽量短。
+- Hotfix Developer：只在独立 latest-base worktree 实现绑定范围，不操作 Git/test/base。
+- Hotfix Reviewer：与实现隔离，一次集中 Review；修复后最多一次 delta。
+- Hotfix Verifier：在 test 的新 environment revision 上做黑盒 repro/回归/smoke，不读源码。
 
-但 hotfix P0/P1 必须升级为完整流程的子集：Tech Lead 写复现 → SA 轻量评审 → candidate → test release → 独立部署后回归 → Evaluator 局部打分。P2/P0/P1 本地验证只能到 FIXED，只有部署后回归可写 VERIFIED。
+Reviewer 可用不同模型，或相同模型配更高 effort/thinking；强制的是独立 session。P3 通过机器边界后可跳过 Reviewer，但不能跳过本地验证、test smoke 或 Gateway B。
 
 ## 五方在 progress.md 中的痕迹
 

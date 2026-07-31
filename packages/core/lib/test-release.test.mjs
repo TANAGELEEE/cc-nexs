@@ -169,6 +169,11 @@ test('test release integrates candidates, invokes structured driver, records evi
     );
     writeFileSync(projectConfigFile, `${JSON.stringify(projectConfig, null, 2)}\n`);
 
+    assert.throws(
+      () => runCcNexsCommand(['release-test', '05', '--dry-run', '--hotfix', '--progress', progressFile], { cwd: root }),
+      /--hotfix requires mode hotfix/,
+    );
+
     const dryRun = runCcNexsCommand(['release-test', '05', '--dry-run', '--progress', progressFile], { cwd: root });
     assert.equal(dryRun.dryRun, true);
     assert.equal(readProgressV2(progressFile).delivery.test.attempts.length, 0);

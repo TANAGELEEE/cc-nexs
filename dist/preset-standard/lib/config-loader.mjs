@@ -270,6 +270,10 @@ function deepMerge(base, override) {
   return out;
 }
 
+export function mergeModelConfigs(...configs) {
+  return configs.reduce((merged, config) => deepMerge(merged, config || {}), {});
+}
+
 /**
  * Resolve config given a project root and an optional explicit preset root.
  * Returns: { project, preset, presetRoot, projectRoot, locale, mergedThresholds, mergedStack }
@@ -322,6 +326,7 @@ export function loadConfig({ projectRoot = process.cwd(), presetRoot = null } = 
   };
   const mergedWorkflow = deepMerge(preset?.workflow || {}, project.workflow || {});
   const mergedRelease = deepMerge(preset?.release || {}, project.release || {});
+  const mergedModels = deepMerge(preset?.models || {}, project.models || {});
 
   // Project-level paths_override merges into preset.stack.
   // Use case: public preset ships with generic placeholders like "src/main/java/**";
@@ -350,6 +355,8 @@ export function loadConfig({ projectRoot = process.cwd(), presetRoot = null } = 
     //       test_cmd:  "cd web && pnpm test"
     ...(Array.isArray(pathsOverride.modules) && { modules: pathsOverride.modules }),
     ...(pathsOverride.diff_base !== undefined && { diff_base: pathsOverride.diff_base }),
+    ...(pathsOverride.build_cache !== undefined && { build_cache: pathsOverride.build_cache }),
+    ...(pathsOverride.build_max_parallel !== undefined && { build_max_parallel: pathsOverride.build_max_parallel }),
   };
 
   return {
@@ -364,6 +371,7 @@ export function loadConfig({ projectRoot = process.cwd(), presetRoot = null } = 
     mergedStack,
     mergedWorkflow,
     mergedRelease,
+    mergedModels,
   };
 }
 

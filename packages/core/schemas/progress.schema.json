@@ -13,7 +13,7 @@
       "properties": { "id": { "type": "string" }, "slug": { "type": "string" } }
     },
     "preset": { "type": "string" },
-    "mode": { "enum": ["fast", "full", "hotfix", "lite"] },
+    "mode": { "enum": ["lean", "fast", "full", "hotfix", "lite"] },
     "state": { "type": "string", "minLength": 1 },
     "revision": { "type": "integer", "minimum": 0 },
     "created_at": { "type": ["string", "null"] },
@@ -28,7 +28,65 @@
       }
     },
     "sprint": { "type": "object" },
+    "hotfix": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["severity", "related_feature", "scope_binding", "scope_bound_at", "review_required"],
+      "properties": {
+        "severity": { "enum": ["P0", "P1", "P2", "P3"] },
+        "related_feature": { "type": ["string", "null"] },
+        "scope_binding": {
+          "type": "object",
+          "required": ["hotfix_scope_sha256", "severity", "related_feature", "file"],
+          "properties": {
+            "hotfix_scope_sha256": { "type": "string" },
+            "severity": { "enum": ["P0", "P1", "P2", "P3"] },
+            "related_feature": { "type": ["string", "null"] },
+            "file": { "const": "hotfix.md" }
+          }
+        },
+        "scope_bound_at": { "type": "string" },
+        "review_required": { "type": "boolean" }
+      }
+    },
     "gates": { "type": "object" },
+    "local_verification": {
+      "type": "object",
+      "properties": {
+        "status": { "type": "string" },
+        "context": { "enum": [null, "implementation", "review", "test", "gateway_b", "hotfix_fix"] },
+        "candidate_fingerprint": { "type": ["string", "null"] },
+        "attempts": { "type": "array" }
+      }
+    },
+    "review": { "type": "object" },
+    "change_requests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["current", "items"],
+      "properties": {
+        "current": { "type": ["string", "null"] },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "kind", "feedback", "affected_acs", "paths", "status", "requested_by", "requested_at"],
+            "properties": {
+              "id": { "type": "string" },
+              "kind": { "enum": ["evidence", "implementation", "scope"] },
+              "feedback": { "type": "string", "minLength": 1 },
+              "affected_acs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+              "paths": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+              "status": { "enum": ["recorded", "open", "addressed", "approved"] },
+              "requested_by": { "type": "string" },
+              "requested_at": { "type": "string" },
+              "resolved_at": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
     "delivery": {
       "type": "object",
       "description": "Optional only for legacy progress.json compatibility. New v2 progress files include delivery; release mutations inject the safe per_sprint + manual default when it is absent.",
@@ -36,6 +94,7 @@
       "required": ["strategy", "test"],
       "properties": {
         "strategy": { "enum": ["final_only", "per_sprint"] },
+        "base": { "type": "object" },
         "test": {
           "type": "object",
           "additionalProperties": false,

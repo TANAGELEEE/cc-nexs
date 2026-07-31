@@ -6,6 +6,8 @@ All notable changes to cc-nexs will be documented here.
 
 ### 新增
 
+- **Lean 默认省 token 流程**：两个人工门禁、一次集中 Review、worktree/feature 分支隔离、精确 candidate 绑定的本地验证与 test/base 发布；Gateway B 意见按 evidence / implementation / scope 分流并同步回唯一 requirements/plan 文档。构建改为按变更模块选择、依赖感知并行、精确候选缓存，Claude Code、Codex、Pi 均支持按角色配置 model 与 effort/thinking。
+- **Hotfix mini-Lean**：Hotfix 改为独立 `mode=hotfix` 需求，从最新 base 创建自己的 feature/worktree，只维护一份 `hotfix.md`；P0/P1/P2 一次集中 Review，P3 机器边界后跳过，修复全生命周期最多一次 delta。Exact candidate 先进入 test 黑盒验收，Gateway B 批准后同一 candidate 才进入 base。Claude Code、Codex、Pi 使用专用可配置角色。
 - **per-feature README 自动同步**：每次 orchestrator 状态推进后自动调 `syncFeatureReadme(...)` 刷新 `doc/<id>/README.md` 的 AUTOGEN 区段（当前状态 / 产物索引 / 契约覆盖快照 / 待人工接入），兑现 README 模板"进入目录第一件事：读本文件"的承诺。
   - 新文件：`packages/core/lib/readme-sync.mjs` + 单测
   - templates/README.md 重组：加 `<!-- AUTOGEN:status START/END -->` 锚点；"下一步动作"小节移到锚点外人工维护
@@ -35,6 +37,11 @@ All notable changes to cc-nexs will be documented here.
   - 用法：`/cc-nexs:build [--phase=build|test|both] [--dry-run]`。
 
 ### 修复
+
+- Hotfix test 阻塞现在持久化计数并按 `fix_per_bug` 阈值熔断，已消耗唯一 delta 后不再重新进入修复循环；重复写入同一 test attempt 不重复计数。
+- P3 边界违规改为结构化 `HOTFIX_P3_BOUNDARY_BLOCKED -> HUMAN_INTERVENTION`，通过时将机器证明绑定 exact candidate，避免 Orchestrator 异常退出或证据丢失。
+- Lean 本地重验记录 `review` / `test` / `gateway_b` 来源，失败后回到准确修复状态；Hotfix Gateway B 三类意见补齐控制器级覆盖。
+- Lean Gateway A 计划增加复杂度与模式适配字段，Planner 在高耦合、契约破坏和高风险变更时明确建议 Full，由人工决定是否另建流程。
 
 - `lib/config-loader.mjs::parseYaml` 重写为递归下降。原栈机版本在嵌套 array-of-object（如 `forbidden_patterns:` + `excludes:` 数组、`modules:` + `match:` 数组）会崩，但因 loader 此前未在 orchestrator 关键路径调用，bug 一直未暴露。修复后能正确解析 `preset-standard/preset.yml` 的所有结构，新增能力：inline flow 数组（`["a","b"]`）、字符串里的 `#` 不再被当注释切掉。
 

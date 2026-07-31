@@ -15,7 +15,7 @@ const legacy = readProgress(markdown);
 const featureId = legacy.raw.match(/feature_id:\s*([^\s]+)/)?.[1] || 'unknown';
 const featureSlug = legacy.raw.match(/feature_slug:\s*([^\s]+)/)?.[1] || 'unknown';
 const preset = legacy.raw.match(/preset:\s*([^\s]+)/)?.[1] || 'preset-standard';
-const mode = legacy.raw.match(/mode:\s*(full|fast|hotfix|lite)/)?.[1] || 'fast';
+const mode = legacy.raw.match(/mode:\s*(lean|full|fast|hotfix|lite)/)?.[1] || 'fast';
 const progress = createProgressV2({
   featureId,
   featureSlug,

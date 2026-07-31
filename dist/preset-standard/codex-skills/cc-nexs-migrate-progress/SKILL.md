@@ -5,7 +5,7 @@ description: /cc-nexs:migrate-progress 的 Codex 镜像 skill。 当用户输入
 
 # /cc-nexs:migrate-progress for Codex
 
-This skill is the Codex mirror for `/cc-nexs:migrate-progress`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and full / fast / hotfix behavior as the Claude Code plugin.
+This skill is the Codex mirror for `/cc-nexs:migrate-progress`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and lean / full / fast / hotfix behavior as the Claude Code plugin.
 
 ## Authoritative Command
 
@@ -17,10 +17,11 @@ Read and follow `../../commands/migrate-progress.md` as the single source of tru
 2. Preserve the command's state-machine contract. If the command says a single-step command must not advance `progress.md`, do not advance it; if `run` is the orchestrator, let `run` own state transitions.
 3. Preserve mode behavior exactly:
    - `full`: five-role SOP with Repo Scout pre-spec recon, Planner / Tech Lead / SA / QA / Evaluator isolation, and sprint loop.
-   - `fast`: three-role flow with Fullstack / Reviewer / Verifier, single sprint, stricter thresholds, and no TECH_LEAD_REVIEW fallback.
-   - `hotfix`: bypass flow with P0/P1/P2/P3 grading, BUG document writes, and escalation back to full SOP when the hotfix boundary is exceeded.
+   - `lean`: default plan-first flow with two authored documents, two human gates, deterministic local verification, one consolidated Review, test verification, and approved base integration.
+   - `fast`: legacy three-role flow with Fullstack / Reviewer / Verifier, single sprint, stricter thresholds, and no TECH_LEAD_REVIEW fallback.
+   - `hotfix`: standalone mini-Lean flow with its own latest-base feature worktrees, one hotfix.md, bounded Review, test verification, and a human base gate.
 4. In Codex, every role runs as an independent native subagent using the role prompt from `../../agents/`. Never invoke Claude Code, a Claude subagent tool, or a nested `codex` CLI process. Runtime adaptation overrides any Claude-specific shell snippet in the authoritative command.
-5. Keep implementation and review in distinct native agent sessions. This provides independent-context review even when the active provider channel exposes only one model. Never pass a literal model id: inherit the current Codex session/channel so channel switches cannot make the plugin unavailable.
+5. Keep implementation and review in distinct native agent sessions. Resolve model profiles from preset < project < feature config. A Lean Reviewer may use a different model or the same model with higher reasoning effort. Provider-specific IDs are allowed only in private project/feature config; public preset defaults remain portable and inherit when unspecified.
 6. When a shell snippet references `$CLAUDE_PLUGIN_ROOT`, translate it to the installed Codex plugin root that contains this skill. In shell commands prefer `PLUGIN_ROOT=<plugin-root>` or `CC_NEXS_PLUGIN_ROOT=<plugin-root>` or substitute the absolute plugin root directly.
 7. Before editing or creating files, inspect the relevant command, agent, template, and current feature directory. Follow existing repo patterns and keep unrelated files untouched.
 8. Run the verification steps requested by the command. If a step cannot be run in the current Codex surface, record the exact limitation and preserve the command's expected stop/gate behavior.
@@ -30,15 +31,16 @@ Read and follow `../../commands/migrate-progress.md` as the single source of tru
 These are fixed cc-nexs locations, not Codex-specific alternatives:
 
 - Feature docs: `all-docs/doc/{id}.{slug}/requirements.md`, `repo-context.md`, `spec.md`, `sa-review.md`, `dev-plan.md`, `api-doc.md`, `deploy.md`, `test-cases.md`, `sa-test-review.md`, `test-report.md`, `sa-code-review.md`, `acceptance.md`, `progress.md`, and `README.md`.
-- Bug docs: `all-docs/doc/{id}.{slug}/bugs/BUG-*.md`, plus hotfix or QA repro assets under `all-docs/doc/{id}.{slug}/qa-scripts/`.
+- Hotfix record: `all-docs/doc/{id}.{slug}/hotfix.md` in an independently initialized hotfix feature.
 - Compound learnings: `docs/solutions/<topic>.md` plus the command-specific feature summary when `/cc-nexs:compound` requests it.
 - Document repo commits: when `all-docs/` is its own git repo, add only `doc/{id}.{slug}/` or the command-declared bug path and keep code-repo files out of that commit.
 
 ## Full / Fast / Hotfix Mode Locks
 
+- `lean`: preserve the plan and release gates, two authored documents, exact worktree/candidate binding, deterministic local driver, one full Review plus at most one delta closure, and test-before-base integration.
 - `full`: preserve Repo Scout pre-spec recon, Planner / Tech Lead / SA / QA / Evaluator isolation, sprint slicing, artifact completeness gate before Evaluator, single human gate after spec approval, and README sync around every state transition.
 - `fast`: preserve Fullstack / Reviewer / Verifier roles, single sprint, stricter counters, merged Reviewer acceptance parsing, Verifier black-box testing, no SA test-case review, and no TECH_LEAD_REVIEW fallback.
-- `hotfix`: preserve P0/P1/P2/P3 grading, P3 direct-fix boundary, P2 BUG file plus repro plus SA-light-review loop, P0/P1 Evaluator section plus regression case plus rollback section, and escalation to full SOP when hotfix boundaries are exceeded.
+- `hotfix`: preserve latest-base isolation, immutable scope binding, P0/P1/P2/P3 impact grading, deterministic P3 boundary, one Review plus at most one lifetime delta, test verification, and Gateway B before base integration.
 
 ## Completion Rule
 

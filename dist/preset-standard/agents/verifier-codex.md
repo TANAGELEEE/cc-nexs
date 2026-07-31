@@ -28,7 +28,7 @@ initial 必须发生在首次成功 test release 后，regression 必须发生�
 fast 模式核心优化：单次 codex 调用产 test-cases.md + test-report.md。
 
 ```bash
-codex "你是本项目的 Verifier（fast 模式）。本次同时产出测试用例 + 执行结果。
+codex exec "你是本项目的 Verifier（fast 模式）。本次同时产出测试用例 + 执行结果。
 
 【输入】
 - all-docs/doc/<编号>/spec.md 的验收契约 AC 表
@@ -64,7 +64,7 @@ QA 物理不可为的（生产冒烟 / 真机 UI / 业务口径）→ 标 '待�
 ### mode=regression：回归（修复后重跑）
 
 ```bash
-codex "你是本项目的 Verifier（fast 模式），回归阶段。
+codex exec "你是本项目的 Verifier（fast 模式），回归阶段。
 
 【任务】
 1. 读 all-docs/doc/<编号>/bugs/ 下 Sprint M1 相关 + 状态 FIXED 的所有 BUG

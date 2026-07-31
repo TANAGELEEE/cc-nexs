@@ -3,9 +3,12 @@ import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'n
 import { basename, dirname, join, resolve } from 'node:path';
 
 import { approveDeployGate, approveHumanGate, transitionState } from './progress-io.mjs';
-import { readProgressV2 } from './progress-v2.mjs';
+import { approveProgressGate, readProgressV2 } from './progress-v2.mjs';
+import { assertHotfixScopeCurrent } from './hotfix-contract.mjs';
+import { assertPlanApprovalCurrent, planApprovalBinding } from './plan-contract.mjs';
+import { syncHotfixChangeStatuses, syncPlanChangeStatuses } from './release-change-docs.mjs';
 
-const GATES = new Set(['g1', 'g2']);
+const GATES = new Set(['g1', 'g2', 'plan', 'release']);
 const SKIP_DIRS = new Set([
   '.git', '.next', '.turbo', 'build', 'coverage', 'dist', 'node_modules', 'out', 'target', 'vendor',
 ]);
@@ -31,7 +34,60 @@ export function approveFeatureGate({
   }
 
   const actor = approver || resolveGitApprover(dirname(progressFile));
-  if (gate === 'g1') {
+  if (gate === 'plan') {
+    if (before.mode !== 'lean') throw new Error(`plan gate requires lean mode, found ${before.mode}`);
+    const existing = before.gates.plan;
+    if (existing?.approved && before.state !== 'PLAN_PENDING_HUMAN') {
+      return approvalResult({ progressFile, progress: before, gate, sprint: null, approval: existing, alreadyApproved: true });
+    }
+    if (before.state !== 'PLAN_PENDING_HUMAN') {
+      throw new Error(`plan gate requires PLAN_PENDING_HUMAN, found ${before.state}`);
+    }
+    const binding = planApprovalBinding(dirname(progressFile));
+    if (!existing?.approved || existing?.binding?.combined_sha256 !== binding.combined_sha256) {
+      approveProgressGate(progressFile, { gate: 'plan', approver: actor, binding });
+    }
+    transitionState(markdownFile, {
+      from: 'PLAN_PENDING_HUMAN',
+      to: 'PLAN_APPROVED',
+      reason: 'human approved lean plan',
+    });
+  } else if (gate === 'release') {
+    if (!['lean', 'hotfix'].includes(before.mode)) throw new Error(`release gate requires lean or hotfix mode, found ${before.mode}`);
+    const pendingState = before.mode === 'hotfix' ? 'HOTFIX_RELEASE_PENDING_HUMAN' : 'RELEASE_PENDING_HUMAN';
+    if (before.state !== pendingState) {
+      const existing = before.gates.release;
+      if (existing?.approved) {
+        return approvalResult({ progressFile, progress: before, gate, sprint: null, approval: existing, alreadyApproved: true });
+      }
+      throw new Error(`release gate requires ${pendingState}, found ${before.state}`);
+    }
+    if (before.mode === 'lean') assertPlanApprovalCurrent(before, dirname(progressFile));
+    else assertHotfixScopeCurrent(before, dirname(progressFile));
+    const attempt = before.delivery?.test?.attempts?.at(-1);
+    if (!attempt || attempt.status !== 'verified' || attempt.verification?.result !== 'passed') {
+      throw new Error('[cc-nexs] release approval requires a verified test release attempt');
+    }
+    if (before.mode === 'hotfix' && before.hotfix?.severity === 'P3') {
+      const localAttempt = before.local_verification?.attempts?.findLast((item) => item.status === 'passed' && item.fingerprint === attempt.fingerprint);
+      if (!localAttempt?.evidence?.some((item) => item?.type === 'p3_boundary' && item.files === 1 && item.lines <= 20)) {
+        throw new Error('[cc-nexs] P3 release approval requires deterministic one-file/20-line boundary evidence');
+      }
+    } else if (before.review?.status !== 'passed' || before.review.candidate_fingerprint !== attempt.fingerprint) {
+      throw new Error('[cc-nexs] release approval requires a consolidated review for the tested candidate');
+    }
+    const binding = {
+      candidate_fingerprint: attempt.fingerprint,
+      source: attempt.source,
+      test_attempt: attempt.id,
+      environment_revision: attempt.environment_revision,
+      plan_binding: before.mode === 'lean' ? before.gates.plan?.binding?.combined_sha256 || null : null,
+      hotfix_scope_binding: before.mode === 'hotfix' ? before.hotfix.scope_binding.hotfix_scope_sha256 : null,
+    };
+    const approved = approveProgressGate(progressFile, { gate: 'release', approver: actor, binding });
+    if (before.mode === 'hotfix') syncHotfixChangeStatuses(join(dirname(progressFile), 'hotfix.md'), approved.change_requests?.items);
+    else syncPlanChangeStatuses(join(dirname(progressFile), 'plan.md'), approved.change_requests?.items);
+  } else if (gate === 'g1') {
     const existing = before.gates.g1;
     if (existing?.approved && before.state !== 'SPEC_PENDING_HUMAN') {
       return approvalResult({ progressFile, progress: before, gate, sprint: null, approval: existing, alreadyApproved: true });
@@ -85,7 +141,9 @@ export function approveFeatureGate({
   const effectiveSprint = gate === 'g2' ? parseApprovedSprint(after, sprint) : null;
   const approval = gate === 'g1'
     ? after.gates.g1
-    : effectiveSprint === null ? after.gates.g2 : after.gates.g2.sprints[String(effectiveSprint)];
+    : gate === 'plan' ? after.gates.plan
+      : gate === 'release' ? after.gates.release
+        : effectiveSprint === null ? after.gates.g2 : after.gates.g2.sprints[String(effectiveSprint)];
   return approvalResult({ progressFile, progress: after, gate, sprint: effectiveSprint, approval, alreadyApproved: false });
 }
 

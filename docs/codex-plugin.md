@@ -4,11 +4,11 @@ cc-nexs now ships a Codex plugin side by side with the Claude Code plugin. The C
 
 ## Runtime isolation and models
 
-Inside Codex, every role is dispatched as an independent native agent. The plugin does not start Claude Code and does not recursively invoke the Codex CLI. Implementer and reviewer contexts remain isolated, but cc-nexs does not claim model-level heterogeneity when the active channel exposes only one model.
+Inside Codex, every role is dispatched as an independent native agent. The plugin does not start Claude Code and does not recursively invoke the Codex CLI. Implementer and reviewer contexts always remain isolated.
 
-No model ID is stored in a preset or generated skill. Every role inherits the current Codex channel/session, so switching providers or channels cannot make the plugin fail merely because a previously named model is unavailable.
+The public preset stores portable profiles only. Private project or feature config may assign each Lean role a concrete model and reasoning effort. This supports either a different Review model or the same model at a higher reasoning level; unspecified model IDs inherit the current Codex channel.
 
-Inside Claude Code, the same preset intentionally remains hybrid: planning and implementation roles use isolated Claude subagents, while SA/QA/Evaluator/Reviewer roles use the configured Codex CLI without passing a hard-coded model argument.
+Inside Claude Code, all Lean roles use isolated Claude subagents, so Developer and Reviewer can use the same Claude model at different effort levels or different Claude models. Legacy full/fast SA/Evaluator/Reviewer roles retain their existing Codex CLI separation; executor-aware resolution uses the `codex` profile for those roles.
 
 ## Artifact Layout
 
@@ -41,7 +41,15 @@ Codex plugins expose reusable workflows through skills. During build, every `com
 | Claude Code command | Codex mirror skill |
 | --- | --- |
 | `/cc-nexs:init` | `$cc-nexs-init` |
+| `/cc-nexs:plan` | `$cc-nexs-plan` |
+| `/cc-nexs:approve-plan` | `$cc-nexs-approve-plan` |
 | `/cc-nexs:run` | `$cc-nexs-run` |
+| `/cc-nexs:verify-local` | `$cc-nexs-verify-local` |
+| `/cc-nexs:lean-review` | `$cc-nexs-lean-review` |
+| `/cc-nexs:lean-verify` | `$cc-nexs-lean-verify` |
+| `/cc-nexs:approve-release` | `$cc-nexs-approve-release` |
+| `/cc-nexs:request-release-changes` | `$cc-nexs-request-release-changes` |
+| `/cc-nexs:release-base` | `$cc-nexs-release-base` |
 | `/cc-nexs:approve-spec` | `$cc-nexs-approve-spec` |
 | `/cc-nexs:release-test` | `$cc-nexs-release-test` |
 | `/cc-nexs:status` | `$cc-nexs-status` |
@@ -55,10 +63,11 @@ Codex plugins expose reusable workflows through skills. During build, every `com
 The original slash-style text remains in skill descriptions as a compatibility hint, but it is not a native Codex slash command and must never be executed as a shell path. Use the explicit `$cc-nexs-*` skill form:
 
 ```text
-$cc-nexs-init "添加 /api/health 健康检查接口" --mode=fast
+$cc-nexs-init "添加 /api/health 健康检查接口"
+$cc-nexs-plan 01
+$cc-nexs-approve-plan 01
 $cc-nexs-run 01
-$cc-nexs-release-test 01
-$cc-nexs-approve-deploy 01
+$cc-nexs-approve-release 01
 $cc-nexs-hotfix "支付回调偶现 500"
 ```
 
@@ -74,14 +83,45 @@ Codex must write to exactly the same locations as Claude Code:
 
 | Flow | Required locations |
 | --- | --- |
+| `lean` | `requirements.md` and `plan.md` are the only authored documents; `config.json`, `progress.json`, and `progress.md` are control files; HTML is rendered to a local temporary directory only |
 | `full` | `all-docs/doc/{id}.{slug}/requirements.md`, `repo-context.md`, `spec.md`, `sa-review.md`, `dev-plan.md`, `api-doc.md`, `deploy.md`, `test-cases.md`, `sa-test-review.md`, `test-report.md`, `bugs/`, `sa-code-review.md`, `acceptance.md`, `progress.md`, `README.md` |
 | `fast` | Same `all-docs/doc/{id}.{slug}/` directory, single-sprint artifacts, `repo-context.md` folded into Fullstack spec phase, `test-cases.md` + `test-report.md` from Verifier, `sa-code-review.md` + `acceptance.md` from Reviewer |
-| `hotfix` | Existing feature's `all-docs/doc/{id}.{slug}/bugs/BUG-*.md`, optional repro assets under `qa-scripts/`, and the hotfix record committed to `all-docs` when configured |
+| `hotfix` | Its own `all-docs/doc/{id}.{slug}/hotfix.md`; `config.json`, `progress.json`, and `progress.md` are control files. It never writes into an older feature directory. |
 | `compound` | `docs/solutions/<topic>.md` plus `all-docs/doc/{id}.{slug}/compound-summary.md` |
 
 Generated Codex skills explicitly forbid relocating these paths.
 
-## Full / Fast / Hotfix Parity
+## Lean / Full / Fast / Hotfix Parity
+
+### Lean (default)
+
+`mode=lean` keeps the low-token chain explicit:
+
+1. Planner creates one requirements document and one plan document, with optional parallel read-only research.
+2. Gateway A binds both documents by hash.
+3. Developers execute non-overlapping plan tasks in per-repository worktrees and feature branches.
+4. A deterministic local driver runs build/start/smoke/e2e against the accumulated candidate.
+5. One independent consolidated Review reports all P0/P1 blockers; only one delta closure is allowed after fixes.
+6. The exact candidate is integrated to test and verified there.
+7. Gateway B binds the reviewed and test-verified fingerprint before non-force base integration; docs are finalized last.
+
+Private model configuration uses ordinary nested YAML. The following intentionally uses the same model with stronger Review reasoning; set another model ID if heterogeneous Review is preferred:
+
+```yaml
+models:
+  profiles:
+    implementation:
+      codex:
+        model: your-model-id
+        effort: medium
+    review:
+      codex:
+        model: your-model-id
+        effort: high
+  roles:
+    lean-developer: implementation
+    lean-reviewer: review
+```
 
 ### Full
 
@@ -110,14 +150,15 @@ Both modes default to `auto_if_ready`; `--no-auto-test-release` or failed prereq
 
 ### Hotfix
 
-`/cc-nexs:hotfix` remains a bypass flow:
+`/cc-nexs:hotfix` is a standalone `mode=hotfix` mini-Lean flow:
 
-- P3: trivial fix path
-- P2: normal hotfix path with BUG artifact and local verification
-- P1/P0: escalated path with lightweight review and acceptance
-- Boundary exceeded: stop and convert the bug to full SOP
+- initialize a new id, latest-base worktrees, and `feature/<id>-<slug>`;
+- bind the sole `hotfix.md` scope, then implement and run the configured local driver;
+- P0/P1/P2 get one independent concentrated Review; P3 skips only after deterministic single-file/20-line/non-behavioral proof;
+- integrate the exact candidate to test, verify it in an independent session, then stop at Gateway B;
+- merge the same feature candidate—not test—to configured base branches after approval.
 
-Hotfix does not create a new feature directory unless the command explicitly escalates to full SOP.
+Any repair consumes at most one lifetime delta Review. Contract/schema/permission changes or broad refactoring stop and become a new Lean/Full change. Reviewer may use another model or the same model at higher effort; independent native-agent context is mandatory.
 
 ## Hooks
 
@@ -173,8 +214,8 @@ The Claude Code validator checks that Codex support has not changed the existing
 - generated Codex command mirror skills stay under `codex-skills/` and do not leak into Claude Code's `skills/`
 - `pnpm smoke:claude-install` runs `install-local.mjs` under a temporary HOME and checks Claude's installed plugin cache, known marketplace file, symlink, and enabled plugin settings without touching the real `~/.claude`
 
-The SOP parity validator checks the full / fast / hotfix load-bearing contract:
+The SOP parity validator checks the lean / full / fast / hotfix load-bearing contract:
 
-- `preset.yml` still declares full and fast mode role sets and thresholds
+- `preset.yml` declares Lean as default plus all explicit legacy mode role sets and thresholds
 - `init`, `run`, and `hotfix` commands still declare the expected document paths and mode branching rules
-- generated Codex mirror skills still include the document write map and full / fast / hotfix mode locks
+- generated Codex mirror skills still include the document write map and Lean / full / fast / hotfix mode locks

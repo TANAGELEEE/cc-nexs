@@ -11,8 +11,28 @@ updated_at: null
 
 ## 状态机字典
 
-> 状态分两套：full 模式可按多个 Sprint 开发，fast 模式固定单 Sprint。新需求均在全部开发完成后只发布/验收一次。
+> 状态分三套：lean 是新需求默认，full 可按多个 Sprint 开发，fast 固定单 Sprint。
 > 由 progress.json.mode 决定走哪一套，并要求与 config.json.mode 一致。
+
+### lean 模式（mode=lean，默认）
+
+| 状态 | 含义 |
+|---|---|
+| INIT / PLANNING | Lean Planner 维护 requirements.md 与 plan.md |
+| **PLAN_PENDING_HUMAN** | ⏸️ Gateway A，批准 requirements + plan scope 哈希 |
+| PLAN_APPROVED / IMPLEMENTING | 按路径所有权在每仓 feature worktree 实现 |
+| LOCAL_VERIFYING | 确定性 driver 执行 build/start/smoke/e2e |
+| CONSOLIDATED_REVIEW | 独立 Reviewer 一次性审全部累计 diff，只阻塞 P0/P1 |
+| REVIEW_FIXING / LOCAL_REVERIFYING / REVIEW_CLOSURE | 阻塞项修复、本地复验、最多一次 delta closure |
+| CANDIDATE_READY / TEST_RELEASE | 精确 candidate 合入 test 并发布 |
+| TEST_VERIFYING / TEST_FIXING | test 黑盒验收；失败后完整修复闭环 |
+| TEST_VERIFIED | test 环境全部必要 AC 通过 |
+| **RELEASE_PENDING_HUMAN** | ⏸️ Gateway B，批准 reviewed + test-verified fingerprint |
+| GATEWAY_B_CHANGE_REQUESTED / FIXING / LOCAL_REVERIFYING / DELTA_REVIEW | Gateway B 范围内意见的单次增量修复闭环 |
+| SCOPE_CHANGE_REQUESTED | Gateway B 改变需求/AC/方案边界，返回 Planner 与 Gateway A |
+| BASE_MERGING | Git Custodian non-force 合入配置 base，docs 最后 |
+| COMPLETE | base 集成与清理完成 |
+| HUMAN_INTERVENTION / *_BLOCKED | delta Review、发布或分支保护需要人工处理 |
 
 ### full 模式（mode=full）
 

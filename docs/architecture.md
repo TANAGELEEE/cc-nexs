@@ -84,7 +84,7 @@ core/i18n/*.json         →   skipExisting               →    i18n/
    │
    ▼
 6. 阶段命令通过 reviewer-adapter.mjs 选择工具：
-   - tool=claude-subagent → 用 Task 工具调子代理
+   - tool=claude-subagent → 用 Task 工具调子代理；Claude Code 的 Lean 四角色均走此路径
    - tool=codex → 用 Bash 工具调 codex CLI
    - tool=gemini / openai-cli / custom → 类似
    │
@@ -101,7 +101,7 @@ core/i18n/*.json         →   skipExisting               →    i18n/
 
 ```js
 loadConfig({ projectRoot, presetRoot? })
-  → { project, preset, overlay, locale, mergedThresholds, mergedStack, mergedWorkflow, mergedRelease }
+  → { project, preset, overlay, locale, mergedThresholds, mergedStack, mergedWorkflow, mergedRelease, mergedModels }
 ```
 
 读两份 YAML / JSON：项目级（`cc-nexs.config.yml`）+ preset 级（`preset.yml`）。
@@ -112,6 +112,7 @@ loadConfig({ projectRoot, presetRoot? })
 纯函数。无 I/O，无副作用。给定 `(state, counters, thresholds, enabledRoles, sprint, humanGateApproved)`，决定下一步。
 
 特点：
+- `mode=lean` 为新需求默认：plan gate、本地验证、一次集中 Review、test 验收、release gate、base merge
 - 三档熔断（review_revision / fix_per_bug / evaluator_reject）
 - 角色弹性（缺 evaluator 时 reviewer 兼任，缺 qa 时 reviewer 兼任）
 - 默认 stop：`SPEC_PENDING_HUMAN`（G1）；manual/legacy G2、test release block、manual verification 和熔断
@@ -126,8 +127,7 @@ loadConfig({ projectRoot, presetRoot? })
 
 ### `core/lib/reviewer-adapter.mjs`
 
-`planReviewerInvocation({tool, prompt, diffFile?, customTemplate?})` 返回 `{tool, mode, command|instruction}`。
-mode=bash 时给出 shell 命令；mode=task 时给出子代理调用提示。
+`planReviewerInvocation({tool, prompt, diffFile?, model?, effort?, fallbackModels?})` 返回结构化 argv 或原生子代理计划。Claude/Codex/Pi 的角色模型可由私有 project/feature config 覆盖；Reviewer 可与实现使用不同模型，也可使用相同模型和更高 effort/thinking。
 
 ### `core/lib/progress-io.mjs`
 
@@ -150,12 +150,25 @@ deep-merge core 的 zh-CN.json / en-US.json 与 preset 的 i18n/<locale>/strings
 跨平台 Node.js hook（取代 v0.1 的 bash hook）：
 
 - `role-boundary-guard.mjs` 按 `CC_NEXS_ROLE` 拦截越权读 / 写 / 命令
-- G1/G2 由状态机返回 `stop: true` 暂停角色派发；不使用全局 PreToolUse 封锁。审批只能通过 `cc-nexs approve-*` 核心命令记录事件和推进状态
+- Lean Gateway A/B 与 legacy G1/G2 由状态机返回 `stop: true` 暂停角色派发；不使用全局 PreToolUse 封锁。审批只能通过 `cc-nexs approve-*` 核心命令记录事件和推进状态
 - `pre-merge-check.mjs` 合并主干前跑 build_cmd + 检查 progress=COMPLETE
 
 通过 stdin JSON 协议接收工具调用入参，exit 0 放行 / 2 阻断。
 
 ## 状态机骨架
+
+Lean 默认：
+
+```text
+INIT → PLANNING → PLAN_PENDING_HUMAN
+→ IMPLEMENTING → LOCAL_VERIFYING → CONSOLIDATED_REVIEW
+→ TEST_RELEASE → TEST_VERIFYING → RELEASE_PENDING_HUMAN
+→ BASE_MERGING → COMPLETE
+```
+
+Lean 只维护 requirements.md 和 plan.md 两份人工文档；Review 阻塞后最多一次 delta closure。
+
+Legacy full：
 
 ```
 INIT → REQ_DRAFTED → RECON_DONE → SPEC_DRAFTED → SPEC_REVIEWING

@@ -1,0 +1,12 @@
+{
+  "mode": "lean",
+  "release": { "test": "inherit" },
+  "models": {
+    "roles": {
+      "lean-planner": "balanced",
+      "lean-developer": "balanced",
+      "lean-reviewer": "review",
+      "lean-verifier": "balanced"
+    }
+  }
+}

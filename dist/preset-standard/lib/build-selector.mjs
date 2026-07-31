@@ -10,8 +10,8 @@
 //   1. Get changed files: `git diff --name-only <diff_base>...HEAD` (worktree HEAD).
 //   2. For each module in mergedStack.modules, if any changed file matches any
 //      of its `match` globs, mark the module as "hit".
-//   3. Output the hit modules' build_cmd / test_cmd lists, in declaration order
-//      (de-duplicated by command string).
+//   3. Expand the hit modules' declared dependency closure, then output commands
+//      in declaration order (de-duplicated by command string).
 //   4. If no module matches (e.g. doc-only change, or modules unset), fall back
 //      to mergedStack.build_cmd / mergedStack.test_cmd.
 //
@@ -24,15 +24,17 @@
 //     "diff_base": "main",
 //     "changed_files": ["api-service/sa-core/src/.../Foo.java", ...],
 //     "matched_modules": ["backend"],
+//     "selected_modules": ["backend"],
 //     "build_cmds": ["cd api-service && mvn -q -DskipTests compile"],
 //     "test_cmds":  ["cd api-service && mvn -q test"],
 //     "fallback":   false,
 //     "reason":     "1 module matched: backend"
 //   }
 
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { loadConfig } from './config-loader.mjs';
+import { configuredPluginRoot, findProjectConfigRoot } from './config-root.mjs';
 
 // ---- glob matching ---------------------------------------------------------
 // Minimal glob → regex. Supports: *, **, ?. No brace expansion, no negation.
@@ -86,10 +88,10 @@ export function matchAny(file, globs) {
 
 // ---- git diff --------------------------------------------------------------
 
-function getChangedFiles(cwd, diffBase) {
+export function getChangedFiles(cwd, diffBase) {
   try {
     // Use 3-dot diff: changes on the feature branch that diverged from base.
-    const out = execSync(`git diff --name-only ${diffBase}...HEAD`, {
+    const out = execFileSync('git', ['diff', '--name-only', `${diffBase}...HEAD`], {
       cwd,
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -97,7 +99,7 @@ function getChangedFiles(cwd, diffBase) {
     const tracked = out.split('\n').map((s) => s.trim()).filter(Boolean);
     // Include uncommitted (working tree + staged) changes too, so build runs reflect
     // what the user is about to commit, not just what's already pushed.
-    const uncommittedOut = execSync('git status --porcelain', {
+    const uncommittedOut = execFileSync('git', ['status', '--porcelain'], {
       cwd,
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -137,32 +139,53 @@ export function selectBuildCommands({ cwd, mergedStack }) {
   const changedFiles = getChangedFiles(cwd, diffBase);
 
   if (modules.length === 0) {
+    const jobs = fallbackJob(fallbackBuild, fallbackTest);
     return {
       diff_base: diffBase,
       changed_files: changedFiles,
       matched_modules: [],
+      selected_modules: [],
       build_cmds: fallbackBuild ? [fallbackBuild] : [],
       test_cmds: fallbackTest ? [fallbackTest] : [],
+      jobs,
       fallback: true,
       reason: 'no modules declared; using top-level build_cmd / test_cmd',
     };
   }
 
   const matched = [];
+  const moduleByName = new Map();
   for (const m of modules) {
     if (!m || typeof m !== 'object' || !m.name) continue;
+    if (moduleByName.has(m.name)) throw new Error(`[cc-nexs] duplicate build module: ${m.name}`);
+    moduleByName.set(m.name, m);
+    for (const dependency of Array.isArray(m.depends_on) ? m.depends_on : []) {
+      if (typeof dependency !== 'string' || !dependency) {
+        throw new Error(`[cc-nexs] invalid dependency for build module ${m.name}`);
+      }
+    }
     const globs = Array.isArray(m.match) ? m.match : [];
     const hit = changedFiles.some((f) => matchAny(f, globs));
     if (hit) matched.push(m);
   }
+  for (const module of moduleByName.values()) {
+    for (const dependency of Array.isArray(module.depends_on) ? module.depends_on : []) {
+      if (!moduleByName.has(dependency)) {
+        throw new Error(`[cc-nexs] unknown build dependency ${dependency} for module ${module.name}`);
+      }
+    }
+  }
 
   if (matched.length === 0) {
+    const jobs = fallbackJob(fallbackBuild, fallbackTest);
     return {
       diff_base: diffBase,
       changed_files: changedFiles,
       matched_modules: [],
+      selected_modules: [],
       build_cmds: fallbackBuild ? [fallbackBuild] : [],
       test_cmds: fallbackTest ? [fallbackTest] : [],
+      jobs,
       fallback: true,
       reason:
         changedFiles.length === 0
@@ -171,12 +194,22 @@ export function selectBuildCommands({ cwd, mergedStack }) {
     };
   }
 
+  const selectedNames = new Set();
+  const include = (module) => {
+    if (selectedNames.has(module.name)) return;
+    selectedNames.add(module.name);
+    for (const dependency of module.depends_on || []) include(moduleByName.get(dependency));
+  };
+  for (const module of matched) include(module);
+  const selectedModules = modules.filter((module) => selectedNames.has(module?.name));
+
   // De-dupe by command string while preserving order.
   const buildSet = new Set();
   const testSet = new Set();
   const buildCmds = [];
   const testCmds = [];
-  for (const m of matched) {
+  const jobs = [];
+  for (const m of selectedModules) {
     if (m.build_cmd && !buildSet.has(m.build_cmd)) {
       buildSet.add(m.build_cmd);
       buildCmds.push(m.build_cmd);
@@ -185,17 +218,30 @@ export function selectBuildCommands({ cwd, mergedStack }) {
       testSet.add(m.test_cmd);
       testCmds.push(m.test_cmd);
     }
+    jobs.push({
+      module: m.name,
+      build_cmd: m.build_cmd || '',
+      test_cmd: m.test_cmd || '',
+      depends_on: Array.isArray(m.depends_on) ? m.depends_on : [],
+    });
   }
 
   return {
     diff_base: diffBase,
     changed_files: changedFiles,
     matched_modules: matched.map((m) => m.name),
+    selected_modules: selectedModules.map((m) => m.name),
     build_cmds: buildCmds,
     test_cmds: testCmds,
+    jobs,
     fallback: false,
-    reason: `${matched.length} module(s) matched: ${matched.map((m) => m.name).join(', ')}`,
+    reason: `${matched.length} module(s) matched; ${selectedModules.length} selected with dependencies: ${selectedModules.map((m) => m.name).join(', ')}`,
   };
+}
+
+function fallbackJob(buildCmd, testCmd) {
+  if (!buildCmd && !testCmd) return [];
+  return [{ module: 'fallback', build_cmd: buildCmd, test_cmd: testCmd, depends_on: [] }];
 }
 
 // ---- CLI -------------------------------------------------------------------
@@ -213,7 +259,9 @@ function parseArgs(argv) {
 
 function main() {
   const args = parseArgs(process.argv);
-  const { mergedStack } = loadConfig({ projectRoot: args.cwd });
+  const projectRoot = findProjectConfigRoot(args.cwd);
+  const presetRoot = configuredPluginRoot();
+  const { mergedStack } = loadConfig({ projectRoot, ...(presetRoot && { presetRoot }) });
   const result = selectBuildCommands({ cwd: args.cwd, mergedStack });
 
   if (args.json) {

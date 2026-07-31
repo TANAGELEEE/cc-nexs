@@ -1,7 +1,7 @@
 ---
 description: 用模板初始化新需求目录。自动按 all-docs/doc/ 下已有编号续号，自动从需求描述生成 slug。默认在 .worktrees/<id>-<slug>/ 创建独立 git worktree，多需求可并行。
 allowed-tools: Read, Write, Edit, Bash, Glob, Skill
-argument-hint: <需求描述> [--mode=full|fast] [--id=<编号>] [--slug=<短名>] [--repos=a,b] [--brainstorm]
+argument-hint: <需求描述> [--mode=lean|hotfix|fast|full] [--id=<编号>] [--slug=<短名>] [--repos=a,b] [--brainstorm]
 ---
 
 # /cc-nexs:init
@@ -11,7 +11,9 @@ argument-hint: <需求描述> [--mode=full|fast] [--id=<编号>] [--slug=<短名
 参数：
 
 - `$1` = 需求描述（必填，中英文都行）
-- `--mode=full|fast` 流水线模式（默认 `fast`；仅显式传 `--mode=full` 才启用完整流程）
+- `--mode=lean|hotfix|fast|full` 流水线模式（新需求默认 `lean`）
+  - `lean`：计划门禁、并行实现、本地验证、一次集中 Review、test 验收、发布门禁
+  - `hotfix`：独立编号/feature 分支/latest-base worktree 的 mini-Lean；绝不复用旧需求分支或状态
   - `full`：五方异构（Planner/Tech Lead/SA/QA/Evaluator）
   - `fast`：三角色合并（Fullstack/Reviewer/Verifier），单 sprint，比 full 少 ~50% 调用
 - `--id=<编号>` 强制使用指定编号（覆盖自动续号）
@@ -27,20 +29,20 @@ argument-hint: <需求描述> [--mode=full|fast] [--id=<编号>] [--slug=<短名
 ```bash
 DESC="$1"
 if [ -z "$DESC" ]; then
-  echo "❌ 用法：/cc-nexs:init <需求描述> [--mode=full|fast]"
+  echo "❌ 用法：/cc-nexs:init <需求描述> [--mode=lean|hotfix|fast|full]"
   echo "   示例：/cc-nexs:init '添加 /api/health 健康检查接口'"
   echo "   示例：/cc-nexs:init '修支付偶现 500' --mode=fast"
   echo "   示例：/cc-nexs:init '用户注册接入邮箱验证' --id=14.2"
   exit 1
 fi
 
-# 解析 --mode 参数（默认 fast）
+# 解析 --mode 参数（默认 lean；项目 workflow.default_mode 可覆盖）
 MODE=$(echo "$@" | grep -oE -- '--mode=[a-z]+' | cut -d= -f2)
-[ -z "$MODE" ] && MODE=fast
+[ -z "$MODE" ] && MODE="${CC_NEXS_DEFAULT_MODE:-lean}"
 case "$MODE" in
-  full|fast) ;;
+  lean|hotfix|full|fast) ;;
   *)
-    echo "❌ --mode 必须是 full 或 fast，当前值: $MODE"
+    echo "❌ --mode 必须是 lean、hotfix、fast 或 full，当前值: $MODE"
     exit 1
     ;;
 esac
@@ -140,11 +142,16 @@ docs worktree 此时已经包含第一阶段占号目录。分支统一为 `feat
 CC_NEXS_RESOLVED_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CODEX_PLUGIN_ROOT:-${CC_NEXS_PLUGIN_ROOT:-}}}}"
 [ -n "$CC_NEXS_RESOLVED_PLUGIN_ROOT" ] || { echo "❌ 找不到 plugin root（需 CLAUDE_PLUGIN_ROOT / PLUGIN_ROOT / CODEX_PLUGIN_ROOT / CC_NEXS_PLUGIN_ROOT）"; exit 1; }
 REQ_DIR="${DOC_WORKTREE}/doc/${ID}.${SLUG}"
-# 目录已由远端第一阶段占号创建；模板覆盖 README，保留隐藏 marker
-cp -r "${CC_NEXS_RESOLVED_PLUGIN_ROOT}/templates/"* "${REQ_DIR}/"
+# Lean/hotfix 只复制各自最小文档和机器状态；fast/full 保持旧模板集合。
+if [ "$MODE" = "lean" ] || [ "$MODE" = "hotfix" ]; then
+  cp -r "${CC_NEXS_RESOLVED_PLUGIN_ROOT}/templates/${MODE}/"* "${REQ_DIR}/"
+  rm -f "${REQ_DIR}/README.md"
+else
+  find "${CC_NEXS_RESOLVED_PLUGIN_ROOT}/templates" -mindepth 1 -maxdepth 1 ! -name lean ! -name hotfix -exec cp -R {} "${REQ_DIR}/" \;
+fi
 ```
 
-包含模板：requirements.md / spec.md / dev-plan.md / test-cases.md / api-doc.md / deploy.md / acceptance.md / test-report.md / progress.md / config.json / bugs/BUG-template.md
+Lean 包含 requirements.md / plan.md；hotfix 只有 hotfix.md；两者另含 progress.json / progress.md / config.json。fast/full 保持原模板集合。
 
 ### 6. 占位符替换
 
@@ -163,15 +170,12 @@ done
 
 ### 6.5 写入 mode 到 config.json
 
-模板里 `mode` 默认值是 `fast`，按 `--mode` 参数覆写：
+Lean 模板默认值是 `lean`，仍按最终 `MODE` 明确覆写：
 
 ```bash
 CFG="${REQ_DIR}/config.json"
-# 仅当 MODE != fast 时才改（默认值已经是 fast）
 # 注意：BSD/macOS sed 不识别 \s，用 [[:space:]] 兼容
-if [ "$MODE" != "fast" ]; then
-  sed "${SED_INPLACE[@]}" -E 's/("mode"[[:space:]]*:[[:space:]]*)"[^"]*"/\1"'"$MODE"'"/' "$CFG"
-fi
+sed "${SED_INPLACE[@]}" -E 's/("mode"[[:space:]]*:[[:space:]]*)"[^"]*"/\1"'"$MODE"'"/' "$CFG"
 
 # progress.json v2 是权威状态；progress.md 仅作为人类可读视图。
 PROGRESS_JSON="${REQ_DIR}/progress.json"
@@ -183,17 +187,17 @@ fi
 
 > 校验：`grep -E '"mode"[[:space:]]*:[[:space:]]*"'"$MODE"'"' "$CFG"` 应能匹配，否则报错回退。
 
-### 7. 把需求描述写入 requirements.md 头部
+### 7. 注入初始描述
 
 让用户启动时已有 PM 给的"一句话诉求"作为基线，省得 PM 还要再敲一遍。
 
 ```bash
-REQ_FILE="${REQ_DIR}/requirements.md"
+REQ_FILE="${REQ_DIR}/$([ "$MODE" = "hotfix" ] && echo hotfix.md || echo requirements.md)"
 # 在第一行 # 标题后插入用户原始描述作为"业务诉求"摘要
 # 具体插入位置由 Claude 按 requirements.md 模板结构判断
 ```
 
-实际操作：用 Edit 工具把 `${DESC}` 注入到 requirements.md 的"业务诉求"或"一句话诉求"段落，**保留模板的其他章节让人工继续填**。
+实际操作：Lean 注入 requirements.md；hotfix 注入 hotfix.md 的“现象”，并要求填写 severity/影响/范围字段后运行 `/cc-nexs:hotfix <id>`。
 
 ### 8. 记录仓库分配
 
@@ -215,7 +219,7 @@ REQ_FILE="${REQ_DIR}/requirements.md"
    编号:    ${ID}
    短名:    ${SLUG}
    描述:    ${DESC}
-   模式:    ${MODE}              ← full | fast
+   模式:    ${MODE}              ← lean | hotfix | fast | full
    目录:    ${REQ_DIR}/
    分支:    ${BRANCH}
    工作树:  ${WORK_DIR}           ← 走 worktree 时是 .worktrees/<id>-<slug>/
@@ -228,7 +232,7 @@ REQ_FILE="${REQ_DIR}/requirements.md"
 ```
 👉 下一步（任选其一）:
    可留在 workspace 根目录运行，Orchestrator 会按 progress.json 分派到各仓 worktree
-   A. 自己手填 requirements.md，再 /cc-nexs:run ${ID}
+   A. 自己手填 requirements.md；lean 运行 /cc-nexs:plan ${ID}，fast/full 运行 /cc-nexs:run ${ID}
    B. /cc-nexs:brainstorm ${ID}
       让 Claude 用 Socratic 对话把一句话诉求展成完整 requirements.md，
       然后再 /cc-nexs:run ${ID}（推荐：需求模糊 / 想压一压思路时）
@@ -255,9 +259,9 @@ REQ_FILE="${REQ_DIR}/requirements.md"
 ## 用法示例
 
 ```bash
-# 默认 fast 模式（自动续号 + 自动 slug）
+# 默认 lean 模式（自动续号 + 自动 slug）
 /cc-nexs:init 添加 /api/health 健康检查接口
-# → all-docs/doc/01.api-health-check/  mode=fast
+# → all-docs/doc/01.api-health-check/  mode=lean
 
 # fast 模式：单接口小改动
 /cc-nexs:init 修支付偶现 500 --mode=fast
@@ -273,7 +277,7 @@ REQ_FILE="${REQ_DIR}/requirements.md"
 
 # 一条命令到位：init + 自动进入 brainstorming 对话
 /cc-nexs:init "做个订单导出后台" --brainstorm
-# → all-docs/doc/05.order-export-admin/  mode=fast
+# → all-docs/doc/05.order-export-admin/  mode=lean
 # → 立即进入 Socratic 对话补全 requirements.md
 
 ```
@@ -303,9 +307,9 @@ $ cd .worktrees/02-feat-b && /cc-nexs:run 02    # B 跟 A 完全独立
 - **合并后安全清理**：仅 Git Custodian 在验证 worktree clean 且分支已合入配置 base 后删除 worktree、local branch 和 candidate ref。
 - **无原地降级**：创建失败即回滚并停止，不污染调用者当前分支。
 
-## 何时选 fast
+## 何时覆盖默认 lean
 
-| 显式用 full | 默认用 fast |
+| 显式用 full | 显式用 fast |
 |---|---|
 | 跨模块、含 DB schema 变更 | 单模块单接口 |
 | 涉及对外契约、合规风险 | 改动 ≤ 800 行 diff |
@@ -315,6 +319,6 @@ $ cd .worktrees/02-feat-b && /cc-nexs:run 02    # B 跟 A 完全独立
 ## 与原来的差异
 
 之前：`/cc-nexs:init 01 health-check` （位置参数 + 必须人工想 slug）
-现在：`/cc-nexs:init "添加 /api/health 健康检查接口" [--mode=fast]`（自动续号 + 自动 slug + mode 一次到位）
+现在：`/cc-nexs:init "添加 /api/health 健康检查接口" [--mode=lean|hotfix|fast|full]`（自动续号 + 自动 slug + mode 一次到位；默认 lean）
 
 旧用法仍兼容：如果 `$1` 是纯数字格式（如 `01`、`14.2`）且 `$2` 是 kebab-case，按旧用法处理。

@@ -30,7 +30,7 @@ tools: Bash, Read, Write, Edit
 ### target=spec：评审 spec.md
 
 ```bash
-codex "你是本项目的 Reviewer（fast 模式）。读 all-docs/doc/<编号>/spec.md。
+codex exec "你是本项目的 Reviewer（fast 模式）。读 all-docs/doc/<编号>/spec.md。
 
 按以下三点评审：
 1. 五章节齐全（业务背景/技术方案/影响范围/验收契约/Sprint切片）；fast 模式 AC 至少 3 条
@@ -53,7 +53,7 @@ BASE_REF=${BASE_REF:-origin/master}
 git diff ${BASE_REF}...HEAD -- '*.java' '*.xml' '*.yml' '*.yaml' '*.sql' '*.properties' > /tmp/fast-code-review.diff
 
 # 2. codex 调用
-codex --file /tmp/fast-code-review.diff "你是本项目的 Reviewer（fast 模式）。
+codex exec "你是本项目的 Reviewer（fast 模式）。
 本次只做代码评审，不做契约验收（测试尚未执行）。
 
 diff: /tmp/fast-code-review.diff
@@ -66,7 +66,7 @@ append 到 all-docs/doc/<编号>/sa-code-review.md（## Sprint M1 - Round R - YY
 末尾输出 \`结论: PASS\` 或 \`结论: NEEDS_REVISION\`。
 
 禁读 src/、禁读 dev-plan.md。
-禁产出 acceptance.md（那是 target=accept 的职责）。"
+禁产出 acceptance.md（那是 target=accept 的职责）。" < /tmp/fast-code-review.diff
 ```
 
 ### target=accept：契约验收（TEST_PASSED 后调用）
@@ -74,7 +74,7 @@ append 到 all-docs/doc/<编号>/sa-code-review.md（## Sprint M1 - Round R - YY
 测试已通过，test-report.md 已存在。只产出 acceptance.md，**禁止产出 sa-code-review.md**。
 
 ```bash
-codex "你是本项目的 Reviewer（fast 模式）。
+codex exec "你是本项目的 Reviewer（fast 模式）。
 本次只做契约验收（代码评审已在 TEST_RELEASE 前完成）。
 
 【输入】

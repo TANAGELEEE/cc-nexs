@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 
 import { loadConfig, loadWorkspaceConfig } from './config-loader.mjs';
+import { assertHotfixScopeCurrent } from './hotfix-contract.mjs';
 import { integrateCandidateToTest, resolveCandidateCommit } from './git-custodian.mjs';
 import {
   beginTestRelease,
@@ -47,7 +48,15 @@ export function preflightTestRelease({
     manual,
   });
   if (policy !== 'auto_if_ready') throw new Error(`[cc-nexs] automatic test release is ${policy}`);
-  if (!hotfix && progress.state !== 'TEST_RELEASE') {
+  if (hotfix) {
+    if (progress.mode !== 'hotfix') throw new Error(`[cc-nexs] --hotfix requires mode hotfix, found ${progress.mode}`);
+    if (progress.state !== 'HOTFIX_TEST_RELEASE') {
+      throw new Error(`[cc-nexs] hotfix test release requires HOTFIX_TEST_RELEASE readiness, found ${progress.state}`);
+    }
+    assertHotfixScopeCurrent(progress, dirname(progressFile));
+  } else if (progress.mode === 'hotfix') {
+    throw new Error('[cc-nexs] hotfix test release requires the explicit --hotfix control');
+  } else if (progress.state !== 'TEST_RELEASE') {
     throw new Error(`[cc-nexs] test release requires TEST_RELEASE readiness, found ${progress.state}`);
   }
 
@@ -83,6 +92,8 @@ export function preflightTestRelease({
     })
     .sort((left, right) => left.releaseOrder - right.releaseOrder || left.id.localeCompare(right.id));
   if (repositories.length === 0) throw new Error('[cc-nexs] no code repository candidate is ready for test release');
+  const source = Object.fromEntries(repositories.map((repo) => [repo.id, repo.sourceCommit]));
+  if (hotfix) assertHotfixReleaseEvidence(progress, source);
 
   const release = config.mergedRelease?.test || {};
   if ((release.environment || 'test').toLowerCase() !== 'test') {
@@ -100,8 +111,23 @@ export function preflightTestRelease({
     release,
     driver,
     repositories,
-    source: Object.fromEntries(repositories.map((repo) => [repo.id, repo.sourceCommit])),
+    source,
   };
+}
+
+function assertHotfixReleaseEvidence(progress, source) {
+  const fingerprint = createHash('sha256').update(JSON.stringify(Object.fromEntries(Object.entries(source).sort(([a], [b]) => a.localeCompare(b))))).digest('hex');
+  if (progress.local_verification?.status !== 'passed' || progress.local_verification.candidate_fingerprint !== fingerprint) {
+    throw new Error('[cc-nexs] hotfix test release requires local verification for the exact candidate');
+  }
+  if (progress.hotfix?.severity === 'P3') {
+    const localAttempt = progress.local_verification.attempts?.findLast((item) => item.status === 'passed' && item.fingerprint === fingerprint);
+    if (!localAttempt?.evidence?.some((item) => item?.type === 'p3_boundary' && item.files === 1 && item.lines <= 20)) {
+      throw new Error('[cc-nexs] P3 test release requires deterministic one-file/20-line boundary evidence');
+    }
+  } else if (progress.review?.status !== 'passed' || progress.review.candidate_fingerprint !== fingerprint) {
+    throw new Error('[cc-nexs] hotfix test release requires one passing Review for the exact candidate');
+  }
 }
 
 export function runTestRelease({

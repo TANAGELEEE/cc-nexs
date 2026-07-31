@@ -1,7 +1,7 @@
 // cc-nexs core: reviewer-adapter.
 // Abstracts the "external reviewer" tool used for SA / QA / Evaluator-style roles.
 // Supported tools (declared in preset.roles.definitions[<role>].tool):
-//   - "codex"           : codex CLI (`codex "<prompt>"` or `codex --file <path> "<prompt>"`)
+//   - "codex"           : Codex CLI in non-interactive exec mode; optional file content is passed on stdin
 //   - "claude-subagent" : invoke Claude as a subagent within the same plugin session (handled by orchestrator command, not this lib)
 //   - "gemini"          : `gemini -p "<prompt>"`  (hypothetical, command varies)
 //   - "openai-cli"      : `openai api chat.completions.create ...`
@@ -17,17 +17,23 @@ export function planReviewerInvocation({
   promptFile = null,
   diffFile = null,
   customTemplate = null,
+  model = 'inherit',
+  effort = 'inherit',
+  fallbackModels = [],
 }) {
   if (!prompt) throw new Error('[cc-nexs] reviewer prompt is required');
 
   switch (tool) {
     case 'codex':
+      const codexModelArgs = model === 'inherit' ? [] : ['--model', model];
+      const codexEffortArgs = effort === 'inherit' ? [] : ['--config', `model_reasoning_effort="${effort}"`];
       if (diffFile) {
         return {
           tool,
           mode: 'bash',
           executable: 'codex',
-          args: ['--file', diffFile, prompt],
+          args: [...codexModelArgs, ...codexEffortArgs, 'exec', prompt],
+          stdinFile: diffFile,
         };
       }
       if (promptFile) {
@@ -35,14 +41,15 @@ export function planReviewerInvocation({
           tool,
           mode: 'bash',
           executable: 'codex',
-          args: ['--file', promptFile],
+          args: [...codexModelArgs, ...codexEffortArgs, 'exec', '-'],
+          stdinFile: promptFile,
         };
       }
       return {
         tool,
         mode: 'bash',
         executable: 'codex',
-        args: [prompt],
+        args: [...codexModelArgs, ...codexEffortArgs, 'exec', prompt],
       };
 
     case 'claude-subagent':
@@ -52,6 +59,9 @@ export function planReviewerInvocation({
         tool,
         mode: 'task',
         instruction: prompt,
+        model,
+        effort,
+        fallbackModels,
         notes: 'Caller should invoke the Task tool with subagent_type set to the role agent.',
       };
 
@@ -60,7 +70,9 @@ export function planReviewerInvocation({
         tool,
         mode: 'native-agent',
         instruction: prompt,
-        notes: 'Spawn an independent native agent and inherit the active session model/channel.',
+        model,
+        reasoning_effort: effort,
+        notes: 'Spawn an independent native agent. Apply model/effort when configured; inherit otherwise.',
       };
 
     case 'pi-subagent':
@@ -68,7 +80,10 @@ export function planReviewerInvocation({
         tool,
         mode: 'pi-subagent',
         instruction: prompt,
-        notes: 'Invoke the package-qualified cc-nexs role through pi-subagents with fresh context. Model selection is owned by Pi settings.',
+        model,
+        thinking: effort,
+        fallbackModels,
+        notes: 'Invoke the package-qualified cc-nexs role through pi-subagents with fresh context. Pass model/thinking directly; retry fallbackModels in order if resolution fails.',
       };
 
     case 'gemini':

@@ -12,13 +12,28 @@
         "build_cmd": { "type": "string" },
         "test_cmd": { "type": "string" },
         "lint_cmd": { "type": "string" },
+        "build_cache": { "type": "boolean" },
+        "build_max_parallel": { "type": "integer", "minimum": 1, "maximum": 16 },
         "src_paths": { "type": "array", "items": { "type": "string" } },
         "forbidden_patterns": { "type": "array" },
         "custom_review_rules": { "type": "array", "items": { "type": "string" } }
       }
     },
     "paths": { "type": "object" },
-    "workflow": { "type": "object" },
+    "workflow": {
+      "type": "object",
+      "properties": {
+        "default_mode": { "enum": ["lean", "hotfix", "fast", "full"] },
+        "local_verify": {
+          "type": "object",
+          "properties": {
+            "driver": { "$ref": "#/definitions/driver" },
+            "reuse_passed": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "models": { "$ref": "#/definitions/models" },
     "release": {
       "type": "object",
       "properties": {
@@ -33,6 +48,10 @@
             "driver": { "$ref": "#/definitions/driver" },
             "browser": { "type": "object" }
           }
+        },
+        "base": {
+          "type": "object",
+          "properties": { "policy": { "enum": ["direct_after_approval", "manual"] } }
         }
       }
     }
@@ -44,6 +63,13 @@
         "command": { "type": "string" },
         "args": { "type": "array", "items": { "type": "string" } },
         "timeout_seconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "models": {
+      "type": "object",
+      "properties": {
+        "profiles": { "type": "object" },
+        "roles": { "type": "object" }
       }
     }
   }

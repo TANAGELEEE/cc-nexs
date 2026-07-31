@@ -4,6 +4,16 @@
 preset: preset-standard
 preset_path: "../../packages/preset-standard"  # 演示用相对路径
 
+workflow:
+  default_mode: lean
+  # Lean 必须配置一个项目自己的本地 build/start/smoke driver：
+  # local_verify:
+  #   driver:
+  #     command: node
+  #     args: [.cc-nexs/local-verify.mjs]
+  #     timeout_seconds: 1200
+  #   reuse_passed: true
+
 # 可选：覆盖 preset 的默认阈值
 thresholds:
   review_revision: 3
@@ -34,6 +44,9 @@ thresholds:
 # 公开发布的 preset 用通用占位符（src/main/java/**），
 # 在你自己的多模块项目里通过下面的 paths_override 注入真实路径，无需 fork preset。
 # paths_override:
+#   diff_base: master
+#   build_cache: true
+#   build_max_parallel: 2
 #   build_cmd: "cd backend && mvn compile -q"
 #   test_cmd: "cd backend && mvn test"
 #   src_paths:

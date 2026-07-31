@@ -1,6 +1,6 @@
 # 演示：用 preset-standard 跑一个最小需求
 
-这个目录展示如何在一个真实项目里启用 cc-nexs 流水线（preset-standard）。
+这个目录保留一个显式 `mode=full` 的兼容示例。新需求默认使用 Lean：`init -> plan -> approve-plan -> run -> approve-release`。
 
 ## 文件清单
 

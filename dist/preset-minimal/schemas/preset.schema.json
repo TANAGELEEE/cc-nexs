@@ -41,7 +41,8 @@
                 "enum": ["independent", "shared"],
                 "default": "independent"
               },
-              "model": { "const": "inherit", "description": "Literal model ids are forbidden for channel portability." }
+              "model": { "type": "string" },
+              "model_profile": { "type": "string" }
             }
           }
         }
@@ -55,6 +56,7 @@
         "pi": { "$ref": "#/definitions/runtime" }
       }
     },
+    "models": { "$ref": "#/definitions/models" },
     "stack": {
       "type": "object",
       "properties": {
@@ -65,6 +67,8 @@
         "build_cmd": { "type": "string" },
         "test_cmd": { "type": "string" },
         "lint_cmd": { "type": "string" },
+        "build_cache": { "type": "boolean", "default": true },
+        "build_max_parallel": { "type": "integer", "minimum": 1, "maximum": 16, "default": 2 },
         "src_paths": {
           "type": "array",
           "items": { "type": "string" }
@@ -102,6 +106,7 @@
     "workflow": {
       "type": "object",
       "properties": {
+        "default_mode": { "enum": ["lean", "hotfix", "fast", "full"], "default": "lean" },
         "sprint_enabled": { "type": "boolean", "default": true },
         "sprint_delivery": { "enum": ["final_only", "per_sprint"], "default": "final_only" },
         "g2_enabled": { "type": "boolean", "default": true },
@@ -110,6 +115,13 @@
           "properties": {
             "policy": { "enum": ["auto_if_ready", "manual", "disabled"] },
             "on_prerequisite_failure": { "enum": ["manual_gate", "stop"] }
+          }
+        },
+        "local_verify": {
+          "type": "object",
+          "properties": {
+            "driver": { "$ref": "#/definitions/driver" },
+            "reuse_passed": { "type": "boolean", "default": true }
           }
         },
         "human_gate_after": {
@@ -142,8 +154,8 @@
           },
           "state_machine": {
             "type": "string",
-            "enum": ["full", "fast"],
-            "description": "State-machine flavor. 'full' = 5-role SOP with sprint slicing. 'fast' = 3-role single-sprint merged pipeline."
+            "enum": ["lean", "hotfix", "full", "fast"],
+            "description": "State-machine flavor. lean = plan-first low-token flow; full = 5-role sprint SOP; fast = 3-role single-sprint flow."
           },
           "sprint_enabled": { "type": "boolean", "default": true },
           "g2_enabled": { "type": "boolean", "default": true },
@@ -182,21 +194,75 @@
             "operations_url": { "type": "string" },
             "allowed_hosts": { "type": "array", "items": { "type": "string" } },
             "credential_ref": { "type": "string" },
-            "driver": {
-              "type": ["object", "null"],
-              "properties": {
-                "command": { "type": "string" },
-                "args": { "type": "array", "items": { "type": "string" } },
-                "timeout_seconds": { "type": "integer", "minimum": 1 }
-              }
-            },
+            "driver": { "$ref": "#/definitions/driver" },
             "browser": { "type": "object" }
           }
+        },
+        "base": {
+          "type": "object",
+          "properties": { "policy": { "enum": ["direct_after_approval", "manual"] } }
         }
       }
     }
   },
   "definitions": {
+    "driver": {
+      "type": ["object", "null"],
+      "properties": {
+        "command": { "type": "string" },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "timeout_seconds": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "models": {
+      "type": "object",
+      "properties": {
+        "profiles": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "claude": { "$ref": "#/definitions/modelSelection" },
+              "codex": { "$ref": "#/definitions/modelSelection" },
+              "pi": { "$ref": "#/definitions/modelSelection" }
+            }
+          }
+        },
+        "roles": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string" },
+              {
+                "type": "object",
+                "properties": {
+                  "profile": { "type": "string" },
+                  "claude": { "$ref": "#/definitions/modelSelection" },
+                  "codex": { "$ref": "#/definitions/modelSelection" },
+                  "pi": { "$ref": "#/definitions/modelSelection" }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "modelSelection": {
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "properties": {
+            "model": { "type": "string" },
+            "effort": { "enum": ["inherit", "low", "medium", "high", "xhigh", "max", "ultra"] },
+            "reasoning_effort": { "enum": ["inherit", "low", "medium", "high", "xhigh", "max", "ultra"] },
+            "thinking": { "enum": ["inherit", "low", "medium", "high", "xhigh", "max", "ultra"] },
+            "fallback_models": { "type": "array", "items": { "type": "string" } },
+            "fallbackModels": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      ]
+    },
     "runtime": {
       "type": "object",
       "properties": {

@@ -5,7 +5,7 @@
     "slug": "{需求短名}"
   },
   "preset": "preset-standard",
-  "mode": "fast",
+  "mode": "lean",
   "state": "INIT",
   "revision": 0,
   "created_at": null,
@@ -23,15 +23,21 @@
   },
   "gates": {
     "g1": { "approved": false },
-    "g2": { "approved": false, "sprints": {} }
+    "g2": { "approved": false, "sprints": {} },
+    "plan": { "approved": false, "binding": null },
+    "release": { "approved": false, "binding": null }
   },
+  "local_verification": { "status": "idle", "candidate_fingerprint": null, "attempts": [] },
+  "review": { "status": "idle", "candidate_fingerprint": null, "reviewed_commits": {}, "blocking_findings": [], "closure_attempts": 0, "gateway_b_delta_attempts": 0 },
+  "change_requests": { "current": null, "items": [] },
   "delivery": {
     "strategy": "final_only",
     "test": {
       "policy": "auto_if_ready",
       "status": "idle",
       "attempts": []
-    }
+    },
+    "base": { "status": "idle", "attempts": [] }
   },
   "repositories": {},
   "events": []

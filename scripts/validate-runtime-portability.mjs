@@ -21,17 +21,17 @@ function walk(dir) {
 for (const dir of checkedRoots) walk(dir);
 
 const preset = readFileSync(join(root, 'packages/preset-standard/preset.yml'), 'utf8');
-for (const marker of ['runtimes:', 'claude:', 'codex:', 'pi:', 'model_policy: inherit', 'force_native_agents: true', 'force_pi_subagents: true']) {
+for (const marker of ['runtimes:', 'claude:', 'codex:', 'pi:', 'models:', 'default_mode: lean', 'model_profile: review', 'model_policy: inherit', 'force_native_agents: true', 'force_pi_subagents: true']) {
   if (!preset.includes(marker)) errors.push(`preset-standard/preset.yml: missing ${marker}`);
 }
 
 const piSkill = readFileSync(join(root, 'pi/skills/cc-nexs-run/SKILL.md'), 'utf8');
-for (const marker of ['fast mode', 'pi-subagents', 'different from the implementation model', 'ships no fixed model IDs']) {
+for (const marker of ['lean (default)', 'pi-subagents', 'same model with higher thinking', 'pass the selected `model` and `thinking` directly', 'ship no provider-specific model IDs']) {
   if (!piSkill.includes(marker)) errors.push(`Pi run skill: missing ${marker}`);
 }
 
 const codexSkill = readFileSync(join(root, 'dist/preset-standard/codex-skills/cc-nexs-run/SKILL.md'), 'utf8');
-for (const marker of ['independent native subagent', 'Never invoke Claude Code', 'Never pass a literal model id']) {
+for (const marker of ['independent native subagent', 'Never invoke Claude Code', 'same model with higher reasoning effort', 'Provider-specific IDs are allowed only in private project/feature config']) {
   if (!codexSkill.includes(marker)) errors.push(`Codex run skill: missing ${marker}`);
 }
 
@@ -40,4 +40,4 @@ if (errors.length) {
   for (const error of errors) console.error(`- ${error}`);
   process.exit(1);
 }
-console.log('Runtime portability passed: Claude hybrid, Codex native-only, Pi subagents with external model overrides.');
+console.log('Runtime portability passed: Claude-native Lean, Codex native-only, direct Pi Agent model selection, portable profiles, and private per-role overrides.');

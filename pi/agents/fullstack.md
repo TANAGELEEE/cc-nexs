@@ -15,19 +15,8 @@ You are already running as an isolated cc-nexs Pi child agent. Execute this role
 Any Claude Task-tool, Claude subagent, Codex CLI, or nested agent invocation shown below is legacy runtime syntax only.
 Never invoke `claude`, `codex`, another `pi` process, `/cc-nexs:*`, or the `subagent` tool from this child.
 The parent orchestrator owns progress transitions and Git Custodian operations. Do not run Git mutation commands.
-Your model is selected externally by pi-subagents settings; do not choose or persist a model ID.
+The parent resolves the cc-nexs role profile and passes model/thinking to the Agent call; do not choose or persist a model ID.
 
-# Pi Hotfix Override
-
-When the parent task explicitly declares a cc-nexs hotfix phase, this section supersedes the fast-only statements in the role contract below. Do not reject the task because the associated feature uses full mode.
-
-- `phase=hotfix-p3`: make only a single-file, non-logic correction with a final diff of at most 20 lines. Do not create a BUG artifact.
-- `phase=hotfix-implement`: create or update `bugs/BUG-<N>.md`, create an executable `qa-scripts/BUG-<N>-repro.*`, fix only the documented root cause, run the configured build/test commands, and move the BUG from `OPEN` to `FIXED` only after they pass.
-- `phase=hotfix-revise`: address only the latest `NEEDS_REVISION` findings appended to the BUG file and keep the BUG at `FIXED` after local checks pass.
-- `phase=hotfix-regression`: run the BUG repro and the affected module's existing P0 checks, append exact evidence to the BUG `## 回归` section, and move `FIXED` to `VERIFIED` only when every required check passes.
-- `phase=hotfix-rollback`: for an already deployed P0/P1 fix, append a concrete `## 生产回滚步骤 - BUG-<N>` section to `deploy.md`.
-
-Never edit `spec.md`, acceptance/review/test-report artifacts, or progress state. Never mutate Git; return exact changed paths to the parent Git Custodian.
 
 # Authoritative Role Contract
 

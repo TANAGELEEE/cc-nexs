@@ -1,15 +1,16 @@
 name: preset-standard
-version: 0.5.1
-description: 通用多角色开发 SOP。默认 fast，显式 mode=full 时启用完整角色隔离；不绑定语言、框架、仓库名或组织规范。
+version: 0.5.2
+description: 通用多角色开发 SOP。新需求默认 lean，保留显式 fast/full；不绑定语言、框架、仓库名或组织规范。
 language: zh-CN
 
 # 默认 enabled 列表（向后兼容）。orchestrator 会按 all-docs/doc/<id>/config.json 的 mode 字段
 # 选用 modes.<mode>.enabled 覆盖；未声明 mode 时回退到 modes.fast.enabled。
 roles:
   enabled:
-    - fullstack
-    - reviewer
-    - verifier
+    - lean-planner
+    - lean-developer
+    - lean-reviewer
+    - lean-verifier
 
   definitions:
     # ===== full 模式角色 =====
@@ -72,12 +73,80 @@ roles:
       tool: codex
       alias: Verifier
 
+    # ===== lean 默认模式角色 =====
+    lean-planner:
+      agent: agents/lean-planner.md
+      tool: claude-subagent
+      alias: Lean Planner
+      session_isolation: independent
+      model_profile: balanced
+
+    lean-developer:
+      agent: agents/lean-developer.md
+      tool: claude-subagent
+      alias: Lean Developer
+      session_isolation: independent
+      model_profile: balanced
+
+    lean-reviewer:
+      agent: agents/lean-reviewer.md
+      tool: codex
+      alias: Consolidated Reviewer
+      session_isolation: independent
+      model_profile: review
+
+    lean-verifier:
+      agent: agents/lean-verifier.md
+      tool: codex
+      alias: Environment Verifier
+      session_isolation: independent
+      model_profile: balanced
+
+    # ===== hotfix mini-Lean 角色 =====
+    hotfix-developer:
+      agent: agents/hotfix-developer.md
+      tool: claude-subagent
+      alias: Hotfix Developer
+      session_isolation: independent
+      model_profile: balanced
+
+    hotfix-reviewer:
+      agent: agents/hotfix-reviewer.md
+      tool: codex
+      alias: Hotfix Reviewer
+      session_isolation: independent
+      model_profile: review
+
+    hotfix-verifier:
+      agent: agents/hotfix-verifier.md
+      tool: codex
+      alias: Hotfix Verifier
+      session_isolation: independent
+      model_profile: balanced
+
 # Runtime adaptation is capability-based, never tied to a literal model id.
-# Claude Code keeps Claude implementer subagents + Codex CLI review roles.
+# Claude Code keeps all Lean roles in isolated Claude subagents; legacy full/fast
+# review roles retain their declared Codex CLI tools.
 # Codex maps every role to an independent native agent and never invokes Claude Code or nested Codex CLI.
 runtimes:
   claude:
     model_policy: inherit
+    # Lean stays native to the host runtime. Legacy full/fast Codex review roles
+    # remain unchanged, but Lean Reviewer/Verifier can now use the same Claude
+    # model at higher effort or a different Claude model without a Codex dependency.
+    roles:
+      lean-reviewer:
+        tool: claude-subagent
+        session_isolation: independent
+      lean-verifier:
+        tool: claude-subagent
+        session_isolation: independent
+      hotfix-reviewer:
+        tool: claude-subagent
+        session_isolation: independent
+      hotfix-verifier:
+        tool: claude-subagent
+        session_isolation: independent
   codex:
     model_policy: inherit
     force_native_agents: true
@@ -87,9 +156,81 @@ runtimes:
     force_pi_subagents: true
     session_isolation: independent
 
+# 公开 preset 只声明可移植 profile，不绑定模型 ID。项目可在 cc-nexs.config.yml
+# 的 models.profiles 中为 Claude/Codex/Pi 分别指定 model、effort 和 fallback_models。
+models:
+  profiles:
+    economical:
+      claude:
+        model: inherit
+        effort: low
+      codex:
+        model: inherit
+        effort: low
+      pi:
+        model: inherit
+        effort: low
+    balanced:
+      claude:
+        model: inherit
+        effort: medium
+      codex:
+        model: inherit
+        effort: medium
+      pi:
+        model: inherit
+        effort: medium
+    review:
+      claude:
+        model: inherit
+        effort: high
+      codex:
+        model: inherit
+        effort: high
+      pi:
+        model: inherit
+        effort: high
+  roles:
+    lean-planner: balanced
+    lean-developer: balanced
+    lean-reviewer: review
+    lean-verifier: balanced
+    hotfix-developer: balanced
+    hotfix-reviewer: review
+    hotfix-verifier: balanced
+
 # 模式声明：每个 mode 列出自己的 enabled 列表与状态机骨架。
-# orchestrator 启动时读需求目录的 config.json.mode 选择对应分支；fast 为默认，full 必须显式指定。
+# orchestrator 启动时读需求目录的 config.json.mode 选择对应分支；lean 为新需求默认。
 modes:
+  lean:
+    description: 计划前置、两个人工门禁、一次集中 Review、强制本地集成验证和单次 test 发布。
+    enabled:
+      - lean-planner
+      - lean-developer
+      - lean-reviewer
+      - lean-verifier
+    state_machine: lean
+    sprint_enabled: false
+    g2_enabled: true
+    thresholds_override:
+      review_revision: 1
+      fix_per_bug: 2
+      evaluator_reject: 1
+
+  hotfix:
+    description: 独立 latest-base feature worktree 上的 mini-Lean；本地验证、一次 Review（P3 机器边界后跳过）、test 黑盒验收和人工 base 门禁。
+    enabled:
+      - hotfix-developer
+      - hotfix-reviewer
+      - hotfix-verifier
+    state_machine: hotfix
+    sprint_enabled: false
+    g2_enabled: true
+    thresholds_override:
+      review_revision: 1
+      fix_per_bug: 1
+      evaluator_reject: 1
+
   full:
     description: 完整五方异构 + 现状勘察前置。Repo Scout 先扫 src/ 产 repo-context.md，再 Planner / Tech Lead / SA / QA / Evaluator 严格分离。
     enabled:
@@ -123,6 +264,8 @@ stack:
   build_cmd: ""
   test_cmd: ""
   lint_cmd: ""
+  build_cache: true
+  build_max_parallel: 2
   src_paths:
     - "src/**"
     - "**/src/**"
@@ -141,12 +284,16 @@ paths:
   bugs_dir: "bugs/"
 
 workflow:
+  default_mode: lean
   sprint_enabled: true
   human_gate_after: spec_reviewing_pass
   sprint_delivery: final_only
   test_release:
     policy: auto_if_ready
     on_prerequisite_failure: manual_gate
+  local_verify:
+    driver: null
+    reuse_passed: true
   thresholds:
     review_revision: 3
     fix_per_bug: 3
@@ -163,6 +310,8 @@ release:
       claude_provider: chrome-devtools-mcp
       codex_provider: current-browser-session
       pi_provider: "@injaneity/pi-computer-use@0.4.3"
+  base:
+    policy: direct_after_approval
 
 i18n:
   locale_dir: "i18n/"

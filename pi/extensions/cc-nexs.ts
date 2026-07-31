@@ -15,6 +15,8 @@ import {
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const P2_COMMANDS = [
   "approve-deploy",
+  "approve-plan",
+  "approve-release",
   "approve-spec",
   "brainstorm",
   "build",
@@ -23,18 +25,26 @@ const P2_COMMANDS = [
   "git-custodian",
   "hotfix",
   "init",
+  "lean-review",
+  "lean-verify",
   "migrate-progress",
   "recon",
   "release-test",
+  "release-base",
+  "render-plan",
+  "request-release-changes",
   "review",
   "run",
   "status",
   "verify",
+  "verify-local",
+  "plan",
+  "execute",
 ] as const;
 
 function commandDescription(name: string): string {
-  if (name === "run") return "Run the cc-nexs fast workflow through isolated Pi subagents";
-  if (name === "init") return "Initialize a cc-nexs fast-mode feature";
+  if (name === "run") return "Run the cc-nexs lean-default workflow through isolated Pi subagents";
+  if (name === "init") return "Initialize a cc-nexs lean-default feature";
   if (name === "hotfix") return "Run the cc-nexs P0/P1/P2/P3 hotfix workflow through isolated Pi subagents";
   if (name === "doctor") return "Validate cc-nexs workspace and Pi subagent prerequisites";
   if (name === "release-test") return "Integrate final candidates, release test, and record deployment evidence";
@@ -95,7 +105,7 @@ export default function ccNexsPiExtension(pi: ExtensionAPI) {
           ctx.ui.notify("cc-nexs commands must start while the Pi agent is idle.", "warning");
           return;
         }
-        if (name === "approve-deploy" || name === "approve-spec") {
+        if (["approve-deploy", "approve-spec", "approve-plan", "approve-release"].includes(name)) {
           try {
             const result = runCcNexsCommand([name, ...splitCommandArguments(args)], { cwd: process.cwd() });
             const sprint = result.sprint === null ? "" : ` M${result.sprint}`;

@@ -1,7 +1,7 @@
 {
   "name": "cc-nexs",
   "version": "0.5.2",
-  "description": "多角色状态机开发流水线：支持多 Sprint 开发、完整需求 test 自动发布、跨端环境验收和人工 fallback。",
+  "description": "Lean 默认的低 Token 开发流水线：计划门禁、本地验证、一次集中 Review、test 验收与发布门禁；保留 fast/full。",
   "author": {
     "name": "cc-nexs"
   },

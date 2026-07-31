@@ -7,6 +7,8 @@ packages/core/
   state-machine.mjs     纯状态路由
   progress-v2.mjs       revision + event + delivery attempts
   git-custodian.mjs     唯一 Git mutation 边界
+  local-verify.mjs      Lean 本地 build/start/smoke driver
+  base-release.mjs      Gateway B 后的 base 集成控制器
   test-release.mjs      test 集成与 release driver 控制器
   doctor.mjs            workspace/release 前置检查
   commands/*.md         跨 runtime 流程事实来源
@@ -28,6 +30,7 @@ Claude Code、Codex 和 Pi 共用 command 文档与 core 控制器。运行时�
 
 - `state`、`revision`、`events[]`；
 - role counters、Sprint 状态、G1/G2；
+- Lean plan/release gates、本地验证与集中 Review fingerprint；
 - repository worktree/candidate assignments；
 - `delivery.strategy`；
 - `delivery.test.policy/status/attempts[]`。
@@ -40,9 +43,20 @@ Claude Code、Codex 和 Pi 共用 command 文档与 core 控制器。运行时�
 {"strategy":"per_sprint","test":{"policy":"manual","status":"idle","attempts":[]}}
 ```
 
-新 progress 默认 `final_only + auto_if_ready`。
+新 progress 默认 `mode=lean + final_only + auto_if_ready`。
 
 ## 状态架构
+
+Lean 默认链：
+
+```text
+INIT -> PLAN -> Gateway A -> IMPLEMENT
+-> LOCAL VERIFY -> one CONSOLIDATED REVIEW
+-> TEST RELEASE -> TEST VERIFY -> Gateway B
+-> BASE MERGE -> COMPLETE
+```
+
+每仓使用 `.worktrees/<id>-<slug>/<repo-id>` 与 `feature/<id>-<slug>`。Gateway A 绑定 requirements/plan scope，Gateway B 绑定本地验证、集中 Review 与 test 验收共享的 candidate fingerprint。
 
 Full 开发与交付分为两个区域：
 
@@ -59,6 +73,8 @@ Delivery zone
 
 Fast 是单 Sprint 压缩版，同样在 CODE_REVIEW 后进入 TEST_RELEASE。
 
+Hotfix 是独立 mini-Lean：新编号从 latest base 建同样的 worktree/feature branch，只绑定一份 `hotfix.md`。P0/P1/P2 有一次集中 Review；P3 由机器证明单文件/20 行/无行为变化后跳过模型 Review。所有修复共享一次 delta 上限，之后仍须 exact-candidate test 验收和 Gateway B，批准后同一 feature candidate 才合入 base。
+
 ## Git Custodian
 
 角色和 Orchestrator 不执行任意 Git mutation。Git Custodian 负责：
@@ -67,7 +83,7 @@ Fast 是单 Sprint 压缩版，同样在 CODE_REVIEW 后进入 TEST_RELEASE。
 - 按角色声明的精确路径 stage/commit candidate；
 - 维护 `refs/cc-nexs/candidates/<feature>/<repo>`；
 - test integration；
-- 用户显式授权后的 main merge/finalize。
+- 用户显式授权后的配置 base merge/finalize。
 
 Test integration 不修改 feature worktree：
 
@@ -109,6 +125,27 @@ controller 通过 stdin 发送一份 JSON request。driver stdout 必须只写�
 ```
 
 其他终态为 `failed` 或 `deployed_needs_manual_verification`。成功但缺 pipeline/deployment/environment_revision 会失败关闭。
+
+## Lean 本地验证 driver
+
+项目私有配置提供独立于 CI 的本地 driver：
+
+```yaml
+workflow:
+  local_verify:
+    driver:
+      command: node
+      args: [.cc-nexs/local-verify.mjs]
+      timeout_seconds: 1200
+```
+
+控制器通过 stdin 发送 `{operation, feature, source, repositories}` JSON；每仓包含精确 candidate SHA 和已分配 worktree。driver 按 plan 矩阵执行 build、单元/集成测试、本地前后端启动、smoke/e2e，并只向 stdout 写一个 JSON object：
+
+```json
+{"status":"passed","evidence":["api build", "web build", "local smoke AC-001"]}
+```
+
+另一合法状态是 `failed`。driver 必须负责 readiness、非冲突端口和成功/失败路径的进程清理。本地验证用于缩短反馈周期，但不能替代 immutable test release 和 test 环境验收。
 
 ## Browser capability
 

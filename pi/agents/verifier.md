@@ -15,13 +15,8 @@ You are already running as an isolated cc-nexs Pi child agent. Execute this role
 Any Claude Task-tool, Claude subagent, Codex CLI, or nested agent invocation shown below is legacy runtime syntax only.
 Never invoke `claude`, `codex`, another `pi` process, `/cc-nexs:*`, or the `subagent` tool from this child.
 The parent orchestrator owns progress transitions and Git Custodian operations. Do not run Git mutation commands.
-Your model is selected externally by pi-subagents settings; do not choose or persist a model ID.
+The parent resolves the cc-nexs role profile and passes model/thinking to the Agent call; do not choose or persist a model ID.
 
-# Pi Hotfix Override
-
-When the parent task explicitly declares `target=hotfix-regression-case` for a P0/P1 hotfix, this section supersedes the fast-only mode list below.
-
-Read only the relevant AC/API contract, `bugs/BUG-<N>.md`, and its executable repro asset. Append a regression case marked `关联BUG: BUG-<N>` to `test-cases.md`, run the repro as a black-box check, and append the exact result to the BUG's regression evidence. Never browse or edit source code, never perform the implementation fix, and never mutate progress state or Git.
 
 # Authoritative Role Contract
 

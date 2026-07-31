@@ -17,7 +17,7 @@ SA 的"评审大脑"运行在 codex CLI（异工具异构原则）。本 agent �
 ### target=spec：评审 spec.md
 
 ```bash
-codex "你是本项目的 SA。读 doc/<编号>/spec.md（已通过 cat 注入或本地直读）。
+codex exec "你是本项目的 SA。读 doc/<编号>/spec.md（已通过 cat 注入或本地直读）。
 
 按以下五点评审：
 1. 五章节是否齐全（业务背景 / 技术方案 / 影响范围 / 验收契约 / Sprint 切片）
@@ -34,7 +34,7 @@ append 到 doc/<编号>/sa-review.md（## Round N - YYYY-MM-DD - 结论 分隔�
 ### target=cases：评审测试用例
 
 ```bash
-codex "你是本项目的 SA。读 doc/<编号>/spec.md 的验收契约 + doc/<编号>/test-cases.md 的 ## Sprint M<N> 章节。
+codex exec "你是本项目的 SA。读 doc/<编号>/spec.md 的验收契约 + doc/<编号>/test-cases.md 的 ## Sprint M<N> 章节。
 
 按以下评审：
 1. 每条用例是否标注关联 AC-ID？
@@ -62,7 +62,7 @@ if [ $LINES -gt 1500 ]; then
 fi
 
 # 3. 调用 codex
-codex --file /tmp/review-m${SPRINT}-a.diff "你是本项目的 SA。评审此 diff。
+codex exec "你是本项目的 SA。评审此 diff。
 
 关注点：
 - 架构合理性：分层是否清晰（Controller/Service/Mapper）？
@@ -74,7 +74,7 @@ codex --file /tmp/review-m${SPRINT}-a.diff "你是本项目的 SA。评审此 di
 
 输出 ≤ 800 行，按 P0/P1/P2/P3 分级。
 append 到 doc/<编号>/sa-code-review.md（## Sprint M<N> - Round R - Group A - YYYY-MM-DD - 结论 分隔）。
-末尾必须 \`结论: PASS\` 或 \`结论: NEEDS_REVISION\`。"
+末尾必须 \`结论: PASS\` 或 \`结论: NEEDS_REVISION\`。" < /tmp/review-m${SPRINT}-a.diff
 ```
 
 ## 文件聚合规则

@@ -7,6 +7,8 @@ const root = resolve(import.meta.dirname, '..');
 const errors = [];
 const expectedCommands = [
   'approve-deploy',
+  'approve-plan',
+  'approve-release',
   'approve-spec',
   'brainstorm',
   'build',
@@ -15,19 +17,34 @@ const expectedCommands = [
   'git-custodian',
   'hotfix',
   'init',
+  'lean-review',
+  'lean-verify',
   'migrate-progress',
   'recon',
   'release-test',
+  'release-base',
+  'render-plan',
+  'request-release-changes',
   'review',
   'run',
   'status',
   'verify',
+  'verify-local',
+  'plan',
+  'execute',
 ];
 const expectedRoles = [
   'fullstack',
   'repo-scout',
   'reviewer',
   'verifier',
+  'lean-planner',
+  'lean-developer',
+  'lean-reviewer',
+  'lean-verifier',
+  'hotfix-developer',
+  'hotfix-reviewer',
+  'hotfix-verifier',
 ];
 
 function fail(message) {
@@ -63,10 +80,13 @@ for (const command of expectedCommands) {
   const skillPath = join(skillsRoot, name, 'SKILL.md');
   if (!existsSync(skillPath)) continue;
   const skill = readFileSync(skillPath, 'utf8');
-    for (const marker of ['preset-standard', 'fast mode', 'pi-subagents', 'different from the implementation model', 'ships no fixed model IDs']) {
+    const contractMarkers = command === 'hotfix'
+      ? ['preset-standard', 'pi-subagents', 'same model with higher thinking', 'ship no provider-specific model IDs']
+      : ['preset-standard', 'lean (default)', 'pi-subagents', 'same model with higher thinking', 'pass the selected `model` and `thinking` directly', 'ship no provider-specific model IDs'];
+    for (const marker of contractMarkers) {
       if (!skill.includes(marker)) fail(`${name}: missing P2 contract marker ${marker}`);
     }
-    if (['cc-nexs-approve-deploy', 'cc-nexs-approve-spec'].includes(name)
+    if (['cc-nexs-approve-deploy', 'cc-nexs-approve-spec', 'cc-nexs-approve-plan', 'cc-nexs-approve-release'].includes(name)
       && !skill.includes('../../../packages/core/lib/cc-nexs-cli.mjs')) {
       fail(`${name}: approval skill must invoke the deterministic control CLI`);
     }
@@ -80,12 +100,11 @@ if (existsSync(hotfixSkillPath)) {
   const hotfixSkill = readFileSync(hotfixSkillPath, 'utf8');
   for (const marker of [
     'Pi Hotfix Dispatch Contract',
-    'phase=hotfix-p3',
-    'phase=hotfix-implement',
-    'target=hotfix-code',
-    'target=hotfix-regression-case',
-    'target=hotfix-accept',
-    'three failed review rounds',
+    'cc-nexs.hotfix-developer',
+    'cc-nexs.hotfix-reviewer',
+    'cc-nexs.hotfix-verifier',
+    'single lifetime delta Review',
+    'Never merge test into base',
   ]) {
     if (!hotfixSkill.includes(marker)) fail(`cc-nexs-hotfix: missing ${marker}`);
   }
@@ -109,20 +128,22 @@ for (const role of expectedRoles) {
   if (/^\s*codex\s+/m.test(text)) fail(`${file}: executable Codex CLI snippet leaked into Pi agent`);
 }
 
-for (const [role, marker] of Object.entries({
-  fullstack: 'phase=hotfix-implement',
-  reviewer: 'target=hotfix-code',
-  verifier: 'target=hotfix-regression-case',
-})) {
-  const text = readFileSync(join(agentsRoot, `${role}.md`), 'utf8');
-  if (!text.includes('# Pi Hotfix Override') || !text.includes(marker)) {
-    fail(`${role}.md: missing Pi hotfix role override`);
-  }
-}
-
 const verifierTools = readFileSync(join(agentsRoot, 'verifier.md'), 'utf8');
+const leanVerifierTools = readFileSync(join(agentsRoot, 'lean-verifier.md'), 'utf8');
+const hotfixVerifierTools = readFileSync(join(agentsRoot, 'hotfix-verifier.md'), 'utf8');
 for (const tool of ['find_roots', 'observe_ui', 'search_ui', 'inspect_ui', 'act_ui', 'wait_for']) {
   if (!verifierTools.match(new RegExp(`^tools:.*\\b${tool}\\b`, 'm'))) fail(`verifier.md: missing computer-use tool ${tool}`);
+  if (!leanVerifierTools.match(new RegExp(`^tools:.*\\b${tool}\\b`, 'm'))) fail(`lean-verifier.md: missing computer-use tool ${tool}`);
+  if (!hotfixVerifierTools.match(new RegExp(`^tools:.*\\b${tool}\\b`, 'm'))) fail(`hotfix-verifier.md: missing computer-use tool ${tool}`);
+}
+
+for (const command of ['verify-local', 'release-base', 'render-plan']) {
+  const skill = readFileSync(join(skillsRoot, `cc-nexs-${command}`, 'SKILL.md'), 'utf8');
+  if (!skill.includes('Deterministic Lean Control')) fail(`cc-nexs-${command}: missing deterministic Lean control`);
+}
+const gatewayBChangeSkill = readFileSync(join(skillsRoot, 'cc-nexs-request-release-changes', 'SKILL.md'), 'utf8');
+if (!gatewayBChangeSkill.includes('Deterministic Gateway B Change Control')) {
+  fail('cc-nexs-request-release-changes: missing deterministic Gateway B change control');
 }
 
 const releaseSkillPath = join(skillsRoot, 'cc-nexs-release-test', 'SKILL.md');

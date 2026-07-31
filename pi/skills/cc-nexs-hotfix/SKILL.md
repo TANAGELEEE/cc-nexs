@@ -1,37 +1,54 @@
 ---
 name: cc-nexs-hotfix
-description: /cc-nexs:hotfix 的 Pi P2 适配 skill。 支持 preset-standard hotfix 旁路流程，并通过 pi-subagents 运行隔离角色。 Bug 修复入口。P0/P1/P2/P3 均先形成 candidate；默认自动发布 test，独立执行部署后回归，生产发布始终人工。
+description: /cc-nexs:hotfix 的 Pi P2 适配 skill。 支持 preset-standard 独立 hotfix mini-Lean，并通过 pi-subagents 运行隔离角色。 独立 Hotfix mini-Lean：latest-base worktree、本地验证、一次集中 Review、test 黑盒验收、人工 base 门禁。
 ---
 
 # /cc-nexs:hotfix for Pi
 
 Read and follow `../../../dist/preset-standard/commands/hotfix.md` as the authoritative command. Treat the text after `/cc-nexs:hotfix` as its arguments.
 
+## Deterministic Hotfix Controls
+
+Resolve `../../../packages/core/lib/cc-nexs-cli.mjs` relative to this SKILL.md. Bind the completed hotfix scope with:
+
+```text
+node <resolved-cli-path> start-hotfix <feature-id> [--level P0|P1|P2|P3] [--related <feature-id>]
+```
+
+Subsequent local verification, Review recording, test release/verification, release approval, and base integration must use the packaged controls named by the authoritative command. Never edit progress state or perform ad hoc merge/push operations.
+
 ## P2 Runtime Contract
 
-1. Pi support is experimental and limited to `preset-standard` fast mode plus the `/cc-nexs:hotfix` bypass. Full orchestration and compound remain unsupported. Do not silently downgrade an existing feature.
+1. Pi support covers `preset-standard` lean (default), standalone hotfix, and legacy fast. Full orchestration and compound remain unsupported. Do not silently downgrade an existing feature.
 2. Use the installed `pi-subagents` tool for every role dispatch. Use package-qualified agents and foreground fresh context:
    - Repo Scout: `cc-nexs.repo-scout`
    - Fullstack: `cc-nexs.fullstack`
    - Reviewer: `cc-nexs.reviewer`
    - Verifier: `cc-nexs.verifier`
+   - Lean Planner: `cc-nexs.lean-planner`
+   - Lean Developer: `cc-nexs.lean-developer`
+   - Lean Reviewer: `cc-nexs.lean-reviewer`
+   - Lean Verifier: `cc-nexs.lean-verifier`
+   - Hotfix Developer: `cc-nexs.hotfix-developer`
+   - Hotfix Reviewer: `cc-nexs.hotfix-reviewer`
+   - Hotfix Verifier: `cc-nexs.hotfix-verifier`
 3. Never invoke Claude Code, the Claude Task tool, Codex CLI, or a nested `pi` CLI. Legacy invocation snippets in the authoritative command are role task descriptions, not commands to execute in Pi.
-4. The Fullstack agent inherits the active Pi default unless the user configured an override. Reviewer and Verifier model selection belongs exclusively to Pi settings under `subagents.agentOverrides`; cc-nexs ships no fixed model IDs.
-5. Before the first Reviewer dispatch, confirm that `cc-nexs.reviewer` resolves to an authenticated model different from the implementation model. P0/P1 must also confirm `cc-nexs.verifier` before verification. Accept ordered `fallbackModels`; if a required mapping is absent, unavailable, or resolves to the implementation model, stop and explain how to configure it.
+4. Resolve Lean profiles from cc-nexs project/feature config and pass the selected `model` and `thinking` directly to the pi-subagents `Agent` call. Omit `model` when it is `inherit`. If the primary model is unavailable, retry the ordered cc-nexs `fallback_models` list. Project `.pi/settings.json` remains only the Pi authentication/`enabledModels` authority; do not duplicate role mappings there. Public cc-nexs files ship no provider-specific model IDs.
+5. Resolve Hotfix role profiles from project/feature config. Reviewer may use a different authenticated model or the same model with higher thinking, but always uses a fresh child context. P0/P1 heterogeneity is an optional private policy, not a public preset requirement. Accept ordered fallbackModels.
 6. Role children never mutate Git or progress state. The parent orchestrator owns state transitions and invokes the Git Custodian command itself.
 7. Set or preserve `CC_NEXS_RUNTIME=pi` and `CC_NEXS_PLUGIN_ROOT` for shell helpers. Resolve all feature paths through the existing workspace/progress contracts.
 8. Preserve the command's artifact locations, human gates, counters, validation, and stop behavior exactly. Runtime adaptation changes dispatch mechanics only.
 
 ## Pi Hotfix Dispatch Contract
 
-1. Hotfix is a bypass workflow, not a full/fast state-machine transition. Do not reject it solely because the associated feature's progress mode is `full`; do not advance `progress.json` or `progress.md`.
-2. The parent classifies P0/P1/P2/P3 exactly as the authoritative command requires, honors an explicit `--level`, prints the classification and reason before mutation, and resolves the existing feature/worktree before dispatch.
-3. P3: dispatch `cc-nexs.fullstack` once with `phase=hotfix-p3`. Re-check the single-file, at-most-20-line, non-logic boundary after the edit. If it is exceeded, reclassify before recording a candidate.
-4. P2: dispatch `cc-nexs.fullstack` with `phase=hotfix-implement`; then dispatch `cc-nexs.reviewer` with `target=hotfix-code` and an injected diff. On `NEEDS_REVISION`, dispatch a fresh Fullstack `phase=hotfix-revise` and a fresh Reviewer, stopping after the third failed review and escalating to the full SOP. After `PASS`, dispatch a fresh Fullstack `phase=hotfix-regression`; only successful evidence may move the BUG to `VERIFIED`.
-5. P0/P1: complete P2 first, then dispatch `cc-nexs.verifier` with `target=hotfix-regression-case`, followed by a fresh `cc-nexs.reviewer` with `target=hotfix-accept`. An unpassed acceptance result stops completion. If `deploy.md` says the change is already deployed, dispatch Fullstack `phase=hotfix-rollback` before recording candidates.
-6. Before the first review or verification dispatch, confirm the package role resolves to an authenticated model different from the Fullstack implementation model. Reviewer and Verifier may use their configured fallback chains, but the public package never supplies a model ID.
-7. Child roles never commit. After all required checks pass, the parent invokes the cc-nexs Git Custodian contract to record only declared code and docs candidate paths. Merge, push, and cleanup still require the normal explicit release authorization.
-8. Preserve every escalation boundary: AC/spec changes, a diff over 500 lines, cross-module refactoring, or three failed review rounds must stop hotfix and direct the user to a new full workflow.
+1. Hotfix must be initialized as `mode=hotfix` with its own id, `feature/<id>-<slug>`, and worktrees from the latest configured remote bases. A related feature is metadata only.
+2. Fill and bind the sole authored `hotfix.md` scope with `start-hotfix` before dispatch. AC/API/database/permission contract changes or broad refactoring stop and become a new Lean/Full change.
+3. Dispatch `cc-nexs.hotfix-developer` for implementation/fix. Candidate Git mutations remain parent Git Custodian work.
+4. P0/P1/P2 dispatch `cc-nexs.hotfix-reviewer` exactly once; a blocked result permits one fresh delta Review only. P3 skips the model Review only after deterministic one-file, at-most-20-line, non-behavioral proof.
+5. Run the configured local verification driver, then release the exact candidate with `release-test --hotfix`. Dispatch a fresh `cc-nexs.hotfix-verifier` on the deployed environment revision, including P3 smoke and P0/P1 rollback/AC evidence.
+6. Reviewer may use a different model or the same model with higher thinking. Session isolation is mandatory; heterogeneity is optional project policy. Public files never pin a model ID.
+7. Test failure or Gateway B implementation feedback consumes the same single lifetime delta Review, then requires a new candidate/test attempt. Delta blocking stops for human intervention.
+8. Only `approve-release` authorizes the verified feature candidate to merge into configured base branches. Never merge test into base and never force push.
 
 
 ## Required Pi Prerequisite
