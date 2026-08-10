@@ -168,6 +168,7 @@ test('doctor probes the ego lite runtime for Pi release readiness', () => {
     assert.equal(ready.status, 0, ready.stderr);
 
     installFakeCommand(root, 'ego-browser', 'not ready');
+    installFakeCommand(root, 'pi', 'npm:pi-subagents@0.35.1');
     const unavailable = runDoctor(root, true, {
       CC_NEXS_RUNTIME: 'pi',
       HOME: root,
