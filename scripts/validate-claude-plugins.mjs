@@ -4,6 +4,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { extractFrontmatter } from '../packages/core/lib/frontmatter.mjs';
 
 const ROOT = resolve(fileURLToPath(import.meta.url), '../..');
 const DIST = join(ROOT, 'dist');
@@ -28,7 +29,7 @@ function readJson(path) {
 
 function readFrontmatter(path) {
   const text = readFileSync(path, 'utf-8');
-  return text.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
+  return extractFrontmatter(text);
 }
 
 function validateExplicitClaudeEntry(path) {

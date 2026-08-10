@@ -14,6 +14,7 @@ import {
 } from './lib/safe-fs.mjs';
 import { writeJsonAtomic, writeTextAtomic } from './lib/atomic-write.mjs';
 import { parseInstallArgs, resolveInstallHome } from './lib/install-home.mjs';
+import { extractFrontmatter, matchFrontmatter } from '../packages/core/lib/frontmatter.mjs';
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '../..');
 
@@ -46,6 +47,16 @@ test('install home parsing prefers explicit isolated homes', () => {
     resolve('./env home'),
   );
   assert.throws(() => parseInstallArgs(['--home']), /requires a path/);
+});
+
+test('Markdown frontmatter parsing accepts Unix and Windows line endings', () => {
+  for (const newline of ['\n', '\r\n', '\r']) {
+    const text = ['---', 'name: portable', 'disable-model-invocation: true', '---', '# Body', ''].join(newline);
+    const match = matchFrontmatter(text);
+    assert.ok(match);
+    assert.equal(extractFrontmatter(text).replace(/\r\n?|\n/g, '\n'), 'name: portable\ndisable-model-invocation: true');
+    assert.equal(text.slice(match[0].length), `# Body${newline}`);
+  }
 });
 
 test('Codex local installer refuses overlapping preset hooks', () => {

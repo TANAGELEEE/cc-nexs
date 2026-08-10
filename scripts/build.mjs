@@ -42,6 +42,7 @@ import {
   copyTreeNoSymlinks,
   safeRemoveWithin,
 } from './lib/safe-fs.mjs';
+import { extractFrontmatter, matchFrontmatter } from '../packages/core/lib/frontmatter.mjs';
 
 const ROOT = resolve(fileURLToPath(import.meta.url), '../..');
 const PACKAGES = join(ROOT, 'packages');
@@ -217,7 +218,7 @@ function assertExplicitClaudeEntrypoints(dst) {
   }
   for (const file of entryFiles) {
     const text = readFileSync(file, 'utf8');
-    const frontmatter = text.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
+    const frontmatter = extractFrontmatter(text);
     if (!/^disable-model-invocation:\s*true\s*$/m.test(frontmatter)) {
       throw new Error(`explicit-only Claude entry is missing disable-model-invocation: true: ${file}`);
     }
@@ -410,7 +411,7 @@ The command is complete only when the artifact, state, and summary expected by \
 }
 
 function parseAgentSource(text, file) {
-  const frontmatter = text.match(/^---\n([\s\S]*?)\n---\n?/);
+  const frontmatter = matchFrontmatter(text);
   if (!frontmatter) throw new Error(`Pi agent source has no frontmatter: ${file}`);
   const description = frontmatter[1].match(/^description:\s*(.+)$/m)?.[1]?.trim() || `cc-nexs role from ${file}`;
   const declaredTools = frontmatter[1].match(/^tools:\s*(.+)$/m)?.[1]?.split(',').map((tool) => tool.trim()) || [];

@@ -2,6 +2,7 @@
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { extractFrontmatter } from '../packages/core/lib/frontmatter.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const errors = [];
@@ -85,7 +86,7 @@ for (const command of expectedCommands) {
   const skillPath = join(skillsRoot, name, 'SKILL.md');
   if (!existsSync(skillPath)) continue;
   const skill = readFileSync(skillPath, 'utf8');
-    const skillFrontmatter = skill.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
+    const skillFrontmatter = extractFrontmatter(skill);
     if (!/^disable-model-invocation:\s*true\s*$/m.test(skillFrontmatter)) {
       fail(`${name}: explicit-only Pi skill must set disable-model-invocation: true`);
     }
@@ -128,7 +129,7 @@ for (const role of expectedRoles) {
   const path = join(agentsRoot, file);
   if (!existsSync(path)) continue;
   const text = readFileSync(path, 'utf8');
-  const frontmatter = text.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
+  const frontmatter = extractFrontmatter(text);
   for (const marker of [`name: ${role}`, 'package: cc-nexs', 'defaultContext: fresh']) {
     if (!frontmatter.includes(marker)) fail(`${file}: missing ${marker}`);
   }
@@ -142,7 +143,7 @@ for (const role of expectedRoles) {
 
 for (const file of ['verifier.md', 'lean-verifier.md', 'hotfix-verifier.md']) {
   const verifier = readFileSync(join(agentsRoot, file), 'utf8');
-  const frontmatter = verifier.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
+  const frontmatter = extractFrontmatter(verifier);
   if (!/^tools:.*\bbash\b/m.test(frontmatter)) fail(`${file}: ego lite browser operations require Bash`);
   if (!/^skills:\s*ego-browser\s*$/m.test(frontmatter)) fail(`${file}: must select the ego-browser skill`);
   if (!verifier.includes('Pi Ego Lite Browser Contract')) fail(`${file}: missing ego lite browser contract`);
@@ -153,7 +154,7 @@ for (const file of ['verifier.md', 'lean-verifier.md', 'hotfix-verifier.md']) {
 
 for (const file of ['verifier-computer-use.md', 'lean-verifier-computer-use.md', 'hotfix-verifier-computer-use.md']) {
   const verifier = readFileSync(join(agentsRoot, file), 'utf8');
-  const frontmatter = verifier.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
+  const frontmatter = extractFrontmatter(verifier);
   if (/^skills:/m.test(frontmatter)) fail(`${file}: fallback verifier must not preload ego-browser`);
   for (const tool of ['find_roots', 'observe_ui', 'search_ui', 'expand_ui', 'inspect_ui', 'act_ui', 'read_text', 'wait_for']) {
     if (!new RegExp(`^tools:.*\\b${tool}\\b`, 'm').test(frontmatter)) fail(`${file}: missing computer-use tool ${tool}`);

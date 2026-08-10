@@ -4,6 +4,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve, basename, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { extractFrontmatter } from '../packages/core/lib/frontmatter.mjs';
 
 const ROOT = resolve(fileURLToPath(import.meta.url), '../..');
 const DIST = join(ROOT, 'dist');
@@ -104,16 +105,11 @@ function validateSkill(skillRoot) {
   const skillPath = join(skillRoot, 'SKILL.md');
   const text = readFileSync(skillPath, 'utf-8');
   if (text.includes('[TODO:')) fail(`${skillPath}: contains [TODO:] placeholder`);
-  if (!text.startsWith('---\n')) {
+  const frontmatter = extractFrontmatter(text);
+  if (!frontmatter) {
     fail(`${skillPath}: missing YAML frontmatter`);
     return;
   }
-  const end = text.indexOf('\n---', 4);
-  if (end < 0) {
-    fail(`${skillPath}: unclosed YAML frontmatter`);
-    return;
-  }
-  const frontmatter = text.slice(4, end);
   const name = frontmatter.match(/^name:\s*(.+)$/m)?.[1]?.trim();
   const description = frontmatter.match(/^description:\s*(.+)$/m)?.[1]?.trim();
   if (!name) fail(`${skillPath}: missing frontmatter name`);
@@ -189,7 +185,7 @@ function validateCommandMirrors(pluginRoot, manifest) {
 
 function readSkillName(skillPath) {
   const text = readFileSync(skillPath, 'utf-8');
-  const frontmatter = text.startsWith('---\n') ? text.slice(4, text.indexOf('\n---', 4)) : '';
+  const frontmatter = extractFrontmatter(text);
   return frontmatter.match(/^name:\s*(.+)$/m)?.[1]?.trim() || null;
 }
 
