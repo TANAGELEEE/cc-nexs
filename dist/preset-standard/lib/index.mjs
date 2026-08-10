@@ -50,7 +50,19 @@ export { HOTFIX_SCOPE_MARKERS, assertHotfixScopeCurrent, assertP3CandidateBounda
 export { recordEnvironmentVerification } from './test-verification-control.mjs';
 export { renderLeanPlan } from './plan-render.mjs';
 export { executeBuildPlan } from './build-executor.mjs';
-export { PLAN_SCOPE_MARKERS, assertPlanApprovalCurrent, extractApprovalScope, planApprovalBinding } from './plan-contract.mjs';
+export { PLAN_SCOPE_MARKERS, approvedPlanRiskTier, assertPlanApprovalCurrent, extractApprovalScope, inspectPlanRiskBinding, planApprovalBinding } from './plan-contract.mjs';
 export { nextFeatureId, recordPublishedFeatureReservation, releaseFeatureReservation, reserveFeatureId } from './feature-reservation.mjs';
 export { publishDocsReservation } from './docs-reservation.mjs';
 export { detectRuntime, resolveRoleRuntime, runtimeContract } from './runtime-resolver.mjs';
+export { migrateFeatureConfig } from './feature-config.mjs';
+export {
+  LEGACY_TEMPLATE_ROLE_MAPS,
+  applyModelRouting,
+  extractPlanRiskTier,
+  hasLegacyTemplateRoleMap,
+  normalizeRiskTier,
+  resolveApprovedPlanRiskSignal,
+  resolveFeatureModelRouting,
+  resolveRiskContext,
+  validateModelRoutingConfig,
+} from './model-routing.mjs';

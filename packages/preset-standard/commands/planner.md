@@ -1,7 +1,8 @@
 ---
-description: Planner 角色入口。展开业务需求为 spec.md，含验收契约 AC 表 + Sprint 切片。可选 --revise 模式按 SA 反馈修订。
-allowed-tools: Read, Write, Edit, Glob, Grep, Task
-argument-hint: [需求编号] [可选: --revise]
+description: "Planner 角色入口。展开业务需求为 spec.md，含验收契约 AC 表 + Sprint 切片。可选 --revise 模式按 SA 反馈修订。"
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Glob, Grep, Task"
+argument-hint: "[需求编号] [可选: --revise]"
 ---
 
 # /cc-nexs:planner

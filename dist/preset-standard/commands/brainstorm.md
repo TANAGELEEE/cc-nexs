@@ -1,7 +1,8 @@
 ---
-description: Brainstorming 入口。用 Socratic 对话把 PM 一句话诉求展开成结构化 requirements.md，作为 Planner 的输入。在 /cc-nexs:init 之后、/cc-nexs:run 之前调用。
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash
-argument-hint: <需求编号>
+description: "Brainstorming 入口。用 Socratic 对话把 PM 一句话诉求展开成结构化 requirements.md，作为 Planner 的输入。在 /cc-nexs:init 之后、/cc-nexs:run 之前调用。"
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Glob, Grep, Bash"
+argument-hint: "<需求编号>"
 ---
 
 # /cc-nexs:brainstorm
@@ -14,7 +15,7 @@ argument-hint: <需求编号>
 
 ## 前置约束
 
-本命令激活 [`brainstorming` skill](../skills/brainstorming/SKILL.md)。HARD-GATE 由 skill 强制：
+本命令读取并遵循 [`brainstorming` skill](../skills/brainstorming/SKILL.md)。HARD-GATE 由该内部流程文件强制：
 
 - 禁写 `spec.md` / `dev-plan.md` / 任何 `src/` 代码
 - 禁调 Planner / Tech Lead / SA / QA / Evaluator 子代理
@@ -79,7 +80,7 @@ fi
 
 ### 5. 进入 brainstorming 对话
 
-激活 `brainstorming` skill 并按其流程清单逐项推进：
+读取 `skills/brainstorming/SKILL.md` 并按其流程清单逐项推进；这是显式 `/cc-nexs:brainstorm` 命令的内部流程加载，不依赖模型自动触发 skill：
 
 1. 读 `${REQ_FILE}` 当前内容（init 已写入一句话诉求）
 2. 读最近 git 提交（`git log --oneline -10`）作为上下文

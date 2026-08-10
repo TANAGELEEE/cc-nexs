@@ -1,7 +1,8 @@
 ---
-description: fast 模式 Verifier 入口。initial 在首次 test 发布后执行，regression 在修复重新发布后执行；两者都是黑盒环境验证。
-allowed-tools: Read, Write, Edit, Bash, Glob, Task
-argument-hint: <mode: initial|regression> [需求编号]
+description: "fast 模式 Verifier 入口。initial 在首次 test 发布后执行，regression 在修复重新发布后执行；两者都是黑盒环境验证。"
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Bash, Glob, Task"
+argument-hint: "<mode: initial|regression> [需求编号]"
 ---
 
 # /cc-nexs:verify

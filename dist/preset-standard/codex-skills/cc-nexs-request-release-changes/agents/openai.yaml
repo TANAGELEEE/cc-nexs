@@ -1,0 +1,6 @@
+interface:
+  display_name: "/cc-nexs:request-release-changes"
+  short_description: "Run /cc-nexs:request-release-changes explicitly"
+  default_prompt: "Use $cc-nexs-request-release-changes to run /cc-nexs:request-release-changes."
+policy:
+  allow_implicit_invocation: false

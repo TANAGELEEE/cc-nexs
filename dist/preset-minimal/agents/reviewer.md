@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: Generic Reviewer role. Reviews spec / code / tests / acceptance. Black-box for source code logic only when reviewing acceptance.
+description: "Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests. Generic Reviewer role. Reviews spec / code / tests / acceptance. Black-box for source code logic only when reviewing acceptance."
 tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 

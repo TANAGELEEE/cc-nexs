@@ -1,11 +1,11 @@
 ---
 name: cc-nexs-init
-description: /cc-nexs:init 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:init"、"/cc-nexs:init ..."、"$cc-nexs-init" 或要求执行 cc-nexs init 流程时触发。 Initialize progress.json v2 and create one isolated worktree per configured repository through Git Custodian.
+description: /cc-nexs:init 的 Codex 镜像 skill。 仅当用户显式输入 "$cc-nexs-init" 或在界面中选择该 skill 时使用；不得因普通自然语言请求自动触发。 Initialize progress.json v2 and create one isolated worktree per configured repository through Git Custodian.
 ---
 
 # /cc-nexs:init for Codex
 
-This skill is the Codex mirror for `/cc-nexs:init`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and full / fast / hotfix behavior as the Claude Code plugin.
+This explicit-only skill is the Codex mirror for `/cc-nexs:init`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and full / fast / hotfix behavior as the Claude Code plugin.
 
 ## Authoritative Command
 

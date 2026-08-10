@@ -1,7 +1,8 @@
 ---
-description: Integrate exact approved Lean/Hotfix candidates into configured base branches and clean worktrees after proof.
-allowed-tools: Read, Bash
-argument-hint: [feature_id]
+description: "Integrate exact approved Lean/Hotfix candidates into configured base branches and clean worktrees after proof."
+disable-model-invocation: true
+allowed-tools: "Read, Bash"
+argument-hint: "[feature_id]"
 ---
 
 # /cc-nexs:release-base

@@ -1,11 +1,11 @@
 ---
 name: cc-nexs-git-custodian
-description: /cc-nexs:git-custodian 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:git-custodian"、"/cc-nexs:git-custodian ..."、"$cc-nexs-git-custodian" 或要求执行 cc-nexs git-custodian 流程时触发。 Sole Git mutation boundary for multi-repository worktrees, candidate commits, merge verification, and safe cleanup.
+description: /cc-nexs:git-custodian 的 Codex 镜像 skill。 仅当用户显式输入 "$cc-nexs-git-custodian" 或在界面中选择该 skill 时使用；不得因普通自然语言请求自动触发。 Sole Git mutation boundary for multi-repository worktrees, candidate commits, merge verification, and safe cleanup.
 ---
 
 # /cc-nexs:git-custodian for Codex
 
-This skill is the Codex mirror for `/cc-nexs:git-custodian`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and full / fast / hotfix behavior as the Claude Code plugin.
+This explicit-only skill is the Codex mirror for `/cc-nexs:git-custodian`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and full / fast / hotfix behavior as the Claude Code plugin.
 
 ## Authoritative Command
 

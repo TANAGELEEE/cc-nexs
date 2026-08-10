@@ -6,6 +6,8 @@ All notable changes to cc-nexs will be documented here.
 
 ### 新增
 
+- **三端风险驱动模型自动升级**：新增 `risk_tier`、`models.routing`、provider-neutral `escalated` profile 与统一 resolver。Lean high/critical 自动升级 Planner/Reviewer，Hotfix P0/P1 自动升级 Reviewer；feature 显式 profile 最终优先，决策输出 risk source/signals/matched rules。新模板不再写死 `models.roles`，并提供 `/cc-nexs:migrate-feature-config` 安全迁移历史 feature；Gateway A 同时绑定 concrete risk。
+- **自动升级复核加固**：历史 Gateway A 只从 hash 匹配的批准 scope 派生风险，未知风险按 high 保守升档；`migrate-feature-config --bind-plan-risk` 可审计回填。文档补充 native-agent 模型可用性与 Fast/Full 全角色低预算映射要求。
 - **Lean 默认省 token 流程**：两个人工门禁、一次集中 Review、worktree/feature 分支隔离、精确 candidate 绑定的本地验证与 test/base 发布；Gateway B 意见按 evidence / implementation / scope 分流并同步回唯一 requirements/plan 文档。构建改为按变更模块选择、依赖感知并行、精确候选缓存，Claude Code、Codex、Pi 均支持按角色配置 model 与 effort/thinking。
 - **Hotfix mini-Lean**：Hotfix 改为独立 `mode=hotfix` 需求，从最新 base 创建自己的 feature/worktree，只维护一份 `hotfix.md`；P0/P1/P2 一次集中 Review，P3 机器边界后跳过，修复全生命周期最多一次 delta。Exact candidate 先进入 test 黑盒验收，Gateway B 批准后同一 candidate 才进入 base。Claude Code、Codex、Pi 使用专用可配置角色。
 - **per-feature README 自动同步**：每次 orchestrator 状态推进后自动调 `syncFeatureReadme(...)` 刷新 `doc/<id>/README.md` 的 AUTOGEN 区段（当前状态 / 产物索引 / 契约覆盖快照 / 待人工接入），兑现 README 模板"进入目录第一件事：读本文件"的承诺。

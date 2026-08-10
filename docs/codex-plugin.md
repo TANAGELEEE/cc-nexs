@@ -6,7 +6,7 @@ cc-nexs now ships a Codex plugin side by side with the Claude Code plugin. The C
 
 Inside Codex, every role is dispatched as an independent native agent. The plugin does not start Claude Code and does not recursively invoke the Codex CLI. Implementer and reviewer contexts always remain isolated.
 
-The public preset stores portable profiles only. Private project or feature config may assign each Lean role a concrete model and reasoning effort. This supports either a different Review model or the same model at a higher reasoning level; unspecified model IDs inherit the current Codex channel.
+The public preset stores portable profiles only. Private project or feature config may assign each role a concrete model and reasoning effort. Automatic routing uses the shared deterministic core: Lean high/critical upgrades Planner and Reviewer to `escalated`; Hotfix P0/P1 upgrades Reviewer; a feature role profile remains the final override. The public `escalated` profile is `inherit + xhigh`, so a project must override that profile to switch to a concrete stronger model. Use only models exposed by the current native-agent override surface; top-level model-catalog visibility alone is not sufficient.
 
 Inside Claude Code, all Lean roles use isolated Claude subagents, so Developer and Reviewer can use the same Claude model at different effort levels or different Claude models. Legacy full/fast SA/Evaluator/Reviewer roles retain their existing Codex CLI separation; executor-aware resolution uses the `codex` profile for those roles.
 
@@ -17,7 +17,7 @@ Inside Claude Code, all Lean roles use isolated Claude subagents, so Developer a
 - `.claude-plugin/plugin.json` for Claude Code
 - `.codex-plugin/plugin.json` for Codex
 - `commands/` as the authoritative command workflows
-- `skills/` with the original Claude Code skills, unchanged
+- `skills/` with the original Claude Code skills and their explicit-only invocation metadata
 - `codex-skills/` with generated Codex command mirror skills
 - `agents/`, `templates/`, `hooks/`, `lib/`, `schemas/`, `i18n/`, and preset docs
 
@@ -60,7 +60,9 @@ Codex plugins expose reusable workflows through skills. During build, every `com
 | `/cc-nexs:verify` | `$cc-nexs-verify` |
 | `/cc-nexs:approve-deploy` | `$cc-nexs-approve-deploy` |
 
-The original slash-style text remains in skill descriptions as a compatibility hint, but it is not a native Codex slash command and must never be executed as a shell path. Use the explicit `$cc-nexs-*` skill form:
+Every generated mirror has `agents/openai.yaml` with `policy.allow_implicit_invocation: false`. Codex therefore omits it from the default model context and runs it only when the user selects or names the `$cc-nexs-*` skill. The original slash-style text remains as a compatibility hint, but it is not a native Codex slash command and must never be executed as a shell path:
+
+This policy controls workflow entry only. After `$cc-nexs-run` is explicitly invoked, the orchestrator continues across internal stages until an existing human gate, release/verification block, circuit breaker, or genuine tool failure stops it.
 
 ```text
 $cc-nexs-init "添加 /api/health 健康检查接口"
@@ -118,10 +120,16 @@ models:
       codex:
         model: your-model-id
         effort: high
+    escalated:
+      codex:
+        model: your-strong-model-id
+        effort: xhigh
   roles:
     lean-developer: implementation
     lean-reviewer: review
 ```
+
+New features use `config_version: 2` and `risk_tier: auto` without generated role mappings. For an older Lean/Hotfix feature, run `$cc-nexs-migrate-feature-config <id> --dry-run` and then the same skill without `--dry-run`; custom feature overrides are preserved. A legacy approved Plan risk is derived only from its exact stored scope hash; unknown legacy risk is conservatively routed as high. Use `--dry-run --bind-plan-risk` and then `--bind-plan-risk` to materialize a derivable risk with an audit event.
 
 ### Full
 
@@ -204,14 +212,17 @@ The Codex validator checks:
 - every `dist/preset-*` has `.codex-plugin/plugin.json`
 - every command has a generated mirror skill
 - generated skills point back to the authoritative command file
+- every generated skill has `policy.allow_implicit_invocation: false` and an explicit `$cc-nexs-*` default prompt
 - hook commands include Codex-compatible plugin-root fallbacks
 - `.agents/plugins/marketplace.json` points at every Codex plugin artifact
 
-The Claude Code validator checks that Codex support has not changed the existing Claude install surface:
+The Claude Code validator checks the Claude install surface and explicit-only contract:
 
 - `.claude-plugin/marketplace.json` still points at `./dist/preset-*`
 - `pnpm install:local` still uses `scripts/install-local.mjs`
 - generated Codex command mirror skills stay under `codex-skills/` and do not leak into Claude Code's `skills/`
+- every Claude command and native skill sets `disable-model-invocation: true`
+- plugin agents are routable only from an already explicit cc-nexs parent workflow
 - `pnpm smoke:claude-install` runs `install-local.mjs` under a temporary HOME and checks Claude's installed plugin cache, known marketplace file, symlink, and enabled plugin settings without touching the real `~/.claude`
 
 The SOP parity validator checks the lean / full / fast / hotfix load-bearing contract:

@@ -1,0 +1,6 @@
+interface:
+  display_name: "/cc-nexs:verify-local"
+  short_description: "Run /cc-nexs:verify-local explicitly"
+  default_prompt: "Use $cc-nexs-verify-local to run /cc-nexs:verify-local."
+policy:
+  allow_implicit_invocation: false

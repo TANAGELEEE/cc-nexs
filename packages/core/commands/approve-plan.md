@@ -1,7 +1,8 @@
 ---
-description: Approve the Lean requirements and plan scope, binding the gate to their hashes.
-allowed-tools: Read, Bash
-argument-hint: [feature_id]
+description: "Approve the Lean requirements and plan scope, binding the gate to their hashes."
+disable-model-invocation: true
+allowed-tools: "Read, Bash"
+argument-hint: "[feature_id]"
 ---
 
 # /cc-nexs:approve-plan

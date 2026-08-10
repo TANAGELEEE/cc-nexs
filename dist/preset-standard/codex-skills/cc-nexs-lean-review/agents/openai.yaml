@@ -1,0 +1,6 @@
+interface:
+  display_name: "/cc-nexs:lean-review"
+  short_description: "Run /cc-nexs:lean-review explicitly"
+  default_prompt: "Use $cc-nexs-lean-review to run /cc-nexs:lean-review."
+policy:
+  allow_implicit_invocation: false

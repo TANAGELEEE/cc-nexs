@@ -1,6 +1,8 @@
 {
   "_comment": "cc-nexs 单需求配置。orchestrator 启动时读取本文件决定流水线模式。",
+  "config_version": 2,
   "mode": "lean",
+  "risk_tier": "auto",
   "release": {
     "test": "inherit"
   },
@@ -11,14 +13,6 @@
     "fast": "三角色单 Sprint；代码评审后统一 TEST_RELEASE，Verifier 在已部署 test 环境验证，失败修复复审后重新发布回归",
     "lite": "轻量流程（Tech Lead → 自测 → commit），跳过 spec 和 Evaluator，适合极小改动",
     "hotfix": "Bug 修复流程，按 P0/P1/P2/P3 自动分档"
-  },
-  "models": {
-    "roles": {
-      "lean-planner": "balanced",
-      "lean-developer": "balanced",
-      "lean-reviewer": "review",
-      "lean-verifier": "balanced"
-    }
   },
   "_mode_选择建议": {
     "用 full 当": "跨模块、含 DB schema 变更、涉及对外契约、合规风险、Sprint 切片 ≥ 2",

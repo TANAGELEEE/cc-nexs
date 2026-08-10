@@ -1,6 +1,7 @@
 ---
 name: cc-nexs-hotfix
-description: /cc-nexs:hotfix 的 Pi P2 适配 skill。 支持 preset-standard 独立 hotfix mini-Lean，并通过 pi-subagents 运行隔离角色。 独立 Hotfix mini-Lean：latest-base worktree、本地验证、一次集中 Review、test 黑盒验收、人工 base 门禁。
+description: /cc-nexs:hotfix 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:hotfix 或 /skill:cc-nexs-hotfix 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard 独立 hotfix mini-Lean，并通过 pi-subagents 运行隔离角色。 独立 Hotfix mini-Lean：latest-base worktree、本地验证、一次集中 Review、test 黑盒验收、人工 base 门禁。
+disable-model-invocation: true
 ---
 
 # /cc-nexs:hotfix for Pi
@@ -33,8 +34,8 @@ Subsequent local verification, Review recording, test release/verification, rele
    - Hotfix Reviewer: `cc-nexs.hotfix-reviewer`
    - Hotfix Verifier: `cc-nexs.hotfix-verifier`
 3. Never invoke Claude Code, the Claude Task tool, Codex CLI, or a nested `pi` CLI. Legacy invocation snippets in the authoritative command are role task descriptions, not commands to execute in Pi.
-4. Resolve Lean profiles from cc-nexs project/feature config and pass the selected `model` and `thinking` directly to the pi-subagents `Agent` call. Omit `model` when it is `inherit`. If the primary model is unavailable, retry the ordered cc-nexs `fallback_models` list. Project `.pi/settings.json` remains only the Pi authentication/`enabledModels` authority; do not duplicate role mappings there. Public cc-nexs files ship no provider-specific model IDs.
-5. Resolve Hotfix role profiles from project/feature config. Reviewer may use a different authenticated model or the same model with higher thinking, but always uses a fresh child context. P0/P1 heterogeneity is an optional private policy, not a public preset requirement. Accept ordered fallbackModels.
+4. Resolve automatic risk routing from one cc-nexs progress/config/approved-plan snapshot, then pass the selected `model` and `thinking` directly to the pi-subagents `Agent` call. Lean high/critical upgrades Planner and Reviewer; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. Omit `model` when it is `inherit`. If the primary model is unavailable, retry the ordered cc-nexs `fallback_models` list. Project `.pi/settings.json` remains only the Pi authentication/`enabledModels` authority; do not duplicate role mappings there. Public cc-nexs files ship no provider-specific model IDs.
+5. Resolve Hotfix role profiles from one progress/config snapshot. P0/P1 automatically routes Reviewer to escalated; an explicit feature role profile remains final. Reviewer may use a different authenticated model or the same model with higher thinking, but always uses a fresh child context. P0/P1 heterogeneity is an optional private policy, not a public preset requirement. Accept ordered fallbackModels.
 6. Role children never mutate Git or progress state. The parent orchestrator owns state transitions and invokes the Git Custodian command itself.
 7. Set or preserve `CC_NEXS_RUNTIME=pi` and `CC_NEXS_PLUGIN_ROOT` for shell helpers. Resolve all feature paths through the existing workspace/progress contracts.
 8. Preserve the command's artifact locations, human gates, counters, validation, and stop behavior exactly. Runtime adaptation changes dispatch mechanics only.

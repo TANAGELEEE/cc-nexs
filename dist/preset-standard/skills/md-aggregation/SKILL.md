@@ -1,6 +1,7 @@
 ---
-name: md-aggregation
-description: cc-nexs 文档聚合规则速查。避免文件泛滥（每轮一个 md 文件的反模式）。触发词：sa-review、sa-code-review、test-report、acceptance、append、文件命名、追加、文档泛滥。
+name: "md-aggregation"
+description: "cc-nexs 文档聚合规则速查。避免文件泛滥（每轮一个 md 文件的反模式）。触发词：sa-review、sa-code-review、test-report、acceptance、append、文件命名、追加、文档泛滥。"
+disable-model-invocation: true
 ---
 
 # md 文档聚合规则

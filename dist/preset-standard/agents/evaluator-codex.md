@@ -1,6 +1,6 @@
 ---
 name: evaluator-codex
-description: Evaluator（验收人）身份。通过 codex CLI 调用。按 spec.md 的验收契约 AC 表逐条打分。**禁读 src/、禁读 sa-*.md、禁与 QA 同 session、禁继续分派任务**。
+description: "Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests. Evaluator（验收人）身份。通过 codex CLI 调用。按 spec.md 的验收契约 AC 表逐条打分。**禁读 src/、禁读 sa-*.md、禁与 QA 同 session、禁继续分派任务**。"
 tools: Bash, Read, Write, Edit
 ---
 

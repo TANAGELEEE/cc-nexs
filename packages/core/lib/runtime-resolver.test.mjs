@@ -84,3 +84,91 @@ test('runtime model profiles support distinct models and Pi fallback chains', ()
   assert.equal(reviewer.effort, 'high');
   assert.deepEqual(reviewer.fallback_models, ['provider/backup']);
 });
+
+test('high-risk Lean roles are automatically upgraded by model routing', () => {
+  const models = {
+    profiles: {
+      daily: { codex: { model: 'daily-model', effort: 'medium' } },
+      escalated: { codex: { model: 'escalated-model', effort: 'xhigh' } },
+    },
+    roles: { implementer: 'daily', reviewer: 'daily' },
+    routing: {
+      rules: [{
+        id: 'lean-high-risk',
+        when: { modes: ['lean'], risk_tiers: ['high', 'critical'] },
+        roles: { reviewer: 'escalated' },
+      }],
+    },
+  };
+  const reviewer = resolveRoleRuntime(preset, 'reviewer', 'codex', {
+    models,
+    modelContext: { mode: 'lean', risk_tier: 'high', source: 'plan' },
+  });
+  assert.equal(reviewer.model_profile, 'escalated');
+  assert.equal(reviewer.model, 'escalated-model');
+  assert.equal(reviewer.effort, 'xhigh');
+  assert.deepEqual(reviewer.model_routing.matched_rules, ['lean-high-risk']);
+  assert.equal(reviewer.model_routing.auto_upgraded, true);
+});
+
+test('feature role model selection overrides an automatic upgrade', () => {
+  const models = {
+    profiles: {
+      daily: { codex: { model: 'daily-model', effort: 'medium' } },
+      escalated: { codex: { model: 'escalated-model', effort: 'xhigh' } },
+    },
+    roles: { reviewer: 'daily' },
+    routing: {
+      rules: [{
+        id: 'hotfix-p0-p1',
+        when: { modes: ['hotfix'], severities: ['P0', 'P1'] },
+        roles: { reviewer: 'escalated' },
+      }],
+    },
+  };
+  const reviewer = resolveRoleRuntime(preset, 'reviewer', 'codex', {
+    models,
+    featureModels: { roles: { reviewer: { profile: 'daily', codex: { effort: 'high' } } } },
+    modelContext: { mode: 'hotfix', risk_tier: 'critical', severity: 'P0' },
+  });
+  assert.equal(reviewer.model_profile, 'daily');
+  assert.equal(reviewer.model, 'daily-model');
+  assert.equal(reviewer.effort, 'high');
+  assert.equal(reviewer.model_routing.auto_upgraded, false);
+  assert.equal(reviewer.model_routing.feature_override, true);
+  assert.equal(reviewer.model_routing.feature_profile_override, true);
+});
+
+test('runtime-only feature tuning preserves automatic upgrade observability', () => {
+  const models = {
+    profiles: {
+      review: { codex: { model: 'review-model', effort: 'high' } },
+      escalated: { codex: { model: 'escalated-model', effort: 'xhigh' } },
+    },
+    roles: { reviewer: 'review' },
+    routing: { rules: [{
+      id: 'lean-high',
+      when: { modes: ['lean'], risk_tiers: ['high'] },
+      roles: { reviewer: 'escalated' },
+    }] },
+  };
+  const reviewer = resolveRoleRuntime(preset, 'reviewer', 'codex', {
+    models,
+    featureConfig: { mode: 'lean', models: { roles: { reviewer: { codex: { effort: 'max' } } } } },
+    progress: { mode: 'lean' },
+    planText: '- risk_tier: high\n',
+  });
+  assert.equal(reviewer.model_profile, 'escalated');
+  assert.equal(reviewer.effort, 'max');
+  assert.equal(reviewer.model_routing.auto_upgraded, true);
+  assert.equal(reviewer.model_routing.feature_override, true);
+  assert.equal(reviewer.model_routing.feature_profile_override, false);
+});
+
+test('feature role profile typos fail closed instead of silently inheriting the host model', () => {
+  assert.throws(() => resolveRoleRuntime(preset, 'reviewer', 'codex', {
+    models: { profiles: { review: { codex: { effort: 'high' } } }, roles: { reviewer: 'review' } },
+    featureConfig: { mode: 'lean', models: { roles: { reviewer: 'typo-profile' } } },
+    progress: { mode: 'lean' },
+  }), /unknown model profile: typo-profile/);
+});

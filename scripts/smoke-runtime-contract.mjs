@@ -16,6 +16,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL, fileURLToPath } from 'node:url';
@@ -103,7 +104,11 @@ function assertHotfixDocs(reqDir) {
     assert(!existsSync(join(reqDir, rel)), `${reqDir}: Hotfix must not create ${rel}`);
   }
   assert(readFileSync(join(reqDir, 'hotfix.md'), 'utf8').includes('HOTFIX-SCOPE START'), 'Hotfix scope marker missing');
-  assert(JSON.parse(readFileSync(join(reqDir, 'config.json'), 'utf8')).mode === 'hotfix', 'Hotfix config mode must be hotfix');
+  const config = JSON.parse(readFileSync(join(reqDir, 'config.json'), 'utf8'));
+  assert(config.mode === 'hotfix', 'Hotfix config mode must be hotfix');
+  assert(config.config_version === 2, 'Hotfix config_version must be 2');
+  assert(config.risk_tier === 'auto', 'Hotfix risk_tier must default to auto');
+  assert(!config.models?.roles, 'Hotfix template must not shadow project models.roles');
   assert(JSON.parse(readFileSync(join(reqDir, 'progress.json'), 'utf8')).mode === 'hotfix', 'Hotfix progress mode must be hotfix');
 }
 
@@ -115,7 +120,11 @@ function assertLeanDocs(reqDir) {
     assert(!existsSync(join(reqDir, rel)), `${reqDir}: Lean must not create ${rel}`);
   }
   assert(readFileSync(join(reqDir, 'plan.md'), 'utf8').includes('APPROVAL-SCOPE START'), 'Lean plan approval marker missing');
-  assert(JSON.parse(readFileSync(join(reqDir, 'config.json'), 'utf8')).mode === 'lean', 'Lean config mode must be lean');
+  const config = JSON.parse(readFileSync(join(reqDir, 'config.json'), 'utf8'));
+  assert(config.mode === 'lean', 'Lean config mode must be lean');
+  assert(config.config_version === 2, 'Lean config_version must be 2');
+  assert(config.risk_tier === 'auto', 'Lean risk_tier must default to auto');
+  assert(!config.models?.roles, 'Lean template must not shadow project models.roles');
   assert(JSON.parse(readFileSync(join(reqDir, 'progress.json'), 'utf8')).mode === 'lean', 'Lean progress mode must be lean');
 }
 
@@ -140,6 +149,9 @@ function assertFeatureDocs(reqDir, mode) {
   }
   const config = JSON.parse(readFileSync(join(reqDir, 'config.json'), 'utf-8'));
   assert(config.mode === mode, `${reqDir}/config.json: expected mode ${mode}, got ${config.mode}`);
+  assert(config.config_version === 2, `${reqDir}/config.json: config_version must be 2`);
+  assert(config.risk_tier === 'auto', `${reqDir}/config.json: risk_tier must default to auto`);
+  assert(!config.models?.roles, `${reqDir}/config.json: template must not shadow project models.roles`);
   const progress = readFileSync(join(reqDir, 'progress.md'), 'utf-8');
   assert(progress.includes('current_state: INIT'), `${reqDir}/progress.md: initial state must be INIT`);
 }
@@ -278,6 +290,50 @@ async function assertStateMachine() {
   assert(fastBreaker.stop === true, 'fast fix breaker must stop for human intervention');
 }
 
+async function assertModelRouting() {
+  const { loadConfig } = await import(pathToFileURL(join(DIST, 'lib', 'config-loader.mjs')).href);
+  const { resolveRoleRuntime } = await import(pathToFileURL(join(DIST, 'lib', 'runtime-resolver.mjs')).href);
+  const config = loadConfig({ projectRoot: repo, presetRoot: DIST });
+  for (const runtime of ['claude', 'codex', 'pi']) {
+    const planner = resolveRoleRuntime(config.preset, 'lean-planner', runtime, {
+      models: config.mergedModels,
+      featureConfig: { config_version: 2, mode: 'lean', risk_tier: 'auto' },
+      progress: { mode: 'lean' },
+      planText: '<!-- APPROVAL-SCOPE START -->\n- risk_tier: high\n<!-- APPROVAL-SCOPE END -->',
+    });
+    assert(planner.model_profile === 'escalated', `${runtime}: high-risk Planner must use escalated`);
+    assert(planner.model === 'inherit' && planner.effort === 'xhigh', `${runtime}: public escalated must be inherit/xhigh`);
+    assert(planner.model_routing.matched_rules.includes('lean-high-risk'), `${runtime}: missing Lean routing rule evidence`);
+    const reviewer = resolveRoleRuntime(config.preset, 'hotfix-reviewer', runtime, {
+      models: config.mergedModels,
+      featureConfig: { config_version: 2, mode: 'hotfix', risk_tier: 'auto' },
+      progress: { mode: 'hotfix', hotfix: { severity: 'P1' } },
+    });
+    assert(reviewer.model_profile === 'escalated', `${runtime}: P1 Hotfix Reviewer must use escalated`);
+    assert(reviewer.model_routing.matched_rules.includes('hotfix-p0-p1'), `${runtime}: missing Hotfix routing rule evidence`);
+  }
+
+  const legacyPlanText = '<!-- APPROVAL-SCOPE START -->\n- risk_tier: critical\n<!-- APPROVAL-SCOPE END -->\n';
+  const legacyScopeHash = createHash('sha256').update('\n- risk_tier: critical\n').digest('hex');
+  const legacyReviewer = resolveRoleRuntime(config.preset, 'lean-reviewer', 'codex', {
+    models: config.mergedModels,
+    featureConfig: { config_version: 2, mode: 'lean', risk_tier: 'auto' },
+    progress: { mode: 'lean', gates: { plan: { approved: true, binding: { plan_scope_sha256: legacyScopeHash } } } },
+    planText: legacyPlanText,
+  });
+  assert(legacyReviewer.model_profile === 'escalated', 'legacy hash-derived critical risk must escalate Reviewer');
+  assert(legacyReviewer.model_routing.source === 'gateway_a_hashed_scope_derived', 'legacy risk source must be hash-derived');
+
+  const unknownLegacyReviewer = resolveRoleRuntime(config.preset, 'lean-reviewer', 'codex', {
+    models: config.mergedModels,
+    featureConfig: { config_version: 2, mode: 'lean', risk_tier: 'auto' },
+    progress: { mode: 'lean', gates: { plan: { approved: true, binding: {} } } },
+    planText: legacyPlanText,
+  });
+  assert(unknownLegacyReviewer.model_routing.risk_tier === 'high', 'unknown legacy Gateway A risk must use high floor');
+  assert(unknownLegacyReviewer.model_profile === 'escalated', 'unknown legacy Gateway A risk must escalate Reviewer');
+}
+
 function writeHotfixArtifacts(reqDir) {
   const bugPath = join(reqDir, 'bugs', 'BUG-001.md');
   let bug = readFileSync(join(reqDir, 'bugs', 'BUG-template.md'), 'utf-8')
@@ -366,6 +422,7 @@ try {
   assertNoWrongLocations('04', 'runtime-hotfix');
 
   await assertStateMachine();
+  await assertModelRouting();
 
   assertAllDocsGitAddOnlyFeatureDir('01', 'runtime-full');
 

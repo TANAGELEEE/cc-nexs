@@ -1,7 +1,8 @@
 ---
-description: Record Gateway B feedback and route evidence-only, implementation, or scope changes safely.
-allowed-tools: Read, Bash
-argument-hint: [feature-id] --type=evidence|implementation|scope --feedback="..." [--ac=AC-001] [--path=src/...]
+description: "Record Gateway B feedback and route evidence-only, implementation, or scope changes safely."
+disable-model-invocation: true
+allowed-tools: "Read, Bash"
+argument-hint: "[feature-id] --type=evidence|implementation|scope --feedback=\"...\" [--ac=AC-001] [--path=src/...]"
 ---
 
 # /cc-nexs:request-release-changes

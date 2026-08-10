@@ -1,6 +1,7 @@
 ---
-name: merge-discipline
-description: Prevent role-owned merges and delegate candidate publication and cleanup to Git Custodian.
+name: "merge-discipline"
+description: "Prevent role-owned merges and delegate candidate publication and cleanup to Git Custodian."
+disable-model-invocation: true
 ---
 
 # Merge Discipline

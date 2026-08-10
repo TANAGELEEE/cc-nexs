@@ -1,7 +1,8 @@
 ---
-description: Compound 角色入口。读完成需求的 all-docs/doc/<id>/* 把"非显然教训"沉淀到 docs/solutions/<topic>.md，下次同类需求 Repo Scout 自动接入。旁路命令，不进状态机。
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Task
-argument-hint: [需求编号] [可选: --force]
+description: "Compound 角色入口。读完成需求的 all-docs/doc/<id>/* 把\"非显然教训\"沉淀到 docs/solutions/<topic>.md，下次同类需求 Repo Scout 自动接入。旁路命令，不进状态机。"
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Glob, Grep, Bash, Task"
+argument-hint: "[需求编号] [可选: --force]"
 ---
 
 # /cc-nexs:compound

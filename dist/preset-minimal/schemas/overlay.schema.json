@@ -69,7 +69,15 @@
       "type": "object",
       "properties": {
         "profiles": { "type": "object" },
-        "roles": { "type": "object" }
+        "roles": { "type": "object" },
+        "routing": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "default_risk_tier": { "enum": ["low", "medium", "high", "critical"] },
+            "rules": { "type": "array" }
+          }
+        }
       }
     }
   }

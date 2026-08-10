@@ -1,7 +1,8 @@
 ---
-description: Lean 实现入口。按 plan 任务和路径所有权并行实现，不负责 Git mutation。
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task
-argument-hint: [需求编号] [--phase=implement|review-fix|test-fix|gateway-b-fix|base-sync]
+description: "Lean 实现入口。按 plan 任务和路径所有权并行实现，不负责 Git mutation。"
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Bash, Glob, Grep, Task"
+argument-hint: "[需求编号] [--phase=implement|review-fix|test-fix|gateway-b-fix|base-sync]"
 ---
 
 # /cc-nexs:execute

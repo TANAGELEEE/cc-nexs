@@ -33,5 +33,5 @@ if (!installed.includes('pi-computer-use')) {
 
 run('pi', ['install', root, '--approve'], { stdio: 'inherit' });
 console.log('cc-nexs Pi package installed. Restart Pi or run /reload.');
-console.log('Lean/Hotfix role model/thinking overrides are optional; use a fresh Reviewer with either a different model or higher thinking.');
+console.log('Lean/Hotfix role model/thinking overrides are optional; automatic risk routing uses escalated, with feature role profiles final.');
 console.log('Fast keeps its legacy review policy; Hotfix uses dedicated Developer/Reviewer/Verifier package agents.');

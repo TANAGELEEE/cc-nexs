@@ -100,7 +100,8 @@ function validateManifest(pluginRoot) {
   return manifest;
 }
 
-function validateSkill(skillPath) {
+function validateSkill(skillRoot) {
+  const skillPath = join(skillRoot, 'SKILL.md');
   const text = readFileSync(skillPath, 'utf-8');
   if (text.includes('[TODO:')) fail(`${skillPath}: contains [TODO:] placeholder`);
   if (!text.startsWith('---\n')) {
@@ -120,6 +121,25 @@ function validateSkill(skillPath) {
   if (description && description.length > 1024) {
     fail(`${skillPath}: description exceeds 1024 characters`);
   }
+  if (/^disable-model-invocation:\s*true\s*$/m.test(frontmatter)) {
+    fail(`${skillPath}: Codex explicit-only policy belongs in agents/openai.yaml`);
+  }
+
+  const agentMetadataPath = join(skillRoot, 'agents', 'openai.yaml');
+  if (!existsSync(agentMetadataPath)) {
+    fail(`${skillRoot}: missing agents/openai.yaml explicit-invocation policy`);
+    return;
+  }
+  const agentMetadata = readFileSync(agentMetadataPath, 'utf-8');
+  for (const field of ['interface:', '  display_name:', '  short_description:', '  default_prompt:', 'policy:']) {
+    if (!agentMetadata.includes(field)) fail(`${agentMetadataPath}: missing ${field.trim()}`);
+  }
+  if (!/^\s{2}allow_implicit_invocation:\s*false\s*$/m.test(agentMetadata)) {
+    fail(`${agentMetadataPath}: policy.allow_implicit_invocation must be false`);
+  }
+  if (name && !agentMetadata.includes(`$${name}`)) {
+    fail(`${agentMetadataPath}: interface.default_prompt must explicitly mention $${name}`);
+  }
 }
 
 function validateSkills(pluginRoot, manifest) {
@@ -136,7 +156,7 @@ function validateSkills(pluginRoot, manifest) {
       fail(`${skillRoot}: missing SKILL.md`);
       continue;
     }
-    validateSkill(skillPath);
+    validateSkill(skillRoot);
   }
 }
 
@@ -157,7 +177,7 @@ function validateCommandMirrors(pluginRoot, manifest) {
     if (!skillText.includes(`../../commands/${fileName}`)) {
       fail(`${skillPath}: does not reference ../../commands/${fileName}`);
     }
-    if (['approve-deploy.md', 'approve-spec.md', 'release-test.md'].includes(fileName)
+    if (['approve-deploy.md', 'approve-spec.md', 'approve-plan.md', 'approve-release.md', 'release-test.md', 'verify-local.md', 'release-base.md', 'render-plan.md', 'migrate-feature-config.md'].includes(fileName)
       && !skillText.includes('../../lib/cc-nexs-cli.mjs')) {
       fail(`${skillPath}: control skill must invoke the deterministic CLI`);
     }

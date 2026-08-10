@@ -1,7 +1,8 @@
 ---
-description: Tech Lead 编码入口。支持 Sprint 开发、文档同步、评审修订、跨 Sprint 集成修订和发布后 BUG 修复。
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task
-argument-hint: [需求编号] [--mode=feat|fix|doc|review-fix|integration] [--sprint=N | --bug=ID]
+description: "Tech Lead 编码入口。支持 Sprint 开发、文档同步、评审修订、跨 Sprint 集成修订和发布后 BUG 修复。"
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Bash, Glob, Grep, Task"
+argument-hint: "[需求编号] [--mode=feat|fix|doc|review-fix|integration] [--sprint=N | --bug=ID]"
 ---
 
 # /cc-nexs:dev

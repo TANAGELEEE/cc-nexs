@@ -1,11 +1,11 @@
 ---
 name: cc-nexs-approve-deploy
-description: /cc-nexs:approve-deploy 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:approve-deploy"、"/cc-nexs:approve-deploy ..."、"$cc-nexs-approve-deploy" 或要求执行 cc-nexs approve-deploy 流程时触发。 Approve deploy gate G2 in authoritative progress.json v2, mirror the human-readable view, then resume via /cc-nexs:run.
+description: /cc-nexs:approve-deploy 的 Codex 镜像 skill。 仅当用户显式输入 "$cc-nexs-approve-deploy" 或在界面中选择该 skill 时使用；不得因普通自然语言请求自动触发。 Approve deploy gate G2 in authoritative progress.json v2, mirror the human-readable view, then resume via /cc-nexs:run.
 ---
 
 # /cc-nexs:approve-deploy for Codex
 
-This skill is the Codex mirror for `/cc-nexs:approve-deploy`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and full / fast / hotfix behavior as the Claude Code plugin.
+This explicit-only skill is the Codex mirror for `/cc-nexs:approve-deploy`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and full / fast / hotfix behavior as the Claude Code plugin.
 
 ## Authoritative Command
 

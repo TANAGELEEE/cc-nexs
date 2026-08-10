@@ -1,7 +1,8 @@
 ---
-description: 独立 Hotfix mini-Lean：latest-base worktree、本地验证、一次集中 Review、test 黑盒验收、人工 base 门禁。
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task, Skill
-argument-hint: <hotfix-id | bug 现象> [--level=P0|P1|P2|P3] [--related=<feature-id>] [--repos=a,b]
+description: "独立 Hotfix mini-Lean：latest-base worktree、本地验证、一次集中 Review、test 黑盒验收、人工 base 门禁。"
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Bash, Glob, Grep, Task, Skill"
+argument-hint: "<hotfix-id | bug 现象> [--level=P0|P1|P2|P3] [--related=<feature-id>] [--repos=a,b]"
 ---
 
 # /cc-nexs:hotfix
@@ -59,9 +60,11 @@ Orchestrator 按 `progress.json.mode=hotfix` 调用 `nextStep`，并把 `workflo
 
 ## 3. 模型策略（三端一致）
 
-角色 profile 默认：Developer=`balanced`、Reviewer=`review`、Verifier=`balanced`。Claude Code 使用原生隔离 subagent；Codex 使用原生 agent；Pi 使用 package agent。项目或 feature 的 `models.roles` / `models.profiles` 可分别配置模型和 effort。
+角色 profile 默认：Developer=`balanced`、Reviewer=`review`、Verifier=`balanced`。绑定 scope 后，P0/P1 的 Reviewer 自动路由到 `escalated`，P2/P3 保持日常 profile。Claude Code 使用原生隔离 subagent；Codex 使用原生 agent；Pi 使用 package agent。
 
-集中 Review 可选择不同模型，也可选择同一模型但更高 effort/thinking；硬约束是与实现 session 隔离，不硬编码供应商或模型 ID。P0/P1 是否强制异构模型属于项目私有策略，不是公共 preset 的硬门槛。
+每次 dispatch 使用 `resolveRoleRuntime(preset, role, runtime, {models: mergedModels, featureConfig, progress: progressV2})`。Hotfix 风险只信已绑定的 `progress.hotfix.severity`：P0→critical、P1→high、P2→medium、P3→low。当前 routing 条件只含 mode/risk/severity，不能从自然语言可靠区分安全、资金、数据损坏；项目可以把全部 P0/P1 Developer 按 severity 升档，细分领域则在结构化 impact domain 落地前使用 feature `models.roles` 显式覆盖。feature profile 始终最终优先。
+
+集中 Review 可选择不同模型，也可选择同一模型但更高 effort/thinking；硬约束是与实现 session 隔离。公共 `escalated` 只定义 `inherit + xhigh`，项目若希望真正切换到 Sol 或其他高能力模型，必须在私有 overlay/project config 中定义同名 profile。P0/P1 是否强制异构模型属于项目私有策略，不是公共 preset 的硬门槛。
 
 ## 4. 本地验证与构建优化
 

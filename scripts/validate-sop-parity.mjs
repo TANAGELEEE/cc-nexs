@@ -77,6 +77,10 @@ function validatePresetModes() {
     '- hotfix-verifier',
     'default_mode: lean',
     'model_profile: review',
+    'routing:',
+    'lean-high-risk',
+    'hotfix-p0-p1',
+    'escalated:',
     'local_verify:',
     'review_revision: 2',
     'fix_per_bug: 2',
@@ -97,6 +101,7 @@ function validateInitCommand() {
   const text = read(path);
   mustContain(path, text, [
     '--mode=lean|hotfix|fast|full',
+    '--risk-tier=auto|low|medium|high|critical',
     '默认 `lean`',
     'createWorkspaceWorktrees',
     '.worktrees/<id>-<slug>/<repo-id>/',
@@ -106,6 +111,8 @@ function validateInitCommand() {
     'progress.md',
     'progress.json',
     'config.json',
+    'config_version',
+    'risk_tier',
     'plan.md',
   ]);
 }
@@ -114,6 +121,8 @@ function validateRunCommand() {
   const path = join(ROOT, 'packages', 'core', 'commands', 'run.md');
   const text = read(path);
   mustContain(path, text, [
+    'after a stage completes, immediately enter the next stage',
+    'Stop only at Lean Gateway A/B',
     'PLAN_PENDING_HUMAN',
     'CONSOLIDATED_REVIEW',
     'RELEASE_PENDING_HUMAN',
@@ -154,6 +163,10 @@ function validateRunCommand() {
     'GATEWAY_B_CHANGE_REQUESTED',
     'SCOPE_CHANGE_REQUESTED',
     '完整 Review 只有一次；修复只允许一次 delta closure',
+    'migrate-feature-config',
+    'resolveRoleRuntime(preset, role, runtime',
+    'featureConfig',
+    'matched_rules',
   ]);
 }
 
@@ -174,6 +187,7 @@ function validateHotfixCommand() {
     'HOTFIX_TEST_RELEASE',
     'HOTFIX_RELEASE_PENDING_HUMAN',
     '同一模型但更高 effort/thinking',
+    'P0/P1 的 Reviewer 自动路由到 `escalated`',
     'Git Custodian',
     'release-test <id> --hotfix',
     '/cc-nexs:approve-release <id>',

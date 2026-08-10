@@ -1,7 +1,7 @@
 ---
 name: hotfix-verifier
 package: cc-nexs
-description: "在 test 环境对精确 Hotfix candidate 做独立黑盒复现、回归和冒烟验收。"
+description: "Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests. 在 test 环境对精确 Hotfix candidate 做独立黑盒复现、回归和冒烟验收。"
 tools: read, write, bash, find, grep, ls, find_roots, observe_ui, search_ui, inspect_ui, act_ui, wait_for
 defaultContext: fresh
 systemPromptMode: replace

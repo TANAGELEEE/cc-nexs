@@ -1,11 +1,11 @@
 ---
 name: cc-nexs-approve-spec
-description: /cc-nexs:approve-spec 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:approve-spec"、"/cc-nexs:approve-spec ..."、"$cc-nexs-approve-spec" 或要求执行 cc-nexs approve-spec 流程时触发。 Approve the spec at the single human checkpoint, transitioning state from SPEC_PENDING_HUMAN to SPEC_APPROVED.
+description: /cc-nexs:approve-spec 的 Codex 镜像 skill。 仅当用户显式输入 "$cc-nexs-approve-spec" 或在界面中选择该 skill 时使用；不得因普通自然语言请求自动触发。 Approve the spec at the single human checkpoint, transitioning state from SPEC_PENDING_HUMAN to SPEC_APPROVED.
 ---
 
 # /cc-nexs:approve-spec for Codex
 
-This skill is the Codex mirror for `/cc-nexs:approve-spec`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and lean / full / fast / hotfix behavior as the Claude Code plugin.
+This explicit-only skill is the Codex mirror for `/cc-nexs:approve-spec`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and lean / full / fast / hotfix behavior as the Claude Code plugin.
 
 ## Authoritative Command
 
@@ -31,7 +31,7 @@ Never execute `/cc-nexs:approve-spec` as a shell path and never edit `progress.j
    - `fast`: legacy three-role flow with Fullstack / Reviewer / Verifier, single sprint, stricter thresholds, and no TECH_LEAD_REVIEW fallback.
    - `hotfix`: standalone mini-Lean flow with its own latest-base feature worktrees, one hotfix.md, bounded Review, test verification, and a human base gate.
 4. In Codex, every role runs as an independent native subagent using the role prompt from `../../agents/`. Never invoke Claude Code, a Claude subagent tool, or a nested `codex` CLI process. Runtime adaptation overrides any Claude-specific shell snippet in the authoritative command.
-5. Keep implementation and review in distinct native agent sessions. Resolve model profiles from preset < project < feature config. A Lean Reviewer may use a different model or the same model with higher reasoning effort. Provider-specific IDs are allowed only in private project/feature config; public preset defaults remain portable and inherit when unspecified.
+5. Keep implementation and review in distinct native agent sessions. Resolve automatic risk routing from one progress/config/approved-plan snapshot: Lean high/critical upgrades Planner and Reviewer; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. Never pre-merge feature roles before routing. A Reviewer may use a different model or the same model with higher reasoning effort. Provider-specific IDs are allowed only in private project/feature config; public preset defaults remain portable and inherit when unspecified.
 6. When a shell snippet references `$CLAUDE_PLUGIN_ROOT`, translate it to the installed Codex plugin root that contains this skill. In shell commands prefer `PLUGIN_ROOT=<plugin-root>` or `CC_NEXS_PLUGIN_ROOT=<plugin-root>` or substitute the absolute plugin root directly.
 7. Before editing or creating files, inspect the relevant command, agent, template, and current feature directory. Follow existing repo patterns and keep unrelated files untouched.
 8. Run the verification steps requested by the command. If a step cannot be run in the current Codex surface, record the exact limitation and preserve the command's expected stop/gate behavior.

@@ -1,6 +1,6 @@
 ---
 name: qa-claude
-description: QA 黑盒测试身份。Sprint 阶段起草用例；完整 candidate 发布 test 后执行 final/final-regression。禁读 src/、禁读代码评审、禁改业务代码。
+description: "Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests. QA 黑盒测试身份。Sprint 阶段起草用例；完整 candidate 发布 test 后执行 final/final-regression。禁读 src/、禁读代码评审、禁改业务代码。"
 tools: Bash, Read, Write, Edit, mcp__chrome-devtools__*
 ---
 

@@ -1,7 +1,8 @@
 ---
-description: fast 模式 Reviewer 入口。spec、每轮发布前代码评审、部署后最终契约验收三者保持独立调用。
-allowed-tools: Read, Write, Edit, Bash, Task
-argument-hint: <target: spec|code|accept> [需求编号]
+description: "fast 模式 Reviewer 入口。spec、每轮发布前代码评审、部署后最终契约验收三者保持独立调用。"
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Bash, Task"
+argument-hint: "<target: spec|code|accept> [需求编号]"
 ---
 
 # /cc-nexs:review

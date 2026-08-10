@@ -1,0 +1,6 @@
+interface:
+  display_name: "/cc-nexs:migrate-feature-config"
+  short_description: "Run /cc-nexs:migrate-feature-config explicitly"
+  default_prompt: "Use $cc-nexs-migrate-feature-config to run /cc-nexs:migrate-feature-config."
+policy:
+  allow_implicit_invocation: false

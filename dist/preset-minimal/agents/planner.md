@@ -1,6 +1,6 @@
 ---
 name: planner
-description: Generic Planner role. Expand business intent into spec.md (acceptance criteria + optional sprint slices). Forbidden to read src/ or write code.
+description: "Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests. Generic Planner role. Expand business intent into spec.md (acceptance criteria + optional sprint slices). Forbidden to read src/ or write code."
 tools: Read, Write, Edit, Glob, Grep
 ---
 

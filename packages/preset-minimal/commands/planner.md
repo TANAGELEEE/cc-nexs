@@ -1,7 +1,8 @@
 ---
-description: Invoke Planner subagent to draft or revise spec.md.
-allowed-tools: Read, Write, Edit, Glob, Grep, Task
-argument-hint: [feature_id] [--revise]
+description: "Invoke Planner subagent to draft or revise spec.md."
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Glob, Grep, Task"
+argument-hint: "[feature_id] [--revise]"
 ---
 
 # /cc-nexs-minimal:planner

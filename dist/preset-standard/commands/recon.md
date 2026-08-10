@@ -1,7 +1,8 @@
 ---
-description: Repo Scout 角色入口。读 src/ 把现存同类配置/Service/页面/API 归档成 repo-context.md，作为 Planner 的现状清单输入。在 /cc-nexs:brainstorm 之后、Planner 之前调用（编排器 RECON 阶段会自动跑）。
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Task
-argument-hint: [需求编号]
+description: "Repo Scout 角色入口。读 src/ 把现存同类配置/Service/页面/API 归档成 repo-context.md，作为 Planner 的现状清单输入。在 /cc-nexs:brainstorm 之后、Planner 之前调用（编排器 RECON 阶段会自动跑）。"
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Glob, Grep, Bash, Task"
+argument-hint: "[需求编号]"
 ---
 
 # /cc-nexs:recon

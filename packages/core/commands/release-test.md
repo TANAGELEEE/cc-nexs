@@ -1,7 +1,8 @@
 ---
-description: Integrate final feature candidates into test, run the project release driver, then hand deployed evidence to the black-box Verifier.
-allowed-tools: Read, Bash, Skill, Task, mcp__chrome-devtools__*
-argument-hint: <feature-id> [--retry | --dry-run | --hotfix]
+description: "Integrate final feature candidates into test, run the project release driver, then hand deployed evidence to the black-box Verifier."
+disable-model-invocation: true
+allowed-tools: "Read, Bash, Skill, Task, mcp__chrome-devtools__*"
+argument-hint: "<feature-id> [--retry | --dry-run | --hotfix]"
 ---
 
 # /cc-nexs:release-test

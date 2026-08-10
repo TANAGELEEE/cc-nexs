@@ -1,7 +1,8 @@
 ---
-description: Initialize progress.json v2 and create one isolated worktree per configured repository through Git Custodian.
-allowed-tools: Read, Write, Edit, Bash, Skill
-argument-hint: [feature_id] <feature_slug> [--mode=lean|hotfix|fast|full] [--repos=a,b] [--sprints=N]
+description: "Initialize progress.json v2 and create one isolated worktree per configured repository through Git Custodian."
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Bash, Skill"
+argument-hint: "[feature_id] <feature_slug> [--mode=lean|hotfix|fast|full] [--repos=a,b] [--sprints=N]"
 ---
 
 # /cc-nexs:init

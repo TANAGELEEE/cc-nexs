@@ -1,7 +1,8 @@
 ---
-description: Evaluator 契约验收入口。新流程默认 final，仅在完整需求发布并通过最终 QA 后全量验收；sprint 仅供 legacy per_sprint。
-allowed-tools: Read, Write, Edit, Bash, Task
-argument-hint: [需求编号] [--scope=sprint|final] [--sprint=N]
+description: "Evaluator 契约验收入口。新流程默认 final，仅在完整需求发布并通过最终 QA 后全量验收；sprint 仅供 legacy per_sprint。"
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Bash, Task"
+argument-hint: "[需求编号] [--scope=sprint|final] [--sprint=N]"
 ---
 
 # /cc-nexs:evaluator

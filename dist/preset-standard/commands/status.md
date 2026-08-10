@@ -1,7 +1,8 @@
 ---
-description: Read-only status snapshot of the active feature pipeline.
-allowed-tools: Read, Bash, Glob
-argument-hint: [feature_id]
+description: "Read-only status snapshot of the active feature pipeline."
+disable-model-invocation: true
+allowed-tools: "Read, Bash, Glob"
+argument-hint: "[feature_id]"
 ---
 
 # /cc-nexs:status
@@ -9,7 +10,7 @@ argument-hint: [feature_id]
 ## Steps
 
 1. Resolve workspace docs assignment and locate authoritative progress.json v2 plus its progress.md mirror
-2. Read mode/state/revision/gates/counters/delivery from progress.json; require config.json.mode to agree
+2. Read mode/state/revision/gates/counters/delivery from progress.json; require config.json.mode to agree and report config_version/risk_tier migration status, including `plan_binding_status=bound|derived|unknown` for approved Lean work
 3. Use `readProgressV2()` (or `readProgress(progress.md)` compatibility delegation)
 4. Print (Lean 显示 plan/local review/test/base；Hotfix 显示 scope/severity/local/review/test/base；fast 显示 BUILD/TEST/ACCEPT)：
 
@@ -25,6 +26,8 @@ Mode:       <lean | hotfix | full | fast>
 Revision:   <event revision>
 Updated at: <updated_at>
 Delivery:   <final_only|per_sprint> / test <auto_if_ready|manual|disabled>
+Risk:       <effective tier / source / all signals>
+Models:     <next role → matched rule / profile / model / effort / feature override>
 
 🚦 Current state: <state> — <i18n description>
 

@@ -58,6 +58,7 @@ const LEAN_ONLY_CORE_COMMANDS = new Set([
   'render-plan.md',
   'request-release-changes.md',
   'verify-local.md',
+  'migrate-feature-config.md',
 ]);
 const PI_P2_COMMANDS = new Set([
   'approve-deploy',
@@ -74,6 +75,7 @@ const PI_P2_COMMANDS = new Set([
   'lean-review',
   'lean-verify',
   'migrate-progress',
+  'migrate-feature-config',
   'recon',
   'release-test',
   'release-base',
@@ -101,6 +103,7 @@ const PI_ROLE_SOURCES = {
   'hotfix-verifier': 'hotfix-verifier.md',
 };
 const PI_ROLE_ADDENDA = {};
+const EXPLICIT_AGENT_TRIGGER_PREFIX = 'Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests.';
 
 // ---- helpers ---------------------------------------------------------------
 
@@ -169,6 +172,49 @@ function extractDescription(commandText, commandName) {
   return desc.replace(/^["']|["']$/g, '');
 }
 
+function assertExplicitClaudeEntrypoints(dst) {
+  const entryFiles = [];
+  const commandsDir = join(dst, 'commands');
+  if (existsSync(commandsDir)) {
+    entryFiles.push(...readdirSync(commandsDir)
+      .filter((entry) => entry.endsWith('.md'))
+      .map((entry) => join(commandsDir, entry)));
+  }
+  const skillsDir = join(dst, 'skills');
+  if (existsSync(skillsDir)) {
+    for (const entry of readdirSync(skillsDir).sort()) {
+      const skillPath = join(skillsDir, entry, 'SKILL.md');
+      if (existsSync(skillPath)) entryFiles.push(skillPath);
+    }
+  }
+  for (const file of entryFiles) {
+    const text = readFileSync(file, 'utf8');
+    const frontmatter = text.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
+    if (!/^disable-model-invocation:\s*true\s*$/m.test(frontmatter)) {
+      throw new Error(`explicit-only Claude entry is missing disable-model-invocation: true: ${file}`);
+    }
+  }
+}
+
+function scopePluginAgentsToExplicitInvocation(dst) {
+  const agentsDir = join(dst, 'agents');
+  if (!existsSync(agentsDir)) return 0;
+  let touched = 0;
+  for (const entry of readdirSync(agentsDir).filter((file) => file.endsWith('.md')).sort()) {
+    const file = join(agentsDir, entry);
+    const text = readFileSync(file, 'utf8');
+    if (text.includes(EXPLICIT_AGENT_TRIGGER_PREFIX)) continue;
+    const next = text.replace(/^description:\s*(.+)$/m, (_match, description) => {
+      const normalized = description.trim().replace(/^["']|["']$/g, '');
+      return `description: ${JSON.stringify(`${EXPLICIT_AGENT_TRIGGER_PREFIX} ${normalized}`)}`;
+    });
+    if (next === text) throw new Error(`Claude agent is missing frontmatter description: ${file}`);
+    writeFileSync(file, next, 'utf8');
+    touched += 1;
+  }
+  return touched;
+}
+
 function deterministicControlBlock(commandBase, cliPath) {
   if (commandBase === 'hotfix') {
     return `## Deterministic Hotfix Controls
@@ -209,13 +255,16 @@ Never edit progress state directly or combine this request with release approval
 
 `;
   }
-  if (['verify-local', 'release-base', 'render-plan'].includes(commandBase)) {
+  if (['verify-local', 'release-base', 'render-plan', 'migrate-feature-config'].includes(commandBase)) {
+    const invocation = commandBase === 'migrate-feature-config'
+      ? 'migrate-feature-config <feature-id> [--dry-run] [--bind-plan-risk] [--progress <path>]'
+      : `${commandBase} <feature-id>`;
     return `## Deterministic Lean Control
 
 Resolve \`${cliPath}\` relative to this SKILL.md and execute:
 
 \`\`\`text
-node <resolved-cli-path> ${commandBase} <feature-id>
+node <resolved-cli-path> ${invocation}
 \`\`\`
 
 Never replace this control with model-generated progress edits or ad hoc Git commands.
@@ -261,11 +310,12 @@ function generateCodexSkills(dst) {
     const commandBase = basename(fileName, '.md');
     const description = [
       `${commandName} 的 Codex 镜像 skill。`,
-      `当用户输入 "${commandName}"、"${commandName} ..."、"$${skillName}" 或要求执行 cc-nexs ${commandBase} 流程时触发。`,
+      `仅当用户显式输入 "$${skillName}" 或在界面中选择该 skill 时使用；不得因普通自然语言请求自动触发。`,
       extractDescription(commandText, commandName),
     ].join(' ');
     const skillRoot = join(codexSkillsDir, skillName);
     mkdirSync(skillRoot, { recursive: true });
+    mkdirSync(join(skillRoot, 'agents'), { recursive: true });
     const relCommand = `../../commands/${fileName}`;
     const controlBlock = deterministicControlBlock(commandBase, '../../lib/cc-nexs-cli.mjs');
     const body = `---
@@ -275,7 +325,7 @@ description: ${description}
 
 # ${commandName} for Codex
 
-This skill is the Codex mirror for \`${commandName}\`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and ${supportsLean ? 'lean / ' : ''}full / fast / hotfix behavior as the Claude Code plugin.
+This explicit-only skill is the Codex mirror for \`${commandName}\`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and ${supportsLean ? 'lean / ' : ''}full / fast / hotfix behavior as the Claude Code plugin.
 
 ## Authoritative Command
 
@@ -290,7 +340,7 @@ ${controlBlock}## Execution Contract
 ${supportsLean ? '   - `lean`: default plan-first flow with two authored documents, two human gates, deterministic local verification, one consolidated Review, test verification, and approved base integration.\n' : ''}   - \`fast\`: legacy three-role flow with Fullstack / Reviewer / Verifier, single sprint, stricter thresholds, and no TECH_LEAD_REVIEW fallback.
    - \`hotfix\`: standalone mini-Lean flow with its own latest-base feature worktrees, one hotfix.md, bounded Review, test verification, and a human base gate.
 4. In Codex, every role runs as an independent native subagent using the role prompt from \`../../agents/\`. Never invoke Claude Code, a Claude subagent tool, or a nested \`codex\` CLI process. Runtime adaptation overrides any Claude-specific shell snippet in the authoritative command.
-5. Keep implementation and review in distinct native agent sessions. ${supportsLean ? 'Resolve model profiles from preset < project < feature config. A Lean Reviewer may use a different model or the same model with higher reasoning effort. ' : ''}Provider-specific IDs are allowed only in private project/feature config; public preset defaults remain portable and inherit when unspecified.
+5. Keep implementation and review in distinct native agent sessions. ${supportsLean ? 'Resolve automatic risk routing from one progress/config/approved-plan snapshot: Lean high/critical upgrades Planner and Reviewer; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. Never pre-merge feature roles before routing. A Reviewer may use a different model or the same model with higher reasoning effort. ' : ''}Provider-specific IDs are allowed only in private project/feature config; public preset defaults remain portable and inherit when unspecified.
 6. When a shell snippet references \`$CLAUDE_PLUGIN_ROOT\`, translate it to the installed Codex plugin root that contains this skill. In shell commands prefer \`PLUGIN_ROOT=<plugin-root>\` or \`CC_NEXS_PLUGIN_ROOT=<plugin-root>\` or substitute the absolute plugin root directly.
 7. Before editing or creating files, inspect the relevant command, agent, template, and current feature directory. Follow existing repo patterns and keep unrelated files untouched.
 8. Run the verification steps requested by the command. If a step cannot be run in the current Codex surface, record the exact limitation and preserve the command's expected stop/gate behavior.
@@ -316,6 +366,16 @@ The command is complete only when the artifact, state, and summary expected by \
 `;
 
     writeFileSync(join(skillRoot, 'SKILL.md'), body, 'utf-8');
+    const agentMetadata = [
+      'interface:',
+      `  display_name: ${JSON.stringify(commandName)}`,
+      `  short_description: ${JSON.stringify(`Run ${commandName} explicitly`)}`,
+      `  default_prompt: ${JSON.stringify(`Use $${skillName} to run ${commandName}.`)}`,
+      'policy:',
+      '  allow_implicit_invocation: false',
+      '',
+    ].join('\n');
+    writeFileSync(join(skillRoot, 'agents', 'openai.yaml'), agentMetadata, 'utf-8');
     generated += 1;
   }
   return generated;
@@ -366,7 +426,7 @@ function generatePiResources() {
       '---',
       `name: ${role}`,
       'package: cc-nexs',
-      `description: ${JSON.stringify(description.replace(/codex CLI/gi, 'Pi subagent').replace(/Claude/gi, 'Pi'))}`,
+      `description: ${JSON.stringify(`${EXPLICIT_AGENT_TRIGGER_PREFIX} ${description.replace(/codex CLI/gi, 'Pi subagent').replace(/Claude/gi, 'Pi')}`)}`,
       `tools: ${tools.join(', ')}`,
       'defaultContext: fresh',
       'systemPromptMode: replace',
@@ -401,19 +461,21 @@ function generatePiResources() {
     const controlBlock = deterministicControlBlock(commandBase, '../../../packages/core/lib/cc-nexs-cli.mjs');
     const description = [
       `${commandName} 的 Pi P2 适配 skill。`,
+      `仅允许通过 /cc-nexs:${commandBase} 或 /skill:${skillName} 显式调用；不得因普通自然语言请求自动触发。`,
       supportsHotfix
         ? '支持 preset-standard 独立 hotfix mini-Lean，并通过 pi-subagents 运行隔离角色。'
         : '支持 preset-standard lean（默认）与 fast 模式，并通过 pi-subagents 运行隔离角色。',
       extractDescription(commandText, commandName).replace(/codex CLI/gi, 'Pi subagent'),
     ].join(' ');
     const modelGuard = supportsHotfix
-      ? 'Resolve Hotfix role profiles from project/feature config. Reviewer may use a different authenticated model or the same model with higher thinking, but always uses a fresh child context. P0/P1 heterogeneity is an optional private policy, not a public preset requirement. Accept ordered fallbackModels.'
-      : 'For lean, resolve role profiles from project/feature configuration: the Reviewer may use a different authenticated model or the same model with higher thinking, but must use a fresh child context. For legacy fast, preserve its configured heterogeneous-review guard. Accept ordered fallbackModels.';
+      ? 'Resolve Hotfix role profiles from one progress/config snapshot. P0/P1 automatically routes Reviewer to escalated; an explicit feature role profile remains final. Reviewer may use a different authenticated model or the same model with higher thinking, but always uses a fresh child context. P0/P1 heterogeneity is an optional private policy, not a public preset requirement. Accept ordered fallbackModels.'
+      : 'Resolve automatic risk routing from one progress/config/approved-plan snapshot: Lean high/critical routes Planner and Reviewer to escalated, Hotfix P0/P1 routes Reviewer to escalated, and an explicit feature role profile remains final. The Reviewer may use a different authenticated model or the same model with higher thinking, but must use a fresh child context. For legacy fast, preserve its configured heterogeneous-review guard. Accept ordered fallbackModels.';
     const skillDir = join(skillsDir, skillName);
     mkdirSync(skillDir, { recursive: true });
     const body = `---
 name: ${skillName}
 description: ${description}
+disable-model-invocation: true
 ---
 
 # ${commandName} for Pi
@@ -436,7 +498,7 @@ ${controlBlock}## P2 Runtime Contract
    - Hotfix Reviewer: \`cc-nexs.hotfix-reviewer\`
    - Hotfix Verifier: \`cc-nexs.hotfix-verifier\`
 3. Never invoke Claude Code, the Claude Task tool, Codex CLI, or a nested \`pi\` CLI. Legacy invocation snippets in the authoritative command are role task descriptions, not commands to execute in Pi.
-4. Resolve Lean profiles from cc-nexs project/feature config and pass the selected \`model\` and \`thinking\` directly to the pi-subagents \`Agent\` call. Omit \`model\` when it is \`inherit\`. If the primary model is unavailable, retry the ordered cc-nexs \`fallback_models\` list. Project \`.pi/settings.json\` remains only the Pi authentication/\`enabledModels\` authority; do not duplicate role mappings there. Public cc-nexs files ship no provider-specific model IDs.
+4. Resolve automatic risk routing from one cc-nexs progress/config/approved-plan snapshot, then pass the selected \`model\` and \`thinking\` directly to the pi-subagents \`Agent\` call. Lean high/critical upgrades Planner and Reviewer; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. Omit \`model\` when it is \`inherit\`. If the primary model is unavailable, retry the ordered cc-nexs \`fallback_models\` list. Project \`.pi/settings.json\` remains only the Pi authentication/\`enabledModels\` authority; do not duplicate role mappings there. Public cc-nexs files ship no provider-specific model IDs.
 5. ${modelGuard}
 6. Role children never mutate Git or progress state. The parent orchestrator owns state transitions and invokes the Git Custodian command itself.
 7. Set or preserve \`CC_NEXS_RUNTIME=pi\` and \`CC_NEXS_PLUGIN_ROOT\` for shell helpers. Resolve all feature paths through the existing workspace/progress contracts.
@@ -566,6 +628,10 @@ function buildPreset(presetName) {
   console.log(`  core i18n: 新增 ${n} 个`);
 
   // 7a. Claude Code plugin.json
+  assertExplicitClaudeEntrypoints(dst);
+  const scopedAgents = scopePluginAgentsToExplicitInvocation(dst);
+  console.log(`  explicit-only Claude agents: ${scopedAgents} 个`);
+
   const presetPluginPath = join(presetSrc, '.claude-plugin', 'plugin.json');
   if (existsSync(presetPluginPath)) {
     assertRegularFile(presetPluginPath);

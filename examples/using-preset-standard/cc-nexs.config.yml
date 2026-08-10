@@ -23,6 +23,36 @@ thresholds:
 # 可选：项目本地化覆盖 preset 默认 language
 # language: zh-CN
 
+# 可选：日常低预算角色 + 高风险自动升级。公开 preset 已提供 routing rules；
+# 项目只需把角色指向日常 profiles，并把 escalated 映射到已认证的高能力模型。
+# models:
+#   profiles:
+#     daily-development:
+#       codex:
+#         model: your-daily-model
+#         effort: max
+#     daily-review:
+#       codex:
+#         model: your-review-model
+#         effort: max
+#     escalated:
+#       codex:
+#         model: your-strong-model
+#         effort: xhigh
+#   roles:
+#     repo-scout: economical
+#     planner: daily-review
+#     tech-lead: daily-review
+#     sa: daily-review
+#     qa: economical
+#     evaluator: daily-review
+#     fullstack: daily-development
+#     reviewer: daily-review
+#     verifier: economical
+#     lean-developer: daily-development
+#     lean-reviewer: daily-review
+# feature config.json 默认不生成 models.roles；显式 feature role override 仍最终优先。
+
 # 新需求默认在所有开发 Sprint 完成后，一次性合并到 test、发布并验收。
 # 显式设为 manual 可退回人工 G2；外部 driver 和 URL 通常放私有 overlay。
 # workflow:

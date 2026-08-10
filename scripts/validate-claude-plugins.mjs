@@ -9,6 +9,7 @@ const ROOT = resolve(fileURLToPath(import.meta.url), '../..');
 const DIST = join(ROOT, 'dist');
 const MARKETPLACE = join(ROOT, '.claude-plugin', 'marketplace.json');
 const PACKAGE_JSON = join(ROOT, 'package.json');
+const EXPLICIT_AGENT_TRIGGER_PREFIX = 'Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests.';
 
 const errors = [];
 
@@ -22,6 +23,31 @@ function readJson(path) {
   } catch (error) {
     fail(`${path}: invalid JSON (${error.message})`);
     return null;
+  }
+}
+
+function readFrontmatter(path) {
+  const text = readFileSync(path, 'utf-8');
+  return text.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
+}
+
+function validateExplicitClaudeEntry(path) {
+  const frontmatter = readFrontmatter(path);
+  if (!/^disable-model-invocation:\s*true\s*$/m.test(frontmatter)) {
+    fail(`${path}: explicit-only entry must set disable-model-invocation: true`);
+  }
+}
+
+function validateQuotedStringFields(path, fields) {
+  const frontmatter = readFrontmatter(path);
+  for (const field of fields) {
+    const raw = frontmatter.match(new RegExp(`^${field}:\\s*(.+)$`, 'm'))?.[1]?.trim();
+    if (raw === undefined) continue;
+    try {
+      if (typeof JSON.parse(raw) !== 'string') throw new Error('not a string');
+    } catch {
+      fail(`${path}: frontmatter ${field} must be a double-quoted string so Claude Code can parse all metadata`);
+    }
   }
 }
 
@@ -104,7 +130,10 @@ function validateClaudeSkillsAreUnchanged(pluginRoot) {
   if (!existsSync(commandsRoot) || !existsSync(skillsRoot)) return;
 
   for (const fileName of readdirSync(commandsRoot).filter((entry) => entry.endsWith('.md')).sort()) {
-    const commandText = readFileSync(join(commandsRoot, fileName), 'utf-8');
+    const commandPath = join(commandsRoot, fileName);
+    const commandText = readFileSync(commandPath, 'utf-8');
+    validateExplicitClaudeEntry(commandPath);
+    validateQuotedStringFields(commandPath, ['description', 'allowed-tools', 'argument-hint']);
     const skillName = normalizeSkillName(extractCommandName(commandText, fileName));
     const claudeMirrorPath = join(skillsRoot, skillName, 'SKILL.md');
     if (existsSync(claudeMirrorPath)) {
@@ -114,9 +143,28 @@ function validateClaudeSkillsAreUnchanged(pluginRoot) {
     if (!existsSync(codexMirrorPath)) {
       fail(`${codexMirrorPath}: Codex command mirror missing from codex-skills/`);
     }
-    if (['approve-deploy.md', 'approve-spec.md', 'release-test.md'].includes(fileName)
+    if (['approve-deploy.md', 'approve-spec.md', 'approve-plan.md', 'approve-release.md', 'release-test.md', 'verify-local.md', 'release-base.md', 'render-plan.md', 'migrate-feature-config.md'].includes(fileName)
       && !commandText.includes('lib/cc-nexs-cli.mjs')) {
       fail(`${join(commandsRoot, fileName)}: control command must invoke the deterministic CLI`);
+    }
+  }
+
+  for (const entry of readdirSync(skillsRoot).sort()) {
+    const skillPath = join(skillsRoot, entry, 'SKILL.md');
+    if (existsSync(skillPath)) {
+      validateExplicitClaudeEntry(skillPath);
+      validateQuotedStringFields(skillPath, ['name', 'description']);
+    }
+  }
+
+  const agentsRoot = join(pluginRoot, 'agents');
+  if (existsSync(agentsRoot)) {
+    for (const fileName of readdirSync(agentsRoot).filter((entry) => entry.endsWith('.md')).sort()) {
+      const agentPath = join(agentsRoot, fileName);
+      validateQuotedStringFields(agentPath, ['description']);
+      if (!readFrontmatter(agentPath).includes(EXPLICIT_AGENT_TRIGGER_PREFIX)) {
+        fail(`${agentPath}: agent routing must be scoped to an explicitly invoked cc-nexs workflow`);
+      }
     }
   }
 }

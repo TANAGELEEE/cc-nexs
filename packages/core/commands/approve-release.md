@@ -1,7 +1,8 @@
 ---
-description: Approve the exact Lean or Hotfix candidate verified in test before base-branch integration.
-allowed-tools: Read, Bash
-argument-hint: [feature_id]
+description: "Approve the exact Lean or Hotfix candidate verified in test before base-branch integration."
+disable-model-invocation: true
+allowed-tools: "Read, Bash"
+argument-hint: "[feature_id]"
 ---
 
 # /cc-nexs:approve-release

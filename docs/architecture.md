@@ -125,6 +125,12 @@ loadConfig({ projectRoot, presetRoot? })
 
 从 preset.yml 解析角色定义，结合 core 默认值。提供 `get(name)` 拿到 `{agent, agentPath, tool, alias}`。
 
+### `core/lib/model-routing.mjs`
+
+把三端共用的模型决策集中在确定性核心：校验 `risk_tier` / Hotfix severity / `models.routing`，从 Gateway A binding 或 Hotfix scope 取可信风险信号，按最高风险匹配规则，再把 feature `models.roles` 作为最终显式覆盖。`resolveFeatureModelRouting()` 和 `resolveRoleRuntime()` 同时返回 matched rules、全部信号、是否自动升档以及最终 profile/model/effort，避免 Claude Code、Codex、Pi 各自实现一套优先级。
+
+Lean `risk_tier:auto` 的首稿由日常 Planner 生成；若首稿判为 high/critical 且路由发生升档，Plan 阶段只追加一次全新 escalated Planner hardening，然后进入 Gateway A。新版 Gateway A 将 concrete risk 与批准范围 hash 一起绑定。历史 binding 没有 risk 时，仅从 `plan_scope_sha256` 完全匹配的批准范围派生；无法验证或没有 concrete risk 时按 high 保守升档。可用 `migrate-feature-config --bind-plan-risk` 显式回填可证明的旧 binding，绝不从范围外文本或模型猜测。
+
 ### `core/lib/reviewer-adapter.mjs`
 
 `planReviewerInvocation({tool, prompt, diffFile?, model?, effort?, fallbackModels?})` 返回结构化 argv 或原生子代理计划。Claude/Codex/Pi 的角色模型可由私有 project/feature config 覆盖；Reviewer 可与实现使用不同模型，也可使用相同模型和更高 effort/thinking。

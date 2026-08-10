@@ -1,7 +1,7 @@
 ---
 name: reviewer
 package: cc-nexs
-description: "fast 模式的 Reviewer 身份，通过 Pi subagent 调用。三种评审目标：spec 评审 / 代码评审（仅）/ 契约验收（仅）。仅 fast 模式启用。"
+description: "Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests. fast 模式的 Reviewer 身份，通过 Pi subagent 调用。三种评审目标：spec 评审 / 代码评审（仅）/ 契约验收（仅）。仅 fast 模式启用。"
 tools: bash, read, write, edit
 defaultContext: fresh
 systemPromptMode: replace

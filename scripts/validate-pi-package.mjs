@@ -20,6 +20,7 @@ const expectedCommands = [
   'lean-review',
   'lean-verify',
   'migrate-progress',
+  'migrate-feature-config',
   'recon',
   'release-test',
   'release-base',
@@ -46,6 +47,7 @@ const expectedRoles = [
   'hotfix-reviewer',
   'hotfix-verifier',
 ];
+const explicitAgentTriggerPrefix = 'Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests.';
 
 function fail(message) {
   errors.push(message);
@@ -80,9 +82,13 @@ for (const command of expectedCommands) {
   const skillPath = join(skillsRoot, name, 'SKILL.md');
   if (!existsSync(skillPath)) continue;
   const skill = readFileSync(skillPath, 'utf8');
+    const skillFrontmatter = skill.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
+    if (!/^disable-model-invocation:\s*true\s*$/m.test(skillFrontmatter)) {
+      fail(`${name}: explicit-only Pi skill must set disable-model-invocation: true`);
+    }
     const contractMarkers = command === 'hotfix'
-      ? ['preset-standard', 'pi-subagents', 'same model with higher thinking', 'ship no provider-specific model IDs']
-      : ['preset-standard', 'lean (default)', 'pi-subagents', 'same model with higher thinking', 'pass the selected `model` and `thinking` directly', 'ship no provider-specific model IDs'];
+      ? ['preset-standard', 'pi-subagents', 'same model with higher thinking', 'P0/P1 automatically routes Reviewer to escalated', 'explicit feature role profile remains final', 'ship no provider-specific model IDs']
+      : ['preset-standard', 'lean (default)', 'pi-subagents', 'same model with higher thinking', 'pass the selected `model` and `thinking` directly', 'automatic risk routing', 'Lean high/critical', 'Hotfix P0/P1', 'explicit feature role profile remains final', 'ship no provider-specific model IDs'];
     for (const marker of contractMarkers) {
       if (!skill.includes(marker)) fail(`${name}: missing P2 contract marker ${marker}`);
     }
@@ -123,6 +129,9 @@ for (const role of expectedRoles) {
   for (const marker of [`name: ${role}`, 'package: cc-nexs', 'defaultContext: fresh']) {
     if (!frontmatter.includes(marker)) fail(`${file}: missing ${marker}`);
   }
+  if (!frontmatter.includes(explicitAgentTriggerPrefix)) {
+    fail(`${file}: package role must be scoped to an explicitly invoked cc-nexs workflow`);
+  }
   if (/^model:/m.test(frontmatter)) fail(`${file}: public package agent must not pin a model`);
   if (!text.includes('# Pi Runtime Override')) fail(`${file}: missing Pi runtime override`);
   if (/^\s*codex\s+/m.test(text)) fail(`${file}: executable Codex CLI snippet leaked into Pi agent`);
@@ -137,7 +146,7 @@ for (const tool of ['find_roots', 'observe_ui', 'search_ui', 'inspect_ui', 'act_
   if (!hotfixVerifierTools.match(new RegExp(`^tools:.*\\b${tool}\\b`, 'm'))) fail(`hotfix-verifier.md: missing computer-use tool ${tool}`);
 }
 
-for (const command of ['verify-local', 'release-base', 'render-plan']) {
+for (const command of ['verify-local', 'release-base', 'render-plan', 'migrate-feature-config']) {
   const skill = readFileSync(join(skillsRoot, `cc-nexs-${command}`, 'SKILL.md'), 'utf8');
   if (!skill.includes('Deterministic Lean Control')) fail(`cc-nexs-${command}: missing deterministic Lean control`);
 }
@@ -160,4 +169,4 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log(`Pi package validation passed: ${expectedCommands.length} P2 commands, ${expectedRoles.length} isolated roles, no fixed models.`);
+console.log(`Pi package validation passed: ${expectedCommands.length} explicit-only P2 commands, ${expectedRoles.length} isolated roles, no fixed models.`);

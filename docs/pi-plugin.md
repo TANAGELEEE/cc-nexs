@@ -40,6 +40,10 @@ pnpm install:local:pi
 
 The local installer requires `pi-subagents` first, then builds and validates cc-nexs. Missing `@injaneity/pi-computer-use@0.4.3` produces a warning: init/status/build remain available, while automatic browser verification falls back to manual G2.
 
+All generated cc-nexs Pi skills set `disable-model-invocation: true`, so Pi excludes them from the model's available-skill prompt. Start cc-nexs only with `/cc-nexs:*` or `/skill:cc-nexs-*`; ordinary natural-language requests do not activate the package. Package role descriptions likewise permit dispatch only from that explicitly started parent workflow.
+
+Explicit-only applies to entry, not progression. Once `/cc-nexs:run` starts, the Pi parent continues dispatching the workflow's internal stages until the same defined human gates or blocking conditions used by the other runtimes.
+
 The generated Verifier agent allowlist includes `find_roots`, `observe_ui`, `search_ui`, `inspect_ui`, `act_ui`, and `wait_for`. Browser checks reuse the current signed-in session and only visit `release.test.allowed_hosts`; plaintext credentials in memory/project files are forbidden.
 
 ## Configure Lean and Hotfix role models
@@ -50,7 +54,7 @@ cc-nexs deliberately ships no Pi model IDs. Choose authenticated models from:
 pi --list-models
 ```
 
-Configure portable profiles once in project `cc-nexs.config.yml`; feature `config.json.models` may override them. The Pi parent passes the resolved `model` and `thinking` directly to each fresh pi-subagents `Agent` call:
+Configure portable profiles once in project `cc-nexs.config.yml`; feature `config.json.models` may override them. The shared resolver applies automatic risk routing first, then feature role overrides last. Lean high/critical upgrades Planner and Reviewer to `escalated`; Hotfix P0/P1 upgrades Reviewer. The Pi parent passes the resolved `model` and `thinking` directly to each fresh pi-subagents `Agent` call:
 
 ```yaml
 models:
@@ -65,12 +69,18 @@ models:
         thinking: high
         fallback_models:
           - backup-provider/review-model
+    escalated:
+      pi:
+        model: provider/strong-model
+        thinking: xhigh
   roles:
     lean-developer: implementation
     lean-reviewer: review
 ```
 
-For Lean and Hotfix, Reviewer may resolve to a different model or the same model as Developer with stronger `thinking`; fresh child context is mandatory in either case. If the primary model is unavailable, the parent tries `fallback_models` in order. Hotfix uses dedicated `hotfix-developer`, `hotfix-reviewer`, and `hotfix-verifier` profiles. P0/P1 heterogeneity can be required by private project policy, but is not hardcoded publicly.
+For Lean and Hotfix, Reviewer may resolve to a different model or the same model as Developer with stronger `thinking`; fresh child context is mandatory in either case. If the primary model is unavailable, the parent tries `fallback_models` in order. Public `escalated` is only `inherit + xhigh`, so the private profile above is required when escalation should switch providers/models. Hotfix uses dedicated roles; P0/P1 heterogeneity can be required by private project policy, but is not hardcoded publicly.
+
+Older feature configs may contain generated role maps that block project routing. Run `/cc-nexs:migrate-feature-config <id> --dry-run`, inspect the result, then run it without `--dry-run`. The migration preserves customized mappings. For a legacy approved Lean plan, `--bind-plan-risk` may materialize only a concrete risk proven by the original Gateway A hashes; otherwise runtime routing uses a conservative high floor.
 
 `.pi/settings.json` remains responsible only for Pi authentication and optional `enabledModels` scope; it is no longer a second cc-nexs role-mapping source. Check Pi after changing configuration:
 
@@ -94,6 +104,7 @@ Pi registers the same P2 slash surface:
 /cc-nexs:approve-plan 01
 /cc-nexs:run 01
 /cc-nexs:verify-local 01
+/cc-nexs:migrate-feature-config 01 --dry-run
 /cc-nexs:approve-release 01
 /cc-nexs:request-release-changes 01 --type=implementation --feedback="调整错误提示"
 /cc-nexs:release-base 01
@@ -106,7 +117,7 @@ Pi registers the same P2 slash surface:
 /cc-nexs:doctor
 ```
 
-Each slash command forwards to a generated Pi skill. The skill reads the same `dist/preset-standard/commands/*.md` document used by the other runtimes, then replaces only the role-dispatch mechanism.
+Each slash command forwards to an explicit-only generated Pi skill. The skill reads the same `dist/preset-standard/commands/*.md` document used by the other runtimes, then replaces only the role-dispatch mechanism.
 
 All approval commands call the shared deterministic core. `verify-local`, `release-test`, and `release-base` call deterministic controllers for evidence and Git integration. Pi never edits progress files through model-generated patches.
 

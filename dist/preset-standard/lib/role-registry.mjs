@@ -19,7 +19,17 @@ const DEFAULT_DEFINITIONS = {
 };
 
 export class RoleRegistry {
-  constructor({ preset, presetRoot, runtime = detectRuntime(), models = null }) {
+  constructor({
+    preset,
+    presetRoot,
+    runtime = detectRuntime(),
+    models = null,
+    featureModels = null,
+    modelContext = null,
+    featureConfig = null,
+    progress = null,
+    planText = '',
+  }) {
     if (!preset || !presetRoot) {
       throw new Error('[cc-nexs] RoleRegistry requires preset + presetRoot');
     }
@@ -29,6 +39,11 @@ export class RoleRegistry {
     this.preset = preset;
     this.runtime = runtime;
     this.models = models;
+    this.featureModels = featureModels;
+    this.modelContext = modelContext;
+    this.featureConfig = featureConfig;
+    this.progress = progress;
+    this.planText = planText;
   }
 
   listEnabled() {
@@ -44,7 +59,14 @@ export class RoleRegistry {
         ...this.preset.roles,
         definitions: { ...this.definitions, ...(fromPreset ? {} : { [name]: fallback }) },
       },
-    }, name, this.runtime, { models: this.models });
+    }, name, this.runtime, {
+      models: this.models,
+      featureModels: this.featureModels,
+      modelContext: this.modelContext,
+      featureConfig: this.featureConfig,
+      progress: this.progress,
+      planText: this.planText,
+    });
     if (!merged.agent && !merged.tool) {
       throw new Error(`[cc-nexs] Role "${name}" not defined in preset or core defaults`);
     }
@@ -60,6 +82,7 @@ export class RoleRegistry {
       model: merged.model || 'inherit',
       effort: merged.effort || 'inherit',
       fallbackModels: merged.fallback_models || [],
+      modelRouting: merged.model_routing,
       runtime: this.runtime,
     };
   }

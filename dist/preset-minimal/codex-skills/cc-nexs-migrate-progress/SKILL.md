@@ -1,11 +1,11 @@
 ---
 name: cc-nexs-migrate-progress
-description: /cc-nexs:migrate-progress 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:migrate-progress"、"/cc-nexs:migrate-progress ..."、"$cc-nexs-migrate-progress" 或要求执行 cc-nexs migrate-progress 流程时触发。 Migrate a legacy human-readable progress.md into authoritative progress.json v2 while preserving progress.md as a rendered view.
+description: /cc-nexs:migrate-progress 的 Codex 镜像 skill。 仅当用户显式输入 "$cc-nexs-migrate-progress" 或在界面中选择该 skill 时使用；不得因普通自然语言请求自动触发。 Migrate a legacy human-readable progress.md into authoritative progress.json v2 while preserving progress.md as a rendered view.
 ---
 
 # /cc-nexs:migrate-progress for Codex
 
-This skill is the Codex mirror for `/cc-nexs:migrate-progress`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and full / fast / hotfix behavior as the Claude Code plugin.
+This explicit-only skill is the Codex mirror for `/cc-nexs:migrate-progress`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and full / fast / hotfix behavior as the Claude Code plugin.
 
 ## Authoritative Command
 

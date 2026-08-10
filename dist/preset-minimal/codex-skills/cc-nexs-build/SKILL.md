@@ -1,11 +1,11 @@
 ---
 name: cc-nexs-build
-description: /cc-nexs:build 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:build"、"/cc-nexs:build ..."、"$cc-nexs-build" 或要求执行 cc-nexs build 流程时触发。 Run only changed modules with exact-candidate success caching and dependency-aware bounded parallelism.
+description: /cc-nexs:build 的 Codex 镜像 skill。 仅当用户显式输入 "$cc-nexs-build" 或在界面中选择该 skill 时使用；不得因普通自然语言请求自动触发。 Run only changed modules with exact-candidate success caching and dependency-aware bounded parallelism.
 ---
 
 # /cc-nexs:build for Codex
 
-This skill is the Codex mirror for `/cc-nexs:build`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and full / fast / hotfix behavior as the Claude Code plugin.
+This explicit-only skill is the Codex mirror for `/cc-nexs:build`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and full / fast / hotfix behavior as the Claude Code plugin.
 
 ## Authoritative Command
 

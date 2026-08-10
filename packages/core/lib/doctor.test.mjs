@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+
+import { createProgressV2, writeProgressV2 } from './progress-v2.mjs';
+import { planApprovalBinding } from './plan-contract.mjs';
 
 const doctor = join(dirname(fileURLToPath(import.meta.url)), 'doctor.mjs');
 
@@ -101,3 +105,91 @@ test('doctor strict mode blocks production-like test hosts', () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('doctor reports legacy feature routing without mutating config', () => {
+  const root = fixture();
+  const feature = join(root, 'docs', 'doc', '07.routing');
+  mkdirSync(feature, { recursive: true });
+  const configFile = join(feature, 'config.json');
+  writeFileSync(configFile, `${JSON.stringify({
+    mode: 'lean',
+    models: { roles: {
+      'lean-planner': 'balanced',
+      'lean-developer': 'balanced',
+      'lean-reviewer': 'review',
+      'lean-verifier': 'balanced',
+    } },
+  }, null, 2)}\n`);
+  writeProgressV2(join(feature, 'progress.json'), createProgressV2({
+    featureId: '07', featureSlug: 'routing', preset: 'preset-standard', mode: 'lean',
+  }));
+  const before = digestFile(configFile);
+  try {
+    const result = runDoctor(root);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /migrate-feature-config 07/);
+    assert.match(result.stderr, /blocks project routing/);
+    assert.equal(digestFile(configFile), before);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('doctor rejects non-canonical v2 risk tiers', () => {
+  const root = fixture();
+  const feature = join(root, 'docs', 'doc', '08.routing');
+  mkdirSync(feature, { recursive: true });
+  writeFileSync(join(feature, 'config.json'), `${JSON.stringify({
+    config_version: 2,
+    mode: 'lean',
+    risk_tier: '高',
+  }, null, 2)}\n`);
+  writeProgressV2(join(feature, 'progress.json'), createProgressV2({
+    featureId: '08', featureSlug: 'routing', preset: 'preset-standard', mode: 'lean',
+  }));
+  try {
+    const result = runDoctor(root);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /risk_tier must use canonical/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('doctor reports a hash-verifiable legacy Gateway A risk without mutating approval state', () => {
+  const root = fixture();
+  const feature = join(root, 'docs', 'doc', '09.routing');
+  mkdirSync(feature, { recursive: true });
+  const configFile = join(feature, 'config.json');
+  const progressFile = join(feature, 'progress.json');
+  writeFileSync(configFile, `${JSON.stringify({
+    config_version: 2,
+    mode: 'lean',
+    risk_tier: 'auto',
+  }, null, 2)}\n`);
+  writeFileSync(join(feature, 'requirements.md'), '# Requirements\n');
+  writeFileSync(join(feature, 'plan.md'), '# Plan\n\n<!-- APPROVAL-SCOPE START -->\n- risk_tier: high\n<!-- APPROVAL-SCOPE END -->\n');
+  const progress = createProgressV2({
+    featureId: '09', featureSlug: 'routing', preset: 'preset-standard', mode: 'lean',
+  });
+  const binding = planApprovalBinding(feature);
+  delete binding.risk_tier;
+  progress.gates.plan = { approved: true, binding };
+  writeProgressV2(progressFile, progress);
+  const configBefore = digestFile(configFile);
+  const progressBefore = digestFile(progressFile);
+  try {
+    const result = runDoctor(root);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /legacy Gateway A risk high is hash-verified/);
+    assert.match(result.stderr, /--bind-plan-risk/);
+    assert.equal(digestFile(configFile), configBefore);
+    assert.equal(digestFile(progressFile), progressBefore);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function digestFile(file) {
+  return createHash('sha256').update(readFileSync(file)).digest('hex');
+}

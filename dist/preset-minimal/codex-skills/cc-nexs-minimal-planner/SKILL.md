@@ -1,11 +1,11 @@
 ---
 name: cc-nexs-minimal-planner
-description: /cc-nexs-minimal:planner 的 Codex 镜像 skill。 当用户输入 "/cc-nexs-minimal:planner"、"/cc-nexs-minimal:planner ..."、"$cc-nexs-minimal-planner" 或要求执行 cc-nexs planner 流程时触发。 Invoke Planner subagent to draft or revise spec.md.
+description: /cc-nexs-minimal:planner 的 Codex 镜像 skill。 仅当用户显式输入 "$cc-nexs-minimal-planner" 或在界面中选择该 skill 时使用；不得因普通自然语言请求自动触发。 Invoke Planner subagent to draft or revise spec.md.
 ---
 
 # /cc-nexs-minimal:planner for Codex
 
-This skill is the Codex mirror for `/cc-nexs-minimal:planner`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and full / fast / hotfix behavior as the Claude Code plugin.
+This explicit-only skill is the Codex mirror for `/cc-nexs-minimal:planner`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and full / fast / hotfix behavior as the Claude Code plugin.
 
 ## Authoritative Command
 

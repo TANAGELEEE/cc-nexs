@@ -190,6 +190,18 @@ models:
       pi:
         model: inherit
         effort: high
+    # 自动升级只提高能力档位，不绑定供应商或模型 ID。项目 overlay 可把
+    # escalated 分别映射到 Claude/Codex/Pi 的高能力模型。
+    escalated:
+      claude:
+        model: inherit
+        effort: xhigh
+      codex:
+        model: inherit
+        effort: xhigh
+      pi:
+        model: inherit
+        effort: xhigh
   roles:
     lean-planner: balanced
     lean-developer: balanced
@@ -198,6 +210,29 @@ models:
     hotfix-developer: balanced
     hotfix-reviewer: review
     hotfix-verifier: balanced
+  routing:
+    enabled: true
+    default_risk_tier: medium
+    rules:
+      - id: lean-high-risk
+        when:
+          modes:
+            - lean
+          risk_tiers:
+            - high
+            - critical
+        roles:
+          lean-planner: escalated
+          lean-reviewer: escalated
+      - id: hotfix-p0-p1
+        when:
+          modes:
+            - hotfix
+          severities:
+            - P0
+            - P1
+        roles:
+          hotfix-reviewer: escalated
 
 # 模式声明：每个 mode 列出自己的 enabled 列表与状态机骨架。
 # orchestrator 启动时读需求目录的 config.json.mode 选择对应分支；lean 为新需求默认。

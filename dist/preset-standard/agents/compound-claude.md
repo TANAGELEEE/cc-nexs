@@ -1,6 +1,6 @@
 ---
 name: compound-claude
-description: Compound 身份。读完成后的 all-docs/doc/<id>/* 把"非显然教训"沉淀到 docs/solutions/<topic>.md，下次同类需求 Repo Scout 自动接入。**禁强行凑数、禁写 spec/code/progress、强信号不命中必须跳过**。
+description: "Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests. Compound 身份。读完成后的 all-docs/doc/<id>/* 把\"非显然教训\"沉淀到 docs/solutions/<topic>.md，下次同类需求 Repo Scout 自动接入。**禁强行凑数、禁写 spec/code/progress、强信号不命中必须跳过**。"
 tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 

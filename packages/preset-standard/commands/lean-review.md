@@ -1,12 +1,13 @@
 ---
-description: Lean 一次集中 Review 与最多一次 delta 闭环检查。
-allowed-tools: Read, Write, Edit, Bash, Task
-argument-hint: [需求编号] [--closure|--gateway-b-delta]
+description: "Lean 一次集中 Review 与最多一次 delta 闭环检查。"
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Bash, Task"
+argument-hint: "[需求编号] [--closure|--gateway-b-delta]"
 ---
 
 # /cc-nexs:lean-review
 
-解析 `lean-reviewer` 的 model profile。Reviewer 可配置为不同模型，也可与 Developer 使用同一模型但更高 effort；无论配置如何都必须是独立 session。
+先用 `assertPlanApprovalCurrent` 验证 Gateway A hash，再从绑定的 `risk_tier` 解析 `lean-reviewer`：`resolveRoleRuntime(..., {models: mergedModels, featureConfig, progress: progressV2, planText})`。`high|critical` 自动命中 `escalated`；feature 显式 profile 最终优先。打印风险来源、matched rule 和最终 profile/model/effort。Reviewer 可配置为不同模型，也可与 Developer 使用同一模型但更高 effort；无论配置如何都必须是独立 session。
 
 完整 Review 输入仅为批准 requirements、plan scope、全部仓库累计 diff、变更文件清单和同 candidate 的本地证据。一次性输出全部 P0/P1；P2/P3 非阻塞。写入 `plan.md` 后由父 Orchestrator执行：
 

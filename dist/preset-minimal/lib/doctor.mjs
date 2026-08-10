@@ -5,6 +5,8 @@ import { basename, dirname, resolve, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 import { loadConfig, loadWorkspaceConfig } from './config-loader.mjs';
+import { hasLegacyTemplateRoleMap, normalizeRiskTier, validateModelRoutingConfig } from './model-routing.mjs';
+import { inspectPlanRiskBinding } from './plan-contract.mjs';
 import { readProgressV2 } from './progress-v2.mjs';
 
 const args = process.argv.slice(2);
@@ -64,8 +66,43 @@ for (const file of progressFiles) {
       const progress = readProgressV2(file);
       const featureConfig = join(featureDir, 'config.json');
       if (existsSync(featureConfig)) {
-        const configuredMode = JSON.parse(readFileSync(featureConfig, 'utf8')).mode || 'lean';
+        const feature = JSON.parse(readFileSync(featureConfig, 'utf8'));
+        const configuredMode = feature.mode || 'lean';
         if (configuredMode !== progress.mode) errors.push(`${featureName}: config mode ${configuredMode} != progress mode ${progress.mode}`);
+        if (['lean', 'hotfix'].includes(configuredMode)) {
+          if (feature.config_version !== 2) {
+            if (feature.config_version === undefined || feature.config_version === 1) {
+              warnings.push(`${featureName}: legacy config; run /cc-nexs:migrate-feature-config ${progress.feature.id}`);
+            } else {
+              errors.push(`${featureName}: unsupported config_version ${feature.config_version}`);
+            }
+          }
+          try {
+            const riskTier = normalizeRiskTier(feature.risk_tier);
+            if (feature.config_version === 2 && feature.risk_tier !== riskTier) {
+              errors.push(`${featureName}: risk_tier must use canonical auto|low|medium|high|critical`);
+            }
+          } catch (error) {
+            errors.push(`${featureName}: ${error.message}`);
+          }
+          if (hasLegacyTemplateRoleMap(feature, configuredMode)) {
+            warnings.push(`${featureName}: generated models.roles blocks project routing; run /cc-nexs:migrate-feature-config ${progress.feature.id}`);
+          }
+          try { validateModelRoutingConfig(feature.models?.routing); }
+          catch (error) { errors.push(`${featureName}: ${error.message}`); }
+        }
+      }
+      if (progress.mode === 'lean' && progress.gates?.plan?.approved === true) {
+        try {
+          const planRisk = inspectPlanRiskBinding(progress, featureDir);
+          if (planRisk.status === 'derivable') {
+            warnings.push(`${featureName}: legacy Gateway A risk ${planRisk.risk_tier} is hash-verified; run /cc-nexs:migrate-feature-config ${progress.feature.id} --bind-plan-risk to materialize it`);
+          } else if (planRisk.status === 'unstructured') {
+            warnings.push(`${featureName}: legacy Gateway A has no concrete risk_tier; routing uses conservative high until the plan is revised and re-approved`);
+          }
+        } catch (error) {
+          errors.push(`${featureName}: ${error.message}`);
+        }
       }
       for (const [repoId, assignment] of Object.entries(progress.repositories || {})) {
         const repo = workspace?.repositories.find((item) => item.id === repoId);

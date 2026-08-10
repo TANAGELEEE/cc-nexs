@@ -1,6 +1,7 @@
 ---
-name: role-isolation
-description: cc-nexs 五方身份隔离速查。当 Claude 在执行任何 SOP 阶段任务前激活，提醒当前身份的禁令清单和越界自检规则。触发词：planner、tech lead、sa、qa、evaluator、身份隔离、role isolation、五方异构、cross-tool、跨 session。
+name: "role-isolation"
+description: "cc-nexs 五方身份隔离速查。当 Claude 在执行任何 SOP 阶段任务前激活，提醒当前身份的禁令清单和越界自检规则。触发词：planner、tech lead、sa、qa、evaluator、身份隔离、role isolation、五方异构、cross-tool、跨 session。"
+disable-model-invocation: true
 ---
 
 # 五方身份隔离速查

@@ -1,6 +1,6 @@
 ---
 name: hotfix-developer
-description: 在独立 latest-base feature worktree 内实现已绑定范围的 Hotfix，并返回精确变更与验证信息。
+description: "Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests. 在独立 latest-base feature worktree 内实现已绑定范围的 Hotfix，并返回精确变更与验证信息。"
 tools: Read, Write, Edit, Bash, Glob, Grep
 model_profile: balanced
 ---

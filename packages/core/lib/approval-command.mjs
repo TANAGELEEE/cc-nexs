@@ -43,7 +43,7 @@ export function approveFeatureGate({
     if (before.state !== 'PLAN_PENDING_HUMAN') {
       throw new Error(`plan gate requires PLAN_PENDING_HUMAN, found ${before.state}`);
     }
-    const binding = planApprovalBinding(dirname(progressFile));
+    const binding = planApprovalBinding(dirname(progressFile), { requireRiskTier: true });
     if (!existing?.approved || existing?.binding?.combined_sha256 !== binding.combined_sha256) {
       approveProgressGate(progressFile, { gate: 'plan', approver: actor, binding });
     }

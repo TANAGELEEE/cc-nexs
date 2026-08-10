@@ -1,7 +1,8 @@
 ---
-description: Run only changed modules with exact-candidate success caching and dependency-aware bounded parallelism.
-allowed-tools: Read, Bash
-argument-hint: [--phase=build|test|both] [--dry-run] [--no-cache] [--max-parallel=N] [--config-root=path]
+description: "Run only changed modules with exact-candidate success caching and dependency-aware bounded parallelism."
+disable-model-invocation: true
+allowed-tools: "Read, Bash"
+argument-hint: "[--phase=build|test|both] [--dry-run] [--no-cache] [--max-parallel=N] [--config-root=path]"
 ---
 
 # /cc-nexs:build

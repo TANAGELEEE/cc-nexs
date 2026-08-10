@@ -1,11 +1,11 @@
 ---
 name: cc-nexs-doctor
-description: /cc-nexs:doctor 的 Codex 镜像 skill。 当用户输入 "/cc-nexs:doctor"、"/cc-nexs:doctor ..."、"$cc-nexs-doctor" 或要求执行 cc-nexs doctor 流程时触发。 Validate workspace repositories, private overlay, and progress.json v2 files without changing project state.
+description: /cc-nexs:doctor 的 Codex 镜像 skill。 仅当用户显式输入 "$cc-nexs-doctor" 或在界面中选择该 skill 时使用；不得因普通自然语言请求自动触发。 Validate workspace repositories, private overlay, and progress.json v2 files without changing project state.
 ---
 
 # /cc-nexs:doctor for Codex
 
-This skill is the Codex mirror for `/cc-nexs:doctor`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and full / fast / hotfix behavior as the Claude Code plugin.
+This explicit-only skill is the Codex mirror for `/cc-nexs:doctor`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and full / fast / hotfix behavior as the Claude Code plugin.
 
 ## Authoritative Command
 

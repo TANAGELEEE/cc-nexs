@@ -1,0 +1,6 @@
+interface:
+  display_name: "/cc-nexs:status"
+  short_description: "Run /cc-nexs:status explicitly"
+  default_prompt: "Use $cc-nexs-status to run /cc-nexs:status."
+policy:
+  allow_implicit_invocation: false

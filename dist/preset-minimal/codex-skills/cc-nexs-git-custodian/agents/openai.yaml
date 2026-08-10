@@ -1,0 +1,6 @@
+interface:
+  display_name: "/cc-nexs:git-custodian"
+  short_description: "Run /cc-nexs:git-custodian explicitly"
+  default_prompt: "Use $cc-nexs-git-custodian to run /cc-nexs:git-custodian."
+policy:
+  allow_implicit_invocation: false

@@ -1,7 +1,8 @@
 ---
-description: Migrate a legacy human-readable progress.md into authoritative progress.json v2 while preserving progress.md as a rendered view.
-allowed-tools: Read, Write, Bash
-argument-hint: <path-to-progress.md> [--force]
+description: "Migrate a legacy human-readable progress.md into authoritative progress.json v2 while preserving progress.md as a rendered view."
+disable-model-invocation: true
+allowed-tools: "Read, Write, Bash"
+argument-hint: "<path-to-progress.md> [--force]"
 ---
 
 # /cc-nexs:migrate-progress

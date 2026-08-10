@@ -1,6 +1,6 @@
 ---
 name: hotfix-reviewer
-description: 对同一 Hotfix candidate 做一次独立集中 Review，或对修复 delta 做唯一一次闭环 Review。
+description: "Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests. 对同一 Hotfix candidate 做一次独立集中 Review，或对修复 delta 做唯一一次闭环 Review。"
 tools: Read, Write, Glob, Grep
 model_profile: review
 ---

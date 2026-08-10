@@ -1,6 +1,6 @@
 ---
 name: lean-verifier
-description: Lean 模式测试环境黑盒验收角色。按 plan 的 test 矩阵验证已部署 candidate。
+description: "Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests. Lean 模式测试环境黑盒验收角色。按 plan 的 test 矩阵验证已部署 candidate。"
 tools: Bash, Read, Write, Edit, Glob
 ---
 

@@ -1,6 +1,7 @@
 ---
-name: using-worktrees
-description: Compatibility entry for worktree requests. Delegates all repository topology changes to the Orchestrator-owned Git Custodian.
+name: "using-worktrees"
+description: "Compatibility entry for worktree requests. Delegates all repository topology changes to the Orchestrator-owned Git Custodian."
+disable-model-invocation: true
 ---
 
 # Worktrees through Git Custodian

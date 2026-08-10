@@ -1,0 +1,6 @@
+interface:
+  display_name: "/cc-nexs:doctor"
+  short_description: "Run /cc-nexs:doctor explicitly"
+  default_prompt: "Use $cc-nexs-doctor to run /cc-nexs:doctor."
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,6 @@
+interface:
+  display_name: "/cc-nexs-minimal:review"
+  short_description: "Run /cc-nexs-minimal:review explicitly"
+  default_prompt: "Use $cc-nexs-minimal-review to run /cc-nexs-minimal:review."
+policy:
+  allow_implicit_invocation: false

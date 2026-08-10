@@ -1,12 +1,6 @@
 {
+  "config_version": 2,
   "mode": "lean",
-  "release": { "test": "inherit" },
-  "models": {
-    "roles": {
-      "lean-planner": "balanced",
-      "lean-developer": "balanced",
-      "lean-reviewer": "review",
-      "lean-verifier": "balanced"
-    }
-  }
+  "risk_tier": "auto",
+  "release": { "test": "inherit" }
 }

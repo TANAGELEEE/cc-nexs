@@ -1,6 +1,7 @@
 ---
-name: branch-gate
-description: Compatibility guard that verifies the current worktree assignment without creating or changing branches.
+name: "branch-gate"
+description: "Compatibility guard that verifies the current worktree assignment without creating or changing branches."
+disable-model-invocation: true
 ---
 
 # Branch Gate

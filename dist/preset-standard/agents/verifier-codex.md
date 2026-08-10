@@ -1,6 +1,6 @@
 ---
 name: verifier-codex
-description: fast 模式的 Verifier 身份，通过 codex CLI 调用（黑盒测试）。一次调用完成测试用例编写 + 执行 + 报告。仅 fast 模式启用。
+description: "Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests. fast 模式的 Verifier 身份，通过 codex CLI 调用（黑盒测试）。一次调用完成测试用例编写 + 执行 + 报告。仅 fast 模式启用。"
 tools: Bash, Read, Write, Edit
 ---
 

@@ -1,7 +1,8 @@
 ---
-description: Render the Lean plan Markdown as a human-friendly temporary HTML page.
-allowed-tools: Read, Bash
-argument-hint: [feature_id]
+description: "Render the Lean plan Markdown as a human-friendly temporary HTML page."
+disable-model-invocation: true
+allowed-tools: "Read, Bash"
+argument-hint: "[feature_id]"
 ---
 
 # /cc-nexs:render-plan

@@ -1,7 +1,8 @@
 ---
-description: Approve deploy gate G2 in authoritative progress.json v2, mirror the human-readable view, then resume via /cc-nexs:run.
-allowed-tools: Read, Write, Edit, Bash
-argument-hint: [feature_id]
+description: "Approve deploy gate G2 in authoritative progress.json v2, mirror the human-readable view, then resume via /cc-nexs:run."
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Bash"
+argument-hint: "[feature_id]"
 ---
 
 # /cc-nexs:approve-deploy

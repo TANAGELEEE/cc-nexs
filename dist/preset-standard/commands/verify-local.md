@@ -1,7 +1,8 @@
 ---
-description: Run deterministic Lean/Hotfix local build/start/smoke/E2E and bind evidence to exact candidate commits.
-allowed-tools: Read, Bash
-argument-hint: [feature_id]
+description: "Run deterministic Lean/Hotfix local build/start/smoke/E2E and bind evidence to exact candidate commits."
+disable-model-invocation: true
+allowed-tools: "Read, Bash"
+argument-hint: "[feature_id]"
 ---
 
 # /cc-nexs:verify-local

@@ -1,7 +1,8 @@
 ---
-description: Lean test 环境黑盒验收，直接把 AC 证据汇总到 plan.md。
-allowed-tools: Read, Write, Edit, Bash, Task, mcp__chrome-devtools__*
-argument-hint: [需求编号]
+description: "Lean test 环境黑盒验收，直接把 AC 证据汇总到 plan.md。"
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Bash, Task, mcp__chrome-devtools__*"
+argument-hint: "[需求编号]"
 ---
 
 # /cc-nexs:lean-verify

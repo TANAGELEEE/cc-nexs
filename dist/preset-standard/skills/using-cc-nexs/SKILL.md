@@ -1,6 +1,7 @@
 ---
-name: using-cc-nexs
-description: 引导新功能、跨模块需求、完整开发测试验收或“按 SOP 跑”进入 cc-nexs。新需求默认 lean，支持一次集中 Review、full/fast、test 发布、自动浏览器验收、manual fallback 和 hotfix 分流。
+name: "using-cc-nexs"
+description: "引导新功能、跨模块需求、完整开发测试验收或“按 SOP 跑”进入 cc-nexs。新需求默认 lean，支持一次集中 Review、full/fast、test 发布、自动浏览器验收、manual fallback 和 hotfix 分流。"
+disable-model-invocation: true
 ---
 
 # 使用 cc-nexs

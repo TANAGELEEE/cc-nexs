@@ -1,7 +1,8 @@
 ---
-description: Invoke Reviewer subagent for spec / code / acceptance review.
-allowed-tools: Read, Write, Edit, Bash, Task
-argument-hint: <target: spec|code|acceptance> [feature_id] [--sprint=N]
+description: "Invoke Reviewer subagent for spec / code / acceptance review."
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Bash, Task"
+argument-hint: "<target: spec|code|acceptance> [feature_id] [--sprint=N]"
 ---
 
 # /cc-nexs-minimal:review

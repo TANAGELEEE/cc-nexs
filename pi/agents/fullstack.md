@@ -1,7 +1,7 @@
 ---
 name: fullstack
 package: cc-nexs
-description: "fast 模式的 Fullstack 身份。一手包办 spec 起草 + 代码实现 + 文档同步。仅在 fast 模式启用，full 模式禁止用。"
+description: "Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests. fast 模式的 Fullstack 身份。一手包办 spec 起草 + 代码实现 + 文档同步。仅在 fast 模式启用，full 模式禁止用。"
 tools: read, write, edit, find, grep, bash, ls
 defaultContext: fresh
 systemPromptMode: replace

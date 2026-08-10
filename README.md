@@ -22,12 +22,14 @@
 
 `preset-standard` 新需求默认 Lean：计划批准后按 worktree/feature branch 并行实现，本地 build/start/smoke 通过后做一次集中 Review，再合入 test 验收；第二个人工门禁批准精确 candidate 后才合入配置的 base 分支。Fast/Full 需显式指定；没有 `delivery` 字段的历史需求继续保持旧的逐 Sprint + manual 语义。
 
-Lean 模型按 `preset < cc-nexs.config.yml < feature config.json` 合并。公开 preset 只有 `inherit` profile；私有配置可让 Review 使用不同模型，或沿用实现模型但提高推理等级：
+Lean/Hotfix 模型采用风险驱动路由。有效优先级是：公开 preset < 私有 overlay < 项目 `cc-nexs.config.yml.models` < feature profiles/routing < 命中的 routing rules < feature `models.roles` 显式覆盖。新 feature 模板不再生成 `models.roles`，因此日常项目配置会真正生效。
+
+`risk_tier:auto` 时，Lean 从 Gateway A 绑定的计划风险取值，Hotfix 从绑定的 P0/P1/P2/P3 severity 推断。历史 Gateway A 缺少风险字段时，只从 hash 完全匹配的已批准 scope 派生；无法证明则按 `high` 保守升档，绝不静默回落 `medium`。公开规则自动把 Lean `high|critical` 的 Planner/Reviewer、Hotfix P0/P1 的 Reviewer 切到 `escalated`。公开 `escalated` 仍是 provider-neutral 的 `inherit + xhigh`；项目要切换实际高能力模型，应在私有配置覆盖同名 profile：
 
 ```yaml
 models:
   profiles:
-    implementation:
+    daily-development:
       claude:
         model: inherit
         effort: medium
@@ -37,7 +39,7 @@ models:
       pi:
         model: inherit
         effort: medium
-    review:
+    daily-review:
       claude:
         model: inherit
         effort: high
@@ -48,12 +50,37 @@ models:
         model: inherit
         effort: high
         fallback_models: []
+    escalated:
+      claude:
+        model: your-strong-claude-model
+        effort: xhigh
+      codex:
+        model: your-strong-codex-model
+        effort: xhigh
+      pi:
+        model: your-provider/strong-model
+        thinking: xhigh
   roles:
-    lean-developer: implementation
-    lean-reviewer: review
+    lean-developer: daily-development
+    lean-reviewer: daily-review
 ```
 
-将任一 `model: inherit` 换成该运行时已认证的私有模型 ID 即可做异构 Review；三端始终使用独立 Reviewer session。
+项目可以继续分别给 Planner、Developer、Reviewer、Verifier 配置低预算日常 profile；只有命中风险规则的角色升档。feature 显式 profile 仍是最终人工决定，`models.routing.enabled: false` 可显式关闭自动路由。三端始终使用独立 Reviewer session。
+
+配置具体模型前必须以宿主的原生子代理 override 能力为准；模型出现在顶层目录中，不等于当前 native-agent dispatch 一定允许它。Fast/Full 仍会解析 `repo-scout/planner/tech-lead/sa/qa/evaluator/fullstack/reviewer/verifier`，主要运行这两种模式的项目也应显式映射这些角色，否则它们会继承宿主模型。
+
+注意：`models.routing.rules` 是有顺序的数组，后匹配规则覆盖先匹配规则；overlay/project/feature 一旦声明该数组，会整体替换低层数组，而不是按 `id` 追加。仅覆盖 profiles/roles 时不要重复声明 rules。
+
+旧 Lean/Hotfix feature 已生成的默认 `models.roles` 会遮蔽项目配置，先安全预览再迁移：
+
+```text
+/cc-nexs:migrate-feature-config <id> --dry-run
+/cc-nexs:migrate-feature-config <id>
+/cc-nexs:migrate-feature-config <id> --dry-run --bind-plan-risk
+/cc-nexs:migrate-feature-config <id> --bind-plan-risk
+```
+
+迁移只移除结构化精确匹配旧模板的完整默认映射；任何自定义 role/profile/routing 都会保留。`--bind-plan-risk` 是独立 opt-in：仅将 hash 验证通过的 concrete risk 回填旧 Gateway A，并记录 migration event；stale/缺失/歧义 scope 会拒绝写入。
 
 Claude Code 的 Lean 四角色全部使用独立 Claude 子代理；Codex 的 Lean 四角色全部使用独立 native agent；Pi 由父代理把 profile 的 `model`/`thinking` 直接传给 pi-subagents `Agent`，无需在 `.pi/settings.json` 再维护一份角色映射。Pi 的 `fallback_models` 按顺序重试。
 
@@ -160,7 +187,7 @@ build 做什么：
 7. 为 Codex 生成 `codex-skills/`：每个 `commands/*.md` 都会生成一个 `$cc-nexs-*` mirror skill，仍回指原 command 文档；原 `skills/` 不写入 Codex mirror，避免影响 Claude Code plugin
 8. 为 Pi 生成 lean + fast + hotfix command skills 和 package-qualified role agents；模型由项目/feature profile 解析后直接传给 pi-subagents Agent
 
-dist 是真正的 plugin 载体。Claude Code 读取 `.claude-plugin/marketplace.json`；Codex 读取 `.agents/plugins/marketplace.json`。两者都指向同一批 `dist/preset-*`。
+dist 是真正的 plugin 载体。Claude Code 读取 `.claude-plugin/marketplace.json`；Codex 读取 `.agents/plugins/marketplace.json`。两者都指向同一批 `dist/preset-*`。三端入口均为仅显式触发：普通自然语言开发请求不会自动启用 cc-nexs。
 
 ## 安装
 
@@ -181,7 +208,7 @@ pnpm install:local:codex
 
 然后重启 Codex 或开新 thread。可以在 `/plugins` 中检查 `cc-nexs@cc-nexs` 是否已启用；hooks 第一次运行前需要在 `/hooks` 中 review + trust。
 
-Codex 使用显式 skill 入口；`/cc-nexs:*` 仅作为兼容文本提示，不是可执行 shell/slash command：
+Codex 使用显式 skill 入口；每个 mirror skill 的 `agents/openai.yaml` 都设置 `policy.allow_implicit_invocation: false`，因此不会进入默认模型上下文。`/cc-nexs:*` 仅作为兼容文本提示，不是可执行 shell/slash command：
 
 ```text
 $cc-nexs-init "需求描述"             # 默认 lean
@@ -216,7 +243,7 @@ pnpm install:local:minimal
 3. 同步 `~/.claude/plugins/installed_plugins.json` 元数据
 4. 校验 `~/.claude/settings.json` 已启用 plugin
 
-完成后重启 Claude Code 即可生效。后续改源码再跑一次 `pnpm install:local` 即可。
+完成后重启 Claude Code 即可生效。后续改源码再跑一次 `pnpm install:local` 即可。Claude Code 的 commands 与原生 skills 都设置 `disable-model-invocation: true`；只会在用户输入 `/cc-nexs:*`、`/cc-nexs-minimal:*` 或显式 skill 命令时运行。角色 agent 的路由描述也限定为只接受已显式启动的 cc-nexs 父流程调度。
 
 ### Pi P2 安装
 
@@ -235,7 +262,7 @@ pnpm install
 pnpm install:local:pi
 ```
 
-Pi 不调用 Codex CLI。Lean 各角色从 cc-nexs profile 解析 `model`、`thinking` 和 `fallback_models`，由父代理直接传入 pi-subagents `Agent`；Reviewer 可用不同模型，也可用相同模型但更高 thinking，主模型不可用时按 fallback 顺序重试。`.pi/settings.json` 只保留 Pi 认证与 `enabledModels` 范围。`@injaneity/pi-computer-use@0.4.3` 提供自动浏览器验收；缺失时基础插件仍可用，但 test release 回退人工。详见 [Pi P2 支持](./docs/pi-plugin.md)。
+Pi 不调用 Codex CLI。生成的 Pi skills 设置 `disable-model-invocation: true`，从系统提示中隐藏，只能通过 `/cc-nexs:*` 或 `/skill:cc-nexs-*` 显式调用。Lean 各角色从 cc-nexs profile 解析 `model`、`thinking` 和 `fallback_models`，由父代理直接传入 pi-subagents `Agent`；Reviewer 可用不同模型，也可用相同模型但更高 thinking，主模型不可用时按 fallback 顺序重试。`.pi/settings.json` 只保留 Pi 认证与 `enabledModels` 范围。`@injaneity/pi-computer-use@0.4.3` 提供自动浏览器验收；缺失时基础插件仍可用，但 test release 回退人工。详见 [Pi P2 支持](./docs/pi-plugin.md)。
 
 Claude Code 自动环境验收要求 `chrome-devtools-mcp` 已配置并可调用。Codex 复用当前已登录的 in-app/Chrome 会话。三端都只访问 `release.test.allowed_hosts`；不得从项目 memory、Markdown 或 Git 读取明文账号密码，必要登录只允许通过 opaque `credential_ref` 对接外部 secret provider。
 
@@ -251,7 +278,9 @@ Claude Code 自动环境验收要求 `chrome-devtools-mcp` 已配置并可调用
 
 ## 日常命令
 
-Claude Code、Codex 和 Pi 共享同一命令语义，但使用各运行时的原生入口。三边都以 `commands/*.md` 为流程事实来源，审批状态统一由 `cc-nexs` 核心命令写入。
+Claude Code、Codex 和 Pi 共享同一命令语义，但使用各运行时的原生入口。三边都以 `commands/*.md` 为流程事实来源，审批状态统一由 `cc-nexs` 核心命令写入；未出现下表入口时，三端都不得仅凭自然语言自动进入 cc-nexs。
+
+“仅显式触发”只约束入口，不改变流程内部自动推进：显式执行 `run` 后，Orchestrator 会继续运行到既有人工门禁、明确阻塞或能力不足为止，不要求用户逐步调用 `execute`、`lean-review`、`verify-local` 等内部阶段命令。
 
 | 运行时 | 推荐入口 |
 | --- | --- |

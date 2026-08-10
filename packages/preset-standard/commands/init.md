@@ -1,7 +1,8 @@
 ---
-description: 用模板初始化新需求目录。自动按 all-docs/doc/ 下已有编号续号，自动从需求描述生成 slug。默认在 .worktrees/<id>-<slug>/ 创建独立 git worktree，多需求可并行。
-allowed-tools: Read, Write, Edit, Bash, Glob, Skill
-argument-hint: <需求描述> [--mode=lean|hotfix|fast|full] [--id=<编号>] [--slug=<短名>] [--repos=a,b] [--brainstorm]
+description: "用模板初始化新需求目录。自动按 all-docs/doc/ 下已有编号续号，自动从需求描述生成 slug。默认在 .worktrees/<id>-<slug>/ 创建独立 git worktree，多需求可并行。"
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Bash, Glob, Skill"
+argument-hint: "<需求描述> [--mode=lean|hotfix|fast|full] [--risk-tier=auto|low|medium|high|critical] [--id=<编号>] [--slug=<短名>] [--repos=a,b] [--brainstorm]"
 ---
 
 # /cc-nexs:init
@@ -17,9 +18,10 @@ argument-hint: <需求描述> [--mode=lean|hotfix|fast|full] [--id=<编号>] [--
   - `full`：五方异构（Planner/Tech Lead/SA/QA/Evaluator）
   - `fast`：三角色合并（Fullstack/Reviewer/Verifier），单 sprint，比 full 少 ~50% 调用
 - `--id=<编号>` 强制使用指定编号（覆盖自动续号）
+- `--risk-tier=auto|low|medium|high|critical` Feature 风险下限（默认 `auto`）。显式 high/critical 可让首次 Lean Planner 直接升级；自动值仍由计划或 Hotfix severity 判定。
 - `--slug=<短名>` 强制使用指定 slug（覆盖自动生成）
 - `--repos=a,b` 初始化时同时创建的代码仓库 worktree；docs repository 总是包含。未指定时先只建 docs，RECON/Planner 确认影响仓库后由 Custodian 扩展。
-- `--brainstorm` 初始化完成后立即激活 brainstorming skill，进入 Socratic 对话把一句话诉求展成完整 requirements.md（不传就只输出提示，不自动开启）
+- `--brainstorm` 初始化完成后立即读取并遵循 brainstorming skill 文件，进入 Socratic 对话把一句话诉求展成完整 requirements.md（不传就只输出提示，不自动开启）
 - 工作区模式始终由 Git Custodian 为 workspace 中命中的每个仓库建立独立 worktree；不提供会污染当前分支的 `--no-worktree` 降级。
 
 ## 执行步骤
@@ -50,6 +52,21 @@ esac
 # 解析 --brainstorm flag（opt-in；不传则保留旧行为）
 BRAINSTORM=0
 echo "$@" | grep -qE -- '(^| )--brainstorm( |$)' && BRAINSTORM=1
+
+RISK_COUNT=$(echo "$@" | grep -oE -- '--risk-tier=[^ ]*' | wc -l | tr -d ' ')
+[ "$RISK_COUNT" -gt 1 ] && { echo "❌ --risk-tier 只能出现一次"; exit 1; }
+if echo "$@" | grep -qE -- '(^| )--risk-tier(=| |$)'; then
+  RISK_ARG=$(echo "$@" | grep -oE -- '--risk-tier=[^ ]*')
+  [ -n "$RISK_ARG" ] || { echo "❌ --risk-tier 必须使用 --risk-tier=<value>"; exit 1; }
+  RISK_TIER=${RISK_ARG#*=}
+  [ -n "$RISK_TIER" ] || { echo "❌ --risk-tier 不能为空"; exit 1; }
+else
+  RISK_TIER=auto
+fi
+case "$RISK_TIER" in
+  auto|low|medium|high|critical) ;;
+  *) echo "❌ --risk-tier 必须是 auto、low、medium、high 或 critical"; exit 1 ;;
+esac
 
 echo "🛠️  模式: ${MODE}"
 [ "$BRAINSTORM" = "1" ] && echo "🧠 init 完成后将自动进入 brainstorming"
@@ -170,12 +187,13 @@ done
 
 ### 6.5 写入 mode 到 config.json
 
-Lean 模板默认值是 `lean`，仍按最终 `MODE` 明确覆写：
+新模板必须保留 `config_version: 2` 与 `risk_tier`；Lean 模板默认 mode 是 `lean`，仍按最终 `MODE` 明确覆写：
 
 ```bash
 CFG="${REQ_DIR}/config.json"
 # 注意：BSD/macOS sed 不识别 \s，用 [[:space:]] 兼容
 sed "${SED_INPLACE[@]}" -E 's/("mode"[[:space:]]*:[[:space:]]*)"[^"]*"/\1"'"$MODE"'"/' "$CFG"
+sed "${SED_INPLACE[@]}" -E 's/("risk_tier"[[:space:]]*:[[:space:]]*)"[^"]*"/\1"'"$RISK_TIER"'"/' "$CFG"
 
 # progress.json v2 是权威状态；progress.md 仅作为人类可读视图。
 PROGRESS_JSON="${REQ_DIR}/progress.json"
@@ -246,7 +264,7 @@ REQ_FILE="${REQ_DIR}/$([ "$MODE" = "hotfix" ] && echo hotfix.md || echo requirem
    HARD-GATE：禁写 spec/code，仅写 requirements.md
 ```
 
-随后**立刻激活 `brainstorming` skill**（`packages/preset-standard/skills/brainstorming/SKILL.md`），按 skill 流程清单第 1 步开始：
+随后**立刻读取并遵循 `brainstorming` skill 文件**（`packages/preset-standard/skills/brainstorming/SKILL.md`），按流程清单第 1 步开始；这是显式 `--brainstorm` 参数授权的内部流程加载，不依赖模型自动触发 skill：
 
 - 读 `${REQ_DIR}/requirements.md`
 - 读最近 git 提交作为上下文

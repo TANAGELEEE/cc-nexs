@@ -1,0 +1,6 @@
+interface:
+  display_name: "/cc-nexs:recon"
+  short_description: "Run /cc-nexs:recon explicitly"
+  default_prompt: "Use $cc-nexs-recon to run /cc-nexs:recon."
+policy:
+  allow_implicit_invocation: false

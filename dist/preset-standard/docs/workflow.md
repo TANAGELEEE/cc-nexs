@@ -15,7 +15,7 @@ init -> plan -> PLAN_PENDING_HUMAN (Gateway A)
 
 Lean 只维护 `requirements.md` 和 `plan.md` 两份人工文档。每仓仍强制独立 worktree、`feature/<id>-<slug>` 与 immutable candidate ref。Gateway A 绑定 requirements + plan approval scope 的哈希；Gateway B 绑定本地验证、Review 和 test 验收共享的精确 fingerprint。
 
-集中 Review 使用独立 session，可选择不同模型，也可用相同模型但提升 effort/thinking。只把 P0/P1 视为阻塞；修复后最多一次 delta closure，再失败转人工。
+集中 Review 使用独立 session，可选择不同模型，也可用相同模型但提升 effort/thinking。Lean high/critical 由 Gateway A 绑定 risk 后自动路由 Planner/Reviewer 到 escalated；Hotfix P0/P1 自动路由 Reviewer。feature 显式 profile 最终优先。只把 P0/P1 视为阻塞；修复后最多一次 delta closure，再失败转人工。
 
 Gateway B 若提出意见，必须结构化分类：证据补充留在门禁；批准范围内实现修改走同一 feature worktree、本地重验、一次 Gateway B delta Review、新 test attempt 和回归；需求/AC/方案边界变化使 Gateway A 哈希失效并返回 Planner。旧 candidate 与 test attempt 只保留为历史，不能继续授权 base merge。
 

@@ -28,6 +28,7 @@ const P2_COMMANDS = [
   "lean-review",
   "lean-verify",
   "migrate-progress",
+  "migrate-feature-config",
   "recon",
   "release-test",
   "release-base",

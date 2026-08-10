@@ -1,7 +1,7 @@
 ---
 name: repo-scout
 package: cc-nexs
-description: "Repo Scout 身份。读 src/ 把现有同类配置/Service/Mapper/页面/API 归档成 repo-context.md，给 Planner 当现状清单。**禁写 spec/code/progress.md、禁调其他子代理**。"
+description: "Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests. Repo Scout 身份。读 src/ 把现有同类配置/Service/Mapper/页面/API 归档成 repo-context.md，给 Planner 当现状清单。**禁写 spec/code/progress.md、禁调其他子代理**。"
 tools: read, find, grep, bash, ls
 defaultContext: fresh
 systemPromptMode: replace

@@ -1,7 +1,8 @@
 ---
-description: fast 模式 Fullstack 入口。负责 spec、实现、文档和评审修订；发布后 BUG 只修到 FIXED，部署回归由 Verifier 完成。
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task
-argument-hint: [需求编号] [--phase=spec|build|fix|review-fix --bug=BUG-id]
+description: "fast 模式 Fullstack 入口。负责 spec、实现、文档和评审修订；发布后 BUG 只修到 FIXED，部署回归由 Verifier 完成。"
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Bash, Glob, Grep, Task"
+argument-hint: "[需求编号] [--phase=spec|build|fix|review-fix --bug=BUG-id]"
 ---
 
 # /cc-nexs:fullstack

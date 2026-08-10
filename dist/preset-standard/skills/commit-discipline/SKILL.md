@@ -1,6 +1,7 @@
 ---
-name: commit-discipline
-description: cc-nexs commit 聚合与 sprint 收尾 squash 规则。避免一个需求 100+ commit 的反模式。触发词：commit、squash、rebase、sprint 收尾、合并、main、master、分支整理。
+name: "commit-discipline"
+description: "cc-nexs commit 聚合与 sprint 收尾 squash 规则。避免一个需求 100+ commit 的反模式。触发词：commit、squash、rebase、sprint 收尾、合并、main、master、分支整理。"
+disable-model-invocation: true
 ---
 
 # Commit 纪律

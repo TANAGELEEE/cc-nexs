@@ -1,7 +1,7 @@
 ---
 name: lean-developer
 package: cc-nexs
-description: "Lean 模式实现角色。只执行分配的 plan task，可按不重叠路径并行实现前后端。"
+description: "Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests. Lean 模式实现角色。只执行分配的 plan task，可按不重叠路径并行实现前后端。"
 tools: read, write, edit, find, grep, bash, ls
 defaultContext: fresh
 systemPromptMode: replace

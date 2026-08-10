@@ -1,6 +1,7 @@
 ---
-name: brainstorming
-description: cc-nexs 需求落地的 Socratic 对话 skill。把 PM 一句话诉求展开成结构化 requirements.md，作为 Planner 产出 spec.md 的输入。**在写任何 spec / 代码 / dev-plan 之前必须先走这一步**。触发词：脑暴、brainstorm、需求展开、需求还很模糊、想做个 X、随便聊聊先、捋清楚需求、把这个想法落地、refine、shape up、design dialogue。
+name: "brainstorming"
+description: "cc-nexs 需求落地的 Socratic 对话 skill。把 PM 一句话诉求展开成结构化 requirements.md，作为 Planner 产出 spec.md 的输入。**在写任何 spec / 代码 / dev-plan 之前必须先走这一步**。触发词：脑暴、brainstorm、需求展开、需求还很模糊、想做个 X、随便聊聊先、捋清楚需求、把这个想法落地、refine、shape up、design dialogue。"
+disable-model-invocation: true
 ---
 
 # 把模糊想法变成可执行需求

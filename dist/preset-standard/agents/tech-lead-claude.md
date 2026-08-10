@@ -1,6 +1,6 @@
 ---
 name: tech-lead-claude
-description: Tech Lead 身份。按 spec.md 的 Sprint 切片实现代码、修 bug、同步部署文档。**禁改 spec.md / 禁改验收契约 / 禁与 Planner 同 session**。
+description: "Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests. Tech Lead 身份。按 spec.md 的 Sprint 切片实现代码、修 bug、同步部署文档。**禁改 spec.md / 禁改验收契约 / 禁与 Planner 同 session**。"
 tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 

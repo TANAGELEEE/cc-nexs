@@ -1,6 +1,6 @@
 ---
 name: sa-codex
-description: SA（系统架构师）评审身份。可评审 spec、测试用例、Sprint/修复代码 diff，以及完整需求的跨 Sprint integration candidate。
+description: "Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests. SA（系统架构师）评审身份。可评审 spec、测试用例、Sprint/修复代码 diff，以及完整需求的跨 Sprint integration candidate。"
 tools: Bash, Read, Write, Edit
 ---
 

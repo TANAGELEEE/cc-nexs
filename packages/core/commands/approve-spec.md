@@ -1,7 +1,8 @@
 ---
-description: Approve the spec at the single human checkpoint, transitioning state from SPEC_PENDING_HUMAN to SPEC_APPROVED.
-allowed-tools: Read, Write, Edit, Bash
-argument-hint: [feature_id]
+description: "Approve the spec at the single human checkpoint, transitioning state from SPEC_PENDING_HUMAN to SPEC_APPROVED."
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Bash"
+argument-hint: "[feature_id]"
 ---
 
 # /cc-nexs:approve-spec

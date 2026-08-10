@@ -1,6 +1,7 @@
 ---
-name: merge-discipline
-description: Compatibility guard for merge requests. Roles never merge; release automation or a human merges candidates, then Git Custodian verifies and cleans up.
+name: "merge-discipline"
+description: "Compatibility guard for merge requests. Roles never merge; release automation or a human merges candidates, then Git Custodian verifies and cleans up."
+disable-model-invocation: true
 ---
 
 # Merge Discipline

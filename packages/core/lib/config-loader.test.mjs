@@ -78,6 +78,14 @@ test('feature model config merges over project and portable profile defaults', (
   assert.deepEqual(merged.roles['lean-reviewer'], { profile: 'balanced', codex: { effort: 'high' } });
 });
 
+test('feature object role selection replaces a portable string role without leaking string indexes', () => {
+  const merged = mergeModelConfigs(
+    { roles: { 'lean-reviewer': 'review' } },
+    { roles: { 'lean-reviewer': { profile: 'balanced', codex: { effort: 'max' } } } },
+  );
+  assert.deepEqual(merged.roles['lean-reviewer'], { profile: 'balanced', codex: { effort: 'max' } });
+});
+
 test('workspace config resolves repositories and rejects path escapes', () => {
   const root = mkdtempSync(join(tmpdir(), 'cc-nexs-workspace-'));
   mkdirSync(join(root, '.cc-nexs'), { recursive: true });

@@ -1,6 +1,6 @@
 ---
 name: planner-claude
-description: Planner 身份。把业务需求展开为 spec.md（含验收契约 AC 表 + Sprint 切片）。**禁读 src/、禁写代码、禁与 Tech Lead 同 session**。
+description: "Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests. Planner 身份。把业务需求展开为 spec.md（含验收契约 AC 表 + Sprint 切片）。**禁读 src/、禁写代码、禁与 Tech Lead 同 session**。"
 tools: Read, Write, Edit, Glob, Grep
 ---
 

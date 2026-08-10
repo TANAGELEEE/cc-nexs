@@ -1,7 +1,8 @@
 ---
-description: Invoke Developer subagent to implement, fix bugs, or sync docs.
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Task
-argument-hint: [feature_id] [--mode=feat|fix|doc] [--sprint=N | --bug=ID]
+description: "Invoke Developer subagent to implement, fix bugs, or sync docs."
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Bash, Glob, Grep, Task"
+argument-hint: "[feature_id] [--mode=feat|fix|doc] [--sprint=N | --bug=ID]"
 ---
 
 # /cc-nexs-minimal:dev

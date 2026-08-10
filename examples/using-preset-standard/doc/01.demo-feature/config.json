@@ -1,6 +1,8 @@
 {
   "_comment": "cc-nexs 单需求配置。orchestrator 启动时读取本文件决定流水线模式。",
+  "config_version": 2,
   "mode": "full",
+  "risk_tier": "auto",
   "_mode_options": {
     "full": "完整五方流程（Planner → SA → 人工 gate → Tech Lead × QA × SA 闭环 → Evaluator）",
     "fast": "三角色单 sprint（Fullstack 一手包办 spec+code → Reviewer 评 spec → 人工 gate → Verifier 写+跑用例 → Reviewer 一次完成代码评审+契约验收）。比 full 少 ~50% 调用，适合单模块小改动",

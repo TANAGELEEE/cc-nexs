@@ -1,0 +1,6 @@
+interface:
+  display_name: "/cc-nexs:dev"
+  short_description: "Run /cc-nexs:dev explicitly"
+  default_prompt: "Use $cc-nexs-dev to run /cc-nexs:dev."
+policy:
+  allow_implicit_invocation: false

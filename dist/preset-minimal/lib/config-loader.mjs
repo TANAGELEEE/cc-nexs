@@ -12,6 +12,7 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname, extname, sep } from 'node:path';
+import { validateModelRoutingConfig } from './model-routing.mjs';
 
 function parseScalar(s) {
   if (s === '' || s === '~' || s === 'null') return null;
@@ -263,7 +264,7 @@ function readStructured(filePath) {
 function deepMerge(base, override) {
   if (override === undefined) return base;
   if (override === null || typeof override !== 'object' || Array.isArray(override)) return override;
-  const out = { ...(base || {}) };
+  const out = base && typeof base === 'object' && !Array.isArray(base) ? { ...base } : {};
   for (const [key, value] of Object.entries(override)) {
     out[key] = deepMerge(out[key], value);
   }
@@ -271,7 +272,9 @@ function deepMerge(base, override) {
 }
 
 export function mergeModelConfigs(...configs) {
-  return configs.reduce((merged, config) => deepMerge(merged, config || {}), {});
+  const merged = configs.reduce((current, config) => deepMerge(current, config || {}), {});
+  validateModelRoutingConfig(merged.routing);
+  return merged;
 }
 
 /**
@@ -326,7 +329,7 @@ export function loadConfig({ projectRoot = process.cwd(), presetRoot = null } = 
   };
   const mergedWorkflow = deepMerge(preset?.workflow || {}, project.workflow || {});
   const mergedRelease = deepMerge(preset?.release || {}, project.release || {});
-  const mergedModels = deepMerge(preset?.models || {}, project.models || {});
+  const mergedModels = mergeModelConfigs(preset?.models, project.models);
 
   // Project-level paths_override merges into preset.stack.
   // Use case: public preset ships with generic placeholders like "src/main/java/**";

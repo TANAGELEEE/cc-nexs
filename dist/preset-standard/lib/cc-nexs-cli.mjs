@@ -11,6 +11,7 @@ import { requestReleaseChanges } from './release-change-command.mjs';
 import { renderLeanPlan } from './plan-render.mjs';
 import { runTestRelease } from './test-release.mjs';
 import { recordEnvironmentVerification } from './test-verification-control.mjs';
+import { migrateFeatureConfig } from './feature-config.mjs';
 
 export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   const [command, ...args] = argv;
@@ -40,6 +41,9 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   }
   if (command === 'request-release-changes') {
     return requestReleaseChanges({ cwd, ...parseReleaseChangeOptions(args) });
+  }
+  if (command === 'migrate-feature-config') {
+    return migrateFeatureConfig({ cwd, ...parseFeatureMigrationOptions(args) });
   }
   const gate = command === 'approve-spec'
     ? 'g1'
@@ -100,6 +104,23 @@ function parseFeatureOptions(args) {
     const token = args[index];
     if (token === '--progress') options.progressPath = requireValue(args, ++index, token);
     else if (token.startsWith('--progress=')) options.progressPath = token.slice('--progress='.length);
+    else if (token.startsWith('-')) throw new Error(`unknown option: ${token}`);
+    else positional.push(token);
+  }
+  options.featureId = positional[0] || null;
+  if (positional.length > 1) throw new Error(`unexpected arguments: ${positional.slice(1).join(' ')}`);
+  return options;
+}
+
+function parseFeatureMigrationOptions(args) {
+  const positional = [];
+  const options = { featureId: null, progressPath: null, dryRun: false, bindPlanRisk: false };
+  for (let index = 0; index < args.length; index += 1) {
+    const token = args[index];
+    if (token === '--progress') options.progressPath = requireValue(args, ++index, token);
+    else if (token.startsWith('--progress=')) options.progressPath = token.slice('--progress='.length);
+    else if (token === '--dry-run') options.dryRun = true;
+    else if (token === '--bind-plan-risk') options.bindPlanRisk = true;
     else if (token.startsWith('-')) throw new Error(`unknown option: ${token}`);
     else positional.push(token);
   }
@@ -220,6 +241,17 @@ function requireValue(args, index, option) {
 }
 
 function printResult(result) {
+  if (result.kind === 'feature-config-migration') {
+    console.log(`cc-nexs feature config ${result.changed ? (result.dryRun ? 'needs migration' : 'migrated') : 'is current'}`);
+    console.log(`Feature: ${result.feature.id} ${result.feature.slug}`);
+    console.log(`Legacy roles removed: ${result.removedLegacyRoles}`);
+    console.log(`risk_tier added: ${result.addedRiskTier}`);
+    console.log(`config_version upgraded: ${result.upgradedConfigVersion}`);
+    console.log(`Gateway A risk binding: ${result.planRiskBindingStatus}${result.planRiskTier ? ` (${result.planRiskTier})` : ''}`);
+    console.log(`Gateway A risk backfilled: ${result.planRiskBindingChanged}`);
+    console.log(`Config: ${result.configFile}`);
+    return;
+  }
   if (result.kind === 'plan-render') {
     console.log(`cc-nexs plan rendered: ${result.output}`);
     return;
@@ -306,6 +338,7 @@ function printUsage() {
   console.error('  cc-nexs request-release-changes <feature-id> --type <evidence|implementation|scope> --feedback <text> [--ac <id>] [--path <path>] [--progress <path>]');
   console.error('  cc-nexs release-base <feature-id> [--progress <path>]');
   console.error('  cc-nexs render-plan <feature-id> [--progress <path>]');
+  console.error('  cc-nexs migrate-feature-config <feature-id> [--dry-run] [--bind-plan-risk] [--progress <path>]');
 }
 
 const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;

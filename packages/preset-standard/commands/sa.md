@@ -1,7 +1,8 @@
 ---
-description: SA 评审入口。支持 spec、cases、单 Sprint code、跨 Sprint integration 和发布后 fix code 评审。
-allowed-tools: Read, Write, Edit, Bash, Task
-argument-hint: <target: spec|cases|code|integration> [需求编号] [--sprint=N | --scope=final-fix]
+description: "SA 评审入口。支持 spec、cases、单 Sprint code、跨 Sprint integration 和发布后 fix code 评审。"
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Bash, Task"
+argument-hint: "<target: spec|cases|code|integration> [需求编号] [--sprint=N | --scope=final-fix]"
 ---
 
 # /cc-nexs:sa

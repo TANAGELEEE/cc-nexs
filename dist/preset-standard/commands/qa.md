@@ -1,7 +1,8 @@
 ---
-description: QA 黑盒测试入口。Sprint 阶段写/评用例；完整需求发布到 test 后执行 final 或 final-regression。禁读 src/。
-allowed-tools: Read, Write, Edit, Bash, Glob, Task, mcp__chrome-devtools__*
-argument-hint: <phase: cases|run|regression|final|final-regression> [需求编号] [--sprint=N] [--revise]
+description: "QA 黑盒测试入口。Sprint 阶段写/评用例；完整需求发布到 test 后执行 final 或 final-regression。禁读 src/。"
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Bash, Glob, Task, mcp__chrome-devtools__*"
+argument-hint: "<phase: cases|run|regression|final|final-regression> [需求编号] [--sprint=N] [--revise]"
 ---
 
 # /cc-nexs:qa

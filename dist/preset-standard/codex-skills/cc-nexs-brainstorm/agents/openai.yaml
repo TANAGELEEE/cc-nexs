@@ -1,0 +1,6 @@
+interface:
+  display_name: "/cc-nexs:brainstorm"
+  short_description: "Run /cc-nexs:brainstorm explicitly"
+  default_prompt: "Use $cc-nexs-brainstorm to run /cc-nexs:brainstorm."
+policy:
+  allow_implicit_invocation: false

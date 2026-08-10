@@ -1,7 +1,8 @@
 ---
-description: Sole Git mutation boundary for multi-repository worktrees, candidate commits, merge verification, and safe cleanup.
-allowed-tools: Read, Bash
-argument-hint: <reserve|create|candidate|prepare|cleanup|finalize> <feature-id>
+description: "Sole Git mutation boundary for multi-repository worktrees, candidate commits, merge verification, and safe cleanup."
+disable-model-invocation: true
+allowed-tools: "Read, Bash"
+argument-hint: "<reserve|create|candidate|prepare|cleanup|finalize> <feature-id>"
 ---
 
 # /cc-nexs:git-custodian

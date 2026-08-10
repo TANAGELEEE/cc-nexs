@@ -45,6 +45,7 @@ function createFeature({ id = '01', mode = 'fast', state, worktree = false } = {
       '<!-- APPROVAL-SCOPE START -->',
       '## Tasks',
       '- T-001 implements AC-001',
+      '- risk_tier: medium',
       '<!-- APPROVAL-SCOPE END -->',
       '## Evidence',
       '',
@@ -204,6 +205,7 @@ test('Lean Gateway A hashes requirements and plan scope before advancing', () =>
   assert.equal(result.state, 'PLAN_APPROVED');
   assert.equal(progress.gates.plan.approved, true);
   assert.match(progress.gates.plan.binding.combined_sha256, /^[a-f0-9]{64}$/);
+  assert.equal(progress.gates.plan.binding.risk_tier, 'medium');
   assert.deepEqual(progress.events.map((event) => event.type), ['gate.approved', 'state.transition']);
 });
 
