@@ -6,6 +6,9 @@ import { isGitMutation, normalizeRole, roleBoundaryViolation } from './role-boun
 test('Pi package-qualified roles resolve to core boundary roles', () => {
   assert.equal(normalizeRole('cc-nexs.reviewer'), 'reviewer');
   assert.equal(normalizeRole('developer'), 'tech-lead');
+  assert.equal(normalizeRole('cc-nexs.verifier-computer-use'), 'verifier');
+  assert.equal(normalizeRole('cc-nexs.lean-verifier-computer-use'), 'lean-verifier');
+  assert.equal(normalizeRole('cc-nexs.hotfix-verifier-computer-use'), 'hotfix-verifier');
 });
 
 test('reviewer and verifier black-box reads are blocked', () => {

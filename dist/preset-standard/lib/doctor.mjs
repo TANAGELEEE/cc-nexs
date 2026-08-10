@@ -7,6 +7,11 @@ import { execFileSync } from 'node:child_process';
 import { loadConfig, loadWorkspaceConfig } from './config-loader.mjs';
 import { hasLegacyTemplateRoleMap, normalizeRiskTier, validateModelRoutingConfig } from './model-routing.mjs';
 import { inspectPlanRiskBinding } from './plan-contract.mjs';
+import {
+  inspectPiBrowserCapability,
+  PI_FALLBACK_BROWSER_PROVIDER,
+  PI_PRIMARY_BROWSER_PROVIDER,
+} from './pi-browser-provider.mjs';
 import { readProgressV2 } from './progress-v2.mjs';
 
 const args = process.argv.slice(2);
@@ -39,7 +44,7 @@ else {
   }
 }
 
-if (config) validateReleaseReadiness({ config, workspace, strictRelease, errors, warnings });
+if (config) validateReleaseReadiness({ config, workspace, strictRelease, errors, warnings, projectRoot: root });
 
 function findProgressFiles(dir, depth = 0) {
   if (!existsSync(dir) || depth > 5) return [];
@@ -130,7 +135,7 @@ for (const error of errors) console.error(`ERROR ${error}`);
 if (errors.length) process.exitCode = 1;
 else console.log(`cc-nexs doctor passed (${workspace?.repositories.length || 1} repository configuration).`);
 
-function validateReleaseReadiness({ config, workspace, strictRelease, errors, warnings }) {
+function validateReleaseReadiness({ config, workspace, strictRelease, errors, warnings, projectRoot }) {
   const policy = config.mergedWorkflow?.test_release?.policy;
   if (policy !== 'auto_if_ready' && !strictRelease) return;
   const report = (message) => (strictRelease ? errors : warnings).push(message);
@@ -154,8 +159,14 @@ function validateReleaseReadiness({ config, workspace, strictRelease, errors, wa
     for (const field of ['claude_provider', 'codex_provider', 'pi_provider']) {
       if (!release.browser?.[field]) report(`release.test.browser.${field} is required`);
     }
-    if (release.browser?.pi_provider && release.browser.pi_provider !== 'ego-lite') {
-      report('release.test.browser.pi_provider must be ego-lite');
+    if (release.browser?.pi_provider && release.browser.pi_provider !== PI_PRIMARY_BROWSER_PROVIDER) {
+      report(`release.test.browser.pi_provider must be ${PI_PRIMARY_BROWSER_PROVIDER}`);
+    }
+    if (release.browser?.pi_fallback?.provider !== PI_FALLBACK_BROWSER_PROVIDER) {
+      report(`release.test.browser.pi_fallback.provider must be ${PI_FALLBACK_BROWSER_PROVIDER}`);
+    }
+    if (release.browser?.pi_fallback?.headless !== true) {
+      report('release.test.browser.pi_fallback.headless must be true');
     }
   }
   const allowed = new Set(release.allowed_hosts || []);
@@ -175,17 +186,9 @@ function validateReleaseReadiness({ config, workspace, strictRelease, errors, wa
   }
 
   if (process.env.CC_NEXS_RUNTIME === 'pi' && release.browser?.required !== false) {
-    try {
-      const output = execFileSync('ego-browser', ['nodejs'], {
-        encoding: 'utf8',
-        input: "console.log('ego-browser ready')\n",
-        stdio: ['pipe', 'pipe', 'ignore'],
-        timeout: 15_000,
-      });
-      if (!output.includes('ego-browser ready')) report('Pi automatic browser verification requires a ready ego lite runtime');
-    } catch {
-      report('Pi automatic browser verification requires ego lite, its ego-browser skill/CLI, and completed onboarding');
-    }
+    const capability = inspectPiBrowserCapability({ projectRoot });
+    if (!capability.ready) report(`Pi automatic browser verification is unavailable: ${capability.reason}`);
+    else if (capability.fallback) warnings.push(`Pi browser verification will use ${PI_FALLBACK_BROWSER_PROVIDER} with headless=true because ${capability.primaryFailure}`);
   }
 }
 

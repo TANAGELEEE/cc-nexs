@@ -345,6 +345,9 @@ release:
       claude_provider: chrome-devtools-mcp
       codex_provider: current-browser-session
       pi_provider: ego-lite
+      pi_fallback:
+        provider: "@injaneity/pi-computer-use@0.4.3"
+        headless: true
   base:
     policy: direct_after_approval
 

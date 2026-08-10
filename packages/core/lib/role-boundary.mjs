@@ -71,7 +71,14 @@ const DEFAULT_RULES = {
   },
 };
 
-const ROLE_ALIASES = { pm: 'planner', developer: 'tech-lead', dev: 'tech-lead' };
+const ROLE_ALIASES = {
+  pm: 'planner',
+  developer: 'tech-lead',
+  dev: 'tech-lead',
+  'verifier-computer-use': 'verifier',
+  'lean-verifier-computer-use': 'lean-verifier',
+  'hotfix-verifier-computer-use': 'hotfix-verifier',
+};
 const GIT_MUTATION = /\bgit(?:\s+-C\s+\S+)?\s+(?:add|commit|push|merge|rebase|checkout|switch|branch|reset|clean|cherry-pick|revert|tag|update-ref|worktree\s+(?:add|remove|move|prune|repair|lock|unlock))\b/;
 
 function matches(patterns, value) {

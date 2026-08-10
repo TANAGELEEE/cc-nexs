@@ -251,10 +251,14 @@ Pi 当前为实验性 P2 支持，承诺 `preset-standard` lean、fast 和 hotfi
 
 ```bash
 pi install npm:pi-subagents@0.35.1
+# macOS 首选 provider（安装后打开 ego lite 完成一次首次引导）
 npx skills add citrolabs/ego-lite
-# 打开 ego lite 并完成一次首次引导
+# Windows 或 ego lite 不可用时的 fallback
+pi install git:github.com/injaneity/pi-computer-use@v0.4.3
 pi install git:github.com/<github-owner>/cc-nexs
 ```
+
+computer-use fallback 必须在项目 `.pi/computer-use.json`（或全局配置）启用 `{"browser_use":true,"headless":true}`。这里的 headless 表示禁止抢占前台焦点、物理键鼠和光标；Windows 仍需要可交互桌面会话与已打开的浏览器窗口。
 
 从本仓库开发或调试时使用本地安装：
 
@@ -263,7 +267,7 @@ pnpm install
 pnpm install:local:pi
 ```
 
-Pi 不调用 Codex CLI。生成的 Pi skills 设置 `disable-model-invocation: true`，从系统提示中隐藏，只能通过 `/cc-nexs:*` 或 `/skill:cc-nexs-*` 显式调用。Lean 各角色从 cc-nexs profile 解析 `model`、`thinking` 和 `fallback_models`，由父代理直接传入 pi-subagents `Agent`；Reviewer 可用不同模型，也可用相同模型但更高 thinking，主模型不可用时按 fallback 顺序重试。`.pi/settings.json` 只保留 Pi 认证与 `enabledModels` 范围。Pi 自动浏览器验收仅支持 ego lite：Verifier 显式选择 `ego-browser` skill，通过 Bash 在隔离 task Space 中后台运行并复用登录状态；缺失时基础插件仍可用，但 test release 回退人工。详见 [Pi P2 支持](./docs/pi-plugin.md)。
+Pi 不调用 Codex CLI。生成的 Pi skills 设置 `disable-model-invocation: true`，从系统提示中隐藏，只能通过 `/cc-nexs:*` 或 `/skill:cc-nexs-*` 显式调用。Lean 各角色从 cc-nexs profile 解析 `model`、`thinking` 和 `fallback_models`，由父代理直接传入 pi-subagents `Agent`；Reviewer 可用不同模型，也可用相同模型但更高 thinking，主模型不可用时按 fallback 顺序重试。`.pi/settings.json` 只保留 Pi 认证与 `enabledModels` 范围。Pi 自动浏览器验收优先使用 ego lite；不可用时选择独立的 computer-use Verifier，并强制有效配置为 `browser_use: true`、`headless: true`。同一 child 不会同时获得两套 provider；两者都不可用时 test release 回退人工。详见 [Pi P2 支持](./docs/pi-plugin.md)。
 
 Claude Code 自动环境验收要求 `chrome-devtools-mcp` 已配置并可调用。Codex 复用当前已登录的 in-app/Chrome 会话。三端都只访问 `release.test.allowed_hosts`；不得从项目 memory、Markdown 或 Git 读取明文账号密码，必要登录只允许通过 opaque `credential_ref` 对接外部 secret provider。
 

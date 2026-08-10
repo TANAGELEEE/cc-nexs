@@ -121,7 +121,7 @@ INTEGRATION_REVIEW_NEEDS_REVISION
 |---|---|
 | Claude Code | `chrome-devtools-mcp` |
 | Codex | 当前 in-app/Chrome 登录会话 |
-| Pi | ego lite（`ego-browser` skill/CLI，隔离 task Space） |
+| Pi | 优先 ego lite（隔离 task Space）；不可用时 `@injaneity/pi-computer-use@0.4.3`（`headless: true`） |
 
 前置失败不 push，状态留在 `TEST_RELEASE` 并输出人工 G2。人工确认代表完整 candidate 已合入 test、发布并完成必要环境检查。
 

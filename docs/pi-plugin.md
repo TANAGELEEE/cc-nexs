@@ -28,13 +28,35 @@ The Pi skills fail closed for those modes instead of silently changing workflow 
 
 ```bash
 pi install npm:pi-subagents@0.35.1
+pi install git:github.com/<github-owner>/cc-nexs
+```
+
+On macOS, ego lite is the preferred browser provider:
+
+```bash
 npx skills add citrolabs/ego-lite
 # Open ego lite and complete first-run onboarding once.
 ego-browser nodejs <<'EOF'
 console.log('ego-browser ready')
 EOF
-pi install git:github.com/<github-owner>/cc-nexs
 ```
+
+On Windows, or whenever ego lite is unavailable, install the fallback:
+
+```bash
+pi install git:github.com/injaneity/pi-computer-use@v0.4.3
+```
+
+Enable its browser-only background policy in project `.pi/computer-use.json` (or the equivalent global config):
+
+```json
+{
+  "browser_use": true,
+  "headless": true
+}
+```
+
+`headless: true` means computer-use must remain in the background: it disables physical pointer/keyboard delivery, foreground focus fallback, cursor takeover, and the cursor overlay. On Windows it still requires an interactive desktop session and an available browser window; it is not a displayless Windows service.
 
 For local development:
 
@@ -42,13 +64,13 @@ For local development:
 pnpm install:local:pi
 ```
 
-The local installer requires `pi-subagents` first, then builds and validates cc-nexs. It runs the same minimal ego runtime probe shown above. If ego lite, its `ego-browser` skill/CLI, or onboarding is unavailable, it warns instead of blocking init/status/build; automatic browser verification falls back to manual G2.
+The local installer requires `pi-subagents` first, then builds and validates cc-nexs. It prefers the minimal ego runtime probe shown above. If ego is unavailable, it checks the installed Pi packages and effective computer-use configuration. Missing providers warn instead of blocking init/status/build; automatic browser verification falls back to manual G2 only when neither provider is ready.
 
 All generated cc-nexs Pi skills set `disable-model-invocation: true`, so Pi excludes them from the model's available-skill prompt. Start cc-nexs only with `/cc-nexs:*` or `/skill:cc-nexs-*`; ordinary natural-language requests do not activate the package. Package role descriptions likewise permit dispatch only from that explicitly started parent workflow.
 
 Explicit-only applies to entry, not progression. Once `/cc-nexs:run` starts, the Pi parent continues dispatching the workflow's internal stages until the same defined human gates or blocking conditions used by the other runtimes.
 
-The generated Verifier agents explicitly select the `ego-browser` skill and call `ego-browser` through Bash. Each release verification uses an isolated ego task Space, inherits the user's login state, and only visits `release.test.allowed_hosts`; plaintext credentials in memory/project files are forbidden. Pi has no alternate automatic browser provider.
+The generated Verifiers are provider-specific. The preferred agents explicitly select the `ego-browser` skill and call `ego-browser` through Bash; the fallback agents expose only the computer-use state/action tools. The parent freezes one provider for each release attempt and never gives both surfaces to one child. Both paths reuse existing login state and only visit `release.test.allowed_hosts`; plaintext credentials in memory/project files are forbidden.
 
 ## Configure Lean and Hotfix role models
 
@@ -139,4 +161,4 @@ Package-qualified child roles run with explicit Pi tool allowlists. The cc-nexs 
 
 The parent orchestrator remains responsible for state transitions and Git Custodian operations. Pi packages and child tools still execute with the user's operating-system permissions; use Pi project trust and review package source before installation.
 
-Automatic control never targets production. Missing ego lite/skill/CLI, expired login, MFA/CAPTCHA, user takeover, host mismatch, or unavailable secret-provider resolution stops before push and yields the manual test-release handoff.
+Automatic control never targets production. If ego lite is unavailable, cc-nexs may select the headless computer-use fallback before the first browser action. Missing fallback tools/configuration, a non-headless-safe action, expired login, MFA/CAPTCHA, user takeover, host mismatch, or unavailable secret-provider resolution stops before push and yields the manual test-release handoff.

@@ -155,7 +155,7 @@ Browser 是 test release 的前置能力和最终 QA 工具：
 |---|---|
 | Claude Code | `chrome-devtools-mcp` |
 | Codex | 当前登录的 in-app/Chrome session |
-| Pi | ego lite（`ego-browser` skill/CLI，隔离 task Space） |
+| Pi | 优先 ego lite（隔离 task Space）；不可用时 `@injaneity/pi-computer-use@0.4.3`（`headless: true`） |
 
 URL 可以来自 versioned project config 或 private overlay。项目 memory/说明中的 URL 只能用于发现候选，自动流程必须先把 host 纳入 `allowed_hosts`。账号密码不能来自 memory、Markdown、Git 或普通 config；优先复用登录，必要时只传 opaque `credential_ref` 给外部 secret provider。
 
@@ -188,10 +188,10 @@ delivery.test.verification_passed | verification_blocked
 
 - 把 core/preset 物化到 `dist/preset-*`；
 - 为 Codex 每个 command 生成 mirror skill；approval/release-test 包含确定性 CLI block；
-- 为 Pi 生成受限 P2 command skills 和 package agents；Verifier 显式选择 `ego-browser` skill，并通过 Bash 调用 ego lite CLI；
+- 为 Pi 生成受限 P2 command skills 和 provider-specific package agents；ego Verifier 只获得 Bash/`ego-browser`，fallback Verifier 只获得 computer-use 工具；
 - 保持 Claude commands 为同一份事实来源。
 
-Pi 基础安装只强制 `pi-subagents`。ego lite、`ego-browser` skill 或 CLI 未就绪时产生警告并使自动浏览器验证回退 manual，不阻断 init/status/build 等能力。
+Pi 基础安装只强制 `pi-subagents`。运行时先探测 ego lite；不可用时仅在 computer-use 已安装且有效配置为 `browser_use: true`、`headless: true` 时选用 fallback Verifier。两者都不可用才回退 manual，不阻断 init/status/build 等能力。
 
 ## 安全边界
 

@@ -73,7 +73,7 @@ append 到 ${REQ_DIR}test-report.md ## Sprint M${SPRINT} 回归 Round R。
 QA 在完整 candidate 已发布到 test 后执行需求级首次验收。
 读全部 Sprint 的 AC 与 test-cases.md 累计用例，不读 src/ 或 sa-*.md。
 从 release.test.app_url / operations_url 进入测试环境；只访问 allowed_hosts，并复用当前已登录浏览器会话。
-Claude 使用 chrome-devtools-mcp，Codex 使用当前浏览器会话，Pi 仅通过 ego lite 的 `ego-browser` skill/CLI 在隔离 task Space 中验证。
+Claude 使用 chrome-devtools-mcp，Codex 使用当前浏览器会话。Pi 优先通过 ego lite 的 `ego-browser` skill/CLI 在隔离 task Space 中验证；ego lite 不可用时，才使用配置为 `browser_use: true`、`headless: true` 的 computer-use 专用 Verifier，且同一 release attempt 不得切换 provider。
 执行全部 P0/P1 auto、跨 Sprint 集成路径和必要 UI/运维台检查。
 append 到 test-report.md 的 ## Final Release R<N> 章节，记录 release attempt、environment_revision 和证据引用。
 发现问题创建 BUG 文件与复现资产，状态 OPEN。任何必需 P0/P1 未执行或失败都必须结论: 阻塞，不能以“待人工接入”冒充通过。

@@ -103,19 +103,34 @@ const PI_ROLE_SOURCES = {
   'hotfix-verifier': 'hotfix-verifier.md',
 };
 const PI_VERIFIER_ROLES = new Set(['verifier', 'lean-verifier', 'hotfix-verifier']);
+const PI_COMPUTER_USE_TOOLS = [
+  'find_roots',
+  'observe_ui',
+  'search_ui',
+  'expand_ui',
+  'inspect_ui',
+  'act_ui',
+  'read_text',
+  'wait_for',
+];
 
 const PI_EGO_LITE_VERIFIER_ADDENDUM = `## Pi Ego Lite Browser Contract
 
-- Pi browser verification MUST use ego lite exclusively through the \`ego-browser\` CLI and the selected \`ego-browser\` skill.
+- This agent is the preferred Pi browser verifier and MUST use ego lite exclusively through the \`ego-browser\` CLI and the selected \`ego-browser\` skill.
 - Read the selected \`ego-browser\` skill before the first browser operation, then invoke \`ego-browser\` only through Bash as documented by that skill.
 - Create or reuse one isolated ego task Space for the feature, release attempt, and environment revision. Reuse its signed-in browser state and close it with \`completeTaskSpace(..., { keep: false })\` only after verification is complete.
 - Navigate only to the configured \`allowed_hosts\`, verify the resulting URL after every navigation, and do not bypass browser policy with direct HTTP, CDP, or injected browser automation.
-- Never request or expose plaintext credentials. If ego lite, the \`ego-browser\` command, the selected skill, the target app, login state, MFA/CAPTCHA handling, or host policy is unavailable, report the automatic-browser capability as unavailable and route to the manual G2 fallback.
+- Never request or expose plaintext credentials. If ego lite becomes unavailable before the first browser action, return a provider-unavailable result so the parent can select the dedicated headless computer-use verifier. Never switch providers inside this child.
 `;
 
-const PI_ROLE_ADDENDA = Object.fromEntries(
-  [...PI_VERIFIER_ROLES].map((role) => [role, PI_EGO_LITE_VERIFIER_ADDENDUM]),
-);
+const PI_COMPUTER_USE_VERIFIER_ADDENDUM = `## Pi Headless Computer Use Browser Contract
+
+- This agent is the fallback Pi browser verifier. Use only the installed \`@injaneity/pi-computer-use@0.4.3\` extension tools and only after the parent has proved the effective extension configuration has \`browser_use: true\` and \`headless: true\`.
+- Keep one provider for the complete release attempt. Never invoke ego lite from this child and never use raw pointer/keyboard delivery, foreground focus fallback, cursor takeover, or another foreground interaction path.
+- Follow the immutable-state loop: find the exact browser root, observe it, query the saved state, act against the same \`stateId\`, and consume the successor state. Prefer semantic targets; do not guess coordinates when headless policy makes an action unavailable.
+- Navigate only to configured \`allowed_hosts\`, verify the resulting URL and test-environment identity after navigation, and never target production.
+- Reuse an existing authenticated browser session and never request or expose plaintext credentials. Missing tools, an interactive desktop session, browser/login state, MFA/CAPTCHA handling, or a headless-safe semantic action makes the capability unavailable and routes to the manual G2 fallback.
+`;
 const EXPLICIT_AGENT_TRIGGER_PREFIX = 'Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests.';
 
 // ---- helpers ---------------------------------------------------------------
@@ -432,32 +447,51 @@ function generatePiResources() {
   for (const [role, sourceFile] of Object.entries(PI_ROLE_SOURCES)) {
     const sourcePath = join(standardSource, 'agents', sourceFile);
     const { description, tools, body } = parseAgentSource(readFileSync(sourcePath, 'utf8'), sourceFile);
-    const header = [
-      '---',
-      `name: ${role}`,
-      'package: cc-nexs',
-      `description: ${JSON.stringify(`${EXPLICIT_AGENT_TRIGGER_PREFIX} ${description.replace(/codex CLI/gi, 'Pi subagent').replace(/Claude/gi, 'Pi')}`)}`,
-      `tools: ${tools.join(', ')}`,
-      'defaultContext: fresh',
-      'systemPromptMode: replace',
-      'inheritProjectContext: true',
-      'inheritSkills: false',
-      ...(PI_VERIFIER_ROLES.has(role) ? ['skills: ego-browser'] : []),
-      '---',
-      '',
-      '# Pi Runtime Override',
-      '',
-      'You are already running as an isolated cc-nexs Pi child agent. Execute this role directly.',
-      'Any Claude Task-tool, Claude subagent, Codex CLI, or nested agent invocation shown below is legacy runtime syntax only.',
-      'Never invoke `claude`, `codex`, another `pi` process, `/cc-nexs:*`, or the `subagent` tool from this child.',
-      'The parent orchestrator owns progress transitions and Git Custodian operations. Do not run Git mutation commands.',
-      'The parent resolves the cc-nexs role profile and passes model/thinking to the Agent call; do not choose or persist a model ID.',
-      '',
-      PI_ROLE_ADDENDA[role] || '',
-      '# Authoritative Role Contract',
-      '',
-    ].join('\n');
-    writeFileSync(join(agentsDir, `${role}.md`), `${header}${body}`, 'utf8');
+    const variants = [{
+      name: role,
+      tools,
+      addendum: PI_VERIFIER_ROLES.has(role) ? PI_EGO_LITE_VERIFIER_ADDENDUM : '',
+      skills: PI_VERIFIER_ROLES.has(role) ? ['ego-browser'] : [],
+      descriptionSuffix: PI_VERIFIER_ROLES.has(role) ? ' Preferred ego lite provider.' : '',
+    }];
+    if (PI_VERIFIER_ROLES.has(role)) {
+      variants.push({
+        name: `${role}-computer-use`,
+        tools: [...new Set([...tools, ...PI_COMPUTER_USE_TOOLS])],
+        addendum: PI_COMPUTER_USE_VERIFIER_ADDENDUM,
+        skills: [],
+        descriptionSuffix: ' Headless pi-computer-use fallback provider.',
+      });
+    }
+
+    for (const variant of variants) {
+      const header = [
+        '---',
+        `name: ${variant.name}`,
+        'package: cc-nexs',
+        `description: ${JSON.stringify(`${EXPLICIT_AGENT_TRIGGER_PREFIX} ${description.replace(/codex CLI/gi, 'Pi subagent').replace(/Claude/gi, 'Pi')}${variant.descriptionSuffix}`)}`,
+        `tools: ${variant.tools.join(', ')}`,
+        'defaultContext: fresh',
+        'systemPromptMode: replace',
+        'inheritProjectContext: true',
+        'inheritSkills: false',
+        ...(variant.skills.length ? [`skills: ${variant.skills.join(', ')}`] : []),
+        '---',
+        '',
+        '# Pi Runtime Override',
+        '',
+        'You are already running as an isolated cc-nexs Pi child agent. Execute this role directly.',
+        'Any Claude Task-tool, Claude subagent, Codex CLI, or nested agent invocation shown below is legacy runtime syntax only.',
+        'Never invoke `claude`, `codex`, another `pi` process, `/cc-nexs:*`, or the `subagent` tool from this child.',
+        'The parent orchestrator owns progress transitions and Git Custodian operations. Do not run Git mutation commands.',
+        'The parent resolves the cc-nexs role profile and passes model/thinking to the Agent call; do not choose or persist a model ID.',
+        '',
+        variant.addendum,
+        '# Authoritative Role Contract',
+        '',
+      ].join('\n');
+      writeFileSync(join(agentsDir, `${variant.name}.md`), `${header}${body}`, 'utf8');
+    }
   }
 
   const commandsDir = join(standardDist, 'commands');
@@ -500,20 +534,21 @@ ${controlBlock}## P2 Runtime Contract
    - Repo Scout: \`cc-nexs.repo-scout\`
    - Fullstack: \`cc-nexs.fullstack\`
    - Reviewer: \`cc-nexs.reviewer\`
-   - Verifier: \`cc-nexs.verifier\`
+   - Verifier: ego lite \`cc-nexs.verifier\`; headless fallback \`cc-nexs.verifier-computer-use\`
    - Lean Planner: \`cc-nexs.lean-planner\`
    - Lean Developer: \`cc-nexs.lean-developer\`
    - Lean Reviewer: \`cc-nexs.lean-reviewer\`
-   - Lean Verifier: \`cc-nexs.lean-verifier\`
+   - Lean Verifier: ego lite \`cc-nexs.lean-verifier\`; headless fallback \`cc-nexs.lean-verifier-computer-use\`
    - Hotfix Developer: \`cc-nexs.hotfix-developer\`
    - Hotfix Reviewer: \`cc-nexs.hotfix-reviewer\`
-   - Hotfix Verifier: \`cc-nexs.hotfix-verifier\`
-3. Never invoke Claude Code, the Claude Task tool, Codex CLI, or a nested \`pi\` CLI. Legacy invocation snippets in the authoritative command are role task descriptions, not commands to execute in Pi.
-4. Resolve automatic risk routing from one cc-nexs progress/config/approved-plan snapshot, then pass the selected \`model\` and \`thinking\` directly to the pi-subagents \`Agent\` call. Lean high/critical upgrades Planner and Reviewer; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. Omit \`model\` when it is \`inherit\`. If the primary model is unavailable, retry the ordered cc-nexs \`fallback_models\` list. Project \`.pi/settings.json\` remains only the Pi authentication/\`enabledModels\` authority; do not duplicate role mappings there. Public cc-nexs files ship no provider-specific model IDs.
-5. ${modelGuard}
-6. Role children never mutate Git or progress state. The parent orchestrator owns state transitions and invokes the Git Custodian command itself.
-7. Set or preserve \`CC_NEXS_RUNTIME=pi\` and \`CC_NEXS_PLUGIN_ROOT\` for shell helpers. Resolve all feature paths through the existing workspace/progress contracts.
-8. Preserve the command's artifact locations, human gates, counters, validation, and stop behavior exactly. Runtime adaptation changes dispatch mechanics only.
+   - Hotfix Verifier: ego lite \`cc-nexs.hotfix-verifier\`; headless fallback \`cc-nexs.hotfix-verifier-computer-use\`
+3. Before any browser verifier dispatch, run the deterministic Pi browser capability preflight and freeze one provider for the release attempt. Prefer ego lite. If it is unavailable, select the matching \`*-computer-use\` agent only when \`@injaneity/pi-computer-use@0.4.3\` is installed and its effective config has \`browser_use: true\` plus \`headless: true\`. Otherwise route to manual G2. Never give one child both provider surfaces.
+4. Never invoke Claude Code, the Claude Task tool, Codex CLI, or a nested \`pi\` CLI. Legacy invocation snippets in the authoritative command are role task descriptions, not commands to execute in Pi.
+5. Resolve automatic risk routing from one cc-nexs progress/config/approved-plan snapshot, then pass the selected \`model\` and \`thinking\` directly to the pi-subagents \`Agent\` call. Lean high/critical upgrades Planner and Reviewer; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. Omit \`model\` when it is \`inherit\`. If the primary model is unavailable, retry the ordered cc-nexs \`fallback_models\` list. Project \`.pi/settings.json\` remains only the Pi authentication/\`enabledModels\` authority; do not duplicate role mappings there. Public cc-nexs files ship no provider-specific model IDs.
+6. ${modelGuard}
+7. Role children never mutate Git or progress state. The parent orchestrator owns state transitions and invokes the Git Custodian command itself.
+8. Set or preserve \`CC_NEXS_RUNTIME=pi\` and \`CC_NEXS_PLUGIN_ROOT\` for shell helpers. Resolve all feature paths through the existing workspace/progress contracts.
+9. Preserve the command's artifact locations, human gates, counters, validation, and stop behavior exactly. Runtime adaptation changes dispatch mechanics only.
 
 ${supportsHotfix ? `## Pi Hotfix Dispatch Contract
 
@@ -521,7 +556,7 @@ ${supportsHotfix ? `## Pi Hotfix Dispatch Contract
 2. Fill and bind the sole authored \`hotfix.md\` scope with \`start-hotfix\` before dispatch. AC/API/database/permission contract changes or broad refactoring stop and become a new Lean/Full change.
 3. Dispatch \`cc-nexs.hotfix-developer\` for implementation/fix. Candidate Git mutations remain parent Git Custodian work.
 4. P0/P1/P2 dispatch \`cc-nexs.hotfix-reviewer\` exactly once; a blocked result permits one fresh delta Review only. P3 skips the model Review only after deterministic one-file, at-most-20-line, non-behavioral proof.
-5. Run the configured local verification driver, then release the exact candidate with \`release-test --hotfix\`. Dispatch a fresh \`cc-nexs.hotfix-verifier\` on the deployed environment revision, including P3 smoke and P0/P1 rollback/AC evidence.
+5. Run the configured local verification driver, then release the exact candidate with \`release-test --hotfix\`. Dispatch a fresh \`cc-nexs.hotfix-verifier\` or \`cc-nexs.hotfix-verifier-computer-use\` according to the frozen provider on the deployed environment revision, including P3 smoke and P0/P1 rollback/AC evidence.
 6. Reviewer may use a different model or the same model with higher thinking. Session isolation is mandatory; heterogeneity is optional project policy. Public files never pin a model ID.
 7. Test failure or Gateway B implementation feedback consumes the same single lifetime delta Review, then requires a new candidate/test attempt. Delta blocking stops for human intervention.
 8. Only \`approve-release\` authorizes the verified feature candidate to merge into configured base branches. Never merge test into base and never force push.
@@ -531,13 +566,13 @@ ${supportsHotfix ? `## Pi Hotfix Dispatch Contract
 
 \`pi-subagents\` must be installed and its \`subagent\` tool must expose the package agents above. Run \`/subagents-doctor\`, then open \`/subagents\` to inspect package-agent model mappings. \`/subagents-models\` is only for builtin agents and must not be used for cc-nexs package roles.
 
-Automatic browser verification additionally requires an installed and onboarded ego lite app, the selected \`ego-browser\` skill, and a successful minimal \`ego-browser nodejs\` runtime probe. Verifier agents invoke \`ego-browser\` through Bash in isolated task Spaces. If a prerequisite is absent, keep cc-nexs available and use the manual test-release fallback; do not silently claim browser verification.
+Automatic browser verification prefers an installed and onboarded ego lite app plus the selected \`ego-browser\` skill and a successful minimal \`ego-browser nodejs\` runtime probe. When ego lite is unavailable, it falls back to \`@injaneity/pi-computer-use@0.4.3\` only with effective \`browser_use: true\` and \`headless: true\`. If neither provider is ready, keep cc-nexs available and use the manual test-release fallback; do not silently claim browser verification.
 `;
     writeFileSync(join(skillDir, 'SKILL.md'), body, 'utf8');
     generated += 1;
   }
 
-  console.log(`\n✓ Pi P2 resources: ${Object.keys(PI_ROLE_SOURCES).length} agents, ${generated} skills`);
+  console.log(`\n✓ Pi P2 resources: ${Object.keys(PI_ROLE_SOURCES).length + PI_VERIFIER_ROLES.size} agents, ${generated} skills`);
 }
 
 function deepMergeJSON(a, b) {

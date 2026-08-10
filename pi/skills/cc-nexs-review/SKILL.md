@@ -15,20 +15,21 @@ Read and follow `../../../dist/preset-standard/commands/review.md` as the author
    - Repo Scout: `cc-nexs.repo-scout`
    - Fullstack: `cc-nexs.fullstack`
    - Reviewer: `cc-nexs.reviewer`
-   - Verifier: `cc-nexs.verifier`
+   - Verifier: ego lite `cc-nexs.verifier`; headless fallback `cc-nexs.verifier-computer-use`
    - Lean Planner: `cc-nexs.lean-planner`
    - Lean Developer: `cc-nexs.lean-developer`
    - Lean Reviewer: `cc-nexs.lean-reviewer`
-   - Lean Verifier: `cc-nexs.lean-verifier`
+   - Lean Verifier: ego lite `cc-nexs.lean-verifier`; headless fallback `cc-nexs.lean-verifier-computer-use`
    - Hotfix Developer: `cc-nexs.hotfix-developer`
    - Hotfix Reviewer: `cc-nexs.hotfix-reviewer`
-   - Hotfix Verifier: `cc-nexs.hotfix-verifier`
-3. Never invoke Claude Code, the Claude Task tool, Codex CLI, or a nested `pi` CLI. Legacy invocation snippets in the authoritative command are role task descriptions, not commands to execute in Pi.
-4. Resolve automatic risk routing from one cc-nexs progress/config/approved-plan snapshot, then pass the selected `model` and `thinking` directly to the pi-subagents `Agent` call. Lean high/critical upgrades Planner and Reviewer; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. Omit `model` when it is `inherit`. If the primary model is unavailable, retry the ordered cc-nexs `fallback_models` list. Project `.pi/settings.json` remains only the Pi authentication/`enabledModels` authority; do not duplicate role mappings there. Public cc-nexs files ship no provider-specific model IDs.
-5. Resolve automatic risk routing from one progress/config/approved-plan snapshot: Lean high/critical routes Planner and Reviewer to escalated, Hotfix P0/P1 routes Reviewer to escalated, and an explicit feature role profile remains final. The Reviewer may use a different authenticated model or the same model with higher thinking, but must use a fresh child context. For legacy fast, preserve its configured heterogeneous-review guard. Accept ordered fallbackModels.
-6. Role children never mutate Git or progress state. The parent orchestrator owns state transitions and invokes the Git Custodian command itself.
-7. Set or preserve `CC_NEXS_RUNTIME=pi` and `CC_NEXS_PLUGIN_ROOT` for shell helpers. Resolve all feature paths through the existing workspace/progress contracts.
-8. Preserve the command's artifact locations, human gates, counters, validation, and stop behavior exactly. Runtime adaptation changes dispatch mechanics only.
+   - Hotfix Verifier: ego lite `cc-nexs.hotfix-verifier`; headless fallback `cc-nexs.hotfix-verifier-computer-use`
+3. Before any browser verifier dispatch, run the deterministic Pi browser capability preflight and freeze one provider for the release attempt. Prefer ego lite. If it is unavailable, select the matching `*-computer-use` agent only when `@injaneity/pi-computer-use@0.4.3` is installed and its effective config has `browser_use: true` plus `headless: true`. Otherwise route to manual G2. Never give one child both provider surfaces.
+4. Never invoke Claude Code, the Claude Task tool, Codex CLI, or a nested `pi` CLI. Legacy invocation snippets in the authoritative command are role task descriptions, not commands to execute in Pi.
+5. Resolve automatic risk routing from one cc-nexs progress/config/approved-plan snapshot, then pass the selected `model` and `thinking` directly to the pi-subagents `Agent` call. Lean high/critical upgrades Planner and Reviewer; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. Omit `model` when it is `inherit`. If the primary model is unavailable, retry the ordered cc-nexs `fallback_models` list. Project `.pi/settings.json` remains only the Pi authentication/`enabledModels` authority; do not duplicate role mappings there. Public cc-nexs files ship no provider-specific model IDs.
+6. Resolve automatic risk routing from one progress/config/approved-plan snapshot: Lean high/critical routes Planner and Reviewer to escalated, Hotfix P0/P1 routes Reviewer to escalated, and an explicit feature role profile remains final. The Reviewer may use a different authenticated model or the same model with higher thinking, but must use a fresh child context. For legacy fast, preserve its configured heterogeneous-review guard. Accept ordered fallbackModels.
+7. Role children never mutate Git or progress state. The parent orchestrator owns state transitions and invokes the Git Custodian command itself.
+8. Set or preserve `CC_NEXS_RUNTIME=pi` and `CC_NEXS_PLUGIN_ROOT` for shell helpers. Resolve all feature paths through the existing workspace/progress contracts.
+9. Preserve the command's artifact locations, human gates, counters, validation, and stop behavior exactly. Runtime adaptation changes dispatch mechanics only.
 
 
 
@@ -36,4 +37,4 @@ Read and follow `../../../dist/preset-standard/commands/review.md` as the author
 
 `pi-subagents` must be installed and its `subagent` tool must expose the package agents above. Run `/subagents-doctor`, then open `/subagents` to inspect package-agent model mappings. `/subagents-models` is only for builtin agents and must not be used for cc-nexs package roles.
 
-Automatic browser verification additionally requires an installed and onboarded ego lite app, the selected `ego-browser` skill, and a successful minimal `ego-browser nodejs` runtime probe. Verifier agents invoke `ego-browser` through Bash in isolated task Spaces. If a prerequisite is absent, keep cc-nexs available and use the manual test-release fallback; do not silently claim browser verification.
+Automatic browser verification prefers an installed and onboarded ego lite app plus the selected `ego-browser` skill and a successful minimal `ego-browser nodejs` runtime probe. When ego lite is unavailable, it falls back to `@injaneity/pi-computer-use@0.4.3` only with effective `browser_use: true` and `headless: true`. If neither provider is ready, keep cc-nexs available and use the manual test-release fallback; do not silently claim browser verification.

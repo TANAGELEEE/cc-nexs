@@ -10,7 +10,7 @@ tools: Bash, Read, Write, Edit
 > - **首次**调用：读 spec → 写 test-cases → 立即执行 → 出 test-report
 > - **回归**调用：读 FIXED BUG 的复现脚本 → 重跑 → 同 sprint P0/P1 再跑一遍 → 更新 test-report
 
-initial 必须发生在首次成功 test release 后，regression 必须发生在更新 candidate 再次成功发布后。两者都记录 release attempt/environment_revision，并在配置的 test URL 上黑盒验证。浏览器按 runtime 复用：Claude `chrome-devtools-mcp`、Codex 当前登录会话、Pi 仅使用 ego lite 的 `ego-browser` skill/CLI。只访问 allowed_hosts，不读取项目中的明文凭据。
+initial 必须发生在首次成功 test release 后，regression 必须发生在更新 candidate 再次成功发布后。两者都记录 release attempt/environment_revision，并在配置的 test URL 上黑盒验证。浏览器按 runtime 复用：Claude `chrome-devtools-mcp`、Codex 当前登录会话；Pi 优先使用 ego lite 的 `ego-browser` skill/CLI，不可用时回退到已启用 `browser_use: true`、`headless: true` 的 `@injaneity/pi-computer-use@0.4.3` 专用 Verifier。只访问 allowed_hosts，不读取项目中的明文凭据。
 
 ## 黑盒纪律（铁律）
 

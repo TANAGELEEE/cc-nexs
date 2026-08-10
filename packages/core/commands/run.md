@@ -344,7 +344,7 @@ When `action == 'release_test'`, perform every check below before the determinis
 2. Confirm the configured runtime browser provider is callable:
    - Claude Code: `chrome-devtools-mcp`
    - Codex: the current in-app/Chrome browser session, reusing its signed-in profile
-   - Pi: ego lite exclusively; require the selected `ego-browser` skill, a ready ego lite app, and a successful minimal `ego-browser nodejs` runtime probe; verifier agents invoke `ego-browser` through Bash in an isolated task Space and reuse its signed-in state
+   - Pi: prefer ego lite with the selected `ego-browser` skill and a successful runtime probe; otherwise require `@injaneity/pi-computer-use@0.4.3` with effective `browser_use: true` and `headless: true`, then dispatch the dedicated `*-computer-use` Verifier. Freeze one provider for the release attempt and never expose both providers to one child
 3. Open only `release.test.allowed_hosts`, prove the current session is authenticated to the configured test app/operations console, and prove the visible environment is test rather than production.
 4. Never read a password or token from project memory, Markdown, Git, config, or a prompt. Reuse an existing login; if login is required, resolve only an opaque `credential_ref` through an external secret provider and never persist secret material.
 

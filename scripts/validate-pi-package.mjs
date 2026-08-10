@@ -46,6 +46,9 @@ const expectedRoles = [
   'hotfix-developer',
   'hotfix-reviewer',
   'hotfix-verifier',
+  'verifier-computer-use',
+  'lean-verifier-computer-use',
+  'hotfix-verifier-computer-use',
 ];
 const explicitAgentTriggerPrefix = 'Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests.';
 
@@ -141,8 +144,23 @@ for (const file of ['verifier.md', 'lean-verifier.md', 'hotfix-verifier.md']) {
   const verifier = readFileSync(join(agentsRoot, file), 'utf8');
   const frontmatter = verifier.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
   if (!/^tools:.*\bbash\b/m.test(frontmatter)) fail(`${file}: ego lite browser operations require Bash`);
-  if (!/^skills:\s*ego-browser\s*$/m.test(frontmatter)) fail(`${file}: must select only the ego-browser skill`);
+  if (!/^skills:\s*ego-browser\s*$/m.test(frontmatter)) fail(`${file}: must select the ego-browser skill`);
   if (!verifier.includes('Pi Ego Lite Browser Contract')) fail(`${file}: missing ego lite browser contract`);
+  for (const tool of ['find_roots', 'observe_ui', 'search_ui', 'expand_ui', 'inspect_ui', 'act_ui', 'read_text', 'wait_for']) {
+    if (new RegExp(`^tools:.*\\b${tool}\\b`, 'm').test(frontmatter)) fail(`${file}: must not expose fallback tool ${tool}`);
+  }
+}
+
+for (const file of ['verifier-computer-use.md', 'lean-verifier-computer-use.md', 'hotfix-verifier-computer-use.md']) {
+  const verifier = readFileSync(join(agentsRoot, file), 'utf8');
+  const frontmatter = verifier.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
+  if (/^skills:/m.test(frontmatter)) fail(`${file}: fallback verifier must not preload ego-browser`);
+  for (const tool of ['find_roots', 'observe_ui', 'search_ui', 'expand_ui', 'inspect_ui', 'act_ui', 'read_text', 'wait_for']) {
+    if (!new RegExp(`^tools:.*\\b${tool}\\b`, 'm').test(frontmatter)) fail(`${file}: missing computer-use tool ${tool}`);
+  }
+  for (const marker of ['Pi Headless Computer Use Browser Contract', '@injaneity/pi-computer-use@0.4.3', 'headless: true']) {
+    if (!verifier.includes(marker)) fail(`${file}: missing ${marker}`);
+  }
 }
 
 for (const command of ['verify-local', 'release-base', 'render-plan', 'migrate-feature-config']) {
@@ -157,7 +175,7 @@ if (!gatewayBChangeSkill.includes('Deterministic Gateway B Change Control')) {
 const releaseSkillPath = join(skillsRoot, 'cc-nexs-release-test', 'SKILL.md');
 if (existsSync(releaseSkillPath)) {
   const releaseSkill = readFileSync(releaseSkillPath, 'utf8');
-  for (const marker of ['Deterministic Test Release Control', 'release-test <feature-id>', 'ego-browser nodejs']) {
+  for (const marker of ['Deterministic Test Release Control', 'release-test <feature-id>', 'ego-browser nodejs', '@injaneity/pi-computer-use@0.4.3', 'headless: true']) {
     if (!releaseSkill.includes(marker)) fail(`cc-nexs-release-test: missing ${marker}`);
   }
 }

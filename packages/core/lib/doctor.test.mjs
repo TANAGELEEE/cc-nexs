@@ -17,7 +17,14 @@ function gitInit(path) {
   execFileSync('git', ['-C', path, 'init', '-q']);
 }
 
-function fixture({ complete = false, plaintext = false, host = 'test.example.com', piProvider = 'ego-lite' } = {}) {
+function fixture({
+  complete = false,
+  plaintext = false,
+  host = 'test.example.com',
+  piProvider = 'ego-lite',
+  piFallbackProvider = '@injaneity/pi-computer-use@0.4.3',
+  piFallbackHeadless = true,
+} = {}) {
   const root = mkdtempSync(join(tmpdir(), 'cc-nexs-doctor-'));
   const preset = join(root, 'preset');
   gitInit(join(root, 'docs'));
@@ -43,6 +50,10 @@ function fixture({ complete = false, plaintext = false, host = 'test.example.com
           claude_provider: 'chrome-devtools-mcp',
           codex_provider: 'current-browser-session',
           pi_provider: piProvider,
+          pi_fallback: {
+            provider: piFallbackProvider,
+            headless: piFallbackHeadless,
+          },
         },
       },
     },
@@ -73,9 +84,9 @@ function runDoctor(root, strict = false, env = {}) {
   });
 }
 
-function installFakeEgoBrowser(root, output) {
+function installFakeCommand(root, command, output) {
   const bin = join(root, 'bin');
-  const executable = join(bin, 'ego-browser');
+  const executable = join(bin, command);
   mkdirSync(bin, { recursive: true });
   writeFileSync(executable, `#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' '${output}'\n`);
   chmodSync(executable, 0o755);
@@ -129,23 +140,70 @@ test('doctor only accepts ego-lite as the Pi browser provider', () => {
   }
 });
 
+test('doctor requires the pinned headless Pi fallback contract', () => {
+  const wrongProvider = fixture({ complete: true, piFallbackProvider: 'unsupported-provider' });
+  const notHeadless = fixture({ complete: true, piFallbackHeadless: false });
+  try {
+    const providerResult = runDoctor(wrongProvider, true);
+    assert.equal(providerResult.status, 1);
+    assert.match(providerResult.stderr, /pi_fallback\.provider must be @injaneity\/pi-computer-use@0\.4\.3/);
+
+    const headlessResult = runDoctor(notHeadless, true);
+    assert.equal(headlessResult.status, 1);
+    assert.match(headlessResult.stderr, /pi_fallback\.headless must be true/);
+  } finally {
+    rmSync(wrongProvider, { recursive: true, force: true });
+    rmSync(notHeadless, { recursive: true, force: true });
+  }
+});
+
 test('doctor probes the ego lite runtime for Pi release readiness', () => {
   const root = fixture({ complete: true });
   try {
-    const readyBin = installFakeEgoBrowser(root, 'ego-browser ready');
+    const readyBin = installFakeCommand(root, 'ego-browser', 'ego-browser ready');
     const ready = runDoctor(root, true, {
       CC_NEXS_RUNTIME: 'pi',
       PATH: `${readyBin}:${process.env.PATH || ''}`,
     });
     assert.equal(ready.status, 0, ready.stderr);
 
-    installFakeEgoBrowser(root, 'not ready');
+    installFakeCommand(root, 'ego-browser', 'not ready');
     const unavailable = runDoctor(root, true, {
       CC_NEXS_RUNTIME: 'pi',
+      HOME: root,
       PATH: `${readyBin}:${process.env.PATH || ''}`,
     });
     assert.equal(unavailable.status, 1);
-    assert.match(unavailable.stderr, /requires a ready ego lite runtime/);
+    assert.match(unavailable.stderr, /pi-computer-use@0\.4\.3 is not installed/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('doctor falls back to computer-use only with effective headless=true', () => {
+  const root = fixture({ complete: true });
+  try {
+    const bin = installFakeCommand(root, 'ego-browser', 'not ready');
+    installFakeCommand(root, 'pi', 'git:github.com/injaneity/pi-computer-use@v0.4.3');
+    mkdirSync(join(root, '.pi'), { recursive: true });
+    writeFileSync(join(root, '.pi', 'computer-use.json'), `${JSON.stringify({ browser_use: true, headless: true })}\n`);
+
+    const ready = runDoctor(root, true, {
+      CC_NEXS_RUNTIME: 'pi',
+      HOME: root,
+      PATH: `${bin}:${process.env.PATH || ''}`,
+    });
+    assert.equal(ready.status, 0, ready.stderr);
+    assert.match(ready.stderr, /will use @injaneity\/pi-computer-use@0\.4\.3 with headless=true/);
+
+    const unsafe = runDoctor(root, true, {
+      CC_NEXS_RUNTIME: 'pi',
+      HOME: root,
+      PATH: `${bin}:${process.env.PATH || ''}`,
+      PI_COMPUTER_USE_HEADLESS: '0',
+    });
+    assert.equal(unsafe.status, 1);
+    assert.match(unsafe.stderr, /pi-computer-use headless must be true/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

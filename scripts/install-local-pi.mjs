@@ -3,6 +3,11 @@
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
+import {
+  inspectPiBrowserCapability,
+  PI_FALLBACK_BROWSER_PROVIDER,
+} from '../packages/core/lib/pi-browser-provider.mjs';
+
 const root = resolve(import.meta.dirname, '..');
 
 function run(command, args, options = {}) {
@@ -26,17 +31,16 @@ if (!installed.includes('pi-subagents')) {
   process.exit(1);
 }
 
-try {
-  const output = run('ego-browser', ['nodejs'], {
-    input: "console.log('ego-browser ready')\n",
-    stdio: ['pipe', 'pipe', 'ignore'],
-    timeout: 15_000,
-  });
-  if (!output.includes('ego-browser ready')) throw new Error('unexpected ego-browser probe output');
-} catch {
-  console.warn('WARN ego lite is not ready; automatic Pi browser verification will fall back to manual G2.');
-  console.warn('Install the skill with: npx skills add citrolabs/ego-lite');
-  console.warn('Then open ego lite, finish onboarding, and confirm the minimal ego-browser runtime probe from docs/pi-plugin.md succeeds.');
+const browserCapability = inspectPiBrowserCapability({ projectRoot: root, piListOutput: installed });
+if (!browserCapability.ready) {
+  console.warn(`WARN automatic Pi browser verification is unavailable: ${browserCapability.reason}`);
+  console.warn('Preferred setup: npx skills add citrolabs/ego-lite, then open ego lite and finish onboarding.');
+  console.warn(`Fallback setup: pi install git:github.com/injaneity/pi-computer-use@v0.4.3, then set browser_use=true and headless=true in .pi/computer-use.json.`);
+  console.warn('Without either provider, test release will fall back to manual G2.');
+} else if (browserCapability.fallback) {
+  console.log(`Pi browser fallback ready: ${PI_FALLBACK_BROWSER_PROVIDER} with headless=true.`);
+} else {
+  console.log('Pi browser provider ready: ego-lite.');
 }
 
 run('pi', ['install', root, '--approve'], { stdio: 'inherit' });

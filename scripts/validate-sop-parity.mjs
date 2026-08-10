@@ -93,6 +93,8 @@ function validatePresetModes() {
     'claude_provider: chrome-devtools-mcp',
     'codex_provider: current-browser-session',
   'pi_provider: ego-lite',
+  'provider: "@injaneity/pi-computer-use@0.4.3"',
+  'headless: true',
   ]);
 }
 
