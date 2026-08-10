@@ -5,13 +5,13 @@
   },
   "metadata": {
     "description": "cc-nexs: Lean 默认的低 Token 多代理流水线，包含计划/发布双门禁、本地验证与一次集中 Review。",
-    "version": "0.5.2"
+    "version": "0.5.3"
   },
   "plugins": [
     {
       "name": "cc-nexs-minimal",
       "description": "cc-nexs minimal preset: 3 roles (Planner / Developer / Reviewer), Claude-only with subagent isolation, English by default, no language stack assumption.",
-      "version": "0.5.2",
+      "version": "0.5.3",
       "author": {
         "name": "cc-nexs"
       },
@@ -20,7 +20,7 @@
     {
       "name": "cc-nexs",
       "description": "Lean 默认的低 Token 开发流水线：计划门禁、本地验证、一次集中 Review、test 验收与发布门禁；保留 fast/full。",
-      "version": "0.5.2",
+      "version": "0.5.3",
       "author": {
         "name": "cc-nexs"
       },

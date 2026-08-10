@@ -40,6 +40,7 @@ All notable changes to cc-nexs will be documented here.
 
 ### 修复
 
+- Windows 原生 Codex/Claude hook 启动不再依赖 `${VAR:-fallback}`：插件根目录由 Node 从 `PLUGIN_ROOT` / `CLAUDE_PLUGIN_ROOT` 解析，支持空格与中文路径；本地安装器增加隔离 Home、原子配置写入、preset 互斥和 Windows CI/smoke 覆盖。
 - Hotfix test 阻塞现在持久化计数并按 `fix_per_bug` 阈值熔断，已消耗唯一 delta 后不再重新进入修复循环；重复写入同一 test attempt 不重复计数。
 - P3 边界违规改为结构化 `HOTFIX_P3_BOUNDARY_BLOCKED -> HUMAN_INTERVENTION`，通过时将机器证明绑定 exact candidate，避免 Orchestrator 异常退出或证据丢失。
 - Lean 本地重验记录 `review` / `test` / `gateway_b` 来源，失败后回到准确修复状态；Hotfix Gateway B 三类意见补齐控制器级覆盖。

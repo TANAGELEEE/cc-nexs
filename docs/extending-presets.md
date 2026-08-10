@@ -121,7 +121,7 @@ i18n:
     "PreToolUse": [
       {
         "matcher": "Bash|Edit|Write|Read",
-        "command": "node ${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CODEX_PLUGIN_ROOT:-${CC_NEXS_PLUGIN_ROOT:-.}}}}/../core/hooks/role-boundary-guard.mjs"
+        "command": "node -e \"const p=require('node:path'),u=require('node:url'),r=process.env.PLUGIN_ROOT||process.env.CLAUDE_PLUGIN_ROOT||process.env.CC_NEXS_PLUGIN_ROOT;if(!r)process.exit(1);import(u.pathToFileURL(p.join(r,'..','core','hooks','role-boundary-guard.mjs')).href)\""
       }
       // ...
     ]
@@ -178,14 +178,17 @@ forbidden_write:
       ...core hooks...,
       {
         "matcher": "Bash",
-        "command": "node ${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CODEX_PLUGIN_ROOT:-${CC_NEXS_PLUGIN_ROOT:-.}}}}/hooks/my-custom-check.mjs"
+        "command": "node -e \"const p=require('node:path'),u=require('node:url'),r=process.env.PLUGIN_ROOT||process.env.CLAUDE_PLUGIN_ROOT||process.env.CC_NEXS_PLUGIN_ROOT;if(!r)process.exit(1);import(u.pathToFileURL(p.join(r,'hooks','my-custom-check.mjs')).href)\""
       }
     ]
   }
 }
 ```
 
-写在 `packages/preset-myteam/hooks/`，遵循 stdin JSON / exit 0|2 协议。
+写在 `packages/preset-myteam/hooks/`，遵循 stdin JSON / exit 0|2 协议。不要在
+hook 命令中使用 `${VAR:-fallback}`：它是 POSIX shell 语法，在 Windows
+PowerShell 和 `cmd.exe` 中不可移植。应在 Node 启动器中通过 `process.env`
+解析插件根目录。
 
 ## 验证
 

@@ -21,8 +21,8 @@ try {
   process.exit(1);
 }
 
-run('pnpm', ['build'], { stdio: 'inherit' });
-run('pnpm', ['validate:pi'], { stdio: 'inherit' });
+run(process.execPath, [resolve(root, 'scripts', 'build.mjs')], { stdio: 'inherit' });
+run(process.execPath, [resolve(root, 'scripts', 'validate-pi-package.mjs')], { stdio: 'inherit' });
 
 const installed = run('pi', ['list']);
 if (!installed.includes('pi-subagents')) {

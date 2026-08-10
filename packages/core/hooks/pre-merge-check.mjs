@@ -93,9 +93,8 @@ if (pfs.length === 0) {
 
 // ---- locate preset ---------------------------------------------------------
 
-const presetRoot = process.env.CLAUDE_PLUGIN_ROOT
-  || process.env.PLUGIN_ROOT
-  || process.env.CODEX_PLUGIN_ROOT
+const presetRoot = process.env.PLUGIN_ROOT
+  || process.env.CLAUDE_PLUGIN_ROOT
   || process.env.CC_NEXS_PLUGIN_ROOT
   || resolve(fileURLToPath(import.meta.url), '../..');
 

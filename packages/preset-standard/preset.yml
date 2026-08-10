@@ -1,5 +1,5 @@
 name: preset-standard
-version: 0.5.2
+version: 0.5.3
 description: 通用多角色开发 SOP。新需求默认 lean，保留显式 fast/full；不绑定语言、框架、仓库名或组织规范。
 language: zh-CN
 

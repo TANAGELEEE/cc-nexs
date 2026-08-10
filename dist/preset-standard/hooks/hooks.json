@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CODEX_PLUGIN_ROOT:-${CC_NEXS_PLUGIN_ROOT:-.}}}}/hooks/role-boundary-guard.mjs\"",
+            "command": "node -e \"const p=require('node:path'),u=require('node:url'),r=process.env.PLUGIN_ROOT||process.env.CLAUDE_PLUGIN_ROOT||process.env.CC_NEXS_PLUGIN_ROOT;if(!r){console.error('[cc-nexs hook] plugin root is unavailable');process.exit(1)}import(u.pathToFileURL(p.join(r,'hooks','role-boundary-guard.mjs')).href).catch(e=>{console.error('[cc-nexs hook] bootstrap failed: '+e.message);process.exit(1)})\"",
             "timeout": 3
           }
         ]
@@ -17,12 +17,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CODEX_PLUGIN_ROOT:-${CC_NEXS_PLUGIN_ROOT:-.}}}}/hooks/git-custodian-guard.mjs\"",
+            "command": "node -e \"const p=require('node:path'),u=require('node:url'),r=process.env.PLUGIN_ROOT||process.env.CLAUDE_PLUGIN_ROOT||process.env.CC_NEXS_PLUGIN_ROOT;if(!r){console.error('[cc-nexs hook] plugin root is unavailable');process.exit(1)}import(u.pathToFileURL(p.join(r,'hooks','git-custodian-guard.mjs')).href).catch(e=>{console.error('[cc-nexs hook] bootstrap failed: '+e.message);process.exit(1)})\"",
             "timeout": 3
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CODEX_PLUGIN_ROOT:-${CC_NEXS_PLUGIN_ROOT:-.}}}}/hooks/pre-merge-check.mjs\"",
+            "command": "node -e \"const p=require('node:path'),u=require('node:url'),r=process.env.PLUGIN_ROOT||process.env.CLAUDE_PLUGIN_ROOT||process.env.CC_NEXS_PLUGIN_ROOT;if(!r){console.error('[cc-nexs hook] plugin root is unavailable');process.exit(1)}import(u.pathToFileURL(p.join(r,'hooks','pre-merge-check.mjs')).href).catch(e=>{console.error('[cc-nexs hook] bootstrap failed: '+e.message);process.exit(1)})\"",
             "timeout": 60
           }
         ]

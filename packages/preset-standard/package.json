@@ -1,6 +1,6 @@
 {
   "name": "@cc-nexs/preset-standard",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "private": true,
   "description": "Generic multi-role SOP preset for cc-nexs, with fast default and explicit full mode.",
   "main": "preset.yml",

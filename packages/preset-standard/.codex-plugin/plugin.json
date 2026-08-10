@@ -1,6 +1,6 @@
 {
   "name": "cc-nexs",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Lean 默认的低 Token 开发流水线：计划门禁、本地验证、一次集中 Review、test 验收与发布门禁；保留 fast/full。",
   "author": {
     "name": "cc-nexs"

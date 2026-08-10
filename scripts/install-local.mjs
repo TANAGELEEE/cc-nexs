@@ -12,10 +12,10 @@
 // 用法：
 //   node scripts/install-local.mjs                  # 默认 preset-standard
 //   node scripts/install-local.mjs preset-minimal   # 切换到 minimal preset
+//   node scripts/install-local.mjs preset-standard --home <isolated-home>
 
 import {
   readFileSync,
-  writeFileSync,
   mkdirSync,
   readdirSync,
   lstatSync,
@@ -27,8 +27,7 @@ import {
 } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import { homedir } from 'node:os';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
   assertPresetName,
@@ -36,9 +35,13 @@ import {
   copyTreeNoSymlinks,
   safeRemoveWithin,
 } from './lib/safe-fs.mjs';
+import { writeJsonAtomic } from './lib/atomic-write.mjs';
+import { parseInstallArgs, resolveInstallHome } from './lib/install-home.mjs';
 
 const ROOT = resolve(fileURLToPath(import.meta.url), '../..');
-const PRESET = assertPresetName(process.argv[2] || 'preset-standard');
+const INSTALL_ARGS = parseInstallArgs(process.argv.slice(2));
+const PRESET = assertPresetName(INSTALL_ARGS.positional[0] || 'preset-standard');
+const INSTALL_HOME = resolveInstallHome({ explicitHome: INSTALL_ARGS.home });
 
 const DIST_ROOT = join(ROOT, 'dist');
 const DIST_PRESET = assertWithin(DIST_ROOT, join(DIST_ROOT, PRESET));
@@ -62,13 +65,19 @@ if (typeof VERSION !== 'string' || !/^[0-9A-Za-z][0-9A-Za-z.+-]*$/.test(VERSION)
 }
 
 const MARKETPLACE_NAME = 'cc-nexs';
-const CACHE_BASE = join(homedir(), '.claude', 'plugins', 'cache', MARKETPLACE_NAME);
+const CLAUDE_HOME = join(INSTALL_HOME, '.claude');
+const CACHE_BASE = join(CLAUDE_HOME, 'plugins', 'cache', MARKETPLACE_NAME);
 const CACHE_PATH = assertWithin(CACHE_BASE, join(CACHE_BASE, PLUGIN_NAME, VERSION));
 const INSTALLED_KEY = `${PLUGIN_NAME}@${MARKETPLACE_NAME}`;
-const MARKETPLACE_LINK = join(homedir(), '.claude', 'plugins', 'marketplaces', MARKETPLACE_NAME);
-const KNOWN_MARKETPLACES = join(homedir(), '.claude', 'plugins', 'known_marketplaces.json');
-const INSTALLED = join(homedir(), '.claude', 'plugins', 'installed_plugins.json');
-const SETTINGS = join(homedir(), '.claude', 'settings.json');
+const MARKETPLACE_LINK = join(CLAUDE_HOME, 'plugins', 'marketplaces', MARKETPLACE_NAME);
+const KNOWN_MARKETPLACES = join(CLAUDE_HOME, 'plugins', 'known_marketplaces.json');
+const INSTALLED = join(CLAUDE_HOME, 'plugins', 'installed_plugins.json');
+const SETTINGS = join(CLAUDE_HOME, 'settings.json');
+const PRESET_PLUGIN_KEYS = ['preset-standard', 'preset-minimal'].map((preset) => {
+  const manifest = join(ROOT, 'packages', preset, '.claude-plugin', 'plugin.json');
+  const name = JSON.parse(readFileSync(manifest, 'utf8')).name;
+  return `${name}@${MARKETPLACE_NAME}`;
+});
 
 console.log(`cc-nexs install-local`);
 console.log(`  preset:  ${PRESET}`);
@@ -76,6 +85,7 @@ console.log(`  plugin:  ${PLUGIN_NAME}`);
 console.log(`  version: ${VERSION}`);
 console.log(`  source:  ${DIST_PRESET}`);
 console.log(`  target:  ${CACHE_PATH}`);
+console.log(`  home:    ${INSTALL_HOME}`);
 
 // 1. build
 console.log(`\n▶ 跑 build...`);
@@ -119,7 +129,7 @@ installed.plugins[INSTALLED_KEY] = [
     lastUpdated: new Date().toISOString(),
   },
 ];
-writeFileSync(INSTALLED, JSON.stringify(installed, null, 2) + '\n', 'utf-8');
+writeJsonAtomic(INSTALLED, installed);
 console.log(`\n✓ 同步 installed_plugins.json`);
 
 // 4. 注册 marketplace 软链（指向仓库根；marketplace.json 在 <root>/.claude-plugin/）
@@ -129,7 +139,7 @@ if (lstatSync(MARKETPLACE_LINK, { throwIfNoEntry: false })) {
   const st = lstatSync(MARKETPLACE_LINK);
   if (st.isSymbolicLink()) {
     const target = readlinkSync(MARKETPLACE_LINK);
-    if (target === ROOT) {
+    if (resolve(dirname(MARKETPLACE_LINK), target) === ROOT) {
       needLink = false;
     } else {
       console.log(`▶ 替换 marketplace 软链: ${target} → ${ROOT}`);
@@ -141,7 +151,7 @@ if (lstatSync(MARKETPLACE_LINK, { throwIfNoEntry: false })) {
   }
 }
 if (needLink) {
-  symlinkSync(ROOT, MARKETPLACE_LINK);
+  symlinkSync(ROOT, MARKETPLACE_LINK, process.platform === 'win32' ? 'junction' : 'dir');
   console.log(`✓ marketplace 软链 ${MARKETPLACE_LINK} → ${ROOT}`);
 } else {
   console.log(`✓ marketplace 软链已是最新`);
@@ -153,7 +163,7 @@ if (existsSync(KNOWN_MARKETPLACES)) {
   known = JSON.parse(readFileSync(KNOWN_MARKETPLACES, 'utf-8'));
 }
 const desiredEntry = {
-  source: { source: 'git', url: `file://${ROOT}` },
+  source: { source: 'git', url: pathToFileURL(ROOT).href },
   installLocation: MARKETPLACE_LINK,
   lastUpdated: new Date().toISOString(),
 };
@@ -162,7 +172,7 @@ const sameSource = existingEntry?.source?.url === desiredEntry.source.url;
 const sameLocation = existingEntry?.installLocation === desiredEntry.installLocation;
 if (!existingEntry || !sameSource || !sameLocation) {
   known[MARKETPLACE_NAME] = desiredEntry;
-  writeFileSync(KNOWN_MARKETPLACES, JSON.stringify(known, null, 2) + '\n', 'utf-8');
+  writeJsonAtomic(KNOWN_MARKETPLACES, known);
   console.log(`✓ 写入 known_marketplaces.json`);
 } else {
   console.log(`✓ known_marketplaces.json 已是最新`);
@@ -172,13 +182,16 @@ if (!existingEntry || !sameSource || !sameLocation) {
 if (existsSync(SETTINGS)) {
   const settings = JSON.parse(readFileSync(SETTINGS, 'utf-8'));
   settings.enabledPlugins ||= {};
-  if (settings.enabledPlugins[INSTALLED_KEY] !== true) {
-    settings.enabledPlugins[INSTALLED_KEY] = true;
-    writeFileSync(SETTINGS, JSON.stringify(settings, null, 2) + '\n', 'utf-8');
-    console.log(`✓ enabledPlugins[${INSTALLED_KEY}] = true`);
-  } else {
-    console.log(`✓ settings.json 已启用 ${INSTALLED_KEY}`);
+  let changed = false;
+  for (const key of PRESET_PLUGIN_KEYS) {
+    const enabled = key === INSTALLED_KEY;
+    if (settings.enabledPlugins[key] !== enabled) {
+      settings.enabledPlugins[key] = enabled;
+      changed = true;
+    }
   }
+  if (changed) writeJsonAtomic(SETTINGS, settings);
+  console.log(`✓ settings.json 已启用 ${INSTALLED_KEY}，并禁用另一 preset`);
 } else {
   console.log(`⚠️  ${SETTINGS} 不存在，跳过 enabledPlugins 写入`);
 }

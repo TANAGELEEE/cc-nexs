@@ -170,17 +170,22 @@ Any repair consumes at most one lifetime delta Review. Contract/schema/permissio
 
 ## Hooks
 
-The same hook scripts are packaged for both runtimes. Hook commands resolve the plugin root in this order:
+The same hook scripts are packaged for both runtimes. The hook launcher resolves the
+root inside Node instead of relying on shell expansion, so the same command works in
+POSIX shells, PowerShell, and `cmd.exe`:
 
 ```text
-CLAUDE_PLUGIN_ROOT
 PLUGIN_ROOT
-CODEX_PLUGIN_ROOT
+CLAUDE_PLUGIN_ROOT
 CC_NEXS_PLUGIN_ROOT
-.
 ```
 
-Codex requires hook review and trust through `/hooks` before non-managed hooks run. Local development can also set `CC_NEXS_PLUGIN_ROOT` when invoking hook scripts directly.
+`PLUGIN_ROOT` is Codex's canonical plugin variable; `CLAUDE_PLUGIN_ROOT` keeps the
+shared package compatible with Claude Code, and `CC_NEXS_PLUGIN_ROOT` is reserved for
+direct local tests. There is deliberately no current-directory fallback because hook
+commands run from the user's session directory, not the plugin directory.
+
+Codex requires hook review and trust through `/hooks` before non-managed hooks run.
 
 ## Local Codex Install
 
@@ -188,13 +193,19 @@ Codex requires hook review and trust through `/hooks` before non-managed hooks r
 pnpm install:local:codex
 ```
 
-This command builds, runs `pnpm validate:plugins`, and registers the repo marketplace with Codex:
+This command builds the artifacts, runs the plugin/SOP/runtime validators directly
+through Node (avoiding Windows `pnpm.cmd` child-process lookup issues), and registers
+the repo marketplace with Codex:
 
 ```bash
 codex plugin marketplace add /path/to/cc-nexs
 ```
 
-It also copies the built plugin roots into `~/.codex/plugins/cache/cc-nexs/`, enables `cc-nexs@cc-nexs`, and disables `cc-nexs-minimal@cc-nexs` by default so the generated `/cc-nexs:*` mirror skills do not appear twice. Use `pnpm install:local:codex:all` to enable both presets, or `pnpm install:local:codex:minimal` to enable only the minimal preset.
+It also copies the built plugin roots into `~/.codex/plugins/cache/cc-nexs/`,
+enables `cc-nexs@cc-nexs`, and disables `cc-nexs-minimal@cc-nexs` so mirror
+skills and lifecycle hooks do not run twice. Use
+`pnpm install:local:codex:minimal` to switch to the minimal preset; the installer
+keeps the standard preset cached but disabled.
 
 Then restart Codex or open a new thread, check `cc-nexs@cc-nexs` from `/plugins` if desired, and review hooks with `/hooks`.
 

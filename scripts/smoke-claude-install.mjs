@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Smoke-test Claude Code local install with an isolated HOME.
+// Smoke-test Claude Code local install with an explicit isolated install home.
 // This proves Codex additions do not require changing the current Claude install flow.
 
 import {
@@ -15,7 +15,7 @@ import {
 import { execFileSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = resolve(fileURLToPath(import.meta.url), '../..');
 const VERSION = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf-8')).version;
@@ -36,12 +36,14 @@ function readJson(path) {
 }
 
 function runInstall(preset) {
-  execFileSync('node', [join(ROOT, 'scripts', 'install-local.mjs'), preset], {
+  execFileSync(process.execPath, [
+    join(ROOT, 'scripts', 'install-local.mjs'),
+    preset,
+    '--home',
+    tmpHome,
+  ], {
     cwd: ROOT,
-    env: {
-      ...process.env,
-      HOME: tmpHome,
-    },
+    env: process.env,
     stdio: 'pipe',
     encoding: 'utf-8',
   });
@@ -65,17 +67,17 @@ function validateInstalledPlugin(pluginName) {
   }
 }
 
-function validateMarketplaceAndSettings() {
+function validateMarketplaceAndSettings(selectedKey) {
   const link = join(tmpHome, '.claude', 'plugins', 'marketplaces', 'cc-nexs');
   if (!lstatSync(link, { throwIfNoEntry: false })?.isSymbolicLink()) {
     fail(`${link}: expected symlink`);
-  } else if (readlinkSync(link) !== ROOT) {
+  } else if (resolve(join(link, '..'), readlinkSync(link)) !== ROOT) {
     fail(`${link}: expected symlink target ${ROOT}`);
   }
 
   const known = readJson(join(tmpHome, '.claude', 'plugins', 'known_marketplaces.json'));
   const knownEntry = known['cc-nexs'];
-  if (knownEntry?.source?.url !== `file://${ROOT}`) {
+  if (knownEntry?.source?.url !== pathToFileURL(ROOT).href) {
     fail('known_marketplaces.json: cc-nexs source URL must remain file:// repo root');
   }
   if (knownEntry?.installLocation !== link) {
@@ -84,8 +86,9 @@ function validateMarketplaceAndSettings() {
 
   const settings = readJson(join(tmpHome, '.claude', 'settings.json'));
   for (const key of ['cc-nexs@cc-nexs', 'cc-nexs-minimal@cc-nexs']) {
-    if (settings.enabledPlugins?.[key] !== true) {
-      fail(`settings.json: enabledPlugins.${key} must be true`);
+    const expected = key === selectedKey;
+    if (settings.enabledPlugins?.[key] !== expected) {
+      fail(`settings.json: enabledPlugins.${key} must be ${expected}`);
     }
   }
 }
@@ -97,10 +100,11 @@ try {
   writeFileSync(settingsPath, '{}\n', 'utf-8');
 
   runInstall('preset-standard');
+  validateMarketplaceAndSettings('cc-nexs@cc-nexs');
   runInstall('preset-minimal');
   validateInstalledPlugin('cc-nexs');
   validateInstalledPlugin('cc-nexs-minimal');
-  validateMarketplaceAndSettings();
+  validateMarketplaceAndSettings('cc-nexs-minimal@cc-nexs');
 
   if (errors.length > 0) {
     console.error('Claude Code install smoke failed:');

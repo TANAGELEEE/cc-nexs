@@ -216,13 +216,29 @@ function validateHooks(pluginRoot) {
   const hooksPath = join(pluginRoot, 'hooks', 'hooks.json');
   if (!existsSync(hooksPath)) return;
   const text = readFileSync(hooksPath, 'utf-8');
-  if (text.includes('${CLAUDE_PLUGIN_ROOT}/')) {
-    fail(`${hooksPath}: uses Claude-only plugin root expression`);
+  const config = readJson(hooksPath);
+  if (!config) return;
+  if (/\$\{[^}]*:-/.test(text)) {
+    fail(`${hooksPath}: uses POSIX-only environment fallback syntax`);
   }
-  if (text.includes('role-boundary-guard') && !text.includes('CODEX_PLUGIN_ROOT')) {
-    fail(`${hooksPath}: command should include CODEX_PLUGIN_ROOT fallback`);
+  if (text.includes('CODEX_PLUGIN_ROOT')) {
+    fail(`${hooksPath}: uses undocumented CODEX_PLUGIN_ROOT instead of Codex PLUGIN_ROOT`);
   }
-  readJson(hooksPath);
+  const handlers = Object.values(config.hooks || {})
+    .flatMap((groups) => Array.isArray(groups) ? groups : [])
+    .flatMap((group) => Array.isArray(group?.hooks) ? group.hooks : []);
+  for (const handler of handlers) {
+    if (handler?.type !== 'command') continue;
+    if (!handler.command?.includes('process.env.PLUGIN_ROOT')) {
+      fail(`${hooksPath}: Codex hook command must resolve process.env.PLUGIN_ROOT`);
+    }
+    if (!handler.command?.includes('process.env.CLAUDE_PLUGIN_ROOT')) {
+      fail(`${hooksPath}: shared hook command must retain Claude Code compatibility`);
+    }
+    if (/CC_NEXS_PLUGIN_ROOT\s*\|\|\s*['"]?\./.test(handler.command || '')) {
+      fail(`${hooksPath}: hook command must not fall back to the session cwd`);
+    }
+  }
 }
 
 function validateMarketplace(presets) {
