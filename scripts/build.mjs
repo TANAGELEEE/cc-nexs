@@ -102,7 +102,20 @@ const PI_ROLE_SOURCES = {
   'hotfix-reviewer': 'hotfix-reviewer.md',
   'hotfix-verifier': 'hotfix-verifier.md',
 };
-const PI_ROLE_ADDENDA = {};
+const PI_VERIFIER_ROLES = new Set(['verifier', 'lean-verifier', 'hotfix-verifier']);
+
+const PI_EGO_LITE_VERIFIER_ADDENDUM = `## Pi Ego Lite Browser Contract
+
+- Pi browser verification MUST use ego lite exclusively through the \`ego-browser\` CLI and the selected \`ego-browser\` skill.
+- Read the selected \`ego-browser\` skill before the first browser operation, then invoke \`ego-browser\` only through Bash as documented by that skill.
+- Create or reuse one isolated ego task Space for the feature, release attempt, and environment revision. Reuse its signed-in browser state and close it with \`completeTaskSpace(..., { keep: false })\` only after verification is complete.
+- Navigate only to the configured \`allowed_hosts\`, verify the resulting URL after every navigation, and do not bypass browser policy with direct HTTP, CDP, or injected browser automation.
+- Never request or expose plaintext credentials. If ego lite, the \`ego-browser\` command, the selected skill, the target app, login state, MFA/CAPTCHA handling, or host policy is unavailable, report the automatic-browser capability as unavailable and route to the manual G2 fallback.
+`;
+
+const PI_ROLE_ADDENDA = Object.fromEntries(
+  [...PI_VERIFIER_ROLES].map((role) => [role, PI_EGO_LITE_VERIFIER_ADDENDUM]),
+);
 const EXPLICIT_AGENT_TRIGGER_PREFIX = 'Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests.';
 
 // ---- helpers ---------------------------------------------------------------
@@ -419,9 +432,6 @@ function generatePiResources() {
   for (const [role, sourceFile] of Object.entries(PI_ROLE_SOURCES)) {
     const sourcePath = join(standardSource, 'agents', sourceFile);
     const { description, tools, body } = parseAgentSource(readFileSync(sourcePath, 'utf8'), sourceFile);
-    if (role === 'verifier' || role === 'lean-verifier' || role === 'hotfix-verifier') {
-      tools.push('find_roots', 'observe_ui', 'search_ui', 'inspect_ui', 'act_ui', 'wait_for');
-    }
     const header = [
       '---',
       `name: ${role}`,
@@ -432,6 +442,7 @@ function generatePiResources() {
       'systemPromptMode: replace',
       'inheritProjectContext: true',
       'inheritSkills: false',
+      ...(PI_VERIFIER_ROLES.has(role) ? ['skills: ego-browser'] : []),
       '---',
       '',
       '# Pi Runtime Override',
@@ -516,11 +527,11 @@ ${supportsHotfix ? `## Pi Hotfix Dispatch Contract
 8. Only \`approve-release\` authorizes the verified feature candidate to merge into configured base branches. Never merge test into base and never force push.
 ` : ''}
 
-## Required Pi Prerequisite
+## Required Pi Prerequisites
 
 \`pi-subagents\` must be installed and its \`subagent\` tool must expose the package agents above. Run \`/subagents-doctor\`, then open \`/subagents\` to inspect package-agent model mappings. \`/subagents-models\` is only for builtin agents and must not be used for cc-nexs package roles.
 
-Automatic browser verification additionally requires \`@injaneity/pi-computer-use@0.4.3\` installed with \`pi install git:github.com/injaneity/pi-computer-use@v0.4.3\`. If it is absent, keep cc-nexs available and use the manual test-release fallback; do not silently claim browser verification.
+Automatic browser verification additionally requires an installed and onboarded ego lite app, the selected \`ego-browser\` skill, and a successful minimal \`ego-browser nodejs\` runtime probe. Verifier agents invoke \`ego-browser\` through Bash in isolated task Spaces. If a prerequisite is absent, keep cc-nexs available and use the manual test-release fallback; do not silently claim browser verification.
 `;
     writeFileSync(join(skillDir, 'SKILL.md'), body, 'utf8');
     generated += 1;

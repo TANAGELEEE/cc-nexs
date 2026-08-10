@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -17,7 +17,7 @@ function gitInit(path) {
   execFileSync('git', ['-C', path, 'init', '-q']);
 }
 
-function fixture({ complete = false, plaintext = false, host = 'test.example.com' } = {}) {
+function fixture({ complete = false, plaintext = false, host = 'test.example.com', piProvider = 'ego-lite' } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'cc-nexs-doctor-'));
   const preset = join(root, 'preset');
   gitInit(join(root, 'docs'));
@@ -42,7 +42,7 @@ function fixture({ complete = false, plaintext = false, host = 'test.example.com
           required: true,
           claude_provider: 'chrome-devtools-mcp',
           codex_provider: 'current-browser-session',
-          pi_provider: '@injaneity/pi-computer-use@0.4.3',
+          pi_provider: piProvider,
         },
       },
     },
@@ -66,8 +66,20 @@ function fixture({ complete = false, plaintext = false, host = 'test.example.com
   return root;
 }
 
-function runDoctor(root, strict = false) {
-  return spawnSync(process.execPath, [doctor, root, ...(strict ? ['--release-test'] : [])], { encoding: 'utf8' });
+function runDoctor(root, strict = false, env = {}) {
+  return spawnSync(process.execPath, [doctor, root, ...(strict ? ['--release-test'] : [])], {
+    encoding: 'utf8',
+    env: { ...process.env, ...env },
+  });
+}
+
+function installFakeEgoBrowser(root, output) {
+  const bin = join(root, 'bin');
+  const executable = join(bin, 'ego-browser');
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(executable, `#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' '${output}'\n`);
+  chmodSync(executable, 0o755);
+  return bin;
 }
 
 test('doctor warns in normal mode but fails strict release readiness', () => {
@@ -101,6 +113,39 @@ test('doctor strict mode blocks production-like test hosts', () => {
     const result = runDoctor(root, true);
     assert.equal(result.status, 1);
     assert.match(result.stderr, /production-like host is forbidden/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('doctor only accepts ego-lite as the Pi browser provider', () => {
+  const root = fixture({ complete: true, piProvider: 'unsupported-provider' });
+  try {
+    const result = runDoctor(root, true);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /pi_provider must be ego-lite/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('doctor probes the ego lite runtime for Pi release readiness', () => {
+  const root = fixture({ complete: true });
+  try {
+    const readyBin = installFakeEgoBrowser(root, 'ego-browser ready');
+    const ready = runDoctor(root, true, {
+      CC_NEXS_RUNTIME: 'pi',
+      PATH: `${readyBin}:${process.env.PATH || ''}`,
+    });
+    assert.equal(ready.status, 0, ready.stderr);
+
+    installFakeEgoBrowser(root, 'not ready');
+    const unavailable = runDoctor(root, true, {
+      CC_NEXS_RUNTIME: 'pi',
+      PATH: `${readyBin}:${process.env.PATH || ''}`,
+    });
+    assert.equal(unavailable.status, 1);
+    assert.match(unavailable.stderr, /requires a ready ego lite runtime/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

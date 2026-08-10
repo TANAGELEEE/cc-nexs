@@ -52,7 +52,7 @@ workflow:
 
 - Claude Code：`chrome-devtools-mcp` 可调用。
 - Codex：复用当前已登录的 in-app/Chrome session。
-- Pi：安装 `@injaneity/pi-computer-use@0.4.3`。
+- Pi：安装并完成 ego lite 引导，安装 `ego-browser` skill，并确保最小 `ego-browser nodejs` runtime probe 成功；Pi 自动浏览器验收仅支持这一 provider。
 
 只访问 `release.test.allowed_hosts`。URL 可从项目说明发现，但自动执行前必须进入结构化 `release.test` 配置。禁止从 memory、Markdown、Git 或 config 读取明文账号密码；优先复用登录，必要时仅使用 opaque `credential_ref` 对接外部 secret provider。
 

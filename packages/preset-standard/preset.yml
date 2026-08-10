@@ -344,7 +344,7 @@ release:
       session_strategy: reuse
       claude_provider: chrome-devtools-mcp
       codex_provider: current-browser-session
-      pi_provider: "@injaneity/pi-computer-use@0.4.3"
+      pi_provider: ego-lite
   base:
     policy: direct_after_approval
 

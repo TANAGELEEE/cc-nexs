@@ -13,7 +13,7 @@ This is the deterministic test delivery action for `workflow.sprint_delivery=fin
 
 Before any remote mutation, resolve `release.test` from project config/private overlay and verify:
 
-1. The current runtime exposes its configured browser provider: Claude `chrome-devtools-mcp`, Codex current signed-in browser session, or Pi `@injaneity/pi-computer-use@0.4.3`.
+1. The current runtime exposes its configured browser provider: Claude `chrome-devtools-mcp`, Codex current signed-in browser session, or Pi ego lite through the selected `ego-browser` skill and CLI.
 2. Reuse the current browser profile, open only configured `allowed_hosts`, and prove the session is authenticated in the test environment. Project instructions/memory may help discover a URL candidate, but automatic execution requires the resolved URL in `release.test` plus its allowlisted host. Do not read plaintext credentials from memory, Markdown, presets, config, or Git. `credential_ref` may name an external secret provider, but secret material must not enter prompts or artifacts.
 3. The app and operations URLs identify test, never production. MFA, CAPTCHA, expired login, unavailable browser tools, or host mismatch fail the preflight before any push.
 4. If preflight fails, leave progress at `TEST_RELEASE` (or Hotfix `HOTFIX_TEST_RELEASE`), report the exact missing prerequisite, and fall back to the manual gate. Do not silently skip deployment or testing. `--hotfix` is accepted only for `mode=hotfix + HOTFIX_TEST_RELEASE`; it never bypasses readiness.

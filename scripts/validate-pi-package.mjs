@@ -137,13 +137,12 @@ for (const role of expectedRoles) {
   if (/^\s*codex\s+/m.test(text)) fail(`${file}: executable Codex CLI snippet leaked into Pi agent`);
 }
 
-const verifierTools = readFileSync(join(agentsRoot, 'verifier.md'), 'utf8');
-const leanVerifierTools = readFileSync(join(agentsRoot, 'lean-verifier.md'), 'utf8');
-const hotfixVerifierTools = readFileSync(join(agentsRoot, 'hotfix-verifier.md'), 'utf8');
-for (const tool of ['find_roots', 'observe_ui', 'search_ui', 'inspect_ui', 'act_ui', 'wait_for']) {
-  if (!verifierTools.match(new RegExp(`^tools:.*\\b${tool}\\b`, 'm'))) fail(`verifier.md: missing computer-use tool ${tool}`);
-  if (!leanVerifierTools.match(new RegExp(`^tools:.*\\b${tool}\\b`, 'm'))) fail(`lean-verifier.md: missing computer-use tool ${tool}`);
-  if (!hotfixVerifierTools.match(new RegExp(`^tools:.*\\b${tool}\\b`, 'm'))) fail(`hotfix-verifier.md: missing computer-use tool ${tool}`);
+for (const file of ['verifier.md', 'lean-verifier.md', 'hotfix-verifier.md']) {
+  const verifier = readFileSync(join(agentsRoot, file), 'utf8');
+  const frontmatter = verifier.match(/^---\n([\s\S]*?)\n---/)?.[1] || '';
+  if (!/^tools:.*\bbash\b/m.test(frontmatter)) fail(`${file}: ego lite browser operations require Bash`);
+  if (!/^skills:\s*ego-browser\s*$/m.test(frontmatter)) fail(`${file}: must select only the ego-browser skill`);
+  if (!verifier.includes('Pi Ego Lite Browser Contract')) fail(`${file}: missing ego lite browser contract`);
 }
 
 for (const command of ['verify-local', 'release-base', 'render-plan', 'migrate-feature-config']) {
@@ -158,7 +157,7 @@ if (!gatewayBChangeSkill.includes('Deterministic Gateway B Change Control')) {
 const releaseSkillPath = join(skillsRoot, 'cc-nexs-release-test', 'SKILL.md');
 if (existsSync(releaseSkillPath)) {
   const releaseSkill = readFileSync(releaseSkillPath, 'utf8');
-  for (const marker of ['Deterministic Test Release Control', 'release-test <feature-id>', '@injaneity/pi-computer-use@0.4.3']) {
+  for (const marker of ['Deterministic Test Release Control', 'release-test <feature-id>', 'ego-browser nodejs']) {
     if (!releaseSkill.includes(marker)) fail(`cc-nexs-release-test: missing ${marker}`);
   }
 }

@@ -52,8 +52,8 @@ Subsequent local verification, Review recording, test release/verification, rele
 8. Only `approve-release` authorizes the verified feature candidate to merge into configured base branches. Never merge test into base and never force push.
 
 
-## Required Pi Prerequisite
+## Required Pi Prerequisites
 
 `pi-subagents` must be installed and its `subagent` tool must expose the package agents above. Run `/subagents-doctor`, then open `/subagents` to inspect package-agent model mappings. `/subagents-models` is only for builtin agents and must not be used for cc-nexs package roles.
 
-Automatic browser verification additionally requires `@injaneity/pi-computer-use@0.4.3` installed with `pi install git:github.com/injaneity/pi-computer-use@v0.4.3`. If it is absent, keep cc-nexs available and use the manual test-release fallback; do not silently claim browser verification.
+Automatic browser verification additionally requires an installed and onboarded ego lite app, the selected `ego-browser` skill, and a successful minimal `ego-browser nodejs` runtime probe. Verifier agents invoke `ego-browser` through Bash in isolated task Spaces. If a prerequisite is absent, keep cc-nexs available and use the manual test-release fallback; do not silently claim browser verification.

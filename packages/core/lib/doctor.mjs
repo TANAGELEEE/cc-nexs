@@ -154,6 +154,9 @@ function validateReleaseReadiness({ config, workspace, strictRelease, errors, wa
     for (const field of ['claude_provider', 'codex_provider', 'pi_provider']) {
       if (!release.browser?.[field]) report(`release.test.browser.${field} is required`);
     }
+    if (release.browser?.pi_provider && release.browser.pi_provider !== 'ego-lite') {
+      report('release.test.browser.pi_provider must be ego-lite');
+    }
   }
   const allowed = new Set(release.allowed_hosts || []);
   for (const [name, value] of [['app_url', release.app_url], ['operations_url', release.operations_url]]) {
@@ -171,14 +174,17 @@ function validateReleaseReadiness({ config, workspace, strictRelease, errors, wa
     errors.push(`plaintext credential field is forbidden: ${finding}`);
   }
 
-  if (process.env.CC_NEXS_RUNTIME === 'pi') {
+  if (process.env.CC_NEXS_RUNTIME === 'pi' && release.browser?.required !== false) {
     try {
-      const installed = execFileSync('pi', ['list'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-      if (!installed.includes('injaneity/pi-computer-use') && !installed.includes('@injaneity/pi-computer-use')) {
-        report('Pi automatic browser verification requires @injaneity/pi-computer-use@0.4.3');
-      }
+      const output = execFileSync('ego-browser', ['nodejs'], {
+        encoding: 'utf8',
+        input: "console.log('ego-browser ready')\n",
+        stdio: ['pipe', 'pipe', 'ignore'],
+        timeout: 15_000,
+      });
+      if (!output.includes('ego-browser ready')) report('Pi automatic browser verification requires a ready ego lite runtime');
     } catch {
-      report('unable to inspect installed Pi computer-use package');
+      report('Pi automatic browser verification requires ego lite, its ego-browser skill/CLI, and completed onboarding');
     }
   }
 }

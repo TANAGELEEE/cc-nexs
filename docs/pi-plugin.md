@@ -28,7 +28,11 @@ The Pi skills fail closed for those modes instead of silently changing workflow 
 
 ```bash
 pi install npm:pi-subagents@0.35.1
-pi install git:github.com/injaneity/pi-computer-use@v0.4.3
+npx skills add citrolabs/ego-lite
+# Open ego lite and complete first-run onboarding once.
+ego-browser nodejs <<'EOF'
+console.log('ego-browser ready')
+EOF
 pi install git:github.com/<github-owner>/cc-nexs
 ```
 
@@ -38,13 +42,13 @@ For local development:
 pnpm install:local:pi
 ```
 
-The local installer requires `pi-subagents` first, then builds and validates cc-nexs. Missing `@injaneity/pi-computer-use@0.4.3` produces a warning: init/status/build remain available, while automatic browser verification falls back to manual G2.
+The local installer requires `pi-subagents` first, then builds and validates cc-nexs. It runs the same minimal ego runtime probe shown above. If ego lite, its `ego-browser` skill/CLI, or onboarding is unavailable, it warns instead of blocking init/status/build; automatic browser verification falls back to manual G2.
 
 All generated cc-nexs Pi skills set `disable-model-invocation: true`, so Pi excludes them from the model's available-skill prompt. Start cc-nexs only with `/cc-nexs:*` or `/skill:cc-nexs-*`; ordinary natural-language requests do not activate the package. Package role descriptions likewise permit dispatch only from that explicitly started parent workflow.
 
 Explicit-only applies to entry, not progression. Once `/cc-nexs:run` starts, the Pi parent continues dispatching the workflow's internal stages until the same defined human gates or blocking conditions used by the other runtimes.
 
-The generated Verifier agent allowlist includes `find_roots`, `observe_ui`, `search_ui`, `inspect_ui`, `act_ui`, and `wait_for`. Browser checks reuse the current signed-in session and only visit `release.test.allowed_hosts`; plaintext credentials in memory/project files are forbidden.
+The generated Verifier agents explicitly select the `ego-browser` skill and call `ego-browser` through Bash. Each release verification uses an isolated ego task Space, inherits the user's login state, and only visits `release.test.allowed_hosts`; plaintext credentials in memory/project files are forbidden. Pi has no alternate automatic browser provider.
 
 ## Configure Lean and Hotfix role models
 
@@ -135,4 +139,4 @@ Package-qualified child roles run with explicit Pi tool allowlists. The cc-nexs 
 
 The parent orchestrator remains responsible for state transitions and Git Custodian operations. Pi packages and child tools still execute with the user's operating-system permissions; use Pi project trust and review package source before installation.
 
-Automatic control never targets production. Missing computer-use, expired login, MFA/CAPTCHA, host mismatch, or unavailable secret-provider resolution stops before push and yields the manual test-release handoff.
+Automatic control never targets production. Missing ego lite/skill/CLI, expired login, MFA/CAPTCHA, user takeover, host mismatch, or unavailable secret-provider resolution stops before push and yields the manual test-release handoff.

@@ -51,7 +51,7 @@ PMODE=$(grep -oE '"mode"\s*:\s*"[^"]*"' "${REQ_DIR}config.json" | head -1 | grep
   - ${REQ_DIR}test-report.md ## Sprint M1 Round 1（含 AC-ID × 用例 × 结果审计表）
   - ${REQ_DIR}bugs/BUG-*.md（如发现）+ qa-scripts/BUG-*-repro.*
 
-必须核对当前 release attempt/environment_revision，并在配置的 test app/operations URL 上验证。Claude 使用 chrome-devtools-mcp，Codex 复用当前登录浏览器，Pi 使用 @injaneity/pi-computer-use@0.4.3。
+必须核对当前 release attempt/environment_revision，并在配置的 test app/operations URL 上验证。Claude 使用 chrome-devtools-mcp，Codex 复用当前登录浏览器，Pi 仅通过 ego lite 的 `ego-browser` skill/CLI 在隔离 task Space 中验证。
 只访问 allowed_hosts；禁从项目文件或 memory 读取明文账号密码。禁读 src/ 和 sa-*.md。禁修代码。
 末尾 ${REQ_DIR}test-report.md 必须 结论: 通过 或 阻塞。
 ```

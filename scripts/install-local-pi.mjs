@@ -26,9 +26,17 @@ if (!installed.includes('pi-subagents')) {
   process.exit(1);
 }
 
-if (!installed.includes('pi-computer-use')) {
-  console.warn('WARN @injaneity/pi-computer-use@0.4.3 is not installed; automatic browser verification will fall back to manual G2.');
-  console.warn('Install: pi install git:github.com/injaneity/pi-computer-use@v0.4.3');
+try {
+  const output = run('ego-browser', ['nodejs'], {
+    input: "console.log('ego-browser ready')\n",
+    stdio: ['pipe', 'pipe', 'ignore'],
+    timeout: 15_000,
+  });
+  if (!output.includes('ego-browser ready')) throw new Error('unexpected ego-browser probe output');
+} catch {
+  console.warn('WARN ego lite is not ready; automatic Pi browser verification will fall back to manual G2.');
+  console.warn('Install the skill with: npx skills add citrolabs/ego-lite');
+  console.warn('Then open ego lite, finish onboarding, and confirm the minimal ego-browser runtime probe from docs/pi-plugin.md succeeds.');
 }
 
 run('pi', ['install', root, '--approve'], { stdio: 'inherit' });
