@@ -196,11 +196,15 @@ function copyDir(src, dst, { skipExisting = false } = {}) {
 
 const TEXT_EXTS = new Set(['.md', '.mjs', '.js', '.json', '.yml', '.yaml', '.sh']);
 
+function normalizeLineEndings(text) {
+  return text.replace(/\r\n?/g, '\n');
+}
+
 function rewriteTextPaths(file) {
   if (!TEXT_EXTS.has(extname(file))) return false;
   let text = readFileSync(file, 'utf-8');
   const before = text;
-  text = text
+  text = normalizeLineEndings(text)
     .replace(/(@cc-nexs\/core\/lib\/)/g, 'lib/')
     .replace(/(@cc-nexs\/core\/lib\/)/g, 'lib/')
     .replace(/\bcore\/lib\//g, 'lib/')
@@ -391,7 +395,7 @@ function generateCodexSkills(dst) {
   let generated = 0;
   for (const fileName of commandFiles) {
     const commandPath = join(commandsDir, fileName);
-    const commandText = readFileSync(commandPath, 'utf-8');
+    const commandText = normalizeLineEndings(readFileSync(commandPath, 'utf-8'));
     const commandName = extractCommandName(commandText, fileName);
     const skillName = normalizeSkillName(commandName);
     if (!skillName) continue;
@@ -457,6 +461,7 @@ The command is complete only when the artifact, state, and summary expected by \
 }
 
 function parseAgentSource(text, file) {
+  text = normalizeLineEndings(text);
   const frontmatter = matchFrontmatter(text);
   if (!frontmatter) throw new Error(`Pi agent source has no frontmatter: ${file}`);
   const description = frontmatter[1].match(/^description:\s*(.+)$/m)?.[1]?.trim() || `cc-nexs role from ${file}`;
