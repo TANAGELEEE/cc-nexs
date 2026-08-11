@@ -40,19 +40,19 @@ workflow:
 ```
 
 - 只维护 `requirements.md` 和 `plan.md` 两份人工文档；HTML 是临时渲染物。
-- 按 plan 的路径所有权并行实现，先用本地 driver 完成 build/start/smoke/e2e，再做一次独立集中 Review。
+- 按 plan 的路径所有权并行实现；本地可执行项完成，环境受限项可结构化 `deferred_to_test`。Fast-track 先 test/CI 与验收再做一次独立集中 Review，standard 保持 Review-first。
 - Review 阻塞只允许一次修复后的 delta closure；test 失败也必须重新本地验证、delta closure 和发布。
 - test 验收通过后停在 Gateway B；只有 `/cc-nexs:approve-release` 才授权合并配置的 base 分支。
 - `--no-auto-test-release` 或 feature `release.test=manual` 显式改走人工 test handoff。
-- driver/test branch/browser/login/host 安全前置不足时，在 push 前自动回退 manual G2。
+- 只有 test environment、candidate、deploy test branch 或 release driver 等交付安全前置不足时才在 push 前停止。browser/login/verification URL 只在部署后检查，缺失进入可恢复的 `manual_required`。
 - 没有 `delivery` 字段的历史需求保持 `per_sprint + manual`。
 - 生产 merge/release 始终人工。
 
-## Browser 前置
+## 部署后 Browser 验收
 
 - Claude Code：`chrome-devtools-mcp` 可调用。
 - Codex：复用当前已登录的 in-app/Chrome session。
-- Pi：优先安装并完成 ego lite 引导以及 `ego-browser` skill；Windows 或 ego lite 不可用时，安装 `@injaneity/pi-computer-use@0.4.3`，并在 `.pi/computer-use.json` 设置 `browser_use: true`、`headless: true`。若两者都不可用则回退 manual G2。
+- Pi：优先安装并完成 ego lite 引导以及 `ego-browser` skill；Windows 或 ego lite 不可用时，安装 `@injaneity/pi-computer-use@0.4.3`，并在 `.pi/computer-use.json` 设置 `browser_use: true`、`headless: true`。若两者都不可用，已完成的 test delivery 保留，verification 进入 `manual_required`。
 
 只访问 `release.test.allowed_hosts`。URL 可从项目说明发现，但自动执行前必须进入结构化 `release.test` 配置。禁止从 memory、Markdown、Git 或 config 读取明文账号密码；优先复用登录，必要时仅使用 opaque `credential_ref` 对接外部 secret provider。
 
@@ -89,7 +89,7 @@ hotfix              独立 P0/P1/P2/P3 mini-Lean：scope binding -> local -> one
 
 - workspace/repository worktree 与 branch assignment 正确；
 - requirements、config.mode 和 progress mode 一致；
-- lean/hotfix 已配置 `workflow.local_verify.driver`，并保持批准 plan 或绑定 hotfix scope 不变；
+- Lean 使用已配置的 `workflow.local_verify.driver`，或在缺失时运行 plan-approved 命令并记录结构化 command/exit/proof；Hotfix 仍必须配置 driver。两者都保持批准 plan 或绑定 hotfix scope 不变；
 - full 多 Sprint 切片覆盖全部 AC；
-- 自动 test 发布项目已配置 test_branch、driver、test URLs 和 allowed_hosts；
-- 当前 runtime 的 browser prerequisite 满足，否则接受 manual fallback。
+- 自动 test 发布项目已为 deploy 仓配置 test_branch 和 driver；Lean local 仓在批准 plan 中显式绑定；
+- test URLs、allowed_hosts 与 browser prerequisite 在部署后验证；缺失时接受可恢复的 manual verification，不回滚 delivery。

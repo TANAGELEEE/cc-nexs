@@ -26,7 +26,7 @@ SPRINT=$(echo "$@" | grep -oE 'sprint=[0-9]+' | cut -d= -f2)
 
 ### 2. 按 phase 分派
 
-调起独立 `qa-claude` agent，按 `agents/qa-claude.md` 的模式执行。Codex runtime 将其映射为原生隔离 agent；Pi full mode 不在 P2 支持范围。
+调起独立 `qa-claude` agent，按 `agents/qa-claude.md` 的模式执行。Codex 映射为原生隔离 agent；Pi 映射为 `cc-nexs.qa`，浏览器 fallback 使用 `cc-nexs.qa-computer-use`。
 
 #### phase=cases
 

@@ -1,8 +1,8 @@
 ---
-description: "Tech Lead 编码入口。支持 Sprint 开发、文档同步、评审修订、跨 Sprint 集成修订和发布后 BUG 修复。"
+description: "Tech Lead 编码入口。Sprint 实现可按已批准 repository assignment 并行；文档、评审修订与修复保持边界隔离。"
 disable-model-invocation: true
 allowed-tools: "Read, Write, Edit, Bash, Glob, Grep, Task"
-argument-hint: "[需求编号] [--mode=feat|fix|doc|review-fix|integration] [--sprint=N | --bug=ID]"
+argument-hint: "[需求编号] [--mode=feat|fix|doc|review-fix|integration] [--sprint=N] [--assignment=IMP-id] [--bug=ID]"
 ---
 
 # /cc-nexs:dev
@@ -11,6 +11,7 @@ argument-hint: "[需求编号] [--mode=feat|fix|doc|review-fix|integration] [--s
 - `$1` = 需求编号
 - `--mode=feat`（默认）/ `fix` / `doc` / `review-fix` / `integration` / `re-evaluate`
 - `--sprint=N` 编码 Sprint N（feat / doc 必需）
+- `--assignment=IMP-id` 将 feat 限定为 ownership 表中的一个 repository/worktree/Allowed paths；新 spec 的并行 worker 必传
 - `--bug=BUG-<N>` 修 bug（fix 必需）
 
 ## 执行步骤
@@ -45,14 +46,15 @@ fi
 
 ```
 你是 Tech Lead（独立 session）。
-读 ${REQ_DIR}spec.md，重点是 Sprint M${SPRINT} 覆盖的 AC-ID 子集。
-实现该 sprint 的代码，目标：
-- 该 sprint 所有 AC 都有对应实现
-- 项目配置命中的 build / test / lint 命令退出码均为 0
+先验证 G1 binding 仍匹配当前 spec，再读 Sprint M${SPRINT} 的 Assignment ${ASSIGNMENT_ID}。
+只实现该 Assignment 的 AC 子集，且只能写其 repository assigned worktree + Allowed paths，目标：
+- Assignment 覆盖的 AC 有对应实现；不得承担 sibling Assignment
+- 表中 Validation 与项目配置命中的局部 build / test / lint 命令退出码均为 0
 - 遵守目标仓库指令文件和私有 overlay 规则
-- 单 sprint commit ≤ 10
+- 返回精确 changed paths、验证证据和建议 candidate message
 按 agents/tech-lead-claude.md 的硬规则执行。
 禁改 spec.md / 禁改 AC / 禁改 progress.md。
+禁写 dev-plan.md / api-doc.md / deploy.md；这些由现有 DOC_SYNC 单写者阶段处理。
 ```
 
 #### fix 模式
@@ -108,11 +110,11 @@ fi
 
 ### 3. 编译自检
 
-调用 `/cc-nexs:build`，由 `cc-nexs.config.yml` 和 workspace module 映射选择 build / test / lint 命令；任一失败即停止。
+assignment worker 调用 `/cc-nexs:build` 时仅选择该 repository/changed modules；全部实现 wave join 后，Orchestrator 再按 repository 做一次 aggregate build/test/lint（可跨仓并行、仓内遵守依赖）。任一失败不推进状态、不创建新 candidate。
 
 ### 4. 返回候选路径
 
-不得自行 stage 或 commit。返回本次精确变更路径和建议的 candidate message，Orchestrator 交给 Git Custodian 生成候选提交。
+不得自行 stage 或 commit。单个 worker 返回后只做路径校验；所有 wave 和 aggregate verification 成功后，Orchestrator 才让 Git Custodian 按 repository 串行生成恰好一个候选提交。
 
 ### 5. 不推进状态
 
@@ -122,7 +124,8 @@ fi
 
 ```
 ✅ Tech Lead 完成: mode=<mode> sprint=M<N>
-   commits: <git log --oneline 本次新增>
+   assignment: <IMP-id 或 legacy-single>
+   changed paths: <精确路径>
    project verification: ✅
 👉 接下来: /cc-nexs:run <编号>
 ```

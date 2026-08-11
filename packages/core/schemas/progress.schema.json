@@ -102,7 +102,7 @@
           "properties": {
             "policy": { "enum": ["auto_if_ready", "manual", "disabled"] },
             "status": {
-              "enum": ["idle", "running", "succeeded", "failed", "deployed_needs_manual_verification", "verified"]
+              "enum": ["idle", "running", "deploying", "succeeded", "failed", "deployed_needs_manual_verification", "verified"]
             },
             "attempts": {
               "type": "array",

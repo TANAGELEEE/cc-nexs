@@ -238,7 +238,7 @@ models:
 # orchestrator 启动时读需求目录的 config.json.mode 选择对应分支；lean 为新需求默认。
 modes:
   lean:
-    description: 计划前置、两个人工门禁、一次集中 Review、强制本地集成验证和单次 test 发布。
+    description: 计划前置、两个人工门禁；合格小需求默认先快速交付 test 再集中 Review，环境型本地检查可结构化转 test 必验。
     enabled:
       - lean-planner
       - lean-developer
@@ -267,7 +267,7 @@ modes:
       evaluator_reject: 1
 
   full:
-    description: 完整五方异构 + 现状勘察前置。Repo Scout 先扫 src/ 产 repo-context.md，再 Planner / Tech Lead / SA / QA / Evaluator 严格分离。
+    description: 完整五方异构 + 现状勘察前置。多端按批准 repository wave 并行 Tech Lead 实现，同时保持 Planner / SA / QA / Evaluator 隔离。
     enabled:
       - repo-scout
       - planner
@@ -280,7 +280,7 @@ modes:
     g2_enabled: true            # final_only 默认自动 test release；G2 仅作显式退出/前置不足 fallback
 
   fast:
-    description: 单 sprint 三角色合并。Fullstack（Planner+Tech Lead）/ Reviewer（SA+Evaluator）/ Verifier（QA cases+run+regression）。
+    description: 单 sprint 三角色合并；多端按批准 repository wave 并行 Fullstack code worker，join 后单一文档 owner。Reviewer 与 Verifier 保持隔离。
     enabled:
       - fullstack
       - reviewer
@@ -321,6 +321,7 @@ paths:
 workflow:
   default_mode: lean
   sprint_enabled: true
+  implementation_max_parallel: 4
   human_gate_after: spec_reviewing_pass
   sprint_delivery: final_only
   test_release:

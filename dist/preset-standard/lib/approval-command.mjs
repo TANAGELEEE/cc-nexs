@@ -3,10 +3,12 @@ import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'n
 import { basename, dirname, join, resolve } from 'node:path';
 
 import { approveDeployGate, approveHumanGate, transitionState } from './progress-io.mjs';
-import { approveProgressGate, readProgressV2 } from './progress-v2.mjs';
+import { approveProgressGate, readProgressV2, recoverApprovedImplementationSprint } from './progress-v2.mjs';
 import { assertHotfixScopeCurrent } from './hotfix-contract.mjs';
 import { assertPlanApprovalCurrent, planApprovalBinding } from './plan-contract.mjs';
 import { syncHotfixChangeStatuses, syncPlanChangeStatuses } from './release-change-docs.mjs';
+import { loadWorkspaceConfig } from './config-loader.mjs';
+import { assertImplementationApprovalCurrent, implementationApprovalBinding } from './implementation-plan.mjs';
 
 const GATES = new Set(['g1', 'g2', 'plan', 'release']);
 const SKIP_DIRS = new Set([
@@ -38,13 +40,39 @@ export function approveFeatureGate({
     if (before.mode !== 'lean') throw new Error(`plan gate requires lean mode, found ${before.mode}`);
     const existing = before.gates.plan;
     if (existing?.approved && before.state !== 'PLAN_PENDING_HUMAN') {
+      if (existing.binding?.delivery_contract_version === 1) {
+        if ((before.delivery?.test?.attempts?.length || 0) > 0) {
+          throw new Error('[cc-nexs] cannot bind a legacy Gateway A test target after test delivery has started');
+        }
+        const upgradedBinding = planApprovalBinding(dirname(progressFile), {
+          requireRiskTier: true,
+          requireDeliveryLane: true,
+        });
+        upgradedBinding.test_targets = assertLeanTestDeliveryContract({
+          binding: upgradedBinding, progress: before, progressFile,
+        });
+        upgradedBinding.delivery_contract_version = 2;
+        const upgraded = approveProgressGate(progressFile, { gate: 'plan', approver: actor, binding: upgradedBinding });
+        return approvalResult({
+          progressFile, progress: upgraded, gate, sprint: null,
+          approval: upgraded.gates.plan, alreadyApproved: false,
+        });
+      }
       return approvalResult({ progressFile, progress: before, gate, sprint: null, approval: existing, alreadyApproved: true });
     }
     if (before.state !== 'PLAN_PENDING_HUMAN') {
       throw new Error(`plan gate requires PLAN_PENDING_HUMAN, found ${before.state}`);
     }
-    const binding = planApprovalBinding(dirname(progressFile), { requireRiskTier: true });
-    if (!existing?.approved || existing?.binding?.combined_sha256 !== binding.combined_sha256) {
+    const binding = planApprovalBinding(dirname(progressFile), {
+      requireRiskTier: true,
+      requireDeliveryLane: true,
+    });
+    binding.test_targets = assertLeanTestDeliveryContract({ binding, progress: before, progressFile });
+    binding.delivery_contract_version = 2;
+    if (!existing?.approved
+      || existing?.binding?.combined_sha256 !== binding.combined_sha256
+      || existing?.binding?.delivery_contract_version !== binding.delivery_contract_version
+      || JSON.stringify(existing?.binding?.test_targets || {}) !== JSON.stringify(binding.test_targets)) {
       approveProgressGate(progressFile, { gate: 'plan', approver: actor, binding });
     }
     transitionState(markdownFile, {
@@ -68,6 +96,7 @@ export function approveFeatureGate({
     if (!attempt || attempt.status !== 'verified' || attempt.verification?.result !== 'passed') {
       throw new Error('[cc-nexs] release approval requires a verified test release attempt');
     }
+    const baseTargets = assertReleaseCandidateRefsCurrent({ progress: before, progressFile, attempt });
     if (before.mode === 'hotfix' && before.hotfix?.severity === 'P3') {
       const localAttempt = before.local_verification?.attempts?.findLast((item) => item.status === 'passed' && item.fingerprint === attempt.fingerprint);
       if (!localAttempt?.evidence?.some((item) => item?.type === 'p3_boundary' && item.files === 1 && item.lines <= 20)) {
@@ -79,6 +108,7 @@ export function approveFeatureGate({
     const binding = {
       candidate_fingerprint: attempt.fingerprint,
       source: attempt.source,
+      base_targets: baseTargets,
       test_attempt: attempt.id,
       environment_revision: attempt.environment_revision,
       plan_binding: before.mode === 'lean' ? before.gates.plan?.binding?.combined_sha256 || null : null,
@@ -95,7 +125,35 @@ export function approveFeatureGate({
     if (before.state !== 'SPEC_PENDING_HUMAN') {
       throw new Error(`G1 requires SPEC_PENDING_HUMAN, found ${before.state}`);
     }
-    if (!existing?.approved) approveHumanGate(markdownFile, { approver: actor });
+    const specFile = join(dirname(progressFile), 'spec.md');
+    if (!existsSync(specFile)) throw new Error('[cc-nexs] G1 requires spec.md');
+    const specText = readFileSync(specFile, 'utf8');
+    const repositories = resolveAssignedCodeRepositories({ progressFile, progress: before });
+    if (!existing?.approved) {
+      const binding = g1BindingWithSprintFallback(
+        implementationApprovalBinding(specText, { repositories, mode: before.mode }),
+        before,
+      );
+      approveHumanGate(markdownFile, { approver: actor, binding });
+    } else {
+      assertImplementationApprovalCurrent(before, specText, {
+        repositories, mode: before.mode, validateProgressSprint: false,
+      });
+      if (!Number.isInteger(existing.binding?.sprint_total) || existing.binding.sprint_total < 1) {
+        const upgradedBinding = g1BindingWithSprintFallback(
+          implementationApprovalBinding(specText, { repositories, mode: before.mode }),
+          before,
+        );
+        approveProgressGate(progressFile, {
+          gate: 'g1', approver: existing.approver || actor, binding: upgradedBinding,
+        });
+      } else {
+        recoverApprovedImplementationSprint(progressFile, { actor });
+      }
+      assertImplementationApprovalCurrent(readProgressV2(progressFile), specText, {
+        repositories, mode: before.mode,
+      });
+    }
     transitionState(markdownFile, {
       from: 'SPEC_PENDING_HUMAN',
       to: 'SPEC_APPROVED',
@@ -145,6 +203,121 @@ export function approveFeatureGate({
       : gate === 'release' ? after.gates.release
         : effectiveSprint === null ? after.gates.g2 : after.gates.g2.sprints[String(effectiveSprint)];
   return approvalResult({ progressFile, progress: after, gate, sprint: effectiveSprint, approval, alreadyApproved: false });
+}
+
+function g1BindingWithSprintFallback(binding, progress) {
+  if (binding.contract_version === 1) return binding;
+  const explicitHistoricalTotal = Number.isInteger(progress.sprint?.total) && progress.sprint.total > 0
+    ? progress.sprint.total
+    : 1;
+  const total = progress.mode === 'full' ? explicitHistoricalTotal : 1;
+  return {
+    ...binding,
+    sprint_contract_version: 0,
+    sprints: Array.from({ length: total }, (_, index) => `M${index + 1}`),
+    sprint_total: total,
+  };
+}
+
+function assertLeanTestDeliveryContract({ binding, progress, progressFile }) {
+  const workspaceRoot = findWorkspaceConfigRoot(dirname(progressFile));
+  const workspace = loadWorkspaceConfig({ projectRoot: workspaceRoot });
+
+  const workspaceById = new Map(workspace.repositories.map((repository) => [repository.id, repository]));
+  const docsRepositories = new Set(workspace.repositories
+    .filter((repository) => repository.docs === true || repository.id === workspace.docs_repository)
+    .map((repository) => repository.id));
+  const assignedCodeRepositories = [];
+  for (const repository of Object.keys(progress.repositories || {})) {
+    if (!workspaceById.has(repository)) {
+      throw new Error(`[cc-nexs] Gateway A found assigned repository missing from workspace config: ${repository}`);
+    }
+    if (!docsRepositories.has(repository)) assignedCodeRepositories.push(repository);
+  }
+  assignedCodeRepositories.sort();
+
+  const assigned = new Set(assignedCodeRepositories);
+  const declared = Object.keys(binding.test_delivery || {}).sort();
+  const unknown = declared.filter((repository) => !assigned.has(repository));
+  if (unknown.length > 0) {
+    throw new Error(`[cc-nexs] Gateway A plan.md has unknown or unassigned test_delivery repositories: ${unknown.join(', ')}`);
+  }
+  const missing = assignedCodeRepositories.filter((repository) => !declared.includes(repository));
+  if (missing.length > 0) {
+    throw new Error(`[cc-nexs] Gateway A plan.md is missing test_delivery coverage for assigned code repositories: ${missing.join(', ')}`);
+  }
+
+  const deployRepositories = assignedCodeRepositories
+    .filter((repository) => binding.test_delivery[repository] === 'deploy');
+  if (deployRepositories.length === 0) {
+    throw new Error('[cc-nexs] Gateway A requires at least one assigned code repository with test_delivery.<repo>: deploy');
+  }
+  for (const repository of deployRepositories) {
+    if (!workspaceById.get(repository).test_branch) {
+      throw new Error(`[cc-nexs] Gateway A repository ${repository} is marked deploy but has no test_branch in workspace config`);
+    }
+  }
+  return Object.fromEntries(deployRepositories.map((repository) => [
+    repository,
+    workspaceById.get(repository).test_branch,
+  ]));
+}
+
+function assertReleaseCandidateRefsCurrent({ progress, progressFile, attempt }) {
+  const workspaceRoot = findWorkspaceConfigRoot(dirname(progressFile));
+  const workspace = loadWorkspaceConfig({ projectRoot: workspaceRoot });
+  const workspaceById = new Map(workspace.repositories.map((repository) => [repository.id, repository]));
+  const baseTargets = {};
+  for (const [repository, testedCommit] of Object.entries(attempt.source || {})) {
+    const configured = workspaceById.get(repository);
+    const assignment = progress.repositories?.[repository];
+    const candidateRef = assignment?.candidate?.ref;
+    if (!configured || !candidateRef) {
+      throw new Error(`[cc-nexs] release approval cannot resolve current candidate ref for ${repository}`);
+    }
+    if (typeof assignment.base_branch !== 'string' || !assignment.base_branch.trim()) {
+      throw new Error(`[cc-nexs] release approval requires an assigned base branch for ${repository}`);
+    }
+    if (configured.base_branch !== assignment.base_branch) {
+      throw new Error(`[cc-nexs] release approval base branch changed since candidate assignment for ${repository}`);
+    }
+    let currentCommit;
+    try {
+      currentCommit = execFileSync('git', ['-C', configured.absolute_path, 'rev-parse', candidateRef], { encoding: 'utf8' }).trim();
+    } catch (error) {
+      throw new Error(`[cc-nexs] release approval cannot resolve candidate ref for ${repository}: ${error.message}`);
+    }
+    if (currentCommit !== testedCommit) {
+      throw new Error(`[cc-nexs] release approval candidate ref moved after test verification for ${repository}`);
+    }
+    baseTargets[repository] = configured.base_branch;
+  }
+  return baseTargets;
+}
+
+function findWorkspaceConfigRoot(start) {
+  let current = resolve(start);
+  while (true) {
+    if (existsSync(join(current, '.cc-nexs', 'workspace.yml'))
+      || existsSync(join(current, '.cc-nexs', 'workspace.json'))) return current;
+    const parent = dirname(current);
+    if (parent === current) {
+      throw new Error('[cc-nexs] Gateway A requires .cc-nexs/workspace.yml or workspace.json');
+    }
+    current = parent;
+  }
+}
+
+export function resolveAssignedCodeRepositories({ progressFile, progress }) {
+  const workspaceRoot = findWorkspaceConfigRoot(dirname(progressFile));
+  const workspace = loadWorkspaceConfig({ projectRoot: workspaceRoot });
+  const docs = new Set(workspace.repositories
+    .filter((repository) => repository.docs === true || repository.id === workspace.docs_repository)
+    .map((repository) => repository.id));
+  const workspaceIds = new Set(workspace.repositories.map((repository) => repository.id));
+  return Object.keys(progress.repositories || {}).filter((repository) => (
+    workspaceIds.has(repository) && !docs.has(repository)
+  ));
 }
 
 export function resolveFeatureProgress({ cwd = process.cwd(), featureId, progressPath = null }) {

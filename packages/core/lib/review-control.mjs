@@ -2,8 +2,8 @@ import { dirname } from 'node:path';
 
 import { resolveCandidateContext } from './candidate-context.mjs';
 import { assertHotfixScopeCurrent } from './hotfix-contract.mjs';
-import { assertPlanApprovalCurrent } from './plan-contract.mjs';
-import { recordConsolidatedReview } from './progress-v2.mjs';
+import { approvedPlanDeliveryLane, assertPlanApprovalCurrent } from './plan-contract.mjs';
+import { candidateFingerprint, recordConsolidatedReview } from './progress-v2.mjs';
 
 export function recordLeanReview({
   cwd = process.cwd(),
@@ -16,7 +16,17 @@ export function recordLeanReview({
 } = {}) {
   const context = resolveCandidateContext({ cwd, featureId, progressPath });
   if (!['lean', 'hotfix'].includes(context.progress.mode)) throw new Error(`[cc-nexs] review control requires lean or hotfix mode, found ${context.progress.mode}`);
-  if (context.progress.mode === 'lean') assertPlanApprovalCurrent(context.progress, dirname(context.progressFile));
+  let leanDeliveryLane = 'standard';
+  if (context.progress.mode === 'lean') {
+    assertPlanApprovalCurrent(context.progress, dirname(context.progressFile));
+    leanDeliveryLane = approvedPlanDeliveryLane(context.progress, dirname(context.progressFile));
+    if (!closure && !gatewayBDelta && leanDeliveryLane === 'fast-track') {
+      const attempt = context.progress.delivery?.test?.attempts?.at(-1);
+      if (attempt?.status !== 'verified' || attempt.fingerprint !== candidateFingerprint(context.source)) {
+        throw new Error('[cc-nexs] fast-track consolidated Review requires test verification for the exact candidate');
+      }
+    }
+  }
   else {
     assertHotfixScopeCurrent(context.progress, dirname(context.progressFile));
     if (context.progress.hotfix?.severity === 'P3') throw new Error('[cc-nexs] P3 skips model Review after deterministic boundary proof');
@@ -29,7 +39,9 @@ export function recordLeanReview({
     ? (closure || gatewayBDelta ? ['HOTFIX_LOCAL_REVERIFYING', 'HOTFIX_DELTA_REVIEW'] : ['HOTFIX_LOCAL_VERIFYING', 'HOTFIX_REVIEWING'])
     : gatewayBDelta
       ? ['GATEWAY_B_LOCAL_REVERIFYING', 'GATEWAY_B_DELTA_REVIEW']
-      : closure ? ['LOCAL_REVERIFYING', 'REVIEW_CLOSURE'] : ['LOCAL_VERIFYING', 'CONSOLIDATED_REVIEW'];
+      : closure
+        ? ['LOCAL_REVERIFYING', 'REVIEW_CLOSURE']
+        : ['LOCAL_VERIFYING', 'CONSOLIDATED_REVIEW', ...(leanDeliveryLane === 'fast-track' ? ['TEST_VERIFIED'] : [])];
   if (!expectedStates.includes(context.progress.state)) {
     throw new Error(`[cc-nexs] ${closure ? 'review closure' : 'consolidated review'} requires ${expectedStates.join(' or ')}, found ${context.progress.state}`);
   }

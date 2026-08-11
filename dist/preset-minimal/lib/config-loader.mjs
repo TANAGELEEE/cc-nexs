@@ -410,10 +410,15 @@ export function loadWorkspaceConfig({ projectRoot = process.cwd(), configPath = 
     if (!raw.allow_external_paths && absolutePath !== root && !absolutePath.startsWith(`${root}${sep}`)) {
       throw new Error(`[cc-nexs] repository ${repo.id} escapes workspace root`);
     }
+    const baseBranch = repo.base_branch || 'main';
+    const testBranch = repo.test_branch || null;
+    if (testBranch && testBranch === baseBranch) {
+      throw new Error(`[cc-nexs] repository ${repo.id} test_branch must differ from base_branch; automatic test delivery must never target the base branch`);
+    }
     return {
       ...repo,
-      base_branch: repo.base_branch || 'main',
-      test_branch: repo.test_branch || null,
+      base_branch: baseBranch,
+      test_branch: testBranch,
       release_order: Number.isInteger(repo.release_order) ? repo.release_order : 100,
       absolute_path: absolutePath,
     };

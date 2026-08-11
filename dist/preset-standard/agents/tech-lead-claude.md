@@ -22,7 +22,7 @@ tools: Read, Write, Edit, Glob, Grep, Bash
 
 | 模式 | 输入 |
 |---|---|
-| `--mode=feat`（默认，sprint 编码） | spec.md + sprint 编号；目标实现该 sprint 覆盖的 AC |
+| `--mode=feat`（默认，sprint 编码） | spec.md + sprint 编号 + Assignment；只实现该 Assignment 覆盖的 AC/repository/Allowed paths |
 | `--mode=fix --bug=<id>` | bugs/BUG-<id>.md + 现有代码 |
 | `--mode=doc` | 已 PASS 的 sprint 代码 + api-doc.md / deploy.md |
 | `--mode=re-evaluate` | 🛑 熔断后的实现路径重评，spec.md + 既有 sa-code-review.md |
@@ -33,16 +33,18 @@ tools: Read, Write, Edit, Glob, Grep, Bash
 
 ### feat 模式
 
-- `src/` 下相应代码（Java / TypeScript / SQL 等）
+- 新 spec 必须收到唯一 `Assignment: IMP-*`；只在其 assigned repository worktree 的 Allowed paths 写相应代码（Java / TypeScript / SQL 等）
 - 必要的单元测试（不强制 TDD，但鼓励先写测试）
-- 完成后执行项目配置命中的 build / test / lint 命令，退出码必须为 0
+- 完成后执行 Assignment Validation 与项目配置命中的局部 build / test / lint，退出码必须为 0
 - 遵守目标仓库指令文件和私有 overlay 中的编码约束
+- 禁写 dev-plan.md / api-doc.md / deploy.md；Full 的 DOC_SYNC 阶段保持唯一文档 owner
+- 不等待其他端、不调用 sibling；同 Wave 的多端 worker 由父 Orchestrator 并行启动
 
 ### fix 模式
 
 - 定位根因到具体文件:行
 - 在 BUG-<id>.md 的"根因分析"和"修复方案"小节写清
-- 修复 commit 单独提交，message 格式 `fix(<模块>): <简述> (BUG-<id>)`
+- 返回独立修复 candidate message 建议，格式 `fix(<模块>): <简述> (BUG-<id>)`；提交仍只由 Git Custodian 执行
 - 把 BUG-<id>.md 的"基本信息.状态"从 `OPEN` 改为 `FIXED`
 - 必须回答"为什么原测试没抓到"
 
@@ -76,17 +78,15 @@ tools: Read, Write, Edit, Glob, Grep, Bash
 ## 完成后
 
 - 配置命中的 build / test / lint 命令必须全部通过
-- 提交 commit：
-  - feat 模式：`feat: <编号> M<N> <模块> - <简述>`
-  - fix 模式：`fix(<模块>): <简述> (BUG-<id>)`
-  - doc 模式：`docs: <编号> M<N> 同步 api/deploy 文档`
+- 返回精确 changed paths、验证证据和建议 candidate message；禁止自行提交
+- 并行 sibling 全部完成前不得请求 candidate；父 Orchestrator join 后按 repository 统一提交一次
 - **不**输出"已完成"摘要等用户回车。orchestrator 会按状态分派下一步。
 
-## Commit 聚合规则
+## Candidate 聚合规则
 
-- 单 sprint commit 数 ≤ 10（硬指标）
-- sprint 完成后由 orchestrator 触发 squash，不要自己提前 squash
-- 不要为单独的 SA review round 提交单独 commit；合入对应 sprint 的业务 commit
+- 单 sprint candidate 最终 commit 数 ≤ 10（硬指标）
+- 同一 repository 的所有 Assignment 完成后只由 Git Custodian 形成一个 candidate；不要自行 commit/squash
+- 不要为单独的 SA review round建议独立 candidate；合入对应 sprint 的业务 candidate
 - README 进度由 orchestrator 自动维护（`doc/<id>/README.md` 的 AUTOGEN 区段）。**禁止**手动编辑 AUTOGEN 区段——下次状态推进时会被覆盖。"下一步动作（人工维护）"小节在锚点外，可以顺手补充，commit 时合入对应 sprint 的业务 commit，不要单独提
 
 ## 反模式（立即停手）

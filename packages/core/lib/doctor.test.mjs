@@ -77,12 +77,35 @@ function fixture({
   return root;
 }
 
-function runDoctor(root, strict = false, env = {}) {
-  return spawnSync(process.execPath, [doctor, root, ...(strict ? ['--release-test'] : [])], {
+function runDoctor(root, strict = false, env = {}, feature = null) {
+  return spawnSync(process.execPath, [doctor, root, ...(strict ? ['--release-test'] : []), ...(feature ? ['--feature', feature] : [])], {
     encoding: 'utf8',
     env: { ...process.env, ...env },
   });
 }
+
+test('release doctor scopes feature artifacts without hiding workspace safety', () => {
+  const root = fixture({ complete: true });
+  const target = join(root, 'docs', 'doc', '09.target');
+  const unrelated = join(root, 'docs', 'doc', '10.stale');
+  mkdirSync(target, { recursive: true });
+  mkdirSync(unrelated, { recursive: true });
+  writeProgressV2(join(target, 'progress.json'), createProgressV2({
+    featureId: '09', featureSlug: 'target', preset: 'preset-standard', mode: 'lean',
+  }));
+  writeFileSync(join(unrelated, 'progress.json'), '{ definitely not valid JSON\n');
+  try {
+    const global = runDoctor(root, true);
+    assert.equal(global.status, 1);
+    assert.match(global.stderr, /10\.stale/);
+
+    const scoped = runDoctor(root, true, {}, '09');
+    assert.equal(scoped.status, 0, scoped.stderr);
+    assert.doesNotMatch(scoped.stderr, /10\.stale/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 function installFakeCommand(root, command, output) {
   const bin = join(root, 'bin');
@@ -98,10 +121,10 @@ test('doctor warns in normal mode but fails strict release readiness', () => {
   try {
     const normal = runDoctor(root);
     assert.equal(normal.status, 0);
-    assert.match(normal.stderr, /missing test_branch/);
+    assert.match(normal.stderr, /has no test_branch; Lean may use it locally only/);
     const strict = runDoctor(root, true);
     assert.equal(strict.status, 1);
-    assert.match(strict.stderr, /missing test_branch/);
+    assert.match(strict.stderr, /at least one code repository with test_branch/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -113,6 +136,21 @@ test('doctor rejects plaintext credentials even outside strict mode', () => {
     const result = runDoctor(root);
     assert.equal(result.status, 1);
     assert.match(result.stderr, /plaintext credential field is forbidden/);
+
+    writeFileSync(join(root, 'cc-nexs.config.json'), `${JSON.stringify({
+      preset_path: 'preset',
+      credentials: { api_key_env: 'TEST_API_KEY', credential_ref: 'keychain://test/key' },
+    })}\n`);
+    const references = runDoctor(root);
+    assert.equal(references.status, 0, references.stderr);
+
+    writeFileSync(join(root, 'cc-nexs.config.json'), `${JSON.stringify({
+      preset_path: 'preset',
+      release: { test: { secret_access_key: 'literal-secret' } },
+    })}\n`);
+    const accessKey = runDoctor(root);
+    assert.equal(accessKey.status, 1);
+    assert.match(accessKey.stderr, /secret_access_key/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -133,7 +171,7 @@ test('doctor only accepts ego-lite as the Pi browser provider', () => {
   const root = fixture({ complete: true, piProvider: 'unsupported-provider' });
   try {
     const result = runDoctor(root, true);
-    assert.equal(result.status, 1);
+    assert.equal(result.status, 0, result.stderr);
     assert.match(result.stderr, /pi_provider must be ego-lite/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -145,11 +183,11 @@ test('doctor requires the pinned headless Pi fallback contract', () => {
   const notHeadless = fixture({ complete: true, piFallbackHeadless: false });
   try {
     const providerResult = runDoctor(wrongProvider, true);
-    assert.equal(providerResult.status, 1);
+    assert.equal(providerResult.status, 0, providerResult.stderr);
     assert.match(providerResult.stderr, /pi_fallback\.provider must be @injaneity\/pi-computer-use@0\.4\.3/);
 
     const headlessResult = runDoctor(notHeadless, true);
-    assert.equal(headlessResult.status, 1);
+    assert.equal(headlessResult.status, 0, headlessResult.stderr);
     assert.match(headlessResult.stderr, /pi_fallback\.headless must be true/);
   } finally {
     rmSync(wrongProvider, { recursive: true, force: true });
@@ -174,7 +212,7 @@ test('doctor probes the ego lite runtime for Pi release readiness', () => {
       HOME: root,
       PATH: `${readyBin}:${process.env.PATH || ''}`,
     });
-    assert.equal(unavailable.status, 1);
+    assert.equal(unavailable.status, 0, unavailable.stderr);
     assert.match(unavailable.stderr, /pi-computer-use@0\.4\.3 is not installed/);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -203,7 +241,7 @@ test('doctor falls back to computer-use only with effective headless=true', () =
       PATH: `${bin}:${process.env.PATH || ''}`,
       PI_COMPUTER_USE_HEADLESS: '0',
     });
-    assert.equal(unsafe.status, 1);
+    assert.equal(unsafe.status, 0, unsafe.stderr);
     assert.match(unsafe.stderr, /pi-computer-use headless must be true/);
   } finally {
     rmSync(root, { recursive: true, force: true });

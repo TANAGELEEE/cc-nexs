@@ -102,34 +102,21 @@ i18n:
   test_fail: "阻塞"
 ```
 
-## manifest.json 调整
+## plugin.json 元数据
+
+preset 源码使用 `.claude-plugin/plugin.json`，不是旧的 `manifest.json`。这里只维护名称、描述、许可证等元数据；不要列举 core commands/agents，也不要写 `../core/...` 路径。`pnpm build` 会把 core 与 preset 内容物化到自包含的 `dist/preset-myteam/`，同时同步根 marketplace。
 
 ```json
 {
-  "name": "cc-nexs",
+  "name": "cc-nexs-myteam",
   "version": "0.1.0",
-  "commands": [
-    "../core/commands/run.md",
-    "../core/commands/approve-spec.md",
-    "../core/commands/status.md",
-    "../core/commands/init.md",
-    "commands/<本 preset 自有命令>.md"
-  ],
-  "agents": [...],
-  "skills": [...],
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash|Edit|Write|Read",
-        "command": "node -e \"const p=require('node:path'),u=require('node:url'),r=process.env.PLUGIN_ROOT||process.env.CLAUDE_PLUGIN_ROOT||process.env.CC_NEXS_PLUGIN_ROOT;if(!r)process.exit(1);import(u.pathToFileURL(p.join(r,'..','core','hooks','role-boundary-guard.mjs')).href)\""
-      }
-      // ...
-    ]
-  }
+  "description": "cc-nexs preset for my team",
+  "license": "MIT",
+  "keywords": ["claude-code", "plugin", "workflow"]
 }
 ```
 
-`../core/...` 路径在 monorepo 内有效。如果将来分仓发布，需要改成 npm 包路径或绝对路径。
+如果要支持 Codex，同时维护 `.codex-plugin/plugin.json` 的 Codex UI 元数据，并固定 `"skills": "./codex-skills/"`；这些 skills 由 build 从同一批 authoritative commands 生成，不要手写副本。执行 build/三端验证前必须把 `preset-myteam` 加到根 `release-presets.json`，因为 build 只接受明确列出的发布 preset。
 
 ## 角色 agent 文件骨架
 
@@ -198,14 +185,18 @@ node packages/core/lib/validate-json.mjs \
   packages/core/schemas/preset.schema.json \
   packages/preset-myteam/preset.yml
 
-# 2. manifest.json 合法性
-node -e "JSON.parse(require('fs').readFileSync('packages/preset-myteam/.claude-plugin/manifest.json'))"
+# 2. plugin metadata + 全量生成物
+node -e "JSON.parse(require('fs').readFileSync('packages/preset-myteam/.claude-plugin/plugin.json'))"
+pnpm build
+node scripts/validate-claude-plugins.mjs
+node scripts/validate-codex-plugins.mjs
+node scripts/validate-pi-package.mjs
 
 # 3. hook 语法检查
 node --check packages/preset-myteam/hooks/*.mjs 2>/dev/null || echo "no custom hooks"
 
-# 4. 装载测试
-ln -s "$PWD/packages/preset-myteam" ~/.claude/plugins/cc-nexs-test
+# 4. 装载测试：只装 build 后的自包含 dist，不直接 symlink packages 源码
+pnpm install:local
 # 在测试项目中跑 /cc-nexs:status 验证 plugin 被识别
 ```
 
@@ -214,5 +205,6 @@ ln -s "$PWD/packages/preset-myteam" ~/.claude/plugins/cc-nexs-test
 如果你的新 preset 适合开源回贡：
 
 1. 在 `pnpm-workspace.yaml` 已有的 `packages/*` glob 自动包含
-2. 在根 `README.md` 的 preset 表格加一行
-3. 提 PR 到 cc-nexs 主仓
+2. 在根 `release-presets.json` 加入 `preset-myteam`
+3. 在根 `README.md` 的 preset 表格加一行
+4. 提 PR 到 cc-nexs 主仓

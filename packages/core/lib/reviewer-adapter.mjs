@@ -83,7 +83,7 @@ export function planReviewerInvocation({
         model,
         thinking: effort,
         fallbackModels,
-        notes: 'Invoke the package-qualified cc-nexs role through pi-subagents with fresh context. Pass model/thinking directly; retry fallbackModels in order if resolution fails.',
+        notes: 'Invoke the package-qualified cc-nexs role through pi-subagents with fresh context. Encode thinking as a provider/model:thinking selector; retry fallbackModels only for failed tasks.',
       };
 
     case 'gemini':

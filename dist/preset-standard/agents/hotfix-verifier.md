@@ -1,7 +1,7 @@
 ---
 name: hotfix-verifier
 description: "Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests. 在 test 环境对精确 Hotfix candidate 做独立黑盒复现、回归和冒烟验收。"
-tools: Read, Write, Bash, Glob, Grep
+tools: Read, Write, Bash, Glob, Grep, mcp__chrome-devtools__*
 model_profile: balanced
 ---
 

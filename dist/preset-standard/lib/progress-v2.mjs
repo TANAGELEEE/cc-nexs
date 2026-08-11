@@ -3,6 +3,8 @@ import { basename, dirname, join } from 'node:path';
 import { relative, resolve, sep } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 
+import { jsonValuesEqual } from './canonical-json.mjs';
+
 export const PROGRESS_SCHEMA_VERSION = 2;
 
 const TEST_RELEASE_INVALIDATION_STATES = new Set([
@@ -136,9 +138,14 @@ function candidateFingerprint(source) {
   return createHash('sha256').update(JSON.stringify(normalized)).digest('hex');
 }
 
+function hasEvidence(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return Object.keys(value).length > 0;
+}
+
 function assertCandidateMutationAllowed(progress) {
-  if (progress.delivery?.test?.status === 'running') {
-    throw new Error('[cc-nexs] cannot update a repository candidate while test release is running');
+  if (['running', 'deploying'].includes(progress.delivery?.test?.status)) {
+    throw new Error('[cc-nexs] cannot update a repository candidate while test release is running or deploying');
   }
 }
 
@@ -167,6 +174,9 @@ export function beginTestRelease(file, {
   const fingerprint = releaseFingerprint(source);
   const previous = testDelivery.attempts.at(-1);
   if (previous?.fingerprint === fingerprint) {
+    if (previous.status === 'deploying' && retry) {
+      throw new Error('[cc-nexs] a deploying test release must be resumed, not retried');
+    }
     if (['succeeded', 'verified'].includes(previous.status) || !retry) {
       return { progress, attempt: previous, reused: true };
     }
@@ -208,6 +218,16 @@ export function recordTestIntegration(file, {
   const testDelivery = requireDelivery(progress).test;
   const attempt = testDelivery.attempts.find((item) => item.id === attemptId);
   if (!attempt) throw new Error(`[cc-nexs] unknown test release attempt: ${attemptId}`);
+  if (attempt !== testDelivery.attempts.at(-1) || attempt.status !== 'running') {
+    throw new Error('[cc-nexs] test integration requires the latest running release attempt');
+  }
+  if (attempt.source?.[repository] !== sourceCommit) {
+    throw new Error(`[cc-nexs] test integration source does not match the bound candidate for ${repository}`);
+  }
+  const existing = attempt.integrations[repository];
+  if (existing && JSON.stringify(existing) !== JSON.stringify({ sourceCommit, targetBranch, targetBefore, integrationCommit })) {
+    throw new Error(`[cc-nexs] test integration evidence is immutable for ${repository}`);
+  }
   attempt.integrations[repository] = { sourceCommit, targetBranch, targetBefore, integrationCommit };
   appendMutationEvent(progress, {
     type: 'delivery.test.repository_integrated', actor,
@@ -225,18 +245,49 @@ export function completeTestRelease(file, {
   environmentRevision = null,
   reason = '',
   actor = 'release-controller',
+  expectedRevision = null,
 } = {}) {
-  const allowed = new Set(['succeeded', 'failed', 'deployed_needs_manual_verification']);
+  const allowed = new Set(['deploying', 'succeeded', 'failed', 'deployed_needs_manual_verification']);
   if (!allowed.has(status)) throw new Error(`[cc-nexs] invalid test release status: ${status}`);
+  if (status === 'deploying' && !hasEvidence(pipeline)) {
+    throw new Error('[cc-nexs] deploying test release requires pipeline evidence');
+  }
+  if (['succeeded', 'deployed_needs_manual_verification'].includes(status)
+    && (!hasEvidence(pipeline) || !hasEvidence(deployment) || !hasEvidence(environmentRevision))) {
+    throw new Error(`[cc-nexs] ${status} test release requires pipeline, deployment, and environment revision evidence`);
+  }
+  if (['succeeded', 'deployed_needs_manual_verification'].includes(status)
+    && String(deployment.environment || '').toLowerCase() !== 'test') {
+    throw new Error(`[cc-nexs] ${status} test release deployment evidence must name the test environment`);
+  }
   const progress = readProgressV2(file);
+  if (expectedRevision !== null && progress.revision !== expectedRevision) {
+    throw new Error(`[cc-nexs] stale progress revision: expected ${expectedRevision}, found ${progress.revision}`);
+  }
   const testDelivery = requireDelivery(progress).test;
   const attempt = testDelivery.attempts.find((item) => item.id === attemptId);
   if (!attempt) throw new Error(`[cc-nexs] unknown test release attempt: ${attemptId}`);
+  if (attempt !== testDelivery.attempts.at(-1)) {
+    throw new Error('[cc-nexs] only the latest test release attempt may be completed');
+  }
+  if (!['running', 'deploying'].includes(attempt.status)) {
+    throw new Error(`[cc-nexs] test release attempt cannot transition from ${attempt.status} to ${status}`);
+  }
+  if (attempt.pipeline && pipeline && !jsonValuesEqual(attempt.pipeline, pipeline)) {
+    throw new Error('[cc-nexs] test release pipeline identity changed while resuming');
+  }
+  if (['succeeded', 'deployed_needs_manual_verification'].includes(status)) {
+    for (const [repository, integration] of Object.entries(attempt.integrations || {})) {
+      if (environmentRevision[repository] !== integration.integrationCommit) {
+        throw new Error(`[cc-nexs] environment revision for ${repository} does not match its test integration`);
+      }
+    }
+  }
   attempt.status = status;
   attempt.pipeline = pipeline;
   attempt.deployment = deployment;
   attempt.environment_revision = environmentRevision;
-  attempt.completed_at = new Date().toISOString();
+  attempt.completed_at = status === 'deploying' ? null : new Date().toISOString();
   if (reason) attempt.reason = reason;
   testDelivery.status = status;
   appendMutationEvent(progress, {
@@ -253,19 +304,36 @@ export function recordTestVerification(file, {
   evidence = [],
   actor = 'verifier',
 } = {}) {
-  if (!['passed', 'blocked'].includes(result)) throw new Error(`[cc-nexs] invalid verification result: ${result}`);
+  if (!['passed', 'blocked', 'manual_required'].includes(result)) {
+    throw new Error(`[cc-nexs] invalid verification result: ${result}`);
+  }
   const progress = readProgressV2(file);
   const testDelivery = requireDelivery(progress).test;
   const attempt = testDelivery.attempts.find((item) => item.id === attemptId);
   if (!attempt) throw new Error(`[cc-nexs] unknown test release attempt: ${attemptId}`);
+  if (attempt !== testDelivery.attempts.at(-1)) {
+    throw new Error('[cc-nexs] only the latest test release attempt may be verified');
+  }
   const previousResult = attempt.verification?.result || null;
+  const duplicateBlocked = result === 'blocked' && previousResult === 'blocked' && attempt.status === 'failed';
+  if (!['succeeded', 'deployed_needs_manual_verification'].includes(attempt.status) && !duplicateBlocked) {
+    throw new Error(`[cc-nexs] test release attempt must be deployed before verification, found ${attempt.status}`);
+  }
+  if (result === 'passed') assertDeferredChecksClosed(progress, attempt, evidence);
   attempt.verification = { result, evidence, recorded_at: new Date().toISOString() };
   if (result === 'passed') {
     attempt.status = 'verified';
     testDelivery.status = 'verified';
-  } else if (progress.mode === 'hotfix' && previousResult !== 'blocked') {
-    progress.counters.fix_per_bug ||= {};
-    progress.counters.fix_per_bug.HOTFIX_TEST = (progress.counters.fix_per_bug.HOTFIX_TEST || 0) + 1;
+  } else if (result === 'manual_required') {
+    attempt.status = 'deployed_needs_manual_verification';
+    testDelivery.status = 'deployed_needs_manual_verification';
+  } else {
+    attempt.status = 'failed';
+    testDelivery.status = 'failed';
+    if (progress.mode === 'hotfix' && previousResult !== 'blocked') {
+      progress.counters.fix_per_bug ||= {};
+      progress.counters.fix_per_bug.HOTFIX_TEST = (progress.counters.fix_per_bug.HOTFIX_TEST || 0) + 1;
+    }
   }
   appendMutationEvent(progress, {
     type: `delivery.test.verification_${result}`, actor,
@@ -319,6 +387,14 @@ export function appendProgressEvent(file, {
     throw new Error(`[cc-nexs] state mismatch: expected ${from}, found ${progress.state}`);
   }
   if (to !== null) progress.state = to;
+  const sprintState = String(to || '').match(/^SPRINT_(\d+)_/);
+  if (sprintState && progress.mode === 'full') {
+    const current = Number(sprintState[1]);
+    if (progress.sprint.total > 0 && current > progress.sprint.total) {
+      throw new Error(`[cc-nexs] refusing transition beyond approved Sprint total ${progress.sprint.total}: ${to}`);
+    }
+    progress.sprint.current = current;
+  }
   if (to !== null && TEST_RELEASE_INVALIDATION_STATES.has(to)) {
     const delivery = requireDelivery(progress);
     delivery.test.status = 'idle';
@@ -345,6 +421,23 @@ export function appendProgressEvent(file, {
   return progress;
 }
 
+export function reopenTestRelease(file, { expectedRevision = null, actor = 'release-controller' } = {}) {
+  const progress = readProgressV2(file);
+  const blocked = progress.mode === 'hotfix' ? 'HOTFIX_TEST_RELEASE_BLOCKED' : 'TEST_RELEASE_BLOCKED';
+  const ready = progress.mode === 'hotfix' ? 'HOTFIX_TEST_RELEASE' : 'TEST_RELEASE';
+  if (!['lean', 'hotfix'].includes(progress.mode) || progress.state !== blocked) {
+    throw new Error(`[cc-nexs] test release retry requires ${blocked}, found ${progress.mode}/${progress.state}`);
+  }
+  return appendProgressEvent(file, {
+    type: 'delivery.test.retry_requested',
+    actor,
+    from: blocked,
+    to: ready,
+    reason: 'explicit test release retry',
+    expectedRevision,
+  });
+}
+
 export function approveProgressGate(file, { gate, approver, sprint = null, binding = null, expectedRevision = null }) {
   const progress = readProgressV2(file);
   if (expectedRevision !== null && progress.revision !== expectedRevision) {
@@ -356,6 +449,11 @@ export function approveProgressGate(file, { gate, approver, sprint = null, bindi
     progress.gates.g2.sprints[String(sprint)] = { approved: true, approver, approved_at: timestamp };
   } else {
     progress.gates[gate] = { ...progress.gates[gate], approved: true, approver, approved_at: timestamp, ...(binding && { binding }) };
+  }
+  if (gate === 'g1' && Number.isInteger(binding?.sprint_total) && binding.sprint_total > 0) {
+    progress.sprint.enabled = progress.mode === 'full';
+    progress.sprint.current = 1;
+    progress.sprint.total = binding.sprint_total;
   }
   if (gate === 'release' && progress.change_requests?.current) {
     const current = progress.change_requests.items.find((item) => item.id === progress.change_requests.current);
@@ -370,6 +468,38 @@ export function approveProgressGate(file, { gate, approver, sprint = null, bindi
   progress.events.push({
     id: randomUUID(), sequence: progress.revision, timestamp, type: 'gate.approved', actor: approver,
     data: { gate, ...(sprint !== null && { sprint }), ...(binding && { binding }) },
+  });
+  writeProgressV2(file, progress);
+  return progress;
+}
+
+export function recoverApprovedImplementationSprint(file, {
+  expectedRevision = null,
+  actor = 'orchestrator',
+} = {}) {
+  const progress = readProgressV2(file);
+  if (expectedRevision !== null && progress.revision !== expectedRevision) {
+    throw new Error(`[cc-nexs] stale progress revision: expected ${expectedRevision}, found ${progress.revision}`);
+  }
+  const total = progress.gates?.g1?.binding?.sprint_total;
+  if (progress.state !== 'SPEC_PENDING_HUMAN' || progress.gates?.g1?.approved !== true) {
+    throw new Error(`[cc-nexs] G1 Sprint recovery requires approved SPEC_PENDING_HUMAN, found ${progress.state}`);
+  }
+  if (!Number.isInteger(total) || total < 1) {
+    throw new Error('[cc-nexs] approved G1 binding has no recoverable Sprint contract');
+  }
+  if (progress.sprint?.current === 1 && progress.sprint?.total === total
+    && progress.sprint?.enabled === (progress.mode === 'full')) return progress;
+  progress.sprint.enabled = progress.mode === 'full';
+  progress.sprint.current = 1;
+  progress.sprint.total = total;
+  const timestamp = new Date().toISOString();
+  progress.revision += 1;
+  progress.updated_at = timestamp;
+  progress.events.push({
+    id: randomUUID(), sequence: progress.revision, timestamp,
+    type: 'g1.sprint_contract_recovered', actor,
+    data: { current: 1, total },
   });
   writeProgressV2(file, progress);
   return progress;
@@ -398,6 +528,7 @@ export function recordRepositoryAssignments(file, assignments, { workspaceRoot, 
   if (expectedRevision !== null && progress.revision !== expectedRevision) {
     throw new Error(`[cc-nexs] stale progress revision: expected ${expectedRevision}, found ${progress.revision}`);
   }
+  assertCandidateMutationAllowed(progress);
   for (const item of assignments) {
     const worktree = relative(resolve(workspaceRoot), resolve(item.worktree));
     if (!worktree || worktree === '..' || worktree.startsWith(`..${sep}`) || resolve(worktree) === worktree) {
@@ -494,6 +625,7 @@ function invalidateLeanCandidateEvidence(progress) {
     closure_attempts: progress.review?.closure_attempts || 0,
     gateway_b_delta_attempts: progress.review?.gateway_b_delta_attempts || 0,
   };
+  if (progress.delivery?.test) progress.delivery.test.status = 'idle';
   if (progress.gates?.release) progress.gates.release = { approved: false, binding: null };
 }
 
@@ -583,9 +715,15 @@ export function recordLocalVerification(file, {
   actor = 'local-verifier',
   expectedRevision = null,
 } = {}) {
-  if (!['passed', 'failed'].includes(status)) throw new Error(`[cc-nexs] invalid local verification status: ${status}`);
   if (!source || Object.keys(source).length === 0) throw new Error('[cc-nexs] local verification source is required');
   const progress = readProgressV2(file);
+  const allowedStatuses = progress.mode === 'lean'
+    ? ['passed', 'failed', 'deferred_to_test']
+    : ['passed', 'failed'];
+  if (!allowedStatuses.includes(status)) throw new Error(`[cc-nexs] invalid local verification status: ${status}`);
+  if (status === 'deferred_to_test' && !hasValidStructuredTestDeferral(evidence)) {
+    throw new Error('[cc-nexs] deferred local verification requires structured test deferral evidence');
+  }
   if (expectedRevision !== null && progress.revision !== expectedRevision) {
     throw new Error(`[cc-nexs] stale progress revision: expected ${expectedRevision}, found ${progress.revision}`);
   }
@@ -676,7 +814,8 @@ export function recordConsolidatedReview(file, {
     throw new Error(`[cc-nexs] stale progress revision: expected ${expectedRevision}, found ${progress.revision}`);
   }
   const fingerprint = candidateFingerprint(source);
-  if (progress.local_verification?.status !== 'passed' || progress.local_verification.candidate_fingerprint !== fingerprint) {
+  if (!isLocalVerificationReadyStatus(progress.local_verification?.status)
+    || progress.local_verification.candidate_fingerprint !== fingerprint) {
     throw new Error('[cc-nexs] consolidated review requires local verification for the same candidate');
   }
   progress.review = {
@@ -748,6 +887,63 @@ export function completeBaseRelease(file, { attemptId, status, reason = '', acto
 }
 
 export { candidateFingerprint };
+
+export function isLocalVerificationReadyStatus(status) {
+  return status === 'passed' || status === 'deferred_to_test';
+}
+
+function hasValidStructuredTestDeferral(evidence) {
+  if (!Array.isArray(evidence) || evidence.length === 0) return false;
+  if (evidence.some((item) => (
+    !item
+    || typeof item !== 'object'
+    || !['passed', 'deferred_to_test'].includes(item.result)
+    || typeof item.check !== 'string'
+    || !item.check.trim()
+  ))) return false;
+  const checks = evidence.map((item) => item.check.trim());
+  if (new Set(checks).size !== checks.length) return false;
+  const deferred = evidence.filter((item) => item?.result === 'deferred_to_test');
+  return deferred.length > 0 && deferred.every((item) => item
+    && typeof item === 'object'
+    && typeof item.check === 'string'
+    && item.check.trim()
+    && typeof item.reason === 'string'
+    && item.reason.trim()
+    && typeof item.test_action === 'string'
+    && item.test_action.trim());
+}
+
+export function deferredChecksForAttempt(progress, releaseAttempt) {
+  const fingerprint = releaseAttempt?.fingerprint;
+  if (!fingerprint) return [];
+  const localAttempt = progress.local_verification?.attempts?.findLast((item) => (
+    item.fingerprint === fingerprint && item.status === 'deferred_to_test'
+  ));
+  return (localAttempt?.evidence || []).filter((item) => item?.result === 'deferred_to_test');
+}
+
+function assertDeferredChecksClosed(progress, releaseAttempt, evidence) {
+  const deferred = deferredChecksForAttempt(progress, releaseAttempt);
+  if (deferred.length === 0) return;
+  const missing = deferred
+    .map((item) => item.check)
+    .filter((check) => !(evidence || []).some((item) => (
+      item
+      && typeof item === 'object'
+      && item.check === check
+      && item.result === 'passed'
+      && hasPositiveProof(item)
+    )));
+  if (missing.length > 0) {
+    throw new Error(`[cc-nexs] test verification evidence must close deferred checks: ${missing.join(', ')}`);
+  }
+}
+
+function hasPositiveProof(item) {
+  return ['proof', 'evidence', 'details', 'artifact', 'url']
+    .some((field) => typeof item[field] === 'string' && item[field].trim());
+}
 
 export function progressJsonForMarkdown(markdownPath) {
   return join(dirname(markdownPath), 'progress.json');

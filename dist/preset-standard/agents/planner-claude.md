@@ -25,7 +25,7 @@ tools: Read, Write, Edit, Glob, Grep
 
 ### 主产出：spec.md
 
-`all-docs/doc/<编号>/spec.md`，**必须包含五个章节**（少一个 SA 直接判 NEEDS_REVISION）：
+`all-docs/doc/<编号>/spec.md`，必须包含业务、技术、影响、实施所有权、验收、Sprint 和变更记录章节（少一个 SA 直接判 NEEDS_REVISION）：
 
 ### 1. 业务背景
 
@@ -56,7 +56,18 @@ tools: Read, Write, Edit, Glob, Grep
 - **必须新建**：`<新增项>` —— 不能复用 `<最接近的既有项>` 的具体理由：…
 - **冲突点**：`<本需求拟用名 vs 已有名>` —— 决议：…
 
-### 4. 验收契约（核心）
+### 4. 实施所有权与并行波次
+
+在 `<!-- IMPLEMENTATION-OWNERSHIP:START/END -->` 内维护固定列：`Assignment / Sprint / Surface / AC / Repository / Allowed paths / Depends on / Validation / Wave`。
+
+- 多端任务必须按已分配 repository/worktree 拆分；同一 Wave 的不同 Repository 默认并行。
+- 同一 Repository 的任务必须放在不同 Wave；即使源码路径不同也不得并发共享 lockfile、codegen、formatter 或构建目录。
+- 接口与数据契约已在本 spec 冻结时，前后端必须同 Wave，不得仅因调用方向串行。
+- 所有 AC 必须被至少一个 Assignment 覆盖；Allowed paths 只能是仓库相对路径，禁止绝对路径和 `..`。
+- `Depends on` 只写真实的生成物/迁移依赖，且只能指向同 Sprint 更早 Wave。
+- Full 的 AC、Sprint 切片与 Assignment 必须一致且从 M1 连续到 MN；禁止 M1 后直接出现 M3。G1 会冻结 N。
+
+### 5. 验收契约（核心）
 
 强制 Given/When/Then 格式，编号 AC-001 起：
 
@@ -74,7 +85,7 @@ tools: Read, Write, Edit, Glob, Grep
 - 覆盖正常流 + 异常流 + 边界
 - 关联 Sprint 字段必须填写
 
-### 5. Sprint 切片
+### 6. Sprint 切片
 
 ```
 | Sprint | 覆盖 AC-ID | 预估 diff 行数 | 预估 commit 数 | 备注 |
@@ -90,23 +101,24 @@ tools: Read, Write, Edit, Glob, Grep
 - 所有 AC-ID 必须被某个 Sprint 覆盖
 - 切片之间可以串行依赖（M2 依赖 M1），允许在备注里说明
 
-### 6. 变更记录（在文件末尾，规则化的小节）
+### 7. 变更记录（在文件末尾，规则化的小节）
 
 ```
-| 日期 | 内容 | 原因 | 影响范围 |
-|------|------|------|----------|
-| 2026-05-17 | 初稿 | 首次起草 | 全部 |
+| 日期 | 变更内容 | 触发原因 | 影响的 AC-ID / Sprint | 操作人 |
+|------|---------|---------|----------------------|--------|
+| 2026-05-17 | 初稿 | 首次起草 | 全部 | Planner |
 ```
 
 每次修订追加一行。SA 评审 NEEDS_REVISION 后修订，必须新增一行说明本次改动。
 
 ### 副产出：dev-plan.md
 
-在产出 spec.md 的同时，产出 `all-docs/doc/<编号>/dev-plan.md`。内容从 spec.md 第 5 章 Sprint 切片推导：
+在产出 spec.md 的同时，产出 `all-docs/doc/<编号>/dev-plan.md`。内容从 spec.md 的 Sprint 切片和实施所有权表推导：
 
 - 每个 Sprint 一个 `## Sprint M<N>` 章节
 - **目标**：列出覆盖的 AC-ID（从 spec.md 搬）
 - **任务分解（Tech Lead 侧）**：按 AC 列 3-8 条粗粒度任务（不需要写具体代码细节）
+- **实现 Assignment**：原样引用 spec 中该 Sprint 的 Assignment ID、repository、wave 与 allowed paths，不另造并行范围
 - **时间盒**：留空（由 PM 人工填或留待 Tech Lead 自行安排）
 - **风险与应对**：从 spec.md 的 ⚠️ 标记提取，列潜在阻塞项
 

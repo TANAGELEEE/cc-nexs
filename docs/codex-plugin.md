@@ -1,6 +1,6 @@
 # Codex Plugin Support
 
-cc-nexs now ships a Codex plugin side by side with the Claude Code plugin. The Codex package is not a simplified preset: it mirrors the same command documents, agents, templates, state machine, hooks, and document locations.
+cc-nexs ships a Codex plugin beside the Claude Code plugin. Both consume the same authoritative command documents, agents, templates, state machine, hooks, and document locations; generated Codex skills stay thin and contain only the runtime delta.
 
 ## Runtime isolation and models
 
@@ -75,9 +75,9 @@ $cc-nexs-hotfix "支付回调偶现 500"
 
 Each generated skill reads its matching `commands/*.md` file as the single source of truth and preserves its arguments, stop conditions, state transitions, and artifact paths.
 
-Approval skills execute the deterministic approval core. `$cc-nexs-release-test` first checks the current signed-in in-app/Chrome session and allowlisted test environment, then executes the deterministic release controller in `lib/cc-nexs-cli.mjs`. These skills never edit `progress.json` directly or implement ad hoc Git integration.
+Approval skills execute the deterministic approval core. `$cc-nexs-release-test` first executes the exact-candidate test merge/CI controller in `lib/cc-nexs-cli.mjs`; only after deployment does the Verifier inspect browser/login capability. These skills never edit `progress.json` directly or implement ad hoc Git integration.
 
-Codex reuses the browser profile already logged into the test app/operations console. URL candidates may be discovered from project instructions, but automatic execution requires configured `release.test.*_url` and `allowed_hosts`. Plaintext account/password values in memory, Markdown, Git, or config are forbidden; only opaque external `credential_ref` values are allowed.
+Codex reuses the browser profile already logged into the test app/operations console. Browser availability, login/MFA state, and verification-page URLs are post-deployment verification inputs, never test merge/CI delivery gates. If they are unavailable, the deployed attempt records recoverable `manual_required` / `deployed_needs_manual_verification` evidence and can resume later without redoing delivery. Automatic navigation remains restricted to `release.test.allowed_hosts`. Plaintext account/password values in memory, Markdown, Git, or config are forbidden; only opaque external `credential_ref` values are allowed.
 
 ## Document Write Locations
 
@@ -102,10 +102,11 @@ Generated Codex skills explicitly forbid relocating these paths.
 1. Planner creates one requirements document and one plan document, with optional parallel read-only research.
 2. Gateway A binds both documents by hash.
 3. Developers execute non-overlapping plan tasks in per-repository worktrees and feature branches.
-4. A deterministic local driver runs build/start/smoke/e2e against the accumulated candidate.
-5. One independent consolidated Review reports all P0/P1 blockers; only one delta closure is allowed after fixes.
-6. The exact candidate is integrated to test and verified there.
-7. Gateway B binds the reviewed and test-verified fingerprint before non-force base integration; docs are finalized last.
+4. A deterministic local driver runs the available checks. If Lean has no driver, the parent runs only plan-approved commands and records exact command/exit/proof evidence; environment-only checks become structured `deferred_to_test` rather than repeated blockers. Hotfix still requires its driver.
+5. The exact candidate is integrated to test and CI/deployment runs before any browser preflight.
+6. The deployed environment is verified independently; a local web may target the deployed test backend. Missing browser/login/URL capability records recoverable `manual_required` instead of blocking delivery.
+7. One independent consolidated Review reports all P0/P1 blockers; only one delta closure is allowed after fixes.
+8. Gateway B binds the reviewed and test-verified fingerprint before non-force base integration; docs are finalized last.
 
 Private model configuration uses ordinary nested YAML. The following intentionally uses the same model with stronger Review reasoning; set another model ID if heterogeneous Review is preferred:
 
@@ -154,7 +155,7 @@ New features use `config_version: 2` and `risk_tier: auto` without generated rol
 
 Fast remains single-sprint only, uses stricter thresholds, skips SA test-case review, and has no TECH_LEAD_REVIEW fallback.
 
-Both modes default to `auto_if_ready`; `--no-auto-test-release` or failed prerequisites retain manual G2. Production release remains explicit and human-authorized.
+Both modes default to `auto_if_ready`; `--no-auto-test-release` explicitly opts out of automatic delivery. Driver/test-branch failures stop delivery, while browser/login/verification-URL limitations occur only after deployment and enter recoverable manual verification. Production release remains explicit and human-authorized.
 
 ### Hotfix
 

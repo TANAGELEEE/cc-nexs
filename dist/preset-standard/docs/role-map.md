@@ -14,7 +14,7 @@ cc-nexs 按 `config.json.mode` 选择三套角色：
 | 禁止 | 代码、Git、progress | approval scope、Git、progress | 代码、Git、progress | 源码、Git、progress |
 | 模型 | profile 可配置 | profile 可配置 | 可不同模型，或相同模型更高 effort/thinking | profile 可配置 |
 
-运行时映射：Claude Code 的 Lean 四角色全部使用独立 Claude 子代理；Codex 全部使用独立 native agent；Pi 全部使用 pi-subagents `Agent`，由父代理把统一风险路由解析出的 `model`/`thinking` 直接传入调用。Lean high/critical 自动升级 Planner/Reviewer，Hotfix P0/P1 自动升级 Reviewer；feature profile 最终优先。Legacy full/fast 仍保留原有异构工具边界。
+运行时映射：Claude Code 使用独立 Claude 子代理；Codex 使用独立 native agent；Pi 使用 `pi-subagents@0.35.1` 的 `subagent`。Fast/Full 同 wave 多仓实现由父级一次启动后 join，整批共享冻结的模型路由与明确 worktree；Pi 把 sibling 放进同一个异步 `tasks` 调用，设置 `worktree: false`，再由 `subagent_wait` 汇合。Lean high/critical 自动升级 Planner/Reviewer，Hotfix P0/P1 自动升级 Reviewer；feature profile 最终优先。
 
 Lean 的完整 Review 只有一次：查看全部仓累计 diff、批准边界、本地证据和风险，一次性列出全部 P0/P1。修复后最多一次 delta closure；再次阻塞转人工，不继续消耗 token。P2/P3 记录但不阻塞。
 
@@ -169,7 +169,7 @@ Reviewer 可用不同模型，或相同模型配更高 effort/thinking；强制�
 
 ## fast 模式：三角色矩阵（0.3.0+）
 
-fast 模式合并 5 个角色为 3 个，交付速度提升约 50%，代价是放弃部分隔离纪律。仅在单接口/单模块小改动场景使用。
+fast 模式合并 5 个角色为 3 个，适合单 Sprint 小改动。需求涉及多端时，按批准 ownership 将不同 repository/worktree 的 Fullstack code worker 同 wave 并行；共享文档仍由唯一 owner 处理。
 
 | 维度 | Fullstack | Reviewer | Verifier |
 |------|-----------|----------|----------|
@@ -186,7 +186,7 @@ fast 模式合并 5 个角色为 3 个，交付速度提升约 50%，代价是�
 
 ### 三条最低纪律（fast 仍保留）
 
-1. **先 spec 后代码**：Fullstack 同 session，但必须把 spec.md 五章节写完才能开 src/。中途回头改 AC 必须在"变更记录"留痕。
+1. **先 spec 后代码**：Fullstack 必须先完成 spec 和 ownership 表。实现阶段多仓 worker 独立并行，禁止修改批准范围；中途需要改 AC/ownership 必须回 G1。
 2. **执行人 ≠ 验收人**：Verifier 跑测试 vs Reviewer 验收 → 两次独立 codex 调用，互不读对方产物。
 3. **黑盒大于一切**：Verifier 不读 src/、不读 sa-*.md，签名走 api-doc.md；Reviewer 评代码基于 diff，不浏览源码目录。
 

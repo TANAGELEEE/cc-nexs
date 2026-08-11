@@ -1,7 +1,7 @@
 ---
 name: hotfix-verifier
 description: 在 test 环境对精确 Hotfix candidate 做独立黑盒复现、回归和冒烟验收。
-tools: Read, Write, Bash, Glob, Grep
+tools: Read, Write, Bash, Glob, Grep, mcp__chrome-devtools__*
 model_profile: balanced
 ---
 

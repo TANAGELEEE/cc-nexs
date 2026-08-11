@@ -109,6 +109,7 @@
         "default_mode": { "enum": ["lean", "hotfix", "fast", "full"], "default": "lean" },
         "sprint_enabled": { "type": "boolean", "default": true },
         "sprint_delivery": { "enum": ["final_only", "per_sprint"], "default": "final_only" },
+        "implementation_max_parallel": { "type": "integer", "minimum": 1, "maximum": 16, "default": 4 },
         "g2_enabled": { "type": "boolean", "default": true },
         "test_release": {
           "type": "object",

@@ -20,41 +20,40 @@ Subsequent local verification, Review recording, test release/verification, rele
 
 ## P2 Runtime Contract
 
-1. Pi support covers `preset-standard` lean (default), standalone hotfix, and legacy fast. Full orchestration and compound remain unsupported. Do not silently downgrade an existing feature.
-2. Use the installed `pi-subagents` tool for every role dispatch. Use package-qualified agents and foreground fresh context:
-   - Repo Scout: `cc-nexs.repo-scout`
-   - Fullstack: `cc-nexs.fullstack`
-   - Reviewer: `cc-nexs.reviewer`
-   - Verifier: ego lite `cc-nexs.verifier`; headless fallback `cc-nexs.verifier-computer-use`
-   - Lean Planner: `cc-nexs.lean-planner`
-   - Lean Developer: `cc-nexs.lean-developer`
-   - Lean Reviewer: `cc-nexs.lean-reviewer`
-   - Lean Verifier: ego lite `cc-nexs.lean-verifier`; headless fallback `cc-nexs.lean-verifier-computer-use`
-   - Hotfix Developer: `cc-nexs.hotfix-developer`
-   - Hotfix Reviewer: `cc-nexs.hotfix-reviewer`
-   - Hotfix Verifier: ego lite `cc-nexs.hotfix-verifier`; headless fallback `cc-nexs.hotfix-verifier-computer-use`
-3. Before any browser verifier dispatch, run the deterministic Pi browser capability preflight and freeze one provider for the release attempt. Prefer ego lite. If it is unavailable, select the matching `*-computer-use` agent only when `@injaneity/pi-computer-use@0.4.3` is installed and its effective config has `browser_use: true` plus `headless: true`. Otherwise route to manual G2. Never give one child both provider surfaces.
-4. Never invoke Claude Code, the Claude Task tool, Codex CLI, or a nested `pi` CLI. Legacy invocation snippets in the authoritative command are role task descriptions, not commands to execute in Pi.
-5. Resolve automatic risk routing from one cc-nexs progress/config/approved-plan snapshot, then pass the selected `model` and `thinking` directly to the pi-subagents `Agent` call. Lean high/critical upgrades Planner and Reviewer; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. Omit `model` when it is `inherit`. If the primary model is unavailable, retry the ordered cc-nexs `fallback_models` list. Project `.pi/settings.json` remains only the Pi authentication/`enabledModels` authority; do not duplicate role mappings there. Public cc-nexs files ship no provider-specific model IDs.
-6. Resolve Hotfix role profiles from one progress/config snapshot. P0/P1 automatically routes Reviewer to escalated; an explicit feature role profile remains final. Reviewer may use a different authenticated model or the same model with higher thinking, but always uses a fresh child context. P0/P1 heterogeneity is an optional private policy, not a public preset requirement. Accept ordered fallbackModels.
-7. Role children never mutate Git or progress state. The parent orchestrator owns state transitions and invokes the Git Custodian command itself.
-8. Set or preserve `CC_NEXS_RUNTIME=pi` and `CC_NEXS_PLUGIN_ROOT` for shell helpers. Resolve all feature paths through the existing workspace/progress contracts.
-9. Preserve the command's artifact locations, human gates, counters, validation, and stop behavior exactly. Runtime adaptation changes dispatch mechanics only.
+1. Pi supports `preset-standard` lean (default), standalone hotfix, fast, and full; unsupported compound flows fail closed rather than downgrade.
+2. Use the installed `pi-subagents@0.35.1` `subagent` tool with package-qualified `cc-nexs.<role>` agents. A Fast/Full implementation batch or wave MUST be one parallel call (include Full QA cases in the first batch), followed by one explicit barrier:
+
+```js
+subagent({
+  tasks: [
+    { agent: "cc-nexs.tech-lead", task: "<assignment task>", cwd: "<assigned repository worktree>", model: "<provider/model:thinking>" },
+    { agent: "cc-nexs.qa", task: "<first-wave cases task>", cwd: "<assigned docs worktree>", model: "<provider/model:thinking>" }
+  ],
+  concurrency: 2,
+  async: true,
+  worktree: false,
+  context: "fresh"
+})
+subagent_wait({ id: "<async-run-id>" })
+```
+
+The example has two tasks, so `concurrency: 2`; for a real batch set it to `min(task count, approved/runtime max_parallel)`. Use only the tasks actually assigned to that batch and set each `cwd` to the progress-assigned worktree. Never issue one `subagent` call per sibling, never wait between sibling starts, never enable Pi-created worktree isolation, and never let a child invoke another child. Non-fanout roles use foreground `subagent({ agent, task, cwd, context: "fresh", model })`.
+3. Test merge/CI delivery runs before browser capability selection. Only after deployment, prefer ego lite; otherwise use `@injaneity/pi-computer-use@0.4.3` when effective config has `browser_use: true` and `headless: true`. Missing browser/login/MFA/verification URL capability records recoverable `manual_required` evidence and never blocks or rolls back delivery.
+4. Never invoke Claude Code, the Claude Task tool, Codex CLI, or a nested `pi` CLI. Runtime adaptation changes dispatch only; preserve the authoritative command's paths, state transitions, gates, counters, validation, and stop behavior.
+5. Resolve one Hotfix model snapshot: P0/P1 automatically routes Reviewer to escalated; an explicit feature role profile remains final. Reviewer may use another model or the same model with higher thinking in a fresh child. Encode thinking in the pi-subagents `model` selector; public files ship no provider-specific model IDs.
+6. pi-subagents has no separate per-task `thinking` field. For a non-inherit selection, pass `provider/model:thinking` in the task `model`; for `inherit` with no thinking override, omit `model`; for `inherit` with a thinking override, resolve the active provider/model and append `:thinking`. After `subagent_wait`, retry ordered `fallback_models` only for failed/unavailable tasks in a new bounded parallel call; never rerun successful siblings.
+7. Role children never mutate Git or `progress.md` / `progress.json`. The parent owns state transitions and Git Custodian operations, and preserves `CC_NEXS_RUNTIME=pi` plus `CC_NEXS_PLUGIN_ROOT`.
 
 ## Pi Hotfix Dispatch Contract
 
-1. Hotfix must be initialized as `mode=hotfix` with its own id, `feature/<id>-<slug>`, and worktrees from the latest configured remote bases. A related feature is metadata only.
-2. Fill and bind the sole authored `hotfix.md` scope with `start-hotfix` before dispatch. AC/API/database/permission contract changes or broad refactoring stop and become a new Lean/Full change.
-3. Dispatch `cc-nexs.hotfix-developer` for implementation/fix. Candidate Git mutations remain parent Git Custodian work.
-4. P0/P1/P2 dispatch `cc-nexs.hotfix-reviewer` exactly once; a blocked result permits one fresh delta Review only. P3 skips the model Review only after deterministic one-file, at-most-20-line, non-behavioral proof.
-5. Run the configured local verification driver, then release the exact candidate with `release-test --hotfix`. Dispatch a fresh `cc-nexs.hotfix-verifier` or `cc-nexs.hotfix-verifier-computer-use` according to the frozen provider on the deployed environment revision, including P3 smoke and P0/P1 rollback/AC evidence.
-6. Reviewer may use a different model or the same model with higher thinking. Session isolation is mandatory; heterogeneity is optional project policy. Public files never pin a model ID.
-7. Test failure or Gateway B implementation feedback consumes the same single lifetime delta Review, then requires a new candidate/test attempt. Delta blocking stops for human intervention.
-8. Only `approve-release` authorizes the verified feature candidate to merge into configured base branches. Never merge test into base and never force push.
+1. Initialize and bind the standalone `mode=hotfix` / `hotfix.md` scope before dispatch; scope expansion becomes a new Lean/Full change.
+2. Use fresh `cc-nexs.hotfix-developer`, `cc-nexs.hotfix-reviewer`, and post-deployment `cc-nexs.hotfix-verifier` (or `cc-nexs.hotfix-verifier-computer-use`) sessions. P3 Review skipping still requires deterministic boundary proof.
+3. Preserve the single lifetime delta Review across Review, test, and Gateway B feedback. Missing browser capability becomes recoverable `manual_required`, not a delivery failure.
+4. Only `approve-release` authorizes the exact verified candidate to configured base branches. Never merge test into base and never force push.
 
 
 ## Required Pi Prerequisites
 
 `pi-subagents` must be installed and its `subagent` tool must expose the package agents above. Run `/subagents-doctor`, then open `/subagents` to inspect package-agent model mappings. `/subagents-models` is only for builtin agents and must not be used for cc-nexs package roles.
 
-Automatic browser verification prefers an installed and onboarded ego lite app plus the selected `ego-browser` skill and a successful minimal `ego-browser nodejs` runtime probe. When ego lite is unavailable, it falls back to `@injaneity/pi-computer-use@0.4.3` only with effective `browser_use: true` and `headless: true`. If neither provider is ready, keep cc-nexs available and use the manual test-release fallback; do not silently claim browser verification.
+After test delivery, automatic verification prefers an onboarded ego lite app plus the `ego-browser` skill and a minimal `ego-browser nodejs` probe. Otherwise it may use `@injaneity/pi-computer-use@0.4.3` with effective `browser_use: true` and `headless: true`. If neither provider or signed-in session is ready, preserve the deployment, record `manual_required`, and resume manual verification later; do not silently claim a pass.

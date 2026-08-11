@@ -36,7 +36,7 @@ if (!browserCapability.ready) {
   console.warn(`WARN automatic Pi browser verification is unavailable: ${browserCapability.reason}`);
   console.warn('Preferred setup: npx skills add citrolabs/ego-lite, then open ego lite and finish onboarding.');
   console.warn(`Fallback setup: pi install git:github.com/injaneity/pi-computer-use@v0.4.3, then set browser_use=true and headless=true in .pi/computer-use.json.`);
-  console.warn('Without either provider, test release will fall back to manual G2.');
+  console.warn('Test merge/CI delivery remains available. After deployment, verification records manual_required and can resume when browser/login capability is restored.');
 } else if (browserCapability.fallback) {
   console.log(`Pi browser fallback ready: ${PI_FALLBACK_BROWSER_PROVIDER} with headless=true.`);
 } else {
@@ -46,4 +46,4 @@ if (!browserCapability.ready) {
 run('pi', ['install', root, '--approve'], { stdio: 'inherit' });
 console.log('cc-nexs Pi package installed. Restart Pi or run /reload.');
 console.log('Lean/Hotfix role model/thinking overrides are optional; automatic risk routing uses escalated, with feature role profiles final.');
-console.log('Fast keeps its legacy review policy; Hotfix uses dedicated Developer/Reviewer/Verifier package agents.');
+console.log('Fast and Full use one async pi-subagents tasks call per repository-scoped wave, followed by subagent_wait; Hotfix uses dedicated Developer/Reviewer/Verifier package agents.');

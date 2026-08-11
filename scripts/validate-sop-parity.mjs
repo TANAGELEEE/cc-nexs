@@ -169,6 +169,51 @@ function validateRunCommand() {
     'resolveRoleRuntime(preset, role, runtime',
     'featureConfig',
     'matched_rules',
+    'fanout: implementation_repositories',
+    'sync-implementation-worktrees',
+    'implementation-delta begin',
+    'implementation-delta end',
+    'validate-implementation-plan',
+    'exactly one candidate refresh per changed repository',
+  ]);
+}
+
+function validateParallelImplementationRules() {
+  const fastPath = join(ROOT, 'packages', 'core', 'rules', 'run-fast.md');
+  const fullPath = join(ROOT, 'packages', 'core', 'rules', 'run-full.md');
+  const plannerPath = join(ROOT, 'packages', 'preset-standard', 'commands', 'planner.md');
+  const fullstackPath = join(ROOT, 'packages', 'preset-standard', 'commands', 'fullstack.md');
+  mustContain(fastPath, read(fastPath), [
+    'Multi-end implementation fanout',
+    '--assignment=<IMP-id>',
+    '--phase=build-sync',
+    'launch all batch members together',
+    'implementation-delta begin <id>',
+    'implementation-delta end <id> --token <token>',
+    'subagent({ tasks, concurrency, async: true, worktree: false, context: "fresh" })',
+    'subagent_wait({ id })',
+    'exactly one candidate per changed repository',
+  ]);
+  mustContain(fullPath, read(fullPath), [
+    'Multi-end implementation fanout',
+    '--assignment=<IMP-id>',
+    'QA `write_cases` and all first-wave Tech Lead workers together',
+    'implementation-delta begin <id>',
+    '--allow-doc-path test-cases.md --allow-doc-path qa-scripts/**',
+    'implementation-delta end <id> --token <token>',
+    'subagent({ tasks, concurrency, async: true, worktree: false, context: "fresh" })',
+    'subagent_wait({ id })',
+    'exactly one candidate per changed repository',
+  ]);
+  mustContain(plannerPath, read(plannerPath), [
+    'sync-implementation-worktrees',
+    'validate-implementation-plan',
+    'G1 前',
+  ]);
+  mustContain(fullstackPath, read(fullstackPath), [
+    'sync-implementation-worktrees',
+    'validate-implementation-plan',
+    'G1 前',
   ]);
 }
 
@@ -245,6 +290,7 @@ function validateAllGeneratedMirrors() {
 validatePresetModes();
 validateInitCommand();
 validateRunCommand();
+validateParallelImplementationRules();
 validateHotfixCommand();
 validateMirrorSkill('cc-nexs-init', 'init.md');
 validateMirrorSkill('cc-nexs-run', 'run.md');

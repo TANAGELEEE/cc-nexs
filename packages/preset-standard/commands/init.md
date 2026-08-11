@@ -281,7 +281,7 @@ REQ_FILE="${REQ_DIR}/$([ "$MODE" = "hotfix" ] && echo hotfix.md || echo requirem
 /cc-nexs:init 添加 /api/health 健康检查接口
 # → all-docs/doc/01.api-health-check/  mode=lean
 
-# fast 模式：单接口小改动
+# fast 模式：单 Sprint 小改动，也可包含独立仓库的前后端并行实现
 /cc-nexs:init 修支付偶现 500 --mode=fast
 # → all-docs/doc/02.payment-500-fix/  mode=fast
 
@@ -329,8 +329,8 @@ $ cd .worktrees/02-feat-b && /cc-nexs:run 02    # B 跟 A 完全独立
 
 | 显式用 full | 显式用 fast |
 |---|---|
-| 跨模块、含 DB schema 变更 | 单模块单接口 |
-| 涉及对外契约、合规风险 | 改动 ≤ 800 行 diff |
+| 多 Sprint、含 DB schema 变更 | 单 Sprint、改动 ≤ 800 行 diff |
+| 破坏性对外契约、合规风险 | 可含契约冻结、不同仓库的前后端并行 |
 | Sprint 切片 ≥ 2 | 无并发/事务复杂度 |
 | 需要严格五方异构纪律 | 接受 spec/code 同 session 的风险换效率 |
 

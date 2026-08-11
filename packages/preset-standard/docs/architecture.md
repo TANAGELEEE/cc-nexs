@@ -58,7 +58,7 @@ INIT -> PLAN -> Gateway A -> IMPLEMENT
 
 每仓使用 `.worktrees/<id>-<slug>/<repo-id>` 与 `feature/<id>-<slug>`。Gateway A 绑定 requirements/plan scope，Gateway B 绑定本地验证、集中 Review 与 test 验收共享的 candidate fingerprint。
 
-Full 开发与交付分为两个区域：
+Full 开发与交付分为两个区域。每个 Sprint 的批准 ownership DAG 按 repository wave fanout；不同 worktree 并行、同 worktree 串行，并与 QA cases 的既有并行合并为同一首波：
 
 ```text
 Development zone
@@ -71,7 +71,7 @@ Delivery zone
 
 这个边界避免前后端只完成一半时发布 M1。Sprint 仍可独立评审和形成 candidate，但只有完整需求进入 delivery zone。
 
-Fast 是单 Sprint 压缩版，同样在 CODE_REVIEW 后进入 TEST_RELEASE。
+Fast 是单 Sprint 压缩版，同样在 CODE_REVIEW 后进入 TEST_RELEASE。多端实现按相同 ownership wave 并行，join 后由唯一 docs owner 同步共享文档。
 
 Hotfix 是独立 mini-Lean：新编号从 latest base 建同样的 worktree/feature branch，只绑定一份 `hotfix.md`。P0/P1/P2 有一次集中 Review；P3 由机器证明单文件/20 行/无行为变化后跳过模型 Review。所有修复共享一次 delta 上限，之后仍须 exact-candidate test 验收和 Gateway B，批准后同一 feature candidate 才合入 base。
 
@@ -115,6 +115,14 @@ release:
 
 controller 通过 stdin 发送一份 JSON request。driver stdout 必须只写一份 JSON object：
 
+异步 CI/CD 首次可立即返回：
+
+```json
+{"status":"pending","pipeline":{"id":"...","url":"..."}}
+```
+
+此时状态为 `deploying`。`release-test --resume` 使用 `operation=release_test_status` 与既有 pipeline evidence 轮询，不会重复集成或触发流水线。部署完成才返回：
+
 ```json
 {
   "status": "succeeded",
@@ -124,11 +132,11 @@ controller 通过 stdin 发送一份 JSON request。driver stdout 必须只写�
 }
 ```
 
-其他终态为 `failed` 或 `deployed_needs_manual_verification`。成功但缺 pipeline/deployment/environment_revision 会失败关闭。
+其他终态为 `failed` 或 `deployed_needs_manual_verification`。`succeeded` 和 `deployed_needs_manual_verification` 要求非空且不可换绑的 pipeline、`environment=test` deployment，以及与每个 test integration commit 精确一致的 `environment_revision`；缺失或不一致都会失败关闭。
 
 ## Lean 本地验证 driver
 
-项目私有配置提供独立于 CI 的本地 driver：
+项目私有配置可以提供独立于 CI 的本地 driver；Lean 未配置 driver 时，由父 Orchestrator 执行 plan 批准的命令并用严格结构化证据记录 `passed|failed|deferred_to_test`，不要求为小改动先新增项目脚本：
 
 ```yaml
 workflow:
@@ -145,11 +153,11 @@ workflow:
 {"status":"passed","evidence":["api build", "web build", "local smoke AC-001"]}
 ```
 
-另一合法状态是 `failed`。driver 必须负责 readiness、非冲突端口和成功/失败路径的进程清理。本地验证用于缩短反馈周期，但不能替代 immutable test release 和 test 环境验收。
+Lean 还允许 `deferred_to_test`：所有本地可执行检查必须通过，至少一个受本地基础设施限制的 start/smoke/E2E check 要提供 `{check,result,reason,test_action}`，且全部 evidence 的 result 只能是 `passed|deferred_to_test`，check 不得重复。compile/unit/lint 的真实失败不能延期。相同 fingerprint 会复用该结果，每个 deferred check 必须用精确对象 `{check,result:"passed",proof}` 在最终 test evidence 中闭环；自由文本 substring 不算。Hotfix 不允许延期。driver 必须负责 readiness、非冲突端口和成功/失败路径的进程清理。本地验证用于缩短反馈周期，但不能替代 immutable test release 和 test 环境验收。
 
 ## Browser capability
 
-Browser 是 test release 的前置能力和最终 QA 工具：
+Browser 只是在 test merge/CI 部署成功后的 QA 工具，不是 test release 前置能力：
 
 | Runtime | 能力 |
 |---|---|
@@ -159,7 +167,7 @@ Browser 是 test release 的前置能力和最终 QA 工具：
 
 URL 可以来自 versioned project config 或 private overlay。项目 memory/说明中的 URL 只能用于发现候选，自动流程必须先把 host 纳入 `allowed_hosts`。账号密码不能来自 memory、Markdown、Git 或普通 config；优先复用登录，必要时只传 opaque `credential_ref` 给外部 secret provider。
 
-MFA、CAPTCHA、过期登录、provider 不可用或环境身份不清晰都会在 push 前触发 manual fallback。
+MFA、CAPTCHA、过期登录、provider 不可用、URL 缺失或环境身份不清晰会在部署后记录 `manual_required`；已完成的 test delivery 保留不变，补证后可从同一 attempt 恢复。
 
 ## Release attempt
 
@@ -168,7 +176,7 @@ MFA、CAPTCHA、过期登录、provider 不可用或环境身份不清晰都会�
 ```text
 delivery.test.started
 delivery.test.repository_integrated (per repository)
-delivery.test.succeeded | failed | deployed_needs_manual_verification
+delivery.test.deploying | succeeded | failed | deployed_needs_manual_verification
 delivery.test.verification_passed | verification_blocked
 ```
 

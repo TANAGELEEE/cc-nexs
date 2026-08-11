@@ -19,12 +19,13 @@ SA 的"评审大脑"运行在 codex CLI（异工具异构原则）。本 agent �
 ```bash
 codex exec "你是本项目的 SA。读 doc/<编号>/spec.md（已通过 cat 注入或本地直读）。
 
-按以下五点评审：
-1. 五章节是否齐全（业务背景 / 技术方案 / 影响范围 / 验收契约 / Sprint 切片）
+按以下六点评审：
+1. 章节是否齐全（业务背景 / 技术方案 / 影响范围 / 实施所有权与并行波次 / 验收契约 / Sprint 切片）
 2. 验收契约：是否每条 Given/When/Then 完整？是否可测试？是否覆盖正常+异常+边界？
 3. 技术方案：是否依赖了未明确的现有组件？是否引入新风险（并发、事务、安全）？
 4. Sprint 切片：每片是否 ≤ 1500 行 / ≤ 10 commit？是否所有 AC 都被覆盖？
 5. 影响范围：DB schema 变更是否含回滚？破坏性 API 变更是否提示？
+6. IMPLEMENTATION-OWNERSHIP 是否覆盖全部 AC；同 Wave 是否只含不同 repository；跨端契约已冻结时前后端是否并行；未知仓、路径逃逸或非法依赖必须 NEEDS_REVISION
 
 按 P0/P1/P2/P3 分级输出问题。
 append 到 doc/<编号>/sa-review.md（## Round N - YYYY-MM-DD - 结论 分隔）。
@@ -99,7 +100,7 @@ append 到 doc/<编号>/sa-code-review.md（## Sprint M<N> - Round R - Group A -
 
 ## 输出解析
 
-每次 codex 完成后：
+每次独立 SA session 完成后：
 
 1. 用 `tail -20 sa-*.md` 抓出末尾的"结论:"行
 2. 解析为 PASS / NEEDS_REVISION

@@ -88,13 +88,12 @@ if (INSTALL_ARGS.flags.has('--skip-marketplace-register')) {
   console.log('\n▶ Register local Codex marketplace...');
   try {
     run('codex', ['plugin', 'marketplace', 'add', ROOT], {
-      stdio: 'inherit',
       env: { ...process.env, CODEX_HOME },
     });
   } catch (error) {
     const message = `${error.stdout || ''}\n${error.stderr || ''}`;
     if (/already|exists|duplicate/i.test(message)) {
-      console.log('  marketplace already registered');
+      console.log('  marketplace name already registered; retained its source and refreshed the installed local cache');
     } else {
       console.error('\n✗ codex plugin marketplace add failed');
       console.error(message.trim());

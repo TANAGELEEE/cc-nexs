@@ -125,3 +125,25 @@ test('workspace config resolves repositories and rejects path escapes', () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('workspace config rejects a test branch that aliases the base branch', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-workspace-'));
+  mkdirSync(join(root, '.cc-nexs'), { recursive: true });
+  writeFileSync(join(root, '.cc-nexs', 'workspace.yml'), [
+    'version: 1',
+    'repositories:',
+    '  - id: api',
+    '    path: api',
+    '    base_branch: main',
+    '    test_branch: main',
+    '',
+  ].join('\n'));
+  try {
+    assert.throws(
+      () => loadWorkspaceConfig({ projectRoot: root }),
+      /test_branch must differ from base_branch/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

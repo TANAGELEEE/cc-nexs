@@ -2,34 +2,55 @@
 description: "Integrate final feature candidates into test, run the project release driver, then hand deployed evidence to the black-box Verifier."
 disable-model-invocation: true
 allowed-tools: "Read, Bash, Skill, Task, mcp__chrome-devtools__*"
-argument-hint: "<feature-id> [--retry | --dry-run | --hotfix]"
+argument-hint: "<feature-id> [--resume | --retry | --dry-run] [--hotfix]"
 ---
 
 # /cc-nexs:release-test
 
-This is the deterministic test delivery action for `workflow.sprint_delivery=final_only`. It is invoked by the parent Orchestrator only after all development sprints and the integration review pass. It never targets production.
+This is the deterministic test delivery action for an exact candidate. Standard Lean invokes it after Review; eligible fast-track Lean invokes it immediately after deterministic local checks and performs its one Review after test verification. It never targets production.
 
-## Runtime capability preflight
+## Delivery preflight
 
-Before any remote mutation, resolve `release.test` from project config/private overlay and verify:
+Before any remote mutation, resolve `release.test` from project config/private overlay and verify only delivery safety:
 
-1. The current runtime exposes its configured browser provider: Claude `chrome-devtools-mcp`, Codex current signed-in browser session, or Pi's ordered provider chain. Pi prefers ego lite through the selected `ego-browser` skill/CLI; when unavailable, it may use `@injaneity/pi-computer-use@0.4.3` only with effective `browser_use: true` and `headless: true`.
-2. Reuse the current browser profile, open only configured `allowed_hosts`, and prove the session is authenticated in the test environment. Project instructions/memory may help discover a URL candidate, but automatic execution requires the resolved URL in `release.test` plus its allowlisted host. Do not read plaintext credentials from memory, Markdown, presets, config, or Git. `credential_ref` may name an external secret provider, but secret material must not enter prompts or artifacts.
-3. The app and operations URLs identify test, never production. Pi freezes one provider for the complete release attempt and dispatches its provider-specific Verifier; it never gives one child both browser surfaces. MFA, CAPTCHA, expired login, unavailable browser tools, a computer-use action that cannot remain headless, or host mismatch fails the preflight before any push.
-4. If preflight fails, leave progress at `TEST_RELEASE` (or Hotfix `HOTFIX_TEST_RELEASE`), report the exact missing prerequisite, and fall back to the manual gate. Do not silently skip deployment or testing. `--hotfix` is accepted only for `mode=hotfix + HOTFIX_TEST_RELEASE`; it never bypasses readiness.
+1. The environment is `test`, never production, and no configured verification URL is production-like.
+2. A structured release driver exists and every assigned code repository has an exact candidate ref.
+3. At least one repository is approved for `deploy` and has a configured `test_branch`. A Lean repository is local only when its Gateway A-bound plan explicitly contains `test_delivery.<repo>: local`; missing `test_branch` is never silently interpreted as local.
+4. Plaintext credentials are absent. Browser provider, login/MFA, app/operations URLs, allowlist completeness, and S3 bucket/CORS/IAM observability are post-deployment verification concerns and must not block the test merge.
+5. Lean has exact-fingerprint local evidence (`passed` or structured `deferred_to_test`); standard Lean additionally has an exact-fingerprint passing Review. Fast-track intentionally performs that Review after test verification.
+
+`--hotfix` is accepted only for `mode=hotfix + HOTFIX_TEST_RELEASE`; it never bypasses readiness.
 
 ## Deterministic control
 
-After capability preflight succeeds, resolve the packaged CLI and run:
+After delivery preflight succeeds, resolve the packaged CLI and run:
 
 ```text
-node <plugin-root>/lib/cc-nexs-cli.mjs release-test <feature-id> --capability-attested [--retry | --dry-run | --hotfix]
+node <plugin-root>/lib/cc-nexs-cli.mjs release-test <feature-id> [--retry | --dry-run | --hotfix]
 ```
 
-`--capability-attested` may be supplied only after all runtime checks above pass. Without it, the controller fails before mutation; `--dry-run` remains read-only and does not require the flag. The controller requires both configured test URLs, requires a candidate for every assigned code repository, freezes each candidate SHA, and holds a per-feature controller lock. It then integrates candidates into the latest `origin/<test_branch>` in temporary worktrees, uses normal non-force pushes, invokes the structured project release driver once, and records immutable integration/pipeline/deployment/environment evidence in progress.json.
+The controller freezes every candidate SHA and holds a per-feature controller lock. It integrates only `deploy` candidates into the latest `origin/<test_branch>` in temporary worktrees with normal non-force pushes; local candidates remain part of the attempt fingerprint and expose their exact clean worktree for the post-deploy Web harness. It then invokes the structured project release driver with the backward-compatible `operation=release_test` start request and records immutable integration evidence in progress.json.
 
-On success, resume `/cc-nexs:run`. Full mode runs accumulated cross-sprint final QA; fast mode runs initial or regression verification based on the release attempt number. On failure, stop in `TEST_RELEASE_BLOCKED`. A deployment that cannot complete browser verification stops in `TEST_DEPLOYED_NEEDS_MANUAL_VERIFY`.
+For CI/CD systems triggered by the test push, the driver should return promptly:
+
+```json
+{"status":"pending","pipeline":{"id":"123","url":"https://ci.example/123"}}
+```
+
+This persists `delivery.test.status=deploying` and returns control immediately. Resume without another merge or trigger:
+
+```text
+node <plugin-root>/lib/cc-nexs-cli.mjs release-test <feature-id> --resume
+```
+
+Hotfix resume also includes `--hotfix`.
+
+The same driver receives `operation=release_test_status` plus the previous attempt evidence and returns `pending`, `succeeded`, or `failed`. Combined evidence across start/poll must keep the same non-empty pipeline identity; terminal deployment must name environment `test`, and every deployed repository's `environment_revision` must equal its recorded integration commit.
+
+If a terminal driver failure has moved the workflow to `TEST_RELEASE_BLOCKED` or `HOTFIX_TEST_RELEASE_BLOCKED`, an explicit `--retry` reopens the release state and creates a new attempt. It never retries a still-`deploying` pipeline; that path must use `--resume`.
+
+Only after deployment success does the parent check URLs, allowed hosts, browser/login, and environment-specific behavior. Missing verification capability records `manual_required` and stops in the recoverable `TEST_DEPLOYED_NEEDS_MANUAL_VERIFY` state without undoing the completed test delivery. A real product failure follows the normal test-fix path. Full mode runs accumulated cross-sprint final QA; fast mode runs initial or regression verification based on the release attempt number.
 
 ## Explicit opt-out
 
-`/cc-nexs:run <id> --no-auto-test-release` and feature config `release.test=manual` retain the manual G2 path. Production release always remains a separate explicit human action.
+Legacy fast/full workflows may retain their manual G2 semantics. Lean/Hotfix Gateway B requires an immutable release attempt and therefore does not treat G2 alone as deployed evidence; configure the test release driver and return to `auto_if_ready` to resume. Production release always remains a separate explicit human action.

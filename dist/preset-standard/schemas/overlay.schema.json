@@ -24,6 +24,7 @@
       "type": "object",
       "properties": {
         "default_mode": { "enum": ["lean", "hotfix", "fast", "full"] },
+        "implementation_max_parallel": { "type": "integer", "minimum": 1, "maximum": 16 },
         "local_verify": {
           "type": "object",
           "properties": {

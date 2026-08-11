@@ -234,6 +234,7 @@ async function assertStateMachine() {
   });
   expectStep(fullKickoff, { next: 'SPRINT_1_DEV', role: 'tech-lead', action: 'implement' }, 'full sprint kickoff');
   assert(fullKickoff.parallel?.role === 'qa' && fullKickoff.parallel?.action === 'write_cases', 'full sprint kickoff must dispatch QA cases in parallel');
+  assert(fullKickoff.fanout === 'implementation_repositories', 'full sprint kickoff must fan out multi-repository implementation');
   expectStep(
     mod.nextStep({ state: 'ALL_SPRINTS_DONE', enabledRoles: fullRoles, mode: 'full' }),
     { next: 'FINAL_EVAL', role: 'evaluator', action: 'final_acceptance' },
@@ -245,11 +246,13 @@ async function assertStateMachine() {
     { next: 'SPEC_DRAFTED', role: 'fullstack', action: 'draft_spec' },
     'fast REQ_DRAFTED',
   );
+  const fastBuild = mod.nextStep({ state: 'SPEC_APPROVED', enabledRoles: fastRoles, mode: 'fast' });
   expectStep(
-    mod.nextStep({ state: 'SPEC_APPROVED', enabledRoles: fastRoles, mode: 'fast' }),
+    fastBuild,
     { next: 'BUILD', role: 'fullstack', action: 'implement' },
     'fast SPEC_APPROVED',
   );
+  assert(fastBuild.fanout === 'implementation_repositories', 'fast implementation must fan out multi-repository workers');
   expectStep(
     mod.nextStep({ state: 'BUILD', enabledRoles: fastRoles, mode: 'fast' }),
     { next: 'CODE_REVIEW', role: 'reviewer', action: 'review_code' },

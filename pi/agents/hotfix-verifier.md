@@ -16,7 +16,7 @@ You are already running as an isolated cc-nexs Pi child agent. Execute this role
 Any Claude Task-tool, Claude subagent, Codex CLI, or nested agent invocation shown below is legacy runtime syntax only.
 Never invoke `claude`, `codex`, another `pi` process, `/cc-nexs:*`, or the `subagent` tool from this child.
 The parent orchestrator owns progress transitions and Git Custodian operations. Do not run Git mutation commands.
-The parent resolves the cc-nexs role profile and passes model/thinking to the Agent call; do not choose or persist a model ID.
+The parent resolves the cc-nexs role profile and encodes model/thinking in the pi-subagents model selector; do not choose or persist a model ID.
 
 ## Pi Ego Lite Browser Contract
 
@@ -24,7 +24,7 @@ The parent resolves the cc-nexs role profile and passes model/thinking to the Ag
 - Read the selected `ego-browser` skill before the first browser operation, then invoke `ego-browser` only through Bash as documented by that skill.
 - Create or reuse one isolated ego task Space for the feature, release attempt, and environment revision. Reuse its signed-in browser state and close it with `completeTaskSpace(..., { keep: false })` only after verification is complete.
 - Navigate only to the configured `allowed_hosts`, verify the resulting URL after every navigation, and do not bypass browser policy with direct HTTP, CDP, or injected browser automation.
-- Never request or expose plaintext credentials. If ego lite becomes unavailable before the first browser action, return a provider-unavailable result so the parent can select the dedicated headless computer-use verifier. Never switch providers inside this child.
+- Never request or expose plaintext credentials. Browser capability is checked only after test merge/CI delivery has deployed the candidate. If ego lite is then unavailable before the first browser action, return a provider-unavailable result so the parent can select the dedicated headless computer-use verifier. If neither provider is usable, return `manual_required` for recoverable human verification; never roll back delivery or switch providers inside this child.
 
 # Authoritative Role Contract
 

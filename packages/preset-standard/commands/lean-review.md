@@ -11,6 +11,10 @@ argument-hint: "[需求编号] [--closure|--gateway-b-delta]"
 
 完整 Review 输入仅为批准 requirements、plan scope、全部仓库累计 diff、变更文件清单和同 candidate 的本地证据。一次性输出全部 P0/P1；P2/P3 非阻塞。写入 `plan.md` 后由父 Orchestrator执行：
 
+`fast-track` 的完整 Review 在首次 test 验收后执行，并同时读取该 attempt/environment revision 的精简黑盒证据；`standard` 仍在 test 交付前执行。两者在 Gateway B 前都必须绑定同一 exact candidate。
+
+Reviewer 必须以批准时的 base...candidate 为唯一 diff，禁止把分支既有文件或路径外变更误报为本次 finding。明确记录为 `deferred_to_test` 且 test 矩阵可执行的环境检查缺口不是 P1；只有代码缺陷、AC 未覆盖或 candidate/证据不一致才可阻塞。不得为了“更完整”要求 AC 外架构加固或新增成批测试。
+
 ```text
 node <plugin-root>/lib/cc-nexs-cli.mjs record-review <id> --passed|--blocked [--finding "P0/P1 finding"]...
 ```

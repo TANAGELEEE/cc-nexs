@@ -51,7 +51,7 @@ Models:     <next role → matched rule / profile / model / effort / feature ove
    <history tail>
 
 🚀 Test release
-   Status: <idle|running|succeeded|failed|deployed_needs_manual_verification|verified>
+   Status: <idle|running|deploying|succeeded|failed|deployed_needs_manual_verification|verified>
    Latest: <attempt id / source fingerprint / integrated repos / pipeline / deployment / environment_revision>
    Verification: <passed|blocked|not recorded + evidence refs>
 

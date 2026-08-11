@@ -43,6 +43,7 @@ MODE=$(grep -oE '"mode"\s*:\s*"[^"]*"' "${REQ_DIR}config.json" | head -1 | grep 
 你是本项目的 Reviewer（fast 模式，独立 codex session）。
 读 ${REQ_DIR}spec.md。
 按 reviewer-codex.md 的 spec 评审清单执行。
+先调用确定性 implementation plan 校验；失败直接 NEEDS_REVISION，不得进入 G1。
 append 到 ${REQ_DIR}sa-review.md（## Round N 分隔）。
 末尾必须 结论: PASS 或 NEEDS_REVISION。
 ```
@@ -125,7 +126,7 @@ fi
 
 orchestrator 读结论后决定：
 - spec PASS → SPEC_PENDING_HUMAN
-- code PASS → TEST_RELEASE（auto_if_ready）；显式 opt-out/能力不足 → manual G2
+- code PASS → TEST_RELEASE（auto_if_ready）；显式 opt-out/交付安全条件不足 → manual G2；浏览器/登录/验收 URL 只在部署后处理
 - 首次 code NEEDS_REVISION → CODE_REVIEW_NEEDS_REVISION；修复轮 → FIX_REVIEW_NEEDS_REVISION
 - accept 通过 → COMPLETE
 - accept 未通过 → ACCEPTANCE_REJECTED

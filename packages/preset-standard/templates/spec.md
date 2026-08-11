@@ -74,6 +74,27 @@
 
 ---
 
+## 实施所有权与并行波次
+
+> 该表在 G1 前冻结。Fast/Full 对同一 Wave、不同 Repository 的实现单元并行派发；同一 Repository 必须放入不同 Wave 串行。接口契约已经在本 spec 固定时，前后端不应仅因调用关系被串行化。`Allowed paths` 使用仓库相对路径，可用 `<br>` 分隔；禁止绝对路径和 `..`。
+
+<!-- IMPLEMENTATION-OWNERSHIP:START -->
+| Assignment | Sprint | Surface | AC | Repository | Allowed paths | Depends on | Validation | Wave |
+|---|---|---|---|---|---|---|---|---|
+| IMP-backend | M1 | backend | AC-001, AC-002 | backend-java | src/main/java/example/** | - | module build + unit | 1 |
+| IMP-web | M1 | web | AC-001, AC-003 | web | src/features/example/** | - | typecheck + unit | 1 |
+<!-- IMPLEMENTATION-OWNERSHIP:END -->
+
+规则：
+
+1. 所有 AC 至少被一个 Assignment 覆盖；每个 Assignment 只能写一个已分配 Repository。
+2. 同一 Wave 不得出现两个相同 Repository；共享 worktree、lockfile、formatter、codegen 或构建目录必须串行。
+3. `Depends on` 只能引用同一 Sprint 更早 Wave；没有真实代码生成依赖时，不得把已冻结接口契约的前后端人为串行化。
+4. 实现 worker 禁写 `dev-plan.md`、`api-doc.md`、`deploy.md`；共享文档在所有实现 join 后由唯一 owner 同步。
+5. Full 模式的 AC/Assignment Sprint 必须从 M1 连续到 MN，不得缺失中间 Sprint；G1 冻结 N。Fast/Lite 只允许 M1。
+
+---
+
 ## 验收契约
 
 > **规则**：每条契约必须可测试（有明确输入/输出或可观测状态）；至少 5 条；用 Given/When/Then 或 checklist。

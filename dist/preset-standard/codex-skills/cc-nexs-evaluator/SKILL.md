@@ -5,42 +5,26 @@ description: /cc-nexs:evaluator 的 Codex 镜像 skill。 仅当用户显式输�
 
 # /cc-nexs:evaluator for Codex
 
-This explicit-only skill is the Codex mirror for `/cc-nexs:evaluator`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and lean / full / fast / hotfix behavior as the Claude Code plugin.
+This explicit-only skill is a thin Codex runtime adapter for `/cc-nexs:evaluator`.
 
 ## Authoritative Command
 
 Read and follow `../../commands/evaluator.md` as the single source of truth for this command. Treat the user's original message after `/cc-nexs:evaluator` as the command arguments.
 
-## Execution Contract
+## Codex Runtime Delta
 
-1. Preserve every document path declared by the command file. Do not relocate `all-docs/doc/{id}.{slug}/`, `doc/{id}.{slug}/`, `bugs/`, `qa-scripts/`, `docs/solutions/`, or any command-specific artifact.
-2. Preserve the command's state-machine contract. If the command says a single-step command must not advance `progress.md`, do not advance it; if `run` is the orchestrator, let `run` own state transitions.
-3. Preserve mode behavior exactly:
-   - `full`: five-role SOP with Repo Scout pre-spec recon, Planner / Tech Lead / SA / QA / Evaluator isolation, and sprint loop.
-   - `lean`: default plan-first flow with two authored documents, two human gates, deterministic local verification, one consolidated Review, test verification, and approved base integration.
-   - `fast`: legacy three-role flow with Fullstack / Reviewer / Verifier, single sprint, stricter thresholds, and no TECH_LEAD_REVIEW fallback.
-   - `hotfix`: standalone mini-Lean flow with its own latest-base feature worktrees, one hotfix.md, bounded Review, test verification, and a human base gate.
-4. In Codex, every role runs as an independent native subagent using the role prompt from `../../agents/`. Never invoke Claude Code, a Claude subagent tool, or a nested `codex` CLI process. Runtime adaptation overrides any Claude-specific shell snippet in the authoritative command.
-5. Keep implementation and review in distinct native agent sessions. Resolve automatic risk routing from one progress/config/approved-plan snapshot: Lean high/critical upgrades Planner and Reviewer; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. Never pre-merge feature roles before routing. A Reviewer may use a different model or the same model with higher reasoning effort. Provider-specific IDs are allowed only in private project/feature config; public preset defaults remain portable and inherit when unspecified.
-6. When a shell snippet references `$CLAUDE_PLUGIN_ROOT`, translate it to the installed Codex plugin root that contains this skill. In shell commands prefer `PLUGIN_ROOT=<plugin-root>` or `CC_NEXS_PLUGIN_ROOT=<plugin-root>` or substitute the absolute plugin root directly.
-7. Before editing or creating files, inspect the relevant command, agent, template, and current feature directory. Follow existing repo patterns and keep unrelated files untouched.
-8. Run the verification steps requested by the command. If a step cannot be run in the current Codex surface, record the exact limitation and preserve the command's expected stop/gate behavior.
+- Dispatch every requested role as an independent native subagent using `../../agents/`; keep implementation, Review, and verification in fresh isolated sessions. For Fast/Full implementation fanout, spawn every same-wave worker with its progress-assigned worktree and frozen role runtime before awaiting any of them, then join the whole wave; never serialize spawn/await or create extra agent worktrees. Never invoke Claude Code, a Claude subagent tool, or a nested `codex` CLI process.
+- Resolve automatic risk routing once from progress/config/approved-plan: Lean high/critical upgrades Planner and Reviewer; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. A Reviewer may use a different model or the same model with higher reasoning effort. Provider-specific IDs are allowed only in private project/feature config; public defaults remain portable.
+- Translate `$CLAUDE_PLUGIN_ROOT` to this installed Codex plugin root and preserve the authoritative command's state transitions, gates, counters, validation, and stop behavior.
+- Browser tooling, login/MFA state, and verification-page URL availability are checked only after the exact candidate reaches test and CI delivery completes. They never block delivery. If post-deployment verification cannot run, record `manual_required` / `deployed_needs_manual_verification` with evidence and leave it recoverable; never claim a pass.
 
 ## Document Write Map
 
-These are fixed cc-nexs locations, not Codex-specific alternatives:
-
-- Feature docs: `all-docs/doc/{id}.{slug}/requirements.md`, `repo-context.md`, `spec.md`, `sa-review.md`, `dev-plan.md`, `api-doc.md`, `deploy.md`, `test-cases.md`, `sa-test-review.md`, `test-report.md`, `sa-code-review.md`, `acceptance.md`, `progress.md`, and `README.md`.
-- Hotfix record: `all-docs/doc/{id}.{slug}/hotfix.md` in an independently initialized hotfix feature.
-- Compound learnings: `docs/solutions/<topic>.md` plus the command-specific feature summary when `/cc-nexs:compound` requests it.
-- Document repo commits: when `all-docs/` is its own git repo, add only `doc/{id}.{slug}/` or the command-declared bug path and keep code-repo files out of that commit.
+Preserve exactly the paths declared by the authoritative command, including `all-docs/doc/{id}.{slug}/`, its `progress.md` and `hotfix.md` records, command-declared `bugs/` or `qa-scripts/`, and `docs/solutions/`. Do not invent Codex-specific alternatives.
 
 ## Full / Fast / Hotfix Mode Locks
 
-- `lean`: preserve the plan and release gates, two authored documents, exact worktree/candidate binding, deterministic local driver, one full Review plus at most one delta closure, and test-before-base integration.
-- `full`: preserve Repo Scout pre-spec recon, Planner / Tech Lead / SA / QA / Evaluator isolation, sprint slicing, artifact completeness gate before Evaluator, single human gate after spec approval, and README sync around every state transition.
-- `fast`: preserve Fullstack / Reviewer / Verifier roles, single sprint, stricter counters, merged Reviewer acceptance parsing, Verifier black-box testing, no SA test-case review, and no TECH_LEAD_REVIEW fallback.
-- `hotfix`: preserve latest-base isolation, immutable scope binding, P0/P1/P2/P3 impact grading, deterministic P3 boundary, one Review plus at most one lifetime delta, test verification, and Gateway B before base integration.
+The authoritative command alone defines `lean, full, fast, and hotfix` semantics. This adapter changes only Codex dispatch and runtime mechanics; it must not restate, reorder, or weaken a mode.
 
 ## Completion Rule
 

@@ -15,6 +15,11 @@ const expectedCommands = [
   'build',
   'doctor',
   'fullstack',
+  'planner',
+  'dev',
+  'sa',
+  'qa',
+  'evaluator',
   'git-custodian',
   'hotfix',
   'init',
@@ -37,6 +42,11 @@ const expectedCommands = [
 ];
 const expectedRoles = [
   'fullstack',
+  'planner',
+  'tech-lead',
+  'sa',
+  'qa',
+  'evaluator',
   'repo-scout',
   'reviewer',
   'verifier',
@@ -48,6 +58,7 @@ const expectedRoles = [
   'hotfix-reviewer',
   'hotfix-verifier',
   'verifier-computer-use',
+  'qa-computer-use',
   'lean-verifier-computer-use',
   'hotfix-verifier-computer-use',
 ];
@@ -67,7 +78,7 @@ const extensionPath = join(root, 'pi/extensions/cc-nexs.ts');
 if (!existsSync(extensionPath)) fail('Pi extension is missing');
 else {
   const extension = readFileSync(extensionPath, 'utf8');
-  for (const marker of ['CC_NEXS_RUNTIME = "pi"', 'PI_SUBAGENT_CHILD_AGENT', 'pi.registerCommand', 'isGitMutation', 'roleBoundaryViolation']) {
+  for (const marker of ['CC_NEXS_RUNTIME = "pi"', 'PI_SUBAGENT_CHILD_AGENT', 'pi.registerCommand', 'isGitMutation', 'isProgressMutation', 'roleBoundaryViolation']) {
     if (!extension.includes(marker)) fail(`Pi extension: missing ${marker}`);
   }
   for (const marker of ['runCcNexsCommand', 'splitCommandArguments']) {
@@ -90,12 +101,34 @@ for (const command of expectedCommands) {
     if (!/^disable-model-invocation:\s*true\s*$/m.test(skillFrontmatter)) {
       fail(`${name}: explicit-only Pi skill must set disable-model-invocation: true`);
     }
-    const contractMarkers = command === 'hotfix'
-      ? ['preset-standard', 'pi-subagents', 'same model with higher thinking', 'P0/P1 automatically routes Reviewer to escalated', 'explicit feature role profile remains final', 'ship no provider-specific model IDs']
-      : ['preset-standard', 'lean (default)', 'pi-subagents', 'same model with higher thinking', 'pass the selected `model` and `thinking` directly', 'automatic risk routing', 'Lean high/critical', 'Hotfix P0/P1', 'explicit feature role profile remains final', 'ship no provider-specific model IDs'];
+    const contractMarkers = [
+      'preset-standard',
+      'pi-subagents@0.35.1',
+      'subagent({',
+      'tasks: [',
+      'concurrency: 2',
+      'async: true',
+      'worktree: false',
+      'context: "fresh"',
+      'subagent_wait({ id:',
+      'failed/unavailable tasks',
+      'never rerun successful siblings',
+      'same model with higher thinking',
+      'explicit feature role profile remains final',
+      'ship no provider-specific model IDs',
+    ];
+    if (command !== 'hotfix') {
+      contractMarkers.push('lean (default)', 'fast, and full', 'automatic risk routing', 'Lean high/critical', 'Hotfix P0/P1');
+    } else {
+      contractMarkers.push('P0/P1 automatically routes Reviewer to escalated');
+    }
     for (const marker of contractMarkers) {
       if (!skill.includes(marker)) fail(`${name}: missing P2 contract marker ${marker}`);
     }
+    if (/run_in_background|background Agent calls?|same-message Agent calls?/i.test(skill)) {
+      fail(`${name}: obsolete non-pi-subagents background Agent API leaked into Pi contract`);
+    }
+    if (/\bworktree\s*:\s*true\b/.test(skill)) fail(`${name}: Pi fanout must never create child worktrees`);
     if (['cc-nexs-approve-deploy', 'cc-nexs-approve-spec', 'cc-nexs-approve-plan', 'cc-nexs-approve-release'].includes(name)
       && !skill.includes('../../../packages/core/lib/cc-nexs-cli.mjs')) {
       fail(`${name}: approval skill must invoke the deterministic control CLI`);
@@ -141,7 +174,28 @@ for (const role of expectedRoles) {
   if (/^\s*codex\s+/m.test(text)) fail(`${file}: executable Codex CLI snippet leaked into Pi agent`);
 }
 
-for (const file of ['verifier.md', 'lean-verifier.md', 'hotfix-verifier.md']) {
+const saPath = join(agentsRoot, 'sa.md');
+if (existsSync(saPath)) {
+  const sa = readFileSync(saPath, 'utf8');
+  const frontmatter = extractFrontmatter(sa);
+  if (/^tools:.*\bbash\b/m.test(frontmatter)) fail('sa.md: direct SA must not expose Bash or subprocess wrappers');
+  for (const marker of [
+    'Pi SA Direct Review Contract',
+    'Review the exact artifacts or candidate diff supplied by the parent directly in this session',
+    'Write only `sa-review.md`, `sa-test-review.md`, or `sa-code-review.md`',
+    'Do not write `progress.md` or `progress.json`',
+    '`spec`, `cases`, `code`, or `integration`',
+    'RESULT:PASS',
+    'RESULT:NEEDS_REVISION',
+  ]) {
+    if (!sa.includes(marker)) fail(`sa.md: missing direct-SA marker ${marker}`);
+  }
+  for (const forbidden of ['codex exec', '评审大脑', '调用 codex CLI', '落到 progress.md', '每次 codex 完成后']) {
+    if (sa.includes(forbidden)) fail(`sa.md: legacy SA wrapper behavior leaked: ${forbidden}`);
+  }
+}
+
+for (const file of ['verifier.md', 'qa.md', 'lean-verifier.md', 'hotfix-verifier.md']) {
   const verifier = readFileSync(join(agentsRoot, file), 'utf8');
   const frontmatter = extractFrontmatter(verifier);
   if (!/^tools:.*\bbash\b/m.test(frontmatter)) fail(`${file}: ego lite browser operations require Bash`);
@@ -152,7 +206,17 @@ for (const file of ['verifier.md', 'lean-verifier.md', 'hotfix-verifier.md']) {
   }
 }
 
-for (const file of ['verifier-computer-use.md', 'lean-verifier-computer-use.md', 'hotfix-verifier-computer-use.md']) {
+for (const file of ['qa.md', 'qa-computer-use.md']) {
+  const qa = readFileSync(join(agentsRoot, file), 'utf8');
+  if (/chrome-devtools|mcp__chrome-devtools/i.test(qa)) {
+    fail(`${file}: Claude-only chrome-devtools instruction leaked into Pi QA`);
+  }
+  for (const marker of ['Pi QA Provider-Neutral Contract', '顶部冻结的唯一 Pi browser provider', '不得自行选择、混用或切换 provider']) {
+    if (!qa.includes(marker)) fail(`${file}: missing provider-neutral QA marker ${marker}`);
+  }
+}
+
+for (const file of ['verifier-computer-use.md', 'qa-computer-use.md', 'lean-verifier-computer-use.md', 'hotfix-verifier-computer-use.md']) {
   const verifier = readFileSync(join(agentsRoot, file), 'utf8');
   const frontmatter = extractFrontmatter(verifier);
   if (/^skills:/m.test(frontmatter)) fail(`${file}: fallback verifier must not preload ego-browser`);
@@ -179,6 +243,12 @@ if (existsSync(releaseSkillPath)) {
   for (const marker of ['Deterministic Test Release Control', 'release-test <feature-id>', 'ego-browser nodejs', '@injaneity/pi-computer-use@0.4.3', 'headless: true']) {
     if (!releaseSkill.includes(marker)) fail(`cc-nexs-release-test: missing ${marker}`);
   }
+}
+
+const roleBoundaryPath = join(root, 'packages/core/lib/role-boundary.mjs');
+const roleBoundary = readFileSync(roleBoundaryPath, 'utf8');
+for (const marker of ["sa: {", 'sa-review|sa-test-review|sa-code-review', 'isProgressMutation', 'progress\\.(?:md|json)']) {
+  if (!roleBoundary.includes(marker)) fail(`role-boundary.mjs: missing Pi child guard marker ${marker}`);
 }
 
 if (errors.length) {

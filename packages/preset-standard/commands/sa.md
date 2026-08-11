@@ -39,6 +39,7 @@ fi
 ```
 评审 spec：
 读 ${REQ_DIR}spec.md
+先调用确定性 implementation plan 校验；失败直接 NEEDS_REVISION，不得进入 G1。
 按 agents/sa-codex.md 中 target=spec 的评审清单执行
 append 到 ${REQ_DIR}sa-review.md（## Round N 分隔）
 末尾必须 结论: PASS 或 NEEDS_REVISION

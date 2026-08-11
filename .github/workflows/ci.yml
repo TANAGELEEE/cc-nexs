@@ -26,6 +26,11 @@ jobs:
       - run: pnpm test:security
       - run: pnpm test:hooks
       - run: pnpm verify:reproducible
+      - name: Verify generated artifacts are committed
+        shell: bash
+        run: |
+          git diff --exit-code -- dist pi/agents pi/skills .claude-plugin/marketplace.json .agents/plugins/marketplace.json package.json.pi
+          test -z "$(git ls-files --others --exclude-standard -- dist pi/agents pi/skills .claude-plugin/marketplace.json .agents/plugins/marketplace.json package.json.pi)"
       - run: pnpm validate:plugins
       - run: pnpm audit:public
       - run: pnpm smoke:public-release

@@ -1,4 +1,4 @@
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 import { resolveCandidateContext } from './candidate-context.mjs';
 import { assertHotfixScopeCurrent } from './hotfix-contract.mjs';
@@ -15,17 +15,31 @@ import {
   recordBaseIntegration,
 } from './progress-v2.mjs';
 import { assertPlanApprovalCurrent } from './plan-contract.mjs';
+import { transitionState } from './progress-io.mjs';
+import { resolveFeatureProgress } from './approval-command.mjs';
 
 export function runBaseRelease({ cwd = process.cwd(), featureId, progressPath = null } = {}) {
   // Code candidates are the immutable, test-verified release payload. The docs
   // worktree contains the live progress ledger, so it is finalized and merged
   // last by Git Custodian after the orchestrator records COMPLETE.
-  const context = resolveCandidateContext({ cwd, featureId, progressPath, includeDocs: false });
-  if (!['lean', 'hotfix'].includes(context.progress.mode)) throw new Error(`[cc-nexs] base release requires lean or hotfix mode, found ${context.progress.mode}`);
-  if (context.progress.mode === 'lean') assertPlanApprovalCurrent(context.progress, dirname(context.progressFile));
-  else assertHotfixScopeCurrent(context.progress, dirname(context.progressFile));
-  const mergeState = context.progress.mode === 'hotfix' ? 'HOTFIX_BASE_MERGING' : 'BASE_MERGING';
-  if (context.progress.state !== mergeState) throw new Error(`[cc-nexs] base release requires ${mergeState}, found ${context.progress.state}`);
+  const progressFile = resolveFeatureProgress({ cwd, featureId, progressPath });
+  const initial = readProgressV2(progressFile);
+  if (!['lean', 'hotfix'].includes(initial.mode)) throw new Error(`[cc-nexs] base release requires lean or hotfix mode, found ${initial.mode}`);
+  const mergeState = initial.mode === 'hotfix' ? 'HOTFIX_BASE_MERGING' : 'BASE_MERGING';
+  if (initial.state !== mergeState) throw new Error(`[cc-nexs] base release requires ${mergeState}, found ${initial.state}`);
+  const failureContext = { progressFile, progress: initial };
+  try {
+    const context = resolveCandidateContext({ cwd, featureId, progressPath: progressFile, includeDocs: false });
+    if (context.progress.mode === 'lean') assertPlanApprovalCurrent(context.progress, dirname(context.progressFile));
+    else assertHotfixScopeCurrent(context.progress, dirname(context.progressFile));
+    return executeBaseRelease(context);
+  } catch (error) {
+    persistBaseReleaseFailure(failureContext, mergeState, error);
+    throw error;
+  }
+}
+
+function executeBaseRelease(context) {
   const gate = context.progress.gates?.release;
   if (!gate?.approved || !gate.binding) throw new Error('[cc-nexs] release gate approval is required');
   if (context.progress.mode === 'hotfix' && gate.binding.hotfix_scope_binding !== context.progress.hotfix.scope_binding.hotfix_scope_sha256) {
@@ -56,12 +70,17 @@ export function runBaseRelease({ cwd = process.cwd(), featureId, progressPath = 
       throw new Error(`[cc-nexs] candidate changed after release approval for ${repository}`);
     }
   }
+  const baseTargets = resolveApprovedBaseTargets({
+    binding: gate.binding,
+    repositories: context.repositories,
+    testedSource,
+  });
 
   for (const item of context.repositories) {
     assertCandidateContainsRemoteBase({
       repo: item.repository.absolute_path,
       candidateRef: item.assignment.candidate.ref,
-      baseBranch: item.repository.base_branch,
+      baseBranch: baseTargets[item.id],
     });
   }
 
@@ -76,7 +95,8 @@ export function runBaseRelease({ cwd = process.cwd(), featureId, progressPath = 
         repositoryId: item.id,
         candidateRef: item.assignment.candidate.ref,
         expectedSourceCommit: item.sourceCommit,
-        targetBranch: item.repository.base_branch,
+        targetBranch: baseTargets[item.id],
+        requireTargetAncestor: true,
       });
       recordBaseIntegration(context.progressFile, {
         attemptId: attempt.id,
@@ -100,7 +120,7 @@ export function runBaseRelease({ cwd = process.cwd(), featureId, progressPath = 
       repo: item.repository.absolute_path,
       worktree: resolve(context.workspaceRoot, item.assignment.worktree),
       branch: item.assignment.branch,
-      baseBranch: item.repository.base_branch,
+      baseBranch: baseTargets[item.id],
       candidateRef: item.assignment.candidate.ref,
       deleteRemote: true,
     });
@@ -114,4 +134,57 @@ export function runBaseRelease({ cwd = process.cwd(), featureId, progressPath = 
     docsFinalizationRequired: Boolean(context.workspace.docs_repository),
     progressFile: context.progressFile,
   };
+}
+
+function persistBaseReleaseFailure(context, mergeState, error) {
+  const current = readProgressV2(context.progressFile);
+  if (current.state !== mergeState) return;
+  const baseChanged = /\bBASE_CHANGED\b/.test(error?.message || '');
+  const blockedState = context.progress.mode === 'hotfix'
+    ? (baseChanged ? 'HOTFIX_BASE_CHANGED' : 'HOTFIX_BASE_MERGE_BLOCKED')
+    : (baseChanged ? 'BASE_CHANGED' : 'BASE_MERGE_BLOCKED');
+  transitionState(join(dirname(context.progressFile), 'progress.md'), {
+    from: mergeState,
+    to: blockedState,
+    reason: error?.message || 'base release failed',
+  });
+}
+
+function resolveApprovedBaseTargets({ binding, repositories, testedSource }) {
+  const hasApprovedTargets = Object.prototype.hasOwnProperty.call(binding, 'base_targets');
+  const approvedTargets = binding.base_targets;
+  if (hasApprovedTargets && (!approvedTargets || typeof approvedTargets !== 'object' || Array.isArray(approvedTargets))) {
+    throw new Error('[cc-nexs] approved base target binding is invalid');
+  }
+
+  const expectedRepositories = Object.keys(testedSource).sort();
+  if (hasApprovedTargets) {
+    const boundRepositories = Object.keys(approvedTargets).sort();
+    if (JSON.stringify(boundRepositories) !== JSON.stringify(expectedRepositories)) {
+      throw new Error('[cc-nexs] approved base target repository set does not match the tested candidate');
+    }
+  }
+
+  const targets = {};
+  for (const item of repositories) {
+    // Progress v2 assignments already captured the base branch when the candidate
+    // worktree was created. That is the only safe fallback for approvals created
+    // before Gateway B started persisting base_targets.
+    const assignedTarget = item.assignment.base_branch;
+    if (typeof assignedTarget !== 'string' || !assignedTarget.trim()) {
+      throw new Error(`[cc-nexs] candidate assignment has no bound base branch for ${item.id}`);
+    }
+    const approvedTarget = hasApprovedTargets ? approvedTargets[item.id] : assignedTarget;
+    if (typeof approvedTarget !== 'string' || !approvedTarget.trim()) {
+      throw new Error(`[cc-nexs] approved base target is missing for ${item.id}`);
+    }
+    if (assignedTarget !== approvedTarget) {
+      throw new Error(`[cc-nexs] candidate assignment base branch changed after release approval for ${item.id}`);
+    }
+    if (item.repository.base_branch !== approvedTarget) {
+      throw new Error(`[cc-nexs] workspace base branch changed after release approval for ${item.id}`);
+    }
+    targets[item.id] = approvedTarget;
+  }
+  return targets;
 }

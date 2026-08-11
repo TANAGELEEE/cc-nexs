@@ -5,9 +5,20 @@ import { dirname, isAbsolute, resolve } from 'node:path';
 import { resolveCandidateContext } from './candidate-context.mjs';
 import { assertHotfixScopeCurrent } from './hotfix-contract.mjs';
 import { assertPlanApprovalCurrent } from './plan-contract.mjs';
-import { candidateFingerprint, readProgressV2, recordLocalVerification } from './progress-v2.mjs';
+import {
+  candidateFingerprint,
+  isLocalVerificationReadyStatus,
+  readProgressV2,
+  recordLocalVerification,
+} from './progress-v2.mjs';
 
-export function runLocalVerification({ cwd = process.cwd(), featureId, progressPath = null } = {}) {
+export function runLocalVerification({
+  cwd = process.cwd(),
+  featureId,
+  progressPath = null,
+  recordStatus = null,
+  evidence: recordedEvidence = [],
+} = {}) {
   const context = resolveCandidateContext({ cwd, featureId, progressPath });
   if (!['lean', 'hotfix'].includes(context.progress.mode)) throw new Error(`[cc-nexs] local verification control requires lean or hotfix mode, found ${context.progress.mode}`);
   if (context.progress.mode === 'lean') assertPlanApprovalCurrent(context.progress, dirname(context.progressFile));
@@ -19,19 +30,48 @@ export function runLocalVerification({ cwd = process.cwd(), featureId, progressP
     throw new Error(`[cc-nexs] local verification is not valid from ${context.progress.state}`);
   }
   const driver = normalizeDriver(context.config.mergedWorkflow?.local_verify?.driver, context.workspaceRoot);
-  if (!driver) throw new Error('[cc-nexs] workflow.local_verify.driver is required for lean mode');
   const fingerprint = candidateFingerprint(context.source);
   const verificationContext = resolveVerificationContext(context.progress);
-  if (
-    context.config.mergedWorkflow?.local_verify?.reuse_passed !== false
-    && context.progress.local_verification?.status === 'passed'
-    && context.progress.local_verification?.candidate_fingerprint === fingerprint
-  ) {
-    const previous = context.progress.local_verification.attempts?.findLast((item) => item.fingerprint === fingerprint && item.status === 'passed');
+  if (recordStatus !== null) {
+    if (context.progress.mode !== 'lean') {
+      throw new Error('[cc-nexs] direct local evidence recording is available only in Lean mode');
+    }
+    if (driver) {
+      throw new Error('[cc-nexs] workflow.local_verify.driver is configured; run verify-local without direct evidence flags');
+    }
+    validateRecordedLocalEvidence(recordStatus, recordedEvidence);
+    recordLocalVerification(context.progressFile, {
+      source: context.source,
+      status: recordStatus,
+      context: verificationContext,
+      evidence: recordedEvidence,
+      expectedRevision: context.progress.revision,
+      actor: 'local-evidence-controller',
+    });
     return {
       kind: 'local-verification',
       feature: context.progress.feature,
-      status: 'passed',
+      status: recordStatus,
+      context: verificationContext,
+      evidence: recordedEvidence,
+      source: context.source,
+      progress: readProgressV2(context.progressFile),
+      progressFile: context.progressFile,
+    };
+  }
+  if (
+    context.config.mergedWorkflow?.local_verify?.reuse_passed !== false
+    && isLocalVerificationReadyStatus(context.progress.local_verification?.status)
+    && context.progress.local_verification?.candidate_fingerprint === fingerprint
+    && context.progress.local_verification?.context === verificationContext
+  ) {
+    const previous = context.progress.local_verification.attempts?.findLast((item) => (
+      item.fingerprint === fingerprint && isLocalVerificationReadyStatus(item.status)
+    ));
+    return {
+      kind: 'local-verification',
+      feature: context.progress.feature,
+      status: previous?.status || context.progress.local_verification.status,
       context: context.progress.local_verification?.context || verificationContext,
       evidence: previous?.evidence || [],
       source: context.source,
@@ -39,6 +79,9 @@ export function runLocalVerification({ cwd = process.cwd(), featureId, progressP
       progress: context.progress,
       progressFile: context.progressFile,
     };
+  }
+  if (!driver) {
+    throw new Error('[cc-nexs] workflow.local_verify.driver is not configured; run plan-approved local commands, then use verify-local --passed, --failed, or --deferred-to-test with structured --evidence-json records');
   }
   const payload = {
     schema_version: 1,
@@ -51,6 +94,13 @@ export function runLocalVerification({ cwd = process.cwd(), featureId, progressP
       branch: item.assignment.branch,
       commit: item.sourceCommit,
     }])),
+    policy: {
+      allow_test_defer: context.progress.mode === 'lean',
+      defer_contract: {
+        status: 'deferred_to_test',
+        evidence: { check: '<check>', result: 'deferred_to_test', reason: '<environment limitation>', test_action: '<test action>' },
+      },
+    },
   };
   const result = invokeLocalVerifyDriver({ driver, workspaceRoot: context.workspaceRoot, payload });
   const evidence = result.evidence || [];
@@ -71,6 +121,52 @@ export function runLocalVerification({ cwd = process.cwd(), featureId, progressP
     progress: readProgressV2(context.progressFile),
     progressFile: context.progressFile,
   };
+}
+
+function validateRecordedLocalEvidence(status, evidence) {
+  if (!['passed', 'failed', 'deferred_to_test'].includes(status)) {
+    throw new Error(`[cc-nexs] invalid recorded local verification status: ${status || '<missing>'}`);
+  }
+  if (!Array.isArray(evidence) || evidence.length === 0) {
+    throw new Error('[cc-nexs] recorded local verification requires structured evidence');
+  }
+  const passed = evidence.filter((item) => item?.result === 'passed');
+  if (passed.some((item) => (
+    typeof item.check !== 'string'
+    || !item.check.trim()
+    || typeof item.command !== 'string'
+    || !item.command.trim()
+    || item.exit_code !== 0
+    || typeof item.proof !== 'string'
+    || !item.proof.trim()
+  ))) {
+    throw new Error('[cc-nexs] passing local evidence requires check, command, exit_code=0, and proof');
+  }
+  const failed = evidence.filter((item) => item?.result === 'failed');
+  if (failed.some((item) => (
+    typeof item.check !== 'string'
+    || !item.check.trim()
+    || typeof item.command !== 'string'
+    || !item.command.trim()
+    || !Number.isInteger(item.exit_code)
+    || item.exit_code === 0
+    || typeof item.proof !== 'string'
+    || !item.proof.trim()
+  ))) {
+    throw new Error('[cc-nexs] failing local evidence requires check, command, a nonzero integer exit_code, and proof');
+  }
+  if (status === 'failed') {
+    if (failed.length === 0 || evidence.some((item) => !['passed', 'failed'].includes(item?.result))) {
+      throw new Error('[cc-nexs] a failed local verification requires at least one failed command and may contain only passed or failed evidence');
+    }
+    return;
+  }
+  if (passed.length === 0) {
+    throw new Error('[cc-nexs] direct local evidence requires at least one passed command with check, command, exit_code=0, and proof');
+  }
+  if (status === 'passed' && evidence.some((item) => item?.result !== 'passed')) {
+    throw new Error('[cc-nexs] a passing local verification may contain only passed evidence');
+  }
 }
 
 function resolveVerificationContext(progress) {
@@ -103,7 +199,7 @@ export function invokeLocalVerifyDriver({ driver, workspaceRoot, payload }) {
   let result;
   try { result = JSON.parse(output); }
   catch { throw new Error('[cc-nexs] local verification driver must write one JSON object to stdout'); }
-  if (!['passed', 'failed'].includes(result?.status)) {
+  if (!['passed', 'failed', 'deferred_to_test'].includes(result?.status)) {
     throw new Error(`[cc-nexs] invalid local verification status: ${result?.status || '<missing>'}`);
   }
   if (!Array.isArray(result.evidence)) throw new Error('[cc-nexs] local verification evidence must be an array');

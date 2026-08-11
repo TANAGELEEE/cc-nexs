@@ -45,10 +45,13 @@ function isFastReviewRevisionState(state) {
  *     Roles: fullstack (replaces planner+tech-lead), reviewer (replaces sa+evaluator),
  *     verifier (replaces qa cases+run+regression).
  *
- *   mode='lean' — plan-first, two-gate, one-consolidated-review pipeline:
+ *   mode='lean' — plan-first, two-gate, one-consolidated-review pipeline.
+ *     Eligible fast-track work reaches test before the consolidated Review;
+ *     standard work keeps Review before test. Both require Review + verified test
+ *     evidence for the exact candidate before Gateway B:
  *     INIT → PLANNING → PLAN_PENDING_HUMAN → PLAN_APPROVED → IMPLEMENTING
- *       → LOCAL_VERIFYING → CONSOLIDATED_REVIEW → CANDIDATE_READY
- *       → TEST_RELEASE → TEST_VERIFYING → RELEASE_PENDING_HUMAN
+ *       → LOCAL_VERIFYING → [CONSOLIDATED_REVIEW] → CANDIDATE_READY
+ *       → TEST_RELEASE → TEST_VERIFYING → [CONSOLIDATED_REVIEW] → RELEASE_PENDING_HUMAN
  *       → BASE_MERGING → COMPLETE
  *     Consolidated blockers take one bounded fix + delta-review closure. Gateway B
  *     implementation feedback takes one bounded local reverify + delta Review and
@@ -89,7 +92,7 @@ export function nextStep({
   if (mode === 'hotfix') {
     return nextStepHotfix({ state, counters, thresholds, enabledRoles, workflow });
   }
-  if (mode === 'fast') {
+  if (mode === 'fast' || mode === 'lite') {
     return nextStepFast({ state, counters, thresholds, enabledRoles, humanGateApproved, workflow });
   }
   return nextStepFull({ state, counters, thresholds, enabledRoles, sprint, humanGateApproved, workflow });
@@ -104,6 +107,9 @@ function nextStepHotfix({ state, counters, thresholds, enabledRoles, workflow = 
   const releaseApproved = workflow.release_approved === true;
   const deltaAttempts = Number(workflow.hotfix?.delta_attempts || 0);
   const testFailures = Number(counters.fix_per_bug?.HOTFIX_TEST || 0);
+  const reviewStatus = workflow.review?.status || 'idle';
+  const reviewExact = workflow.review?.exact === true;
+  const closureAttempts = Number(workflow.review?.closure_attempts || 0);
 
   if (TERMINAL.has(state)) return { next: state, role: null, action: 'noop' };
   if (['HOTFIX_REVIEW_BLOCKED', 'HOTFIX_TEST_FAILED', 'HOTFIX_CHANGE_REQUESTED'].includes(state) && deltaAttempts >= 1) {
@@ -123,6 +129,9 @@ function nextStepHotfix({ state, counters, thresholds, enabledRoles, workflow = 
       return { next: 'HOTFIX_IMPLEMENTED', role: developer, action: 'fix_local' };
     case 'HOTFIX_LOCAL_VERIFYING':
       if (severity === 'P3') return { next: 'HOTFIX_CANDIDATE_READY', role: null, action: 'assert_p3_candidate' };
+      if (reviewExact && ['passed', 'blocked'].includes(reviewStatus)) {
+        return { next: 'HOTFIX_REVIEWING', role: null, action: 'continue' };
+      }
       return { next: 'HOTFIX_REVIEWING', role: reviewer, action: 'review_hotfix' };
     case 'HOTFIX_REVIEWING':
       return { next: 'PARSE_HOTFIX_REVIEW', role: null, action: 'parse_review_conclusion' };
@@ -136,6 +145,9 @@ function nextStepHotfix({ state, counters, thresholds, enabledRoles, workflow = 
       return { next: 'HOTFIX_FIXING', role: developer, action: 'fix_local' };
     case 'HOTFIX_LOCAL_REVERIFYING':
       if (severity === 'P3') return { next: 'HOTFIX_CANDIDATE_READY', role: null, action: 'assert_p3_candidate' };
+      if (reviewExact && closureAttempts > 0) {
+        return { next: 'HOTFIX_DELTA_REVIEW', role: null, action: 'continue' };
+      }
       return { next: 'HOTFIX_DELTA_REVIEW', role: reviewer, action: 'review_hotfix_delta' };
     case 'HOTFIX_DELTA_REVIEW':
       return { next: 'PARSE_HOTFIX_DELTA_REVIEW', role: null, action: 'parse_review_conclusion' };
@@ -151,9 +163,25 @@ function nextStepHotfix({ state, counters, thresholds, enabledRoles, workflow = 
     case 'HOTFIX_TEST_RELEASE':
       return nextHotfixTestReleaseStep({ workflow, verifier });
     case 'HOTFIX_TEST_RELEASE_BLOCKED':
+      return { next: state, role: null, action: 'await_human', stop: true };
     case 'HOTFIX_TEST_DEPLOYED_NEEDS_MANUAL_VERIFY':
+      if (workflow.test_release?.status === 'verified') {
+        return { next: 'HOTFIX_TEST_VERIFIED', role: null, action: 'continue' };
+      }
+      if (workflow.test_release?.status === 'failed') {
+        return { next: 'HOTFIX_TEST_FAILED', role: null, action: 'continue' };
+      }
       return { next: state, role: null, action: 'await_human', stop: true };
     case 'HOTFIX_TEST_VERIFYING':
+      if (workflow.test_release?.status === 'verified') {
+        return { next: 'HOTFIX_TEST_VERIFIED', role: null, action: 'continue' };
+      }
+      if (workflow.test_release?.status === 'failed') {
+        return { next: 'HOTFIX_TEST_FAILED', role: null, action: 'continue' };
+      }
+      if (workflow.test_release?.status === 'deployed_needs_manual_verification') {
+        return { next: 'HOTFIX_TEST_DEPLOYED_NEEDS_MANUAL_VERIFY', role: null, action: 'await_human', stop: true };
+      }
       return { next: 'PARSE_HOTFIX_TEST', role: null, action: 'parse_test_conclusion' };
     case 'HOTFIX_TEST_VERIFIED':
       return { next: 'HOTFIX_RELEASE_PENDING_HUMAN', role: null, action: 'await_release_approval', stop: true };
@@ -161,7 +189,13 @@ function nextStepHotfix({ state, counters, thresholds, enabledRoles, workflow = 
       if (releaseApproved) return { next: 'HOTFIX_BASE_MERGING', role: null, action: 'release_base' };
       return { next: state, role: null, action: 'await_release_approval', stop: true };
     case 'HOTFIX_BASE_MERGING':
-      return { next: 'COMPLETE', role: null, action: 'complete' };
+      if (workflow.base_release?.status === 'succeeded') {
+        return { next: 'COMPLETE', role: null, action: 'complete' };
+      }
+      if ((workflow.base_release?.status || 'idle') === 'idle') {
+        return { next: state, role: null, action: 'release_base' };
+      }
+      return { next: 'HOTFIX_BASE_MERGE_BLOCKED', role: null, action: 'await_human', stop: true };
     case 'HOTFIX_BASE_CHANGED':
       return { next: 'HOTFIX_FIXING', role: developer, action: 'sync_base' };
     case 'HOTFIX_BASE_MERGE_BLOCKED':
@@ -176,9 +210,11 @@ function nextHotfixTestReleaseStep({ workflow, verifier }) {
   const policy = release.policy || 'manual';
   const status = release.status || 'idle';
   const attempt = Number(release.attempt || 0);
-  if (status === 'succeeded' || status === 'verified') {
+  if (status === 'verified') return { next: 'HOTFIX_TEST_VERIFIED', role: null, action: 'continue' };
+  if (status === 'succeeded') {
     return { next: 'HOTFIX_TEST_VERIFYING', role: verifier, action: attempt > 1 ? 'verify_hotfix_regression' : 'verify_hotfix_test' };
   }
+  if (status === 'deploying') return { next: 'HOTFIX_TEST_RELEASE', role: null, action: 'poll_test_release' };
   if (status === 'failed') return { next: 'HOTFIX_TEST_RELEASE_BLOCKED', role: null, action: 'await_human', stop: true };
   if (status === 'deployed_needs_manual_verification') {
     return { next: 'HOTFIX_TEST_DEPLOYED_NEEDS_MANUAL_VERIFY', role: null, action: 'await_human', stop: true };
@@ -197,6 +233,13 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
   const verifier = has('lean-verifier') ? 'lean-verifier' : has('verifier') ? 'verifier' : reviewer;
   const planApproved = workflow.plan_approved ?? humanGateApproved;
   const releaseApproved = workflow.release_approved === true;
+  const deliveryLane = workflow.delivery_lane || (workflow.lean_fast_track === true ? 'fast-track' : 'standard');
+  const fastTrack = deliveryLane === 'fast-track';
+  const reviewStatus = workflow.review?.status || workflow.review_status || 'idle';
+  const reviewExact = workflow.review?.exact === true;
+  const closureAttempts = Number(workflow.review?.closure_attempts || 0);
+  const gatewayBDeltaAttempts = Number(workflow.review?.gateway_b_delta_attempts || 0);
+  const testReleaseStatus = workflow.test_release?.status || 'idle';
 
   if (TERMINAL.has(state)) return { next: state, role: null, action: 'noop' };
   if (state === 'REVIEW_CLOSURE_BLOCKED') {
@@ -227,6 +270,10 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
     case 'LOCAL_VERIFY_FAILED':
       return { next: 'IMPLEMENTING', role: developer, action: 'fix_local' };
     case 'LOCAL_VERIFYING':
+      if (fastTrack) return { next: 'CANDIDATE_READY', role: null, action: 'continue_to_test' };
+      if (reviewExact && ['passed', 'blocked'].includes(reviewStatus)) {
+        return { next: 'CONSOLIDATED_REVIEW', role: null, action: 'continue' };
+      }
       return { next: 'CONSOLIDATED_REVIEW', role: reviewer, action: 'review_candidate' };
     case 'CONSOLIDATED_REVIEW':
       return { next: 'PARSE_CONSOLIDATED_REVIEW', role: null, action: 'parse_review_conclusion' };
@@ -244,25 +291,59 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
       }
       return { next: 'REVIEW_FIXING', role: developer, action: 'fix_local' };
     case 'LOCAL_REVERIFYING':
+      if (fastTrack && workflow.local_verification?.context === 'test' && reviewStatus === 'idle') {
+        return { next: 'CANDIDATE_READY', role: null, action: 'continue_to_test' };
+      }
+      if (reviewExact && closureAttempts > 0) {
+        return { next: 'REVIEW_CLOSURE', role: null, action: 'continue' };
+      }
       return { next: 'REVIEW_CLOSURE', role: reviewer, action: 'review_delta' };
     case 'REVIEW_CLOSURE':
       return { next: 'PARSE_REVIEW_CLOSURE', role: null, action: 'parse_review_conclusion' };
     case 'CANDIDATE_READY':
+      if (fastTrack && testReleaseStatus === 'verified' && reviewStatus === 'passed') {
+        return { next: 'RELEASE_PENDING_HUMAN', role: null, action: 'await_release_approval', stop: true };
+      }
+      return { next: 'TEST_RELEASE', role: null, action: 'continue' };
     case 'TEST_RELEASE':
       return nextTestReleaseStep({
         workflow,
         verifier,
         initial: { next: 'TEST_VERIFYING', action: 'verify_test' },
         regression: { next: 'TEST_VERIFYING', action: 'verify_test_regression' },
+        verified: { next: 'TEST_VERIFIED', action: 'continue' },
+        allowLegacyG2: false,
       });
     case 'TEST_RELEASE_BLOCKED':
+      return { next: state, role: null, action: 'await_human', stop: true };
     case 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY':
+      if (testReleaseStatus === 'verified') {
+        return { next: 'TEST_VERIFIED', role: null, action: 'continue' };
+      }
+      if (testReleaseStatus === 'failed') {
+        return { next: 'TEST_VERIFY_FAILED', role: null, action: 'continue' };
+      }
       return { next: state, role: null, action: 'await_human', stop: true };
     case 'TEST_VERIFYING':
+      if (testReleaseStatus === 'verified') {
+        return { next: 'TEST_VERIFIED', role: null, action: 'continue' };
+      }
+      if (testReleaseStatus === 'failed') {
+        return { next: 'TEST_VERIFY_FAILED', role: null, action: 'continue' };
+      }
+      if (testReleaseStatus === 'deployed_needs_manual_verification') {
+        return { next: 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY', role: null, action: 'await_human', stop: true };
+      }
       return { next: 'PARSE_TEST_VERIFY', role: null, action: 'parse_test_conclusion' };
     case 'TEST_VERIFY_FAILED':
       return { next: 'TEST_FIXING', role: developer, action: 'fix_test' };
     case 'TEST_VERIFIED':
+      if (fastTrack && reviewExact && reviewStatus === 'blocked') {
+        return { next: 'CONSOLIDATED_REVIEW', role: null, action: 'continue' };
+      }
+      if (fastTrack && (!reviewExact || reviewStatus !== 'passed')) {
+        return { next: 'CONSOLIDATED_REVIEW', role: reviewer, action: 'review_tested_candidate' };
+      }
       return { next: 'RELEASE_PENDING_HUMAN', role: null, action: 'await_release_approval', stop: true };
     case 'RELEASE_PENDING_HUMAN':
       if (releaseApproved) return { next: 'BASE_MERGING', role: null, action: 'release_base' };
@@ -272,13 +353,22 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
     case 'GATEWAY_B_FIXING':
       return { next: 'GATEWAY_B_LOCAL_REVERIFYING', role: null, action: 'verify_local' };
     case 'GATEWAY_B_LOCAL_REVERIFYING':
+      if (reviewExact && gatewayBDeltaAttempts > 0) {
+        return { next: 'GATEWAY_B_DELTA_REVIEW', role: null, action: 'continue' };
+      }
       return { next: 'GATEWAY_B_DELTA_REVIEW', role: reviewer, action: 'review_gateway_b_delta' };
     case 'GATEWAY_B_DELTA_REVIEW':
       return { next: 'PARSE_GATEWAY_B_DELTA_REVIEW', role: null, action: 'parse_review_conclusion' };
     case 'GATEWAY_B_DELTA_REVIEW_BLOCKED':
       return { next: 'HUMAN_INTERVENTION', role: null, action: 'await_human', circuitBreaker: 'gateway_b_review', stop: true };
     case 'BASE_MERGING':
-      return { next: 'COMPLETE', role: null, action: 'complete' };
+      if (workflow.base_release?.status === 'succeeded') {
+        return { next: 'COMPLETE', role: null, action: 'complete' };
+      }
+      if ((workflow.base_release?.status || 'idle') === 'idle') {
+        return { next: state, role: null, action: 'release_base' };
+      }
+      return { next: 'BASE_MERGE_BLOCKED', role: null, action: 'await_human', stop: true };
     case 'BASE_CHANGED':
       return { next: 'IMPLEMENTING', role: developer, action: 'sync_base' };
     case 'BASE_MERGE_BLOCKED':
@@ -306,6 +396,11 @@ function nextStepFull({
   const qa = has('qa') ? 'qa' : reviewer;
   const evaluator = has('evaluator') ? 'evaluator' : reviewer;
   const sprintDelivery = workflow.sprint_delivery || 'per_sprint';
+  // Historical Full progress may predate the G1 Sprint binding and carry
+  // total=0. Treat that unbound legacy value as one Sprint so it cannot advance
+  // through M2, M3, ... forever. New bound progress always supplies exact N.
+  const sprintTotal = Number.isInteger(sprint.total) && sprint.total > 0 ? sprint.total : 1;
+  const sprintCurrent = Number.isInteger(sprint.current) && sprint.current > 0 ? sprint.current : 1;
 
   if (TERMINAL.has(state)) {
     return { next: state, role: null, action: 'noop' };
@@ -353,7 +448,7 @@ function nextStepFull({
       if (humanGateApproved) return { next: 'SPEC_APPROVED', role: null, action: 'continue' };
       return { next: HUMAN_GATE, role: null, action: 'await_human_approval', stop: true };
     case 'SPEC_APPROVED':
-      return { next: `SPRINT_${sprint.current || 1}_KICKOFF`, role: null, action: 'kickoff_sprint' };
+      return { next: `SPRINT_${sprintCurrent}_KICKOFF`, role: null, action: 'kickoff_sprint' };
 
     default:
       // Sprint states
@@ -364,7 +459,11 @@ function nextStepFull({
         switch (phase) {
           case 'KICKOFF':
             // Parallel: QA writes cases + Dev implements
-            return { next: `SPRINT_${N}_DEV`, role: dev, action: 'implement', parallel: { role: qa, action: 'write_cases' } };
+            return {
+              next: `SPRINT_${N}_DEV`, role: dev, action: 'implement',
+              fanout: 'implementation_repositories',
+              parallel: { role: qa, action: 'write_cases' },
+            };
           case 'QA_CASES':
             return { next: `SPRINT_${N}_SA_TEST_REVIEW`, role: reviewer, action: 'review_test_cases', sprint: N };
           case 'DEV':
@@ -402,7 +501,7 @@ function nextStepFull({
           case 'EVAL':
             return { next: `SPRINT_${N}_PARSE_EVAL`, role: null, action: 'parse_eval_conclusion', sprint: N };
           case 'DONE':
-            if (sprint.total && N >= sprint.total) {
+            if (N >= sprintTotal) {
               return { next: 'ALL_SPRINTS_DONE', role: null, action: 'continue' };
             }
             return { next: `SPRINT_${N + 1}_KICKOFF`, role: null, action: 'kickoff_sprint' };
@@ -410,7 +509,7 @@ function nextStepFull({
             if (sprintDelivery !== 'final_only') {
               return { next: state, role: null, action: 'unknown_phase' };
             }
-            if (sprint.total && N >= sprint.total) {
+            if (N >= sprintTotal) {
               return { next: 'ALL_SPRINTS_DEV_DONE', role: null, action: 'continue' };
             }
             return { next: `SPRINT_${N + 1}_KICKOFF`, role: null, action: 'kickoff_sprint' };
@@ -440,7 +539,14 @@ function nextStepFull({
           verifier: qa,
           initial: { next: 'FINAL_QA', action: 'run_final' },
           regression: { next: 'FINAL_QA', action: 'regression_final' },
+          verified: { next: 'FINAL_QA_PASSED', action: 'continue' },
         });
+      }
+      if (state === 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY' && workflow.test_release?.status === 'verified') {
+        return { next: 'FINAL_QA_PASSED', role: null, action: 'continue' };
+      }
+      if (state === 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY' && workflow.test_release?.status === 'failed') {
+        return { next: 'FINAL_QA_BLOCKED', role: null, action: 'continue' };
       }
       if (state === 'TEST_RELEASE_BLOCKED' || state === 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY') {
         return { next: state, role: null, action: 'await_human', stop: true };
@@ -540,7 +646,7 @@ function nextStepFast({ state, counters, thresholds, enabledRoles, humanGateAppr
       if (humanGateApproved) return { next: 'SPEC_APPROVED', role: null, action: 'continue' };
       return { next: HUMAN_GATE, role: null, action: 'await_human_approval', stop: true };
     case 'SPEC_APPROVED':
-      return { next: 'BUILD', role: fullstack, action: 'implement' };
+      return { next: 'BUILD', role: fullstack, action: 'implement', fanout: 'implementation_repositories' };
     case 'BUILD':
       // After coding → code review only (no acceptance yet, no test-report available)
       return { next: 'CODE_REVIEW', role: reviewer, action: 'review_code' };
@@ -560,9 +666,13 @@ function nextStepFast({ state, counters, thresholds, enabledRoles, humanGateAppr
         verifier,
         initial: { next: 'TEST', action: 'verify_initial' },
         regression: { next: 'REGRESSION', action: 'verify_regression' },
+        verified: { next: 'TEST_PASSED', action: 'continue' },
       });
     case 'TEST_RELEASE_BLOCKED':
+      return { next: state, role: null, action: 'await_human', stop: true };
     case 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY':
+      if (workflow.test_release?.status === 'verified') return { next: 'TEST_PASSED', role: null, action: 'continue' };
+      if (workflow.test_release?.status === 'failed') return { next: 'TEST_BLOCKED', role: null, action: 'continue' };
       return { next: state, role: null, action: 'await_human', stop: true };
     case 'TEST':
       return { next: 'PARSE_TEST', role: null, action: 'parse_test_conclusion' };
@@ -588,7 +698,7 @@ function nextStepFast({ state, counters, thresholds, enabledRoles, humanGateAppr
   }
 }
 
-function nextTestReleaseStep({ workflow, verifier, initial, regression }) {
+function nextTestReleaseStep({ workflow, verifier, initial, regression, verified = initial, allowLegacyG2 = true }) {
   const release = workflow.test_release || {};
   const policy = release.policy || (workflow.g2_enabled === false ? 'disabled' : 'manual');
   const status = release.status || 'idle';
@@ -597,8 +707,12 @@ function nextTestReleaseStep({ workflow, verifier, initial, regression }) {
   if (policy === 'disabled' || workflow.g2_enabled === false) {
     return { ...initial, role: verifier };
   }
-  if (status === 'succeeded' || status === 'verified' || workflow.g2_approved === true) {
+  if (status === 'verified') return { ...verified, role: verified.role ?? null };
+  if (status === 'succeeded' || (allowLegacyG2 && workflow.g2_approved === true)) {
     return { ...(attempt > 1 ? regression : initial), role: verifier };
+  }
+  if (status === 'deploying') {
+    return { next: 'TEST_RELEASE', role: null, action: 'poll_test_release' };
   }
   if (status === 'failed') {
     return { next: 'TEST_RELEASE_BLOCKED', role: null, action: 'await_human', stop: true };
@@ -607,6 +721,9 @@ function nextTestReleaseStep({ workflow, verifier, initial, regression }) {
     return { next: 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY', role: null, action: 'await_human', stop: true };
   }
   if (policy === 'manual' || release.prerequisites_met === false) {
+    if (!allowLegacyG2 && workflow.g2_approved === true) {
+      return { next: 'TEST_RELEASE', role: null, action: 'configure_auto_test_release', stop: true };
+    }
     return { next: 'TEST_RELEASE', role: null, action: 'await_deploy_approval', stop: true };
   }
   return { next: 'TEST_RELEASE', role: null, action: 'release_test' };

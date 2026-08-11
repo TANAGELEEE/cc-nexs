@@ -97,7 +97,7 @@ node <plugin-root>/lib/cc-nexs-cli.mjs record-review <id> --passed|--blocked [--
 候选就绪后先进入 `HOTFIX_TEST_RELEASE`，再执行：
 
 ```text
-node <plugin-root>/lib/cc-nexs-cli.mjs release-test <id> --hotfix --capability-attested [--retry]
+node <plugin-root>/lib/cc-nexs-cli.mjs release-test <id> --hotfix [--retry|--resume]
 ```
 
 控制器仅接受 `mode=hotfix + HOTFIX_TEST_RELEASE`，只把精确 feature candidate 合入配置的 `test_branch`，然后调用结构化 release driver。`--hotfix` 不再是绕过 readiness 的开关。CI 不可避免时只运行最终 candidate 的一次发布；日常反馈由本地 driver 提前消化。

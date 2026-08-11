@@ -72,4 +72,4 @@ fast 模式三条纪律：
 2. **Reviewer 一次产两份输出**：sa-code-review.md + acceptance.md 同时生成（单 codex 调用），但仍按二级标题分两段。
 3. **fast 阈值更严**：`review_revision: 2` / `fix_per_bug: 2`（full 是 3 / 3），熔断更快。
 
-何时用 fast：单模块单接口、Sprint 切片 = 1、改动 ≤ 800 行 diff、无并发/事务复杂度。其他场景仍走 full。
+何时用 fast：单 Sprint、改动 ≤ 800 行、无并发/事务复杂度；可以包含契约已冻结、分属不同 repository/worktree 的前后端并行实现。多 Sprint、schema/权限/破坏性契约或复杂跨端依赖仍走 full。

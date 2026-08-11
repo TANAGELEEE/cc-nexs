@@ -10,13 +10,13 @@
   "_mode_options": {
     "lean": "默认省 Token 流程；计划门禁、并行实现、本地集成验证、一次集中 Review、test 验收和发布门禁",
     "full": "完整五方流程；开发可分多个 Sprint，全部开发完成后统一 integration review、test release、final QA 和 Evaluator 验收",
-    "fast": "三角色单 Sprint；代码评审后统一 TEST_RELEASE，Verifier 在已部署 test 环境验证，失败修复复审后重新发布回归",
+    "fast": "三角色单 Sprint；小型多端需求按 repository wave 并行实现，代码评审后统一 TEST_RELEASE",
     "lite": "轻量流程（Tech Lead → 自测 → commit），跳过 spec 和 Evaluator，适合极小改动",
     "hotfix": "Bug 修复流程，按 P0/P1/P2/P3 自动分档"
   },
   "_mode_选择建议": {
-    "用 full 当": "跨模块、含 DB schema 变更、涉及对外契约、合规风险、Sprint 切片 ≥ 2",
-    "用 fast 当": "单模块单接口、Sprint 切片 = 1、改动 ≤ 800 行 diff、无并发/事务复杂度"
+    "用 full 当": "多 Sprint、含 DB schema/破坏性契约/合规风险，或复杂跨端依赖",
+    "用 fast 当": "单 Sprint、改动 ≤ 800 行；可包含契约已冻结且分属不同 repository 的前后端并行实现"
   },
   "thresholds": {
     "sa_code_revision": 3,

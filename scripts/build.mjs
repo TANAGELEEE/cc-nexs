@@ -2,6 +2,8 @@
 // cc-nexs build: 把 monorepo 源码物化成扁平 plugin。
 // 输入：packages/core/* + packages/preset-<name>/*
 // 输出：dist/<preset-name>/  ← 自包含 Claude Code + Codex Plugin
+//      pi/agents + pi/skills ← preset-standard 的 Pi runtime adapters
+//      根 marketplace       ← Claude Code + Codex 分发入口
 //
 // 物化策略:
 //   1. preset 自有资源直接拷（commands / agents / skills / templates / preset.yml）
@@ -16,12 +18,14 @@
 //        "_core/"      → ""        (例如 "_core/hooks/x.mjs" → "hooks/x.mjs")
 //        "../core/"    → ""        (例如 "../core/commands/run.md" → "commands/run.md")
 //   9. Codex 额外生成 command mirror skills：每个 commands/*.md 都成为一个可触发 skill，
-//      保证 /cc-nexs:* 的 lean / full / fast / hotfix SOP 仍以同一份 command 文档为事实来源。
+//      command 文档始终是事实来源；mirror 只保留 runtime delta。
+//  10. preset-standard 同源生成 Pi agents/skills；pi/extensions/cc-nexs.ts 仍是手写 runtime 入口。
 //
 // 用法:
 //   node scripts/build.mjs                # 构建全部 preset
 //   node scripts/build.mjs preset-standard     # 仅构建一个
 
+import { execFileSync } from 'node:child_process';
 import {
   copyFileSync,
   existsSync,
@@ -52,6 +56,13 @@ const ROOT_PKG = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf-8'));
 const VERSION = ROOT_PKG.version;
 const RELEASE_PRESETS = readReleasePresets();
 const PI_ROOT = join(ROOT, 'pi');
+const GENERATED_PATHS = [
+  'dist',
+  'pi/agents',
+  'pi/skills',
+  '.claude-plugin/marketplace.json',
+  '.agents/plugins/marketplace.json',
+];
 const LEAN_ONLY_CORE_COMMANDS = new Set([
   'approve-plan.md',
   'approve-release.md',
@@ -70,6 +81,11 @@ const PI_P2_COMMANDS = new Set([
   'build',
   'doctor',
   'fullstack',
+  'planner',
+  'dev',
+  'sa',
+  'qa',
+  'evaluator',
   'git-custodian',
   'hotfix',
   'init',
@@ -92,6 +108,11 @@ const PI_P2_COMMANDS = new Set([
 ]);
 const PI_ROLE_SOURCES = {
   'repo-scout': 'repo-scout-claude.md',
+  planner: 'planner-claude.md',
+  'tech-lead': 'tech-lead-claude.md',
+  sa: 'sa-codex.md',
+  qa: 'qa-claude.md',
+  evaluator: 'evaluator-codex.md',
   fullstack: 'fullstack-claude.md',
   reviewer: 'reviewer-codex.md',
   verifier: 'verifier-codex.md',
@@ -103,7 +124,7 @@ const PI_ROLE_SOURCES = {
   'hotfix-reviewer': 'hotfix-reviewer.md',
   'hotfix-verifier': 'hotfix-verifier.md',
 };
-const PI_VERIFIER_ROLES = new Set(['verifier', 'lean-verifier', 'hotfix-verifier']);
+const PI_VERIFIER_ROLES = new Set(['verifier', 'qa', 'lean-verifier', 'hotfix-verifier']);
 const PI_COMPUTER_USE_TOOLS = [
   'find_roots',
   'observe_ui',
@@ -121,7 +142,7 @@ const PI_EGO_LITE_VERIFIER_ADDENDUM = `## Pi Ego Lite Browser Contract
 - Read the selected \`ego-browser\` skill before the first browser operation, then invoke \`ego-browser\` only through Bash as documented by that skill.
 - Create or reuse one isolated ego task Space for the feature, release attempt, and environment revision. Reuse its signed-in browser state and close it with \`completeTaskSpace(..., { keep: false })\` only after verification is complete.
 - Navigate only to the configured \`allowed_hosts\`, verify the resulting URL after every navigation, and do not bypass browser policy with direct HTTP, CDP, or injected browser automation.
-- Never request or expose plaintext credentials. If ego lite becomes unavailable before the first browser action, return a provider-unavailable result so the parent can select the dedicated headless computer-use verifier. Never switch providers inside this child.
+- Never request or expose plaintext credentials. Browser capability is checked only after test merge/CI delivery has deployed the candidate. If ego lite is then unavailable before the first browser action, return a provider-unavailable result so the parent can select the dedicated headless computer-use verifier. If neither provider is usable, return \`manual_required\` for recoverable human verification; never roll back delivery or switch providers inside this child.
 `;
 
 const PI_COMPUTER_USE_VERIFIER_ADDENDUM = `## Pi Headless Computer Use Browser Contract
@@ -130,7 +151,33 @@ const PI_COMPUTER_USE_VERIFIER_ADDENDUM = `## Pi Headless Computer Use Browser C
 - Keep one provider for the complete release attempt. Never invoke ego lite from this child and never use raw pointer/keyboard delivery, foreground focus fallback, cursor takeover, or another foreground interaction path.
 - Follow the immutable-state loop: find the exact browser root, observe it, query the saved state, act against the same \`stateId\`, and consume the successor state. Prefer semantic targets; do not guess coordinates when headless policy makes an action unavailable.
 - Navigate only to configured \`allowed_hosts\`, verify the resulting URL and test-environment identity after navigation, and never target production.
-- Reuse an existing authenticated browser session and never request or expose plaintext credentials. Missing tools, an interactive desktop session, browser/login state, MFA/CAPTCHA handling, or a headless-safe semantic action makes the capability unavailable and routes to the manual G2 fallback.
+- Reuse an existing authenticated browser session and never request or expose plaintext credentials. Missing tools, an interactive desktop session, browser/login state, MFA/CAPTCHA handling, or a headless-safe semantic action makes post-deployment verification \`manual_required\`. Preserve the deployed candidate and evidence so verification can resume; these limitations never block test merge/CI delivery.
+`;
+const PI_SA_DIRECT_BODY = `
+# SA
+
+## Pi SA Direct Review Contract
+
+You are the isolated SA reviewer itself. Review the exact artifacts or candidate diff supplied by the parent directly in this session. Do not invoke another agent, reviewer, CLI, command skill, or nested process to perform the review.
+
+The parent must supply the review target (\`spec\`, \`cases\`, \`code\`, or \`integration\`; normalize \`code --scope=final-fix\` as \`final-fix\`), the absolute feature-document directory, round/sprint identifiers when applicable, and exact diff files or injected diff content for code targets. If any required input is missing or stale, return a blocking input error instead of discovering implementation source or broadening scope.
+
+## Isolation and write boundary
+
+- Review only the supplied \`spec.md\`, acceptance/API/deploy/test-case artifacts, immutable candidate metadata, and exact diff material appropriate to the target. Never read \`src/\` or \`dev-plan.md\`.
+- Write only \`sa-review.md\`, \`sa-test-review.md\`, or \`sa-code-review.md\` in the supplied feature-document directory. Append a clearly labelled target/sprint/round section and preserve earlier evidence.
+- Do not write \`progress.md\` or \`progress.json\`, do not mutate Git, and do not create candidates. The parent parses your final conclusion and owns all state transitions.
+- The parent owns diff-size checks and deterministic splitting. Review only the assigned group; do not merge groups or rerun successful sibling reviews.
+
+## Target contract
+
+- \`spec\`: check required sections, Given/When/Then acceptance coverage, technical/operational risk, repository ownership/DAG, sprint size, rollback, and cross-end contract clarity. Append to \`sa-review.md\`.
+- \`cases\`: compare the assigned Sprint AC subset with its test cases; require P0/P1 coverage plus relevant normal, boundary, failure, permission, concurrency, and timeout cases. Append to \`sa-test-review.md\`.
+- \`code\`: review the assigned exact candidate diff for correctness, security, concurrency/transaction behavior, contract compatibility, tests, rollback, and scope. Append to \`sa-code-review.md\`.
+- \`integration\`: review all supplied repository candidate diffs and cumulative API/deploy/test evidence for cross-repository compatibility, release order, configuration/database compatibility, integrated AC paths, and rollback. Append to \`sa-code-review.md\`.
+- \`final-fix\`: review only the supplied repair diff against the blocking findings and regression scope. Append to \`sa-code-review.md\`.
+
+Each review section must identify the target and evidence, list concise actionable findings with severity and artifact/diff location, and end with exactly \`结论: PASS\` or \`结论: NEEDS_REVISION\`. The final response must end with exactly \`RESULT:PASS\` or \`RESULT:NEEDS_REVISION\` so the parent can parse it without modifying progress from this child.
 `;
 const EXPLICIT_AGENT_TRIGGER_PREFIX = 'Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests.';
 
@@ -261,13 +308,13 @@ Subsequent local verification, Review recording, test release/verification, rele
   if (commandBase === 'release-test') {
     return `## Deterministic Test Release Control
 
-Complete the runtime/browser capability preflight from the authoritative command before any remote mutation. Then resolve \`${cliPath}\` relative to this SKILL.md and execute:
+Resolve \`${cliPath}\` relative to this SKILL.md and deliver the exact candidate to the test branch/CI first:
 
 \`\`\`text
-node <resolved-cli-path> release-test <feature-id> --capability-attested [--retry] [--dry-run] [--hotfix]
+node <resolved-cli-path> release-test <feature-id> [--resume | --retry] [--dry-run] [--hotfix]
 \`\`\`
 
-Never implement test-branch integration with ad hoc Git commands and never target production. If capability preflight fails, do not invoke the controller; preserve the manual fallback exactly as the command specifies.
+Never implement test-branch integration with ad hoc Git commands and never target production. Browser tools, login/MFA state, and verification-page URL availability are post-deployment verification capabilities, not delivery preconditions. If they are unavailable after deployment, record the recoverable \`manual_required\` / \`deployed_needs_manual_verification\` state with evidence and stop without claiming verification passed; do not undo or block the completed test merge/CI delivery.
 
 `;
   }
@@ -284,7 +331,20 @@ Never edit progress state directly or combine this request with release approval
 
 `;
   }
-  if (['verify-local', 'release-base', 'render-plan', 'migrate-feature-config'].includes(commandBase)) {
+  if (commandBase === 'verify-local') {
+    return `## Deterministic Lean Control — Local Verification
+
+Resolve \`${cliPath}\` relative to this SKILL.md and preserve the user's original verification flags and every repeated evidence object:
+
+\`\`\`text
+node <resolved-cli-path> verify-local <feature-id> [--passed | --failed | --deferred-to-test] [--evidence-json <json>]... [--progress <path>]
+\`\`\`
+
+With a configured driver, omit direct evidence flags. Without a driver, Lean must execute the plan-approved commands first and then pass their real structured results; never invent evidence or replace this control with model-generated progress edits.
+
+`;
+  }
+  if (['release-base', 'render-plan', 'migrate-feature-config'].includes(commandBase)) {
     const invocation = commandBase === 'migrate-feature-config'
       ? 'migrate-feature-config <feature-id> [--dry-run] [--bind-plan-risk] [--progress <path>]'
       : `${commandBase} <feature-id>`;
@@ -354,40 +414,26 @@ description: ${description}
 
 # ${commandName} for Codex
 
-This explicit-only skill is the Codex mirror for \`${commandName}\`. It exists so the Codex plugin can preserve the same command surface, workflow semantics, document write locations, and ${supportsLean ? 'lean / ' : ''}full / fast / hotfix behavior as the Claude Code plugin.
+This explicit-only skill is a thin Codex runtime adapter for \`${commandName}\`.
 
 ## Authoritative Command
 
 Read and follow \`${relCommand}\` as the single source of truth for this command. Treat the user's original message after \`${commandName}\` as the command arguments.
 
-${controlBlock}## Execution Contract
+${controlBlock}## Codex Runtime Delta
 
-1. Preserve every document path declared by the command file. Do not relocate \`all-docs/doc/{id}.{slug}/\`, \`doc/{id}.{slug}/\`, \`bugs/\`, \`qa-scripts/\`, \`docs/solutions/\`, or any command-specific artifact.
-2. Preserve the command's state-machine contract. If the command says a single-step command must not advance \`progress.md\`, do not advance it; if \`run\` is the orchestrator, let \`run\` own state transitions.
-3. Preserve mode behavior exactly:
-   - \`full\`: five-role SOP with Repo Scout pre-spec recon, Planner / Tech Lead / SA / QA / Evaluator isolation, and sprint loop.
-${supportsLean ? '   - `lean`: default plan-first flow with two authored documents, two human gates, deterministic local verification, one consolidated Review, test verification, and approved base integration.\n' : ''}   - \`fast\`: legacy three-role flow with Fullstack / Reviewer / Verifier, single sprint, stricter thresholds, and no TECH_LEAD_REVIEW fallback.
-   - \`hotfix\`: standalone mini-Lean flow with its own latest-base feature worktrees, one hotfix.md, bounded Review, test verification, and a human base gate.
-4. In Codex, every role runs as an independent native subagent using the role prompt from \`../../agents/\`. Never invoke Claude Code, a Claude subagent tool, or a nested \`codex\` CLI process. Runtime adaptation overrides any Claude-specific shell snippet in the authoritative command.
-5. Keep implementation and review in distinct native agent sessions. ${supportsLean ? 'Resolve automatic risk routing from one progress/config/approved-plan snapshot: Lean high/critical upgrades Planner and Reviewer; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. Never pre-merge feature roles before routing. A Reviewer may use a different model or the same model with higher reasoning effort. ' : ''}Provider-specific IDs are allowed only in private project/feature config; public preset defaults remain portable and inherit when unspecified.
-6. When a shell snippet references \`$CLAUDE_PLUGIN_ROOT\`, translate it to the installed Codex plugin root that contains this skill. In shell commands prefer \`PLUGIN_ROOT=<plugin-root>\` or \`CC_NEXS_PLUGIN_ROOT=<plugin-root>\` or substitute the absolute plugin root directly.
-7. Before editing or creating files, inspect the relevant command, agent, template, and current feature directory. Follow existing repo patterns and keep unrelated files untouched.
-8. Run the verification steps requested by the command. If a step cannot be run in the current Codex surface, record the exact limitation and preserve the command's expected stop/gate behavior.
+- Dispatch every requested role as an independent native subagent using \`../../agents/\`; keep implementation, Review, and verification in fresh isolated sessions. For Fast/Full implementation fanout, spawn every same-wave worker with its progress-assigned worktree and frozen role runtime before awaiting any of them, then join the whole wave; never serialize spawn/await or create extra agent worktrees. Never invoke Claude Code, a Claude subagent tool, or a nested \`codex\` CLI process.
+- ${supportsLean ? 'Resolve automatic risk routing once from progress/config/approved-plan: Lean high/critical upgrades Planner and Reviewer; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. A Reviewer may use a different model or the same model with higher reasoning effort. ' : ''}Provider-specific IDs are allowed only in private project/feature config; public defaults remain portable.
+- Translate \`$CLAUDE_PLUGIN_ROOT\` to this installed Codex plugin root and preserve the authoritative command's state transitions, gates, counters, validation, and stop behavior.
+- Browser tooling, login/MFA state, and verification-page URL availability are checked only after the exact candidate reaches test and CI delivery completes. They never block delivery. If post-deployment verification cannot run, record \`manual_required\` / \`deployed_needs_manual_verification\` with evidence and leave it recoverable; never claim a pass.
 
 ## Document Write Map
 
-These are fixed cc-nexs locations, not Codex-specific alternatives:
-
-- Feature docs: \`all-docs/doc/{id}.{slug}/requirements.md\`, \`repo-context.md\`, \`spec.md\`, \`sa-review.md\`, \`dev-plan.md\`, \`api-doc.md\`, \`deploy.md\`, \`test-cases.md\`, \`sa-test-review.md\`, \`test-report.md\`, \`sa-code-review.md\`, \`acceptance.md\`, \`progress.md\`, and \`README.md\`.
-- Hotfix record: \`all-docs/doc/{id}.{slug}/hotfix.md\` in an independently initialized hotfix feature.
-- Compound learnings: \`docs/solutions/<topic>.md\` plus the command-specific feature summary when \`/cc-nexs:compound\` requests it.
-- Document repo commits: when \`all-docs/\` is its own git repo, add only \`doc/{id}.{slug}/\` or the command-declared bug path and keep code-repo files out of that commit.
+Preserve exactly the paths declared by the authoritative command, including \`all-docs/doc/{id}.{slug}/\`, its \`progress.md\` and \`hotfix.md\` records, command-declared \`bugs/\` or \`qa-scripts/\`, and \`docs/solutions/\`. Do not invent Codex-specific alternatives.
 
 ## Full / Fast / Hotfix Mode Locks
 
-${supportsLean ? '- `lean`: preserve the plan and release gates, two authored documents, exact worktree/candidate binding, deterministic local driver, one full Review plus at most one delta closure, and test-before-base integration.\n' : ''}- \`full\`: preserve Repo Scout pre-spec recon, Planner / Tech Lead / SA / QA / Evaluator isolation, sprint slicing, artifact completeness gate before Evaluator, single human gate after spec approval, and README sync around every state transition.
-- \`fast\`: preserve Fullstack / Reviewer / Verifier roles, single sprint, stricter counters, merged Reviewer acceptance parsing, Verifier black-box testing, no SA test-case review, and no TECH_LEAD_REVIEW fallback.
-- \`hotfix\`: preserve latest-base isolation, immutable scope binding, P0/P1/P2/P3 impact grading, deterministic P3 boundary, one Review plus at most one lifetime delta, test verification, and Gateway B before base integration.
+The authoritative command alone defines \`${supportsLean ? 'lean, ' : ''}full, fast, and hotfix\` semantics. This adapter changes only Codex dispatch and runtime mechanics; it must not restate, reorder, or weaken a mode.
 
 ## Completion Rule
 
@@ -435,6 +481,22 @@ function parseAgentSource(text, file) {
   return { description, tools, body };
 }
 
+function adaptPiAgentBody(role, body) {
+  if (role === 'sa') return PI_SA_DIRECT_BODY;
+  if (role !== 'qa') return body;
+
+  const claudeBrowserInstruction = '3. 使用 chrome-devtools-mcp 打开配置的 `app_url` / `operations_url`，只访问 `allowed_hosts`，复用当前登录会话。';
+  const piBrowserInstruction = '3. 使用本 agent 顶部冻结的唯一 Pi browser provider 打开配置的 `app_url` / `operations_url`，只访问 `allowed_hosts`，复用现有登录会话；不得自行选择、混用或切换 provider。';
+  if (!body.includes(claudeBrowserInstruction)) {
+    throw new Error('Pi QA adapter could not find the Claude-only browser instruction');
+  }
+  const adapted = body.replace(claudeBrowserInstruction, piBrowserInstruction);
+  return adapted.replace(
+    '# QA\n',
+    '# QA\n\n## Pi QA Provider-Neutral Contract\n\n本角色正文只描述黑盒验收语义；具体浏览器能力由顶部唯一 provider contract 决定。不要调用其他运行时的浏览器工具，也不要在 child 内切换 provider。\n',
+  );
+}
+
 function generatePiResources() {
   const standardSource = join(PACKAGES, 'preset-standard');
   const standardDist = join(DIST, 'preset-standard');
@@ -448,9 +510,11 @@ function generatePiResources() {
   for (const [role, sourceFile] of Object.entries(PI_ROLE_SOURCES)) {
     const sourcePath = join(standardSource, 'agents', sourceFile);
     const { description, tools, body } = parseAgentSource(readFileSync(sourcePath, 'utf8'), sourceFile);
+    const roleBody = adaptPiAgentBody(role, body);
+    const roleTools = role === 'sa' ? tools.filter((tool) => tool !== 'bash') : tools;
     const variants = [{
       name: role,
-      tools,
+      tools: roleTools,
       addendum: PI_VERIFIER_ROLES.has(role) ? PI_EGO_LITE_VERIFIER_ADDENDUM : '',
       skills: PI_VERIFIER_ROLES.has(role) ? ['ego-browser'] : [],
       descriptionSuffix: PI_VERIFIER_ROLES.has(role) ? ' Preferred ego lite provider.' : '',
@@ -485,13 +549,13 @@ function generatePiResources() {
         'Any Claude Task-tool, Claude subagent, Codex CLI, or nested agent invocation shown below is legacy runtime syntax only.',
         'Never invoke `claude`, `codex`, another `pi` process, `/cc-nexs:*`, or the `subagent` tool from this child.',
         'The parent orchestrator owns progress transitions and Git Custodian operations. Do not run Git mutation commands.',
-        'The parent resolves the cc-nexs role profile and passes model/thinking to the Agent call; do not choose or persist a model ID.',
+        'The parent resolves the cc-nexs role profile and encodes model/thinking in the pi-subagents model selector; do not choose or persist a model ID.',
         '',
         variant.addendum,
         '# Authoritative Role Contract',
         '',
       ].join('\n');
-      writeFileSync(join(agentsDir, `${variant.name}.md`), `${header}${body}`, 'utf8');
+      writeFileSync(join(agentsDir, `${variant.name}.md`), `${header}${roleBody}`, 'utf8');
     }
   }
 
@@ -510,12 +574,12 @@ function generatePiResources() {
       `仅允许通过 /cc-nexs:${commandBase} 或 /skill:${skillName} 显式调用；不得因普通自然语言请求自动触发。`,
       supportsHotfix
         ? '支持 preset-standard 独立 hotfix mini-Lean，并通过 pi-subagents 运行隔离角色。'
-        : '支持 preset-standard lean（默认）与 fast 模式，并通过 pi-subagents 运行隔离角色。',
+        : '支持 preset-standard lean（默认）、fast 与 full 模式，并通过 pi-subagents 运行隔离角色。',
       extractDescription(commandText, commandName).replace(/codex CLI/gi, 'Pi subagent'),
     ].join(' ');
     const modelGuard = supportsHotfix
-      ? 'Resolve Hotfix role profiles from one progress/config snapshot. P0/P1 automatically routes Reviewer to escalated; an explicit feature role profile remains final. Reviewer may use a different authenticated model or the same model with higher thinking, but always uses a fresh child context. P0/P1 heterogeneity is an optional private policy, not a public preset requirement. Accept ordered fallbackModels.'
-      : 'Resolve automatic risk routing from one progress/config/approved-plan snapshot: Lean high/critical routes Planner and Reviewer to escalated, Hotfix P0/P1 routes Reviewer to escalated, and an explicit feature role profile remains final. The Reviewer may use a different authenticated model or the same model with higher thinking, but must use a fresh child context. For legacy fast, preserve its configured heterogeneous-review guard. Accept ordered fallbackModels.';
+      ? 'Resolve one Hotfix model snapshot: P0/P1 automatically routes Reviewer to escalated; an explicit feature role profile remains final. Reviewer may use another model or the same model with higher thinking in a fresh child. Encode thinking in the pi-subagents `model` selector; public files ship no provider-specific model IDs.'
+      : 'Resolve automatic risk routing once: Lean high/critical upgrades Planner and Reviewer; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. Reviewer may use another model or the same model with higher thinking. Encode the selected thinking in each pi-subagents task `model` selector; public files ship no provider-specific model IDs.';
     const skillDir = join(skillsDir, skillName);
     mkdirSync(skillDir, { recursive: true });
     const body = `---
@@ -530,44 +594,43 @@ Read and follow \`../../../dist/preset-standard/commands/${fileName}\` as the au
 
 ${controlBlock}## P2 Runtime Contract
 
-1. Pi support covers \`preset-standard\` lean (default), standalone hotfix, and legacy fast. Full orchestration and compound remain unsupported. Do not silently downgrade an existing feature.
-2. Use the installed \`pi-subagents\` tool for every role dispatch. Use package-qualified agents and foreground fresh context:
-   - Repo Scout: \`cc-nexs.repo-scout\`
-   - Fullstack: \`cc-nexs.fullstack\`
-   - Reviewer: \`cc-nexs.reviewer\`
-   - Verifier: ego lite \`cc-nexs.verifier\`; headless fallback \`cc-nexs.verifier-computer-use\`
-   - Lean Planner: \`cc-nexs.lean-planner\`
-   - Lean Developer: \`cc-nexs.lean-developer\`
-   - Lean Reviewer: \`cc-nexs.lean-reviewer\`
-   - Lean Verifier: ego lite \`cc-nexs.lean-verifier\`; headless fallback \`cc-nexs.lean-verifier-computer-use\`
-   - Hotfix Developer: \`cc-nexs.hotfix-developer\`
-   - Hotfix Reviewer: \`cc-nexs.hotfix-reviewer\`
-   - Hotfix Verifier: ego lite \`cc-nexs.hotfix-verifier\`; headless fallback \`cc-nexs.hotfix-verifier-computer-use\`
-3. Before any browser verifier dispatch, run the deterministic Pi browser capability preflight and freeze one provider for the release attempt. Prefer ego lite. If it is unavailable, select the matching \`*-computer-use\` agent only when \`@injaneity/pi-computer-use@0.4.3\` is installed and its effective config has \`browser_use: true\` plus \`headless: true\`. Otherwise route to manual G2. Never give one child both provider surfaces.
-4. Never invoke Claude Code, the Claude Task tool, Codex CLI, or a nested \`pi\` CLI. Legacy invocation snippets in the authoritative command are role task descriptions, not commands to execute in Pi.
-5. Resolve automatic risk routing from one cc-nexs progress/config/approved-plan snapshot, then pass the selected \`model\` and \`thinking\` directly to the pi-subagents \`Agent\` call. Lean high/critical upgrades Planner and Reviewer; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. Omit \`model\` when it is \`inherit\`. If the primary model is unavailable, retry the ordered cc-nexs \`fallback_models\` list. Project \`.pi/settings.json\` remains only the Pi authentication/\`enabledModels\` authority; do not duplicate role mappings there. Public cc-nexs files ship no provider-specific model IDs.
-6. ${modelGuard}
-7. Role children never mutate Git or progress state. The parent orchestrator owns state transitions and invokes the Git Custodian command itself.
-8. Set or preserve \`CC_NEXS_RUNTIME=pi\` and \`CC_NEXS_PLUGIN_ROOT\` for shell helpers. Resolve all feature paths through the existing workspace/progress contracts.
-9. Preserve the command's artifact locations, human gates, counters, validation, and stop behavior exactly. Runtime adaptation changes dispatch mechanics only.
+1. Pi supports \`preset-standard\` lean (default), standalone hotfix, fast, and full; unsupported compound flows fail closed rather than downgrade.
+2. Use the installed \`pi-subagents@0.35.1\` \`subagent\` tool with package-qualified \`cc-nexs.<role>\` agents. A Fast/Full implementation batch or wave MUST be one parallel call (include Full QA cases in the first batch), followed by one explicit barrier:
+
+\`\`\`js
+subagent({
+  tasks: [
+    { agent: "cc-nexs.tech-lead", task: "<assignment task>", cwd: "<assigned repository worktree>", model: "<provider/model:thinking>" },
+    { agent: "cc-nexs.qa", task: "<first-wave cases task>", cwd: "<assigned docs worktree>", model: "<provider/model:thinking>" }
+  ],
+  concurrency: 2,
+  async: true,
+  worktree: false,
+  context: "fresh"
+})
+subagent_wait({ id: "<async-run-id>" })
+\`\`\`
+
+The example has two tasks, so \`concurrency: 2\`; for a real batch set it to \`min(task count, approved/runtime max_parallel)\`. Use only the tasks actually assigned to that batch and set each \`cwd\` to the progress-assigned worktree. Never issue one \`subagent\` call per sibling, never wait between sibling starts, never enable Pi-created worktree isolation, and never let a child invoke another child. Non-fanout roles use foreground \`subagent({ agent, task, cwd, context: "fresh", model })\`.
+3. Test merge/CI delivery runs before browser capability selection. Only after deployment, prefer ego lite; otherwise use \`@injaneity/pi-computer-use@0.4.3\` when effective config has \`browser_use: true\` and \`headless: true\`. Missing browser/login/MFA/verification URL capability records recoverable \`manual_required\` evidence and never blocks or rolls back delivery.
+4. Never invoke Claude Code, the Claude Task tool, Codex CLI, or a nested \`pi\` CLI. Runtime adaptation changes dispatch only; preserve the authoritative command's paths, state transitions, gates, counters, validation, and stop behavior.
+5. ${modelGuard}
+6. pi-subagents has no separate per-task \`thinking\` field. For a non-inherit selection, pass \`provider/model:thinking\` in the task \`model\`; for \`inherit\` with no thinking override, omit \`model\`; for \`inherit\` with a thinking override, resolve the active provider/model and append \`:thinking\`. After \`subagent_wait\`, retry ordered \`fallback_models\` only for failed/unavailable tasks in a new bounded parallel call; never rerun successful siblings.
+7. Role children never mutate Git or \`progress.md\` / \`progress.json\`. The parent owns state transitions and Git Custodian operations, and preserves \`CC_NEXS_RUNTIME=pi\` plus \`CC_NEXS_PLUGIN_ROOT\`.
 
 ${supportsHotfix ? `## Pi Hotfix Dispatch Contract
 
-1. Hotfix must be initialized as \`mode=hotfix\` with its own id, \`feature/<id>-<slug>\`, and worktrees from the latest configured remote bases. A related feature is metadata only.
-2. Fill and bind the sole authored \`hotfix.md\` scope with \`start-hotfix\` before dispatch. AC/API/database/permission contract changes or broad refactoring stop and become a new Lean/Full change.
-3. Dispatch \`cc-nexs.hotfix-developer\` for implementation/fix. Candidate Git mutations remain parent Git Custodian work.
-4. P0/P1/P2 dispatch \`cc-nexs.hotfix-reviewer\` exactly once; a blocked result permits one fresh delta Review only. P3 skips the model Review only after deterministic one-file, at-most-20-line, non-behavioral proof.
-5. Run the configured local verification driver, then release the exact candidate with \`release-test --hotfix\`. Dispatch a fresh \`cc-nexs.hotfix-verifier\` or \`cc-nexs.hotfix-verifier-computer-use\` according to the frozen provider on the deployed environment revision, including P3 smoke and P0/P1 rollback/AC evidence.
-6. Reviewer may use a different model or the same model with higher thinking. Session isolation is mandatory; heterogeneity is optional project policy. Public files never pin a model ID.
-7. Test failure or Gateway B implementation feedback consumes the same single lifetime delta Review, then requires a new candidate/test attempt. Delta blocking stops for human intervention.
-8. Only \`approve-release\` authorizes the verified feature candidate to merge into configured base branches. Never merge test into base and never force push.
+1. Initialize and bind the standalone \`mode=hotfix\` / \`hotfix.md\` scope before dispatch; scope expansion becomes a new Lean/Full change.
+2. Use fresh \`cc-nexs.hotfix-developer\`, \`cc-nexs.hotfix-reviewer\`, and post-deployment \`cc-nexs.hotfix-verifier\` (or \`cc-nexs.hotfix-verifier-computer-use\`) sessions. P3 Review skipping still requires deterministic boundary proof.
+3. Preserve the single lifetime delta Review across Review, test, and Gateway B feedback. Missing browser capability becomes recoverable \`manual_required\`, not a delivery failure.
+4. Only \`approve-release\` authorizes the exact verified candidate to configured base branches. Never merge test into base and never force push.
 ` : ''}
 
 ## Required Pi Prerequisites
 
 \`pi-subagents\` must be installed and its \`subagent\` tool must expose the package agents above. Run \`/subagents-doctor\`, then open \`/subagents\` to inspect package-agent model mappings. \`/subagents-models\` is only for builtin agents and must not be used for cc-nexs package roles.
 
-Automatic browser verification prefers an installed and onboarded ego lite app plus the selected \`ego-browser\` skill and a successful minimal \`ego-browser nodejs\` runtime probe. When ego lite is unavailable, it falls back to \`@injaneity/pi-computer-use@0.4.3\` only with effective \`browser_use: true\` and \`headless: true\`. If neither provider is ready, keep cc-nexs available and use the manual test-release fallback; do not silently claim browser verification.
+After test delivery, automatic verification prefers an onboarded ego lite app plus the \`ego-browser\` skill and a minimal \`ego-browser nodejs\` probe. Otherwise it may use \`@injaneity/pi-computer-use@0.4.3\` with effective \`browser_use: true\` and \`headless: true\`. If neither provider or signed-in session is ready, preserve the deployment, record \`manual_required\`, and resume manual verification later; do not silently claim a pass.
 `;
     writeFileSync(join(skillDir, 'SKILL.md'), body, 'utf8');
     generated += 1;
@@ -784,7 +847,7 @@ function buildClaudeMarketplace(presetNames) {
     name: 'cc-nexs',
     owner: { name: 'cc-nexs' },
     metadata: {
-      description: 'cc-nexs: Lean 默认的低 Token 多代理流水线，包含计划/发布双门禁、本地验证与一次集中 Review。',
+      description: 'cc-nexs: Lean fast-track 多代理流水线，本地可执行验证后优先交付 test/CI，部署后验收并集中 Review。',
       version: VERSION,
     },
     plugins,
@@ -829,6 +892,23 @@ function buildCodexMarketplace(presetNames) {
   console.log(`✓ .agents/plugins/marketplace.json (${plugins.length} 个 plugin)`);
 }
 
+function assertGeneratedOutputsCleanInCi() {
+  if (!['1', 'true'].includes(String(process.env.CI || '').toLowerCase())) return;
+  const status = execFileSync(
+    'git',
+    ['status', '--porcelain=v1', '--untracked-files=all', '--', ...GENERATED_PATHS],
+    { cwd: ROOT, encoding: 'utf8' },
+  ).trim();
+  if (!status) {
+    console.log(`✓ CI generated-output dirty check: ${GENERATED_PATHS.join(', ')}`);
+    return;
+  }
+  throw new Error(
+    `[cc-nexs] build changed committed generated outputs:\n${status}\n`
+    + `Run pnpm build and commit all of: ${GENERATED_PATHS.join(', ')}`,
+  );
+}
+
 // ---- main ------------------------------------------------------------------
 
 const arg = process.argv[2];
@@ -849,5 +929,6 @@ if (targets.includes('preset-standard')) generatePiResources();
 // 总是基于全量 preset 列表刷新 marketplace.json，保证根目录入口与 dist/ 中产物一致。
 buildClaudeMarketplace(allPresets);
 buildCodexMarketplace(allPresets);
+assertGeneratedOutputsCleanInCi();
 
 console.log(`\n✓ build done`);

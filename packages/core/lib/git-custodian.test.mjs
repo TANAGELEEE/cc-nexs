@@ -125,6 +125,14 @@ test('custodian starts from latest remote base, avoids false upstream arrows, re
       expectedSourceCommit: '0000000000000000000000000000000000000000',
       targetBranch: 'test',
     }), /candidate ref changed during test release/);
+    assert.throws(() => integrateCandidateToTest({
+      repo,
+      repositoryId: 'docs',
+      candidateRef: candidate.candidateRef,
+      expectedSourceCommit: git(repo, ['rev-parse', candidate.candidateRef]),
+      targetBranch: 'test',
+      requireTargetAncestor: true,
+    }), /BASE_CHANGED: candidate .* does not contain current origin\/test/);
     const integrated = withToolIdentity(() => integrateCandidateToTest({
       repo,
       repositoryId: 'docs',
@@ -144,6 +152,13 @@ test('custodian starts from latest remote base, avoids false upstream arrows, re
       targetBranch: 'test',
     });
     assert.equal(repeatedIntegration.alreadyIntegrated, true);
+    assert.throws(() => integrateCandidateToTest({
+      repo,
+      repositoryId: 'docs',
+      candidateRef: candidate.candidateRef,
+      targetBranch: 'test',
+      requireTargetAncestor: true,
+    }), /BASE_CHANGED: candidate .* does not contain current origin\/test/);
 
     git(item.worktree, ['push', 'origin', `${item.branch}:${item.branch}`]);
     git(item.worktree, ['push', 'origin', `${item.branch}:master`]);

@@ -90,7 +90,7 @@ append 到 all-docs/doc/<编号>/acceptance.md 末尾，章节标题 \`## 最终
 
 ## 输出解析
 
-每次 codex 完成后：
+每次独立 Evaluator session 完成后：
 
 1. `tail -30 acceptance.md` 抓"验收结果:"行
 2. **Git 边界**：只写角色契约允许的文件；禁止执行 git add、commit、push、merge、rebase、branch 或 worktree 清理。完成后向 Orchestrator 返回精确变更路径，由 Git Custodian 生成 candidate。

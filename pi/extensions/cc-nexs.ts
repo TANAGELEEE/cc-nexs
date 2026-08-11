@@ -8,6 +8,7 @@ import {
 } from "../../packages/core/lib/cc-nexs-cli.mjs";
 import {
   isGitMutation,
+  isProgressMutation,
   normalizeRole,
   roleBoundaryViolation,
 } from "../../packages/core/lib/role-boundary.mjs";
@@ -22,6 +23,11 @@ const P2_COMMANDS = [
   "build",
   "doctor",
   "fullstack",
+  "planner",
+  "dev",
+  "sa",
+  "qa",
+  "evaluator",
   "git-custodian",
   "hotfix",
   "init",
@@ -44,11 +50,11 @@ const P2_COMMANDS = [
 ] as const;
 
 function commandDescription(name: string): string {
-  if (name === "run") return "Run the cc-nexs lean-default workflow through isolated Pi subagents";
+  if (name === "run") return "Run cc-nexs Lean, Fast, Full, or Hotfix through isolated Pi subagents to test delivery and verification";
   if (name === "init") return "Initialize a cc-nexs lean-default feature";
   if (name === "hotfix") return "Run the cc-nexs P0/P1/P2/P3 hotfix workflow through isolated Pi subagents";
   if (name === "doctor") return "Validate cc-nexs workspace and Pi subagent prerequisites";
-  if (name === "release-test") return "Integrate final candidates, release test, and record deployment evidence";
+  if (name === "release-test") return "Deliver exact candidates to test/CI first; verify after deployment or record recoverable manual verification";
   return `Execute the cc-nexs ${name} workflow`;
 }
 
@@ -73,6 +79,23 @@ export default function ccNexsPiExtension(pi: ExtensionAPI) {
         return {
           block: true,
           reason: "cc-nexs Pi role sessions cannot mutate Git; the parent orchestrator owns Git Custodian operations.",
+        };
+      }
+
+      if (event.toolName === "bash" && isProgressMutation(command)) {
+        return {
+          block: true,
+          reason: "cc-nexs Pi role sessions cannot mutate progress.md or progress.json; the parent orchestrator owns state transitions.",
+        };
+      }
+
+      if (
+        ["edit", "write", "notebookedit"].includes(event.toolName.toLowerCase())
+        && /(^|\/)progress\.(?:md|json)$/.test(filePath)
+      ) {
+        return {
+          block: true,
+          reason: "cc-nexs Pi role sessions cannot mutate progress.md or progress.json; the parent orchestrator owns state transitions.",
         };
       }
 

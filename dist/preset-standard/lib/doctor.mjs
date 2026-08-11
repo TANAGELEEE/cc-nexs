@@ -16,7 +16,15 @@ import { readProgressV2 } from './progress-v2.mjs';
 
 const args = process.argv.slice(2);
 const strictRelease = args.includes('--release-test');
-const root = resolve(args.find((arg) => !arg.startsWith('-')) || process.cwd());
+const featureFilter = optionValue(args, '--feature');
+const positional = [];
+for (let index = 0; index < args.length; index += 1) {
+  const arg = args[index];
+  if (arg === '--feature') { index += 1; continue; }
+  if (arg.startsWith('--feature=') || arg === '--release-test') continue;
+  if (!arg.startsWith('-')) positional.push(arg);
+}
+const root = resolve(positional[0] || process.cwd());
 const errors = [];
 const warnings = [];
 let workspace = null;
@@ -63,7 +71,13 @@ const progressFiles = new Set([
   ...findProgressFiles(join(docsSource, 'doc')),
   ...(workspace ? findProgressFiles(workspace.worktree_root) : []),
 ]);
-for (const file of progressFiles) {
+const selectedProgressFiles = featureFilter
+  ? [...progressFiles].filter((file) => matchesFeature(dirname(file), featureFilter))
+  : [...progressFiles];
+if (featureFilter && selectedProgressFiles.length === 0) {
+  errors.push(`feature ${featureFilter}: progress.json not found`);
+}
+for (const file of selectedProgressFiles) {
     const featureDir = dirname(file);
     const featureName = basename(featureDir);
     const activeWorktreeState = workspace && resolve(file).startsWith(`${resolve(workspace.worktree_root)}${process.platform === 'win32' ? '\\' : '/'}`);
@@ -130,6 +144,22 @@ for (const file of progressFiles) {
     } catch (error) { errors.push(`${featureName}: ${error.message}`); }
 }
 
+function optionValue(values, name) {
+  const inline = values.find((value) => value.startsWith(`${name}=`));
+  if (inline) return inline.slice(name.length + 1) || null;
+  const index = values.indexOf(name);
+  return index >= 0 ? values[index + 1] || null : null;
+}
+
+function matchesFeature(featureDir, requested) {
+  const name = basename(featureDir);
+  const actualId = name.match(/^(\d+)(?:[.\-_]|$)/)?.[1] || name;
+  if (/^\d+$/.test(actualId) && /^\d+$/.test(requested)) {
+    return Number(actualId) === Number(requested);
+  }
+  return actualId === requested || name === requested;
+}
+
 for (const warning of warnings) console.warn(`WARN ${warning}`);
 for (const error of errors) console.error(`ERROR ${error}`);
 if (errors.length) process.exitCode = 1;
@@ -139,8 +169,11 @@ function validateReleaseReadiness({ config, workspace, strictRelease, errors, wa
   const policy = config.mergedWorkflow?.test_release?.policy;
   if (policy !== 'auto_if_ready' && !strictRelease) return;
   const report = (message) => (strictRelease ? errors : warnings).push(message);
+  const verificationWarning = (message) => warnings.push(message);
   if (['lean', 'hotfix'].includes(config.mergedWorkflow?.default_mode) && !config.mergedWorkflow?.local_verify?.driver?.command) {
-    report(`${config.mergedWorkflow.default_mode} mode requires workflow.local_verify.driver.command for build/start/smoke verification`);
+    verificationWarning(config.mergedWorkflow.default_mode === 'lean'
+      ? 'workflow.local_verify.driver.command is not configured; Lean must run plan-approved commands and record structured exact-candidate evidence'
+      : 'hotfix mode requires workflow.local_verify.driver.command before local verification');
   }
   if (!workspace) {
     report('automatic test release requires .cc-nexs/workspace.yml or workspace.json');
@@ -149,7 +182,12 @@ function validateReleaseReadiness({ config, workspace, strictRelease, errors, wa
   const codeRepositories = workspace.repositories.filter((repo) => repo.id !== workspace.docs_repository && repo.docs !== true);
   if (codeRepositories.length === 0) report('automatic test release requires at least one code repository');
   for (const repo of codeRepositories) {
-    if (!repo.test_branch) report(`repository ${repo.id} is missing test_branch`);
+    if (!repo.test_branch) {
+      verificationWarning(`repository ${repo.id} has no test_branch; Lean may use it locally only with an approved test_delivery.${repo.id}: local binding`);
+    }
+  }
+  if (codeRepositories.length > 0 && !codeRepositories.some((repo) => repo.test_branch)) {
+    report('automatic test release requires at least one code repository with test_branch');
   }
 
   const release = config.mergedRelease?.test || {};
@@ -157,28 +195,28 @@ function validateReleaseReadiness({ config, workspace, strictRelease, errors, wa
   if (!release.driver?.command) report('release.test.driver.command is required for automatic test release');
   if (release.browser?.required !== false) {
     for (const field of ['claude_provider', 'codex_provider', 'pi_provider']) {
-      if (!release.browser?.[field]) report(`release.test.browser.${field} is required`);
+      if (!release.browser?.[field]) verificationWarning(`release.test.browser.${field} is required for automatic verification`);
     }
     if (release.browser?.pi_provider && release.browser.pi_provider !== PI_PRIMARY_BROWSER_PROVIDER) {
-      report(`release.test.browser.pi_provider must be ${PI_PRIMARY_BROWSER_PROVIDER}`);
+      verificationWarning(`release.test.browser.pi_provider must be ${PI_PRIMARY_BROWSER_PROVIDER} for automatic verification`);
     }
     if (release.browser?.pi_fallback?.provider !== PI_FALLBACK_BROWSER_PROVIDER) {
-      report(`release.test.browser.pi_fallback.provider must be ${PI_FALLBACK_BROWSER_PROVIDER}`);
+      verificationWarning(`release.test.browser.pi_fallback.provider must be ${PI_FALLBACK_BROWSER_PROVIDER} for automatic verification`);
     }
     if (release.browser?.pi_fallback?.headless !== true) {
-      report('release.test.browser.pi_fallback.headless must be true');
+      verificationWarning('release.test.browser.pi_fallback.headless must be true for automatic verification');
     }
   }
   const allowed = new Set(release.allowed_hosts || []);
   for (const [name, value] of [['app_url', release.app_url], ['operations_url', release.operations_url]]) {
-    if (!value) { report(`release.test.${name} is required`); continue; }
+    if (!value) { verificationWarning(`release.test.${name} is required before automatic verification, not before test delivery`); continue; }
     let url;
     try { url = new URL(value); }
-    catch { report(`release.test.${name} is invalid: ${value}`); continue; }
+    catch { verificationWarning(`release.test.${name} is invalid for automatic verification: ${value}`); continue; }
     if (url.protocol !== 'https:' && url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') {
-      report(`release.test.${name} must use https`);
+      verificationWarning(`release.test.${name} must use https for automatic verification`);
     }
-    if (!allowed.has(url.hostname)) report(`${url.hostname} is missing from release.test.allowed_hosts`);
+    if (!allowed.has(url.hostname)) verificationWarning(`${url.hostname} is missing from release.test.allowed_hosts for automatic verification`);
     if (/(^|[.-])(prod|production|live)([.-]|$)/i.test(url.hostname)) report(`production-like host is forbidden: ${url.hostname}`);
   }
   for (const finding of findPlaintextCredentialFields({ project: config.project, overlay: config.overlay })) {
@@ -187,7 +225,7 @@ function validateReleaseReadiness({ config, workspace, strictRelease, errors, wa
 
   if (process.env.CC_NEXS_RUNTIME === 'pi' && release.browser?.required !== false) {
     const capability = inspectPiBrowserCapability({ projectRoot });
-    if (!capability.ready) report(`Pi automatic browser verification is unavailable: ${capability.reason}`);
+    if (!capability.ready) verificationWarning(`Pi automatic browser verification is unavailable after delivery: ${capability.reason}`);
     else if (capability.fallback) warnings.push(`Pi browser verification will use ${PI_FALLBACK_BROWSER_PROVIDER} with headless=true because ${capability.primaryFailure}`);
   }
 }
@@ -197,8 +235,19 @@ function findPlaintextCredentialFields(value, path = '') {
   const findings = [];
   for (const [key, child] of Object.entries(value)) {
     const next = path ? `${path}.${key}` : key;
-    if (/^(password|passwd|credential|credentials|secret_value)$/i.test(key) && child) findings.push(next);
-    else findings.push(...findPlaintextCredentialFields(child, next));
+    if (isSensitiveCredentialKey(key) && hasLiteralCredentialValue(child)) findings.push(next);
+    findings.push(...findPlaintextCredentialFields(child, next));
   }
   return findings;
+}
+
+function isSensitiveCredentialKey(key) {
+  return /^(?:password|passwd|credential|credentials|secret_value|token|api_?key|secret|client_secret|access_key_id|secret_access_key|aws_access_key_id|aws_secret_access_key|private_key)$/i.test(key)
+    && !/(?:_ref|_env|_file|_path)$/i.test(key);
+}
+
+function hasLiteralCredentialValue(value) {
+  if (Array.isArray(value)) return value.length > 0;
+  if (value && typeof value === 'object') return false;
+  return value !== undefined && value !== null && value !== '' && value !== false;
 }

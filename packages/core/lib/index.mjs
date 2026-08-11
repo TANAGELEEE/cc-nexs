@@ -16,6 +16,7 @@ export {
   createProgressV2,
   readProgressV2,
   recordRepositoryAssignments,
+  recoverApprovedImplementationSprint,
   recordRepositoryCandidate,
   recordRepositoryCandidatePrepared,
   recordLocalVerification,
@@ -55,6 +56,8 @@ export { nextFeatureId, recordPublishedFeatureReservation, releaseFeatureReserva
 export { publishDocsReservation } from './docs-reservation.mjs';
 export { detectRuntime, resolveRoleRuntime, runtimeContract } from './runtime-resolver.mjs';
 export { migrateFeatureConfig } from './feature-config.mjs';
+export { syncImplementationWorktrees } from './implementation-worktrees.mjs';
+export { beginImplementationDelta, endImplementationDelta, implementationPathAllowed } from './implementation-delta.mjs';
 export {
   LEGACY_TEMPLATE_ROLE_MAPS,
   applyModelRouting,

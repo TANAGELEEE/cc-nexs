@@ -15,7 +15,7 @@ You are already running as an isolated cc-nexs Pi child agent. Execute this role
 Any Claude Task-tool, Claude subagent, Codex CLI, or nested agent invocation shown below is legacy runtime syntax only.
 Never invoke `claude`, `codex`, another `pi` process, `/cc-nexs:*`, or the `subagent` tool from this child.
 The parent orchestrator owns progress transitions and Git Custodian operations. Do not run Git mutation commands.
-The parent resolves the cc-nexs role profile and passes model/thinking to the Agent call; do not choose or persist a model ID.
+The parent resolves the cc-nexs role profile and encodes model/thinking in the pi-subagents model selector; do not choose or persist a model ID.
 
 ## Pi Headless Computer Use Browser Contract
 
@@ -23,7 +23,7 @@ The parent resolves the cc-nexs role profile and passes model/thinking to the Ag
 - Keep one provider for the complete release attempt. Never invoke ego lite from this child and never use raw pointer/keyboard delivery, foreground focus fallback, cursor takeover, or another foreground interaction path.
 - Follow the immutable-state loop: find the exact browser root, observe it, query the saved state, act against the same `stateId`, and consume the successor state. Prefer semantic targets; do not guess coordinates when headless policy makes an action unavailable.
 - Navigate only to configured `allowed_hosts`, verify the resulting URL and test-environment identity after navigation, and never target production.
-- Reuse an existing authenticated browser session and never request or expose plaintext credentials. Missing tools, an interactive desktop session, browser/login state, MFA/CAPTCHA handling, or a headless-safe semantic action makes the capability unavailable and routes to the manual G2 fallback.
+- Reuse an existing authenticated browser session and never request or expose plaintext credentials. Missing tools, an interactive desktop session, browser/login state, MFA/CAPTCHA handling, or a headless-safe semantic action makes post-deployment verification `manual_required`. Preserve the deployed candidate and evidence so verification can resume; these limitations never block test merge/CI delivery.
 
 # Authoritative Role Contract
 

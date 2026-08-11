@@ -9,60 +9,29 @@ argument-hint: "[feature_id] [--sprint=N | --resume] [--no-auto-test-release]"
 
 > **Core rule**: after a stage completes, immediately enter the next stage. Stop only at Lean Gateway A/B, legacy spec/deploy gates, a release/verification block, a circuit breaker, or a genuine tool failure.
 
-This command is the generic orchestrator. It loads `cc-nexs.config.yml` + the active `preset.yml`, then drives the state machine in `lib/state-machine.mjs`.
+This file contains only the common controller. Mode-specific states, dispatches, parsing, gates, and release evidence live in one active rule file so a run does not load unrelated workflows.
 
-## Orchestrator Identity & Anti-overreach
+## Orchestrator boundary
 
-> **身份声明**：Orchestrator 只编排，**不写业务产物、不写代码、不写 spec、不评审、不测试**。它可以调用窄权限 Git Custodian 记录角色产出的 candidate；Orchestrator 本身不执行任意 Git 命令。
+The Orchestrator only coordinates. It does not author business artifacts, implementation, specs, reviews, or test code, and it never performs subjective model-based verification or arbitrary Git commands. It may invoke deterministic controllers and, only for Lean's documented no-local-driver fallback, execute the plan-approved build/unit/lint/start commands and record their real structured results. It may invoke the narrow Git Custodian for candidate mutations.
 
-### 交付物验证协议
+When a single role reports completion:
 
-成员角色声称"已完成"时，Orchestrator 验证其返回的精确变更路径位于 progress.json 分配的 worktree，且符合角色写入契约。验证通过后调用 Git Custodian stage/commit candidate；禁止用远端 push 作为普通阶段完成条件。
+1. Prove every returned path belongs to the progress.json-assigned worktree and role write contract.
+2. For implementation/code-owning role output, ask Git Custodian to stage and commit the exact code candidate. For Lean/Hotfix Planner, Reviewer, and Verifier documentation-only output, validate the paths but leave them in the docs worktree until the single final docs candidate after `COMPLETE`.
+3. If anything is missing, redispatch the owning role with the concrete contract delta. Never repair the artifact in the Orchestrator or commit an incomplete result.
 
-### 禁止自行补救
+Fast/Full implementation fanout is a group exception: a worker completion only records its returned paths/evidence in parent memory. Before each same-wave batch, the parent must open one deterministic `implementation-delta begin` token containing every Assignment in that batch; after every child joins, it must close that token with `implementation-delta end` before another batch starts. The controller snapshots every progress-assigned worktree through a temporary Git index/tree, rejects any net path outside the active Assignments and narrow Full-QA docs allowance (including changes in an inactive or ownership-removed repository), and never mutates the real index. A token is parent-only and is never passed to a child. Only after every delta barrier passes may the parent run aggregate repository checks and serialize exactly one candidate refresh per changed repository. Never let a fast sibling create a candidate while another sibling is still writing.
 
-发现成员交付物缺失时：
-- ❌ 禁止 Orchestrator 自己补写或让 Custodian 提交不完整产物
-- ✅ 必须重新派发给对应成员，附带缺失文件和契约差异
+When `nextStep()` returns `parallel`, dispatch the complete listed batch before waiting and do not advance until its barrier completes. Claude/Codex spawn all native children before awaiting. Pi makes one `subagent({ tasks, concurrency, async: true, worktree: false, context: "fresh" })` call and then one `subagent_wait({ id })`; it never loops through foreground `subagent` calls. Never serialize an explicitly parallel dispatch.
 
-### 并行 dispatch 规则
+## 1. Locate the feature and resolve mode
 
-当 `nextStep()` 返回 `parallel` 字段时，Orchestrator **必须**使用 Agent tool 并发调用两个角色（在同一条消息中发出多个 Agent tool call），而非串行执行：
+Find the workspace root containing `.cc-nexs/workspace.yml`, load it with `loadWorkspaceConfig()`, and run doctor. Invocation may start at the workspace root or any assigned repository worktree, but every dispatch uses the exact assignment stored in progress.json.
 
-```
-// nextStep 返回示例:
-{ next: 'SPRINT_1_DEV', role: 'tech-lead', action: 'implement', parallel: { role: 'qa', action: 'write_cases' } }
+Resolve `docs_repository`, find `doc/<id>.*` in its assigned feature worktree, and set `REQ_DIR`, `PROGRESS_MD`, and `PROGRESS_JSON`. Never assume the docs repository is nested in a code repository. If progress.md exists without progress.json, stop and require `/cc-nexs:migrate-progress`; never reconstruct authoritative history implicitly.
 
-// → 同时 dispatch:
-//   Agent 1: tech-lead → implement
-//   Agent 2: qa → write_cases
-// 两者完成后再推进状态机
-```
-
-## Step -1: Workspace and assignment check
-
-Locate the workspace root containing `.cc-nexs/workspace.yml`, load it with `loadWorkspaceConfig()`, and run doctor. The command may be launched from the workspace root or any assigned repository worktree. Every role dispatch receives its exact repository worktree from progress.json; stop if a path or branch differs from the recorded assignment.
-
-## Step 0: Locate active feature
-
-Resolve `docs_repository` from workspace configuration, then find `doc/<id>.*` in its assigned feature worktree. Set `REQ_DIR`, `PROGRESS_MD`, and `PROGRESS_JSON` from that path. Never assume the docs repository is nested inside a code repository.
-
-If `progress.json` is missing but progress.md exists, stop and require `/cc-nexs:migrate-progress`; never silently create state that could discard legacy history. For a new feature, init copies both templates.
-
-### Step 0.1: README catch-up sync (defensive)
-
-Fast/full run invocations sync README to match current progress.md. Lean and hotfix deliberately have no README and skip this step.
-
-```js
-import { syncFeatureReadme } from 'lib/readme-sync.mjs';
-try { syncFeatureReadme({ reqDir: REQ_DIR }); } catch (_) { /* best-effort */ }
-```
-
-This is idempotent: if README is already current, it returns `no_change` and costs nothing.
-
-## Step 0.5: Resolve feature mode
-
-Read `${REQ_DIR}progress.json.mode` first and require `${REQ_DIR}config.json.mode` to agree. New init writes `lean`; missing values on historical features still default to `fast` for compatibility. An explicit unknown mode or a mismatch is a hard error; never silently run another state machine.
+Read `${REQ_DIR}progress.json.mode` first and require `${REQ_DIR}config.json.mode` to agree. Historical features with both values missing default to `fast`; an explicit unknown value or mismatch fails closed.
 
 ```bash
 MODE=$(grep -oE '"mode"\s*:\s*"[^"]*"' "${REQ_DIR}config.json" 2>/dev/null \
@@ -72,33 +41,46 @@ case "$MODE" in
   lean|full|fast|lite|hotfix) ;;
   *) echo "❌ unknown explicit mode '$MODE'"; exit 1 ;;
 esac
+[ "$MODE" = "lite" ] && MODE=fast
 ```
 
-For Lean/Hotfix, require `config_version: 2` before any role dispatch. A legacy or missing version stops with:
+Compare config/progress using their raw stored values before this normalization. Legacy `lite` then uses Fast roles, state machine, active rule, and command validation consistently; it must never fall through to Full.
+
+For Lean/Hotfix, require `config_version: 2` before dispatch. Otherwise stop and print:
 
 ```text
 /cc-nexs:migrate-feature-config <id> --dry-run
 /cc-nexs:migrate-feature-config <id>
 ```
 
-The deterministic migration removes only the complete unchanged role map generated by old templates. It preserves every customized feature model override. This prevents legacy defaults from silently blocking project-level routing.
+For a legacy approved Lean plan without bound risk, derive risk only from an exact `plan_scope_sha256` match. Missing, stale, ambiguous, or unstructured risk gets a conservative `high` floor. To persist a derivable value without replacing approval, use `/cc-nexs:migrate-feature-config <id> --bind-plan-risk`.
 
-For an approved legacy Lean Gateway A binding without `risk_tier`, the resolver may derive risk only from an exact `plan_scope_sha256` match. Missing, stale, unstructured or ambiguous legacy risk receives a conservative `high` floor. To materialize a derivable risk without creating a new approval, preview and run `/cc-nexs:migrate-feature-config <id> --bind-plan-risk`; this appends a dedicated migration event and preserves the original gate hashes/approver/state.
+### Mandatory active-rule load
 
-The mode controls two things downstream:
-1. Which `enabled` role list and state-machine flavor `nextStep` uses (`lean`, `hotfix`, `fast`, or `full`).
-2. Which slash command name maps to each role in the dispatch table (Step 2).
+After resolving mode, **Read exactly one** file relative to the active plugin root containing this command (never relative to the project worktree), and do not Read/Glob the other mode rules:
 
-## Step 1: Load config + preset
+| resolved mode | active rule |
+|---|---|
+| `lean` | `rules/run-lean.md` |
+| `hotfix` | `rules/run-hotfix.md` |
+| `full` | `rules/run-full.md` |
+| `fast` or legacy `lite` | `rules/run-fast.md` |
 
-Use core's `loadConfig({ projectRoot: pwd })` to get:
-- `preset.modes[MODE].enabled` (preferred) or `preset.roles.enabled` (fallback) — ordered role list
-- `preset.modes[MODE].state_machine` — `'lean'`, `'hotfix'`, `'full'`, or `'fast'` (passed to `nextStep` as `mode`)
-- `preset.modes[MODE].thresholds_override` merged on top of `preset.workflow.thresholds`
-- `preset.modes?.[MODE]?.g2_enabled` — whether G2 deploy gate is active (default: `true` for nexs, `false` for minimal)
-- `i18n.locale` — for state names + conclusion strings
+The selected rule is authoritative for mode-specific dispatch, state parsing, human gates, circuit behavior, and release evidence. Continue using this common controller for shared safety and persistence.
 
-Resolve every dispatched role from one coherent snapshot:
+Fast/full runs perform best-effort `syncFeatureReadme({ reqDir: REQ_DIR })` catch-up now and after each transition. Lean/Hotfix have no README and skip it. `no_anchor` warns; `no_change` and `no_readme` do not block.
+
+## 2. Load one coherent runtime snapshot
+
+Use `loadConfig({ projectRoot: pwd })`. Resolve:
+
+- `preset.modes[MODE].enabled`, falling back to `preset.roles.enabled`
+- `preset.modes[MODE].state_machine` (`lean`, `hotfix`, `full`, or `fast`)
+- mode threshold overrides on `preset.workflow.thresholds`
+- mode/project G2 setting
+- `i18n.locale`
+
+Resolve each dispatched role from a fresh coherent snapshot:
 
 ```js
 const planText = MODE === 'lean' && existsSync(join(REQ_DIR, 'plan.md'))
@@ -115,31 +97,25 @@ const roleRuntime = resolveRoleRuntime(preset, role, runtime, {
 });
 ```
 
-Do not pre-merge `featureConfig.models.roles` into `mergedModels`: automatic routing runs after public/overlay/project defaults, and a feature role selection is deliberately applied last. Risk is the highest trusted signal, so a feature risk setting can raise but cannot lower the approved Plan or bound Hotfix severity. Lean `high|critical` routes Planner and Reviewer to `escalated`; Hotfix P0/P1 routes Reviewer to `escalated`. A feature role profile remains the final explicit override. `models.routing.enabled: false` is the explicit feature/project opt-out.
+Do not pre-merge `featureConfig.models.roles` into `mergedModels`. Automatic routing follows public/overlay/project defaults, then the explicit feature role override is applied last. Trusted plan/hotfix risk may raise but never lower severity. Lean high/critical and Hotfix P0/P1 Reviewer routing uses `escalated`; `models.routing.enabled: false` is the explicit opt-out.
 
-Claude applies `model`/`effort` to independent Claude agents; Codex applies `model`/`reasoning_effort` to native agents; Pi passes `model`/`thinking` directly to the package-qualified `Agent` call and retries `fallback_models` in order. `inherit` keeps the active runtime model. The public `escalated` profile is provider-neutral (`model: inherit`, `effort: xhigh`); switching to a specific stronger model requires a private project/overlay profile with the same name.
+Claude uses `model`/`effort`, Codex uses `model`/`reasoning_effort`, and Pi uses `model`/`thinking` plus ordered `fallback_models`. `inherit` keeps the active runtime model. Before every dispatch print risk tier/source/signals, plan binding status, `matched_rules`, feature profile override, effective profile/model/effort, and fallback chain. Recompute after every document/progress revision.
 
-Before dispatch, print `model_routing.risk_tier`, `source`, `signals`, `plan_binding_status`, `matched_rules`, `feature_profile_override`, effective profile/model/effort, and fallback chain. Recompute after every progress/document revision; never reuse a resolution from a stale snapshot.
+Every dispatch gets `CC_NEXS_REQ_DIR=<absolute-feature-doc-dir>/` and the repository-id → assigned-worktree map. Treat old `all-docs/doc/<id>` wording as logical notation, not topology.
 
-Every dispatch also receives `CC_NEXS_REQ_DIR=<absolute-doc-feature-dir>/` (with trailing separator) and a repository-id → worktree map. Commands must prefer this value over legacy relative-path discovery. Any `all-docs/doc/<id>` wording inside older role prompts is logical artifact notation and resolves to `CC_NEXS_REQ_DIR`, not a required repository name or topology.
+For a Fast/Full implementation group, resolve all child runtimes from the same coherent snapshot before launching the first child. Freeze model/effort or thinking/fallbacks, Assignment, repository, worktree, and Allowed paths for the whole batch. Do not resolve one child, await it, then resolve the next; that recreates serial execution and permits half-batch model drift.
 
-### Constructing `workflow` for `nextStep`
+### Construct `workflow`
 
-The `workflow` object passed to `nextStep` is assembled from **preset config + progress.json v2 state**. `readProgress(progress.md)` automatically delegates to the sibling progress.json when present:
+`readProgress(progress.md)` delegates to its sibling progress.json. Rebuild the object before each `nextStep()` call:
 
 ```js
 const presetG2 = preset.modes?.[MODE]?.g2_enabled ?? preset.workflow?.g2_enabled ?? true;
-const progress = readProgress(progressPath);
-const progressV2 = readProgressV2(PROGRESS_JSON);
+const progress = readProgress(PROGRESS_MD);
+let progressV2 = readProgressV2(PROGRESS_JSON);
 const featureConfig = JSON.parse(readFileSync(join(REQ_DIR, 'config.json'), 'utf8'));
-// readProgress() exposes a normalized workflow view. `attempt` is derived from
-// persisted delivery.test.attempts.length; it is not a progress.json field.
-const normalizedTestRelease = progress.workflow?.test_release || { policy: 'manual', status: 'idle', attempt: 0 };
-const attemptCount = normalizedTestRelease.attempt || 0;
-const delivery = {
-  strategy: progress.workflow?.sprint_delivery || 'per_sprint',
-  test: normalizedTestRelease,
-};
+const normalizedTestRelease = progress.workflow?.test_release
+  || { policy: 'manual', status: 'idle', attempt: 0 };
 const releaseOptOut = ARGS.includes('--no-auto-test-release');
 const configuredOverride = project.workflow?.test_release?.policy
   ?? overlay?.workflow?.test_release?.policy;
@@ -149,426 +125,140 @@ const persistedPolicy = resolveTestReleasePolicy({
   configured: mergedWorkflow?.test_release?.policy,
   configuredOverride,
 });
+const latestLocalAttempt = progressV2.local_verification?.attempts?.findLast((item) => (
+  item.fingerprint === progressV2.local_verification?.candidate_fingerprint
+));
+const exactRecordedReview = ['passed', 'blocked'].includes(progressV2.review?.status)
+  && progressV2.review?.candidate_fingerprint === progressV2.local_verification?.candidate_fingerprint
+  && latestLocalAttempt?.fingerprint === progressV2.review?.candidate_fingerprint;
+// Fast/Full only: after the spec-writing child returns, the parent materializes
+// exactly the code repositories declared by the ownership table. This happens
+// before plan validation/review/G1; role children never invoke the mutation.
+if (['fast', 'lite', 'full'].includes(MODE)
+  && existsSync(join(REQ_DIR, 'spec.md'))
+  && progressV2.gates?.g1?.approved !== true
+  && !['INIT', 'REQ_DRAFTED', 'RECON_DONE'].includes(progressV2.state)) {
+  runCcNexsCommand(['sync-implementation-worktrees', FEATURE_ID], { cwd: WORKSPACE_ROOT });
+  progressV2 = readProgressV2(PROGRESS_JSON);
+}
+// Fast/Full only: this deterministic controller also verifies the current G1
+// binding. A legacy approved spec without binding returns an empty assignment
+// set and therefore keeps the historical single-worker path.
+const implementationPlan = ['fast', 'lite', 'full'].includes(MODE)
+  && existsSync(join(REQ_DIR, 'spec.md'))
+  && !['INIT', 'REQ_DRAFTED', 'RECON_DONE'].includes(progressV2.state)
+  ? runCcNexsCommand(['validate-implementation-plan', FEATURE_ID], { cwd: WORKSPACE_ROOT })
+  : { contractVersion: 0, assignments: [], legacy: true };
 const workflow = {
   plan_approved: progressV2.gates?.plan?.approved === true,
+  delivery_lane: progressV2.gates?.plan?.binding?.delivery_lane || 'standard',
   release_approved: progressV2.gates?.release?.approved === true,
   hotfix: progressV2.hotfix ? {
     ...progressV2.hotfix,
     delta_attempts: progressV2.review?.closure_attempts || 0,
   } : null,
   local_verification: {
+    status: progressV2.local_verification?.status || 'idle',
     context: progressV2.local_verification?.context || null,
+  },
+  review: {
+    status: progressV2.review?.status || 'idle',
+    exact: exactRecordedReview,
+    closure_attempts: progressV2.review?.closure_attempts || 0,
+    gateway_b_delta_attempts: progressV2.review?.gateway_b_delta_attempts || 0,
   },
   g2_enabled: presetG2,
   g2_approved: progress.workflow.g2_approved,
   g2_approved_sprints: progress.workflow.g2_approved_sprints,
-  sprint_delivery: delivery.strategy,
+  sprint_delivery: progress.workflow?.sprint_delivery || 'per_sprint',
   test_release: {
     policy: releaseOptOut ? 'manual' : persistedPolicy,
-    status: delivery.test.status,
-    attempt: attemptCount,
+    status: normalizedTestRelease.status,
+    attempt: normalizedTestRelease.attempt || 0,
     prerequisites_met: true,
+  },
+  base_release: {
+    status: progressV2.delivery?.base?.status || 'idle',
+    attempt: progressV2.delivery?.base?.attempts?.length || 0,
+  },
+  implementation: {
+    contract_version: implementationPlan.contractVersion,
+    sprints: implementationPlan.sprints,
+    sprint_total: implementationPlan.sprintTotal,
+    assignments: implementationPlan.assignments,
+    max_parallel: mergedWorkflow?.implementation_max_parallel || 4,
   },
 };
 ```
 
-New features default to `final_only + auto_if_ready`. Explicit project/overlay `manual` or `disabled` policy overrides that default. A legacy progress file without `delivery` is always interpreted as `per_sprint + manual`; upgrading cc-nexs must never grant an existing feature new remote-write authority. `--no-auto-test-release` changes only the current orchestration invocation. A feature may persist the opt-out with `config.json.release.test=manual`.
+New features default to `final_only + auto_if_ready`. An explicit project/overlay `manual` or `disabled` wins. A legacy progress file without `delivery` remains `per_sprint + manual`; an upgrade cannot silently grant remote-write authority. `--no-auto-test-release` affects only this invocation; `config.json.release.test=manual` persists the choice.
 
-In full final-only mode, Sprint PASS advances through `SPRINT_<N>_DEV_DONE` to `ALL_SPRINTS_DEV_DONE`, then exactly one `INTEGRATION_REVIEW -> TEST_RELEASE -> FINAL_QA -> FINAL_EVAL` delivery chain.
+## 3. Compact dispatch loop
 
-In lean mode, `/cc-nexs:plan` owns `INIT -> PLANNING -> PLAN_PENDING_HUMAN`. After `/cc-nexs:approve-plan`, run performs implementation, deterministic local verification, exactly one consolidated Review, test release/verification, then stops at `RELEASE_PENDING_HUMAN`. `/cc-nexs:approve-release` authorizes the exact tested fingerprint; the next run invokes deterministic base integration. Gateway B feedback must use `/cc-nexs:request-release-changes`: evidence-only feedback stays at the gate, in-scope implementation feedback takes one bounded delta loop, and scope/AC feedback invalidates Gateway A and returns to Planner.
+Repeat until terminal or stopped:
 
-In hotfix mode, `/cc-nexs:hotfix` binds `hotfix.md` scope and owns `INIT -> HOTFIX_IMPLEMENTING`. Run then follows the mini-Lean branch documented by that command: deterministic local verification, one consolidated Review (P3 skips only after machine boundary proof), test release with explicit `--hotfix`, independent environment verification, and `HOTFIX_RELEASE_PENDING_HUMAN`. Scope/contract feedback is rejected rather than expanding the patch.
+1. Re-read authoritative state/revision, config, active documents, role routing, counters, and workflow.
+2. Call `nextStep({ state, counters, thresholds, enabledRoles, sprint, humanGateApproved, workflow, mode })`.
+3. Apply the active mode rule to the returned `{ next, role, action, stop, parallel, fanout, circuitBreaker }`.
+4. A circuit breaker appends its diagnostic event and required changelog. Dispatch a role only through the active rule's mapping. For `parallel`, launch calls together. For `fanout: implementation_repositories`, replace the generic implementation call with the active rule's validated dependency waves; flatten any listed QA call into the first wave. Immediately before each implementation batch, run `implementation-delta begin <id>` with one `--assignment` per batch member and retain its opaque token only in the parent. Launch every same-wave child before awaiting, join the complete batch, then run `implementation-delta end <id> --token <token>`. A missing/invalid token or out-of-scope delta blocks the fanout before another wave, aggregate verification, or candidate mutation. Individual fanout workers never trigger Git Custodian.
+5. Parent control actions are deterministic:
+   - after Fast/Full spec authoring and before spec validation/Review/G1 → `sync-implementation-worktrees`; it parses ownership against configured non-doc repositories, asks Git Custodian to create only missing assigned worktrees, persists them, and is a no-op when already synchronized. Never delegate it to Planner/Fullstack children and never run it after G1.
+   - before/after each Fast/Full implementation batch → `implementation-delta begin|end`; begin accepts all same-Sprint/same-Wave Assignment IDs in that bounded batch, and end proves the real net worktree delta against the exact G1-bound Allowed paths. It monitors every progress-assigned code repository, including repositories removed from the current ownership table, as zero-delta unless active. It also monitors the docs worktree as zero-delta by default; only Full's first implementation+QA batch may add the fixed `--allow-doc-path test-cases.md --allow-doc-path qa-scripts/**` allowance, and that token is closed only after QA joins. It fails closed on HEAD/branch/worktree/G1 drift. Never pass the token to a role child or substitute a model path review for this controller.
+   - `verify_local` → `/cc-nexs:verify-local`; an agent is never a substitute. Treat the controller status as control flow, not mere evidence: `passed` (and Lean-only `deferred_to_test`) keeps the state machine's intended success transition; `failed` replaces it with the active rule's local-failure state. Never blindly apply the pre-action `next` after a failed check.
+   - `release_test` / `release_test_hotfix` → release safety preflight, then `/cc-nexs:release-test` with active-rule flags.
+   - `poll_test_release` → `/cc-nexs:release-test <id> --resume` once; Hotfix also requires `--hotfix`. If still `deploying`, report the same pipeline and return.
+   - `configure_auto_test_release` → print the missing driver/policy fields and return. It never fabricates a release attempt.
+   - `await_deploy_approval` → print the active Fast/Full G2 summary and return; it never authorizes production.
+   - `release_base` → pre-transition to mode-specific `BASE_MERGING`, run `/cc-nexs:release-base`, then record `COMPLETE` only after proof.
+   - `parse_*_conclusion` → parse only the active rule's file/pattern/outcomes.
+   - `continue`, `continue_to_test`, and `noop` → no role/tool side effect; apply only the returned state movement.
+   - `unknown_state` or `unknown_phase` → stop as a genuine controller failure and report the exact mode/state; never guess a transition.
+6. Let the completed action determine `effectiveNext` (normally the returned `next`; `verify_local` failure uses the active rule's explicit failure state). Re-read authoritative progress, then persist `effectiveNext` **before** honoring `stop: true`. If the current state is still the captured `state` and `effectiveNext !== state`, call `transitionState(PROGRESS_MD, { from: state, to: effectiveNext, reason })` exactly once—even when the action persisted evidence and incremented revision. This covers boundaries such as `TEST_VERIFIED -> RELEASE_PENDING_HUMAN` and `TEST_RELEASE -> *_BLOCKED|*_DEPLOYED_NEEDS_MANUAL_VERIFY`; returning first would strand progress in the prior state. If a controller already changed state to `effectiveNext`, do not append a synthetic transition. Any third state is stale/conflicting: discard the decision, rebuild the snapshot, and call `nextStep()` again.
+7. Exact candidate fingerprint, attempt, evidence, and from-state checks make reruns idempotent. Never redispatch a completed role, re-integrate a candidate, retrigger CI, or append a transition already reflected in authoritative state. Release actions that only update delivery status must be re-read and routed by `nextStep()`; they never receive an invented same-state transition.
+8. Only after step 6/7, if `stop: true`, render the active rule's summary from the newly persisted state and return. Otherwise Fast/Full sync README best-effort and the loop continues immediately.
 
-`g2_enabled: false` still disables test delivery for presets such as minimal. It does not authorize production release.
+A stop returns orchestration control; it is not a tool lock. The user-authorized parent session may still inspect status, prepare documents or deployment, and use Git/SQL/SSH as separately authorized.
 
-## Step 2: Dispatch loop
+Release attempts are immutable. Invoke `/cc-nexs:release-test` once per candidate fingerprint; `pending` is resumed without another integration or trigger, and only a deliberate failed-attempt retry uses `--retry`. A verification-only limitation never rolls back a successful test merge/deployment.
 
-Repeatedly:
+### Shared release safety boundary
 
-1. Read `state` and `revision` from progress.json
-2. Call `nextStep({state, counters, thresholds, enabledRoles, sprint, humanGateApproved, workflow, mode})` from lib/state-machine.mjs (mode = `'lean'`, `'hotfix'`, `'full'`, or `'fast'`)
-3. Examine the returned `{next, role, action, stop, parallel, circuitBreaker}`:
-   - `circuitBreaker` set → append a progress.json event + spec.md changelog, then transition
-   - `stop: true` → output the matching human/release-block summary (Step 3) and return
-   - `role` set → invoke that role's command per the dispatch table below
-   - `parallel` set → **必须**在同一条消息中使用多个 Agent tool call 并发 dispatch 两个角色（见 "并行 dispatch 规则"），两者都完成后再推进状态机
-   - `action == 'release_test'` → run the release capability preflight below, invoke `/cc-nexs:release-test`, then re-read progress without writing a same-state transition
-   - `action == 'release_test_hotfix'` → invoke `/cc-nexs:release-test <id> --hotfix` only from `HOTFIX_TEST_RELEASE`
-   - `action == 'verify_local'` → invoke deterministic `/cc-nexs:verify-local`; never use an agent as a substitute. A failed initial check routes to `LOCAL_VERIFY_FAILED` / `HOTFIX_LOCAL_VERIFY_FAILED`; a failed repair check routes to `LOCAL_REVERIFY_FAILED` / `HOTFIX_LOCAL_REVERIFY_FAILED`. Lean uses the persisted `local_verification.context` to return to `REVIEW_FIXING`, `TEST_FIXING`, or `GATEWAY_B_FIXING`.
-   - `action == 'assert_p3_candidate'` → invoke deterministic `cc-nexs assert-hotfix-candidate <id>`; if it returns `blocked`, re-read progress and stop at `HOTFIX_P3_BOUNDARY_BLOCKED` instead of applying the stale candidate-ready transition
-   - `action == 'release_base'` → transition to mode-specific `BASE_MERGING` / `HOTFIX_BASE_MERGING`, invoke deterministic `/cc-nexs:release-base`, and stop on base-changed/protected-branch failure
-   - `action == 'fix_gateway_b_feedback'` → dispatch the Developer only for the current structured Gateway B request in `plan.md`
-   - `action == 'review_gateway_b_delta'` → dispatch one independent Reviewer only over the request, delta, affected surfaces, and fresh local evidence
-   - `action == 'parse_*_conclusion'` → tail the corresponding md file's conclusion line, choose next state according to Step 4
-4. After the action completes, call `transitionState(progress.md path, {from, to, reason})`; it atomically appends the authoritative v2 event before refreshing the Markdown view. Stale or mismatched transitions fail closed. For `release_base`, the pre-action transition already entered `BASE_MERGING`; after success record `BASE_MERGING -> COMPLETE`, create and integrate the final docs candidate as described below, and do not write progress again.
-4.5. In fast/full only, sync the per-feature README. Lean and hotfix skip it.
-   ```js
-   import { syncFeatureReadme } from 'lib/readme-sync.mjs';
-   try {
-     const r = syncFeatureReadme({ reqDir: REQ_DIR });
-     if (r.reason === 'no_anchor') {
-       console.warn(`⚠️ ${REQ_DIR}README.md 缺少 AUTOGEN 锚点，跳过同步。从模板重建或手动加锚点可恢复自动同步。`);
-     }
-   } catch (e) {
-     console.warn(`⚠️ README 同步失败: ${e.message}（不阻塞主流程）`);
-   }
-   ```
-   Reasons returned: `synced` (rewrote), `no_change` (idempotent), `no_anchor` (legacy README, warn), `no_readme` (minimal preset, silent).
-5. Recurse to step 1 unless next state is terminal (COMPLETE) or `stop: true`
+Before test integration, `/cc-nexs:doctor --release-test --feature <id>` checks only delivery safety: a non-production test environment, release driver, exact candidates, and at least one approved deploy repository with `test_branch`. Feature scoping keeps a stale unrelated task from blocking this candidate while workspace/global safety remains checked. Reject plaintext credentials and production-like hosts. Missing URL, browser/login, bucket/CORS/IAM observability, or other verification capability is post-deploy work and must not block integration.
 
-### Role → command dispatch table
+After CI/CD succeeds, freeze one runtime browser provider: Claude Code uses `chrome-devtools-mcp`; Codex uses the current in-app/Chrome signed-in session; Pi prefers a successful ego lite probe and otherwise uses the dedicated headless `@injaneity/pi-computer-use@0.4.3` Verifier with `browser_use: true` and `headless: true`. Never expose two providers to one child. Enforce `release.test.allowed_hosts`, prove test-environment identity, and reuse existing authentication. Never read plaintext credentials from memory, Markdown, Git, config, or prompts; only an opaque external `credential_ref` may be resolved. If verification capability is unavailable, persist `manual_required` on the same deployed attempt so it can resume later.
 
-Per-mode mapping. The orchestrator selects the correct slash command based on `MODE` + the `role` field returned by `nextStep`.
+### Compact command index
 
-| role (from nextStep) | action | full mode command | fast mode command |
-|----------------------|--------|-------------------|-------------------|
-| `repo-scout` | `recon` | `/cc-nexs:recon` | (folded into `/cc-nexs:fullstack <id> --phase=spec`) |
-| `planner` / `pm` | `draft_spec` / `revise_spec` | `/cc-nexs:planner` | (n/a) |
-| `tech-lead` / `dev` | `implement` | `/cc-nexs:dev <id> --mode=feat --sprint=N` | (n/a) |
-| `tech-lead` / `dev` | `sync_docs` | `/cc-nexs:dev <id> --mode=doc --sprint=N` | (n/a) |
-| `tech-lead` / `dev` | `revise_integration` | `/cc-nexs:dev <id> --mode=integration` | (n/a) |
-| `tech-lead` / `dev` | `fix_bug` | `/cc-nexs:dev <id> --mode=fix --bug=<BUG-ID>` | (n/a) |
-| `tech-lead` / `dev` | `revise_implementation` | `/cc-nexs:dev <id> --mode=review-fix [--sprint=N]` | `/cc-nexs:fullstack <id> --phase=review-fix` |
-| `sa` / `reviewer` | `review_spec` | `/cc-nexs:sa spec` | `/cc-nexs:review spec <id>` |
-| `sa` / `reviewer` | `review_test_cases` | `/cc-nexs:sa test-cases` | (n/a) |
-| `sa` / `reviewer` | `review_code` | `/cc-nexs:sa code` | `/cc-nexs:review code <id>` |
-| `sa` / `reviewer` | `review_final_fix` | `/cc-nexs:sa code <id> --scope=final-fix` | (n/a) |
-| `sa` / `reviewer` | `review_integration` | `/cc-nexs:sa integration <id>` | (n/a) |
-| `sa` / `reviewer` | `accept` | (n/a) | `/cc-nexs:review accept <id>` |
-| `qa` / `verifier` | `write_cases` | `/cc-nexs:qa cases <id> --sprint=N` | `/cc-nexs:verify initial <id>` |
-| `qa` | `revise_cases` | `/cc-nexs:qa cases <id> --sprint=N --revise` | (n/a) |
-| `qa` / `verifier` | `run` | `/cc-nexs:qa run` | (folded into `/cc-nexs:verify initial`) |
-| `qa` / `verifier` | `regression` | `/cc-nexs:qa regression` | `/cc-nexs:verify regression <id>` |
-| `qa` / `verifier` | `run_final` | `/cc-nexs:qa final <id>` | (n/a) |
-| `qa` / `verifier` | `regression_final` | `/cc-nexs:qa final-regression <id>` | (n/a) |
-| `evaluator` | `final_acceptance` | `/cc-nexs:evaluator <id> --scope=final` | (n/a) |
-| `fullstack` | `draft_spec` / `revise_spec` | (n/a) | `/cc-nexs:fullstack <id> --phase=spec` |
-| `fullstack` | `implement` / `revise_implementation` | (n/a) | `/cc-nexs:fullstack <id> --phase=build` |
-| `fullstack` | `fix_bug` | (n/a) | `/cc-nexs:fullstack <id> --phase=fix --bug=<BUG-ID>` |
+This index keeps cross-runtime command discovery stable; dispatch details belong only to the active rule.
 
-Lean mapping:
-
-| role/action | command |
+| mode | representative role commands |
 |---|---|
-| `lean-planner / draft_plan` | `/cc-nexs:plan <id>` (normally completed before run) |
-| `lean-developer / execute_plan` | `/cc-nexs:execute <id> --phase=implement` |
-| `lean-developer / fix_review` | `/cc-nexs:execute <id> --phase=review-fix` |
-| `lean-developer / fix_test` | `/cc-nexs:execute <id> --phase=test-fix` |
-| `lean-developer / fix_gateway_b_feedback` | `/cc-nexs:execute <id> --phase=gateway-b-fix` |
-| `lean-developer / sync_base` | `/cc-nexs:execute <id> --phase=base-sync` |
-| `lean-reviewer / review_candidate` | `/cc-nexs:lean-review <id>` |
-| `lean-reviewer / review_delta` | `/cc-nexs:lean-review <id> --closure` |
-| `lean-reviewer / review_gateway_b_delta` | `/cc-nexs:lean-review <id> --gateway-b-delta` |
-| `lean-verifier / verify_test*` | `/cc-nexs:lean-verify <id>` |
-| `verify_local` | deterministic `/cc-nexs:verify-local <id>` |
-| `release_base` | deterministic `/cc-nexs:release-base <id>` |
+| Full | `/cc-nexs:recon`; `/cc-nexs:planner`; `/cc-nexs:dev <id> --mode=feat --sprint=N`; `/cc-nexs:qa cases`; `/cc-nexs:evaluator` |
+| Fast/Lite | `/cc-nexs:fullstack <id> --phase=spec`; `/cc-nexs:review accept <id>`; `/cc-nexs:verify regression <id>` |
+| Lean | `/cc-nexs:plan <id>`; `/cc-nexs:execute <id>`; `/cc-nexs:lean-review <id>`; `/cc-nexs:verify-local <id>`; `/cc-nexs:approve-release <id>`; `/cc-nexs:request-release-changes <id>` |
+| Hotfix | dedicated developer/reviewer/verifier agents; `/cc-nexs:release-test <id> --hotfix`; `/cc-nexs:approve-release <id>` |
 
-Hotfix mapping:
+The **Role → command dispatch table**, mode conclusion tables, and gate summaries are in the selected rule. Stable state markers include `PLAN_PENDING_HUMAN`, `CONSOLIDATED_REVIEW`, `RELEASE_PENDING_HUMAN`, `GATEWAY_B_CHANGE_REQUESTED`, `SCOPE_CHANGE_REQUESTED`, `HOTFIX_RELEASE_PENDING_HUMAN`, `SPEC_PENDING_HUMAN`, `DEPLOY_GATE`, `ALL_SPRINTS_DEV_DONE`, `INTEGRATION_REVIEW`, `TEST_RELEASE`, `FINAL_QA_BLOCKED`, and `BASE_MERGING`. The fast rule owns **fast 模式解析**. The full rule owns the **Artifact completeness gate** over `deploy.md api-doc.md test-report.md`. Lean keeps: **完整 Review 只有一次；修复只允许一次 delta closure**.
 
-| role/action | command |
-|---|---|
-| `hotfix-developer / implement_hotfix, fix_hotfix, fix_local, sync_base` | dispatch `agents/hotfix-developer.md` in its assigned worktree |
-| `hotfix-reviewer / review_hotfix` | dispatch `agents/hotfix-reviewer.md`, then `record-review` |
-| `hotfix-reviewer / review_hotfix_delta` | independent delta session, then `record-review --closure` |
-| `hotfix-verifier / verify_hotfix_*` | dispatch `agents/hotfix-verifier.md`, then `record-test-verification` |
-| `verify_local` | deterministic `/cc-nexs:verify-local <id>` |
-| `release_test_hotfix` | deterministic `/cc-nexs:release-test <id> --hotfix` |
-| `release_base` | deterministic `/cc-nexs:release-base <id>` |
+## 4. Common completion and candidate discipline
 
-Lean base release integrates only the exact code candidates bound to Gateway B. Once it succeeds, transition to `COMPLETE`; Git Custodian then commits the final five-file Lean docs set (`requirements.md`, `plan.md`, `config.json`, `progress.md`, `progress.json`), integrates the docs repository last, proves remote ancestry, and cleans its feature worktree/ref. This ordering avoids a self-modifying progress ledger and forbids any docs write after the final candidate.
+Loop termination is limited to:
 
-`release_test` is a parent control action, not a role dispatch. Invoke `/cc-nexs:release-test <id>` (or the runtime's mirror skill) exactly once for the current immutable candidate fingerprint. On a failed attempt, only a deliberate retry uses `--retry`.
+- `COMPLETE`
+- a state-machine `stop: true` human/manual/release/verification gate or circuit breaker
+- a genuine tool failure after bounded self-repair
 
-Key fast mode distinction:
-- `review_code` → `/cc-nexs:review code <id>` — **only** generates `sa-code-review.md` (no acceptance)
-- `accept` → `/cc-nexs:review accept <id>` — **only** generates `acceptance.md` (test-report.md is available)
+No other condition waits for user input.
 
-Implementation hint: a small `dispatch(role, action, mode, reqId, extras)` helper picks the command name from this table; the `action` field from `nextStep` directly disambiguates which sub-command to invoke for multi-target roles.
-
-## Step 3: Human gate output
-
-Lean `PLAN_PENDING_HUMAN` prints requirements scope, affected repositories, task waves, local/test validation matrices, risk/release summary, model profiles, and the temporary HTML path from `/cc-nexs:render-plan`. It then stops for `/cc-nexs:approve-plan <id>`.
-
-Lean `RELEASE_PENDING_HUMAN` prints exact candidate commits, consolidated Review result, local verification fingerprint, test attempt/environment revision, AC coverage, and base targets. It then stops for `/cc-nexs:approve-release <id>`. This approval is explicit authorization for the next run to perform non-force base integration.
-
-Hotfix `HOTFIX_RELEASE_PENDING_HUMAN` prints severity/scope hash, exact candidate, local verification, Review or P3 skip proof, test attempt/environment revision, P0/P1 rollback evidence, and base targets. It stops for the same `/cc-nexs:approve-release <id>` gate. Evidence/implementation feedback updates `hotfix.md`; scope feedback must become a new Lean/Full change.
-
-If the human requests changes instead of approving, invoke `/cc-nexs:request-release-changes <id> --type=... --feedback=...`. Never edit code while remaining in `RELEASE_PENDING_HUMAN`:
-
-- `evidence`: update only the execution/evidence section of `plan.md`, render new HTML, and remain at Gateway B.
-- `implementation`: `GATEWAY_B_CHANGE_REQUESTED -> GATEWAY_B_FIXING -> GATEWAY_B_LOCAL_REVERIFYING -> GATEWAY_B_DELTA_REVIEW`; a passing delta goes to a new `TEST_RELEASE`, deployed regression, and Gateway B. A blocked delta stops at `HUMAN_INTERVENTION` rather than starting another review loop.
-- `scope`: `SCOPE_CHANGE_REQUESTED -> PLANNING -> PLAN_PENDING_HUMAN`; Planner updates `requirements.md` plus the approval scope in `plan.md`, and Gateway A must approve the new hash before any code work.
-
-The controller keeps each Gateway B request row in `plan.md` synchronized with progress status. A later request marks the previous open item `addressed`; final release approval marks the current item `approved` before docs are archived.
-
-When `next == 'SPEC_PENDING_HUMAN'` and `humanGateApproved == false`, **first call `syncFeatureReadme({ reqDir: REQ_DIR })`** so the README mirrors the freshly produced spec / sa-review state before the human reads it. Then output the gate summary:
-
-```
-═══════════════════════════════════════════════════════════════
-🚦 [i18n: human_gate_summary_header]
-═══════════════════════════════════════════════════════════════
-
-[i18n: labels.feature]: <id> <slug>
-[i18n: labels.branch]: $(git branch --show-current)
-[i18n: labels.mode]: <full|fast>
-
-【Spec summary】
-(extract first paragraph of spec.md "Background" + "Tech Approach")
-
-【Acceptance Criteria table】
-(extract AC table from spec.md)
-
-【Sprint slices】          ← full 模式有
-(extract Sprint table from spec.md)
-
-【Last review conclusion】
-(tail -10 sa-review.md / review.md)
-
-【Key tradeoffs】
-(grep for ⚠️ or 【tradeoff】 in spec.md)
-
-═══════════════════════════════════════════════════════════════
-👉 [i18n: human_gate_approve]
-👉 [i18n: human_gate_revise]
-═══════════════════════════════════════════════════════════════
-```
-
-Then **return**. This is a workflow pause, not a tool lock: status inspection, document work, deployment preparation, Git, SQL, and SSH remain available to the user-authorized parent session.
-
-## Step 3.5: Test release preflight and manual G2 fallback
-
-When `action == 'release_test'`, perform every check below before the deterministic controller is allowed to push:
-
-1. Run `/cc-nexs:doctor --release-test` for repository test branches, release driver, URL allowlist, non-production hosts, and secret-reference policy.
-2. Confirm the configured runtime browser provider is callable:
-   - Claude Code: `chrome-devtools-mcp`
-   - Codex: the current in-app/Chrome browser session, reusing its signed-in profile
-   - Pi: prefer ego lite with the selected `ego-browser` skill and a successful runtime probe; otherwise require `@injaneity/pi-computer-use@0.4.3` with effective `browser_use: true` and `headless: true`, then dispatch the dedicated `*-computer-use` Verifier. Freeze one provider for the release attempt and never expose both providers to one child
-3. Open only `release.test.allowed_hosts`, prove the current session is authenticated to the configured test app/operations console, and prove the visible environment is test rather than production.
-4. Never read a password or token from project memory, Markdown, Git, config, or a prompt. Reuse an existing login; if login is required, resolve only an opaque `credential_ref` through an external secret provider and never persist secret material.
-
-If any check fails, do not call the release controller and do not push. Re-evaluate `nextStep` with `workflow.test_release.prerequisites_met=false`; this produces the manual G2 gate at `TEST_RELEASE`.
-
-When `action == 'await_deploy_approval'` and `stop: true`, output the G2 gate summary. For `final_only`, the approval attests that the complete requirement candidate was integrated to test, released, and its required environment checks were performed. For legacy `per_sprint`, retain the existing sprint-scoped meaning:
-
-```
-═══════════════════════════════════════════════════════════════
-🚀 [i18n: deploy_gate_summary_header]
-═══════════════════════════════════════════════════════════════
-
-[i18n: labels.feature]: <id> <slug>
-[i18n: labels.branch]: $(git branch --show-current)
-[i18n: labels.mode]: <full|fast>
-[i18n: labels.sprint]: M<N>          ← 仅 legacy per_sprint 有
-
-【SA Code Review 结论】
-(tail -5 sa-code-review.md 结论行)
-
-【待部署变更摘要】
-(git log --oneline origin/master..HEAD | head -10)
-
-【数据库变更】（如有）
-(grep -A5 'DDL\|DML\|ALTER\|CREATE' deploy.md)
-
-═══════════════════════════════════════════════════════════════
-👉 Git Custodian 已为各仓记录 candidate commit。请由人工或 CI 将完整 candidate
-   合入 test、部署测试环境并完成必要环境验证；确认后执行 /cc-nexs:approve-deploy <id>。
-   角色和 Orchestrator 不直接 merge/push 目标分支。
-═══════════════════════════════════════════════════════════════
-```
-
-Then **return**. Pipeline halts until human runs `/cc-nexs:approve-deploy`. Production merge/release is never implied by G2 and always remains an explicit human action.
-
-## Step 4: Conclusion parsing rules
-
-| File | Pattern (regex applied to last 30 lines) | Conclusion outcomes |
-|------|------------------------------------------|---------------------|
-| `sa-review.md` / `review.md` | `^[结论\|Conclusion]:\s*(\S+)` | `PASS` / `NEEDS_REVISION` |
-| `sa-code-review.md` / `code-review.md` | same | same |
-| `test-report.md` | same | preset-defined `test_pass` / `test_fail` / `待人工执行`(= pass, 不阻塞) |
-| `acceptance.md` | `^[验收结果\|Acceptance]:\s*(\S+)` | `acceptance_pass` / `acceptance_fail` |
-| Lean `plan.md` Review section | `^结论:\s*(\S+)` | `PASS` / `NEEDS_REVISION` |
-| Lean `plan.md` Test section | `^测试结论:\s*(\S+)` | `通过` / `阻塞` |
-
-i18n: the literal strings (`PASS`, `通过`, `PASSED`, etc.) come from preset's `i18n.conclusion_*` settings.
-
-### lean 模式解析
-
-| Parse action | PASS / 通过 | FAIL / 阻塞 |
-|---|---|---|
-| `PARSE_CONSOLIDATED_REVIEW` | `CANDIDATE_READY` | `CONSOLIDATED_REVIEW_BLOCKED` |
-| `PARSE_REVIEW_CLOSURE` | `CANDIDATE_READY` | `REVIEW_CLOSURE_BLOCKED` → 人工介入 |
-| `PARSE_GATEWAY_B_DELTA_REVIEW` | `CANDIDATE_READY` → new test attempt | `GATEWAY_B_DELTA_REVIEW_BLOCKED` → 人工介入 |
-| `PARSE_TEST_VERIFY` | `TEST_VERIFIED` | `TEST_VERIFY_FAILED` |
-
-每次 Review 解析后调用 `record-review` 控制器，把结论绑定本地验证的相同 candidate fingerprint。完整 Review 只有一次；修复只允许一次 delta closure。Test 阻塞修复同样走本地重新验证和 delta closure，再产生新 test attempt。
-
-### hotfix 模式解析
-
-| Parse action | PASS | BLOCKED |
-|---|---|---|
-| `PARSE_HOTFIX_REVIEW` | `HOTFIX_CANDIDATE_READY` | `HOTFIX_REVIEW_BLOCKED` |
-| `PARSE_HOTFIX_DELTA_REVIEW` | `HOTFIX_CANDIDATE_READY` | `HOTFIX_DELTA_REVIEW_BLOCKED -> HUMAN_INTERVENTION` |
-| `PARSE_HOTFIX_TEST` | `HOTFIX_TEST_VERIFIED` | `HOTFIX_TEST_FAILED` |
-
-所有 Review 结论通过 `record-review` 绑定 exact candidate；test 结论通过 `record-test-verification` 绑定 exact attempt/environment revision。全生命周期只允许一次 delta Review。
-每次 Hotfix test 阻塞会递增 `counters.fix_per_bug.HOTFIX_TEST`。模式阈值为 1，因此第一次失败可进入唯一修复闭环；第二次失败或任何已消耗 delta Review 后的新修复请求都会熔断到人工介入。P3 边界不满足进入 `HOTFIX_P3_BOUNDARY_BLOCKED`，由人工选择新建 P0/P1/P2 Hotfix 或 Lean/Full 需求。
-
-### full 模式 SA_CODE 结论路由
-
-`PARSE_SA_CODE` 结论解析后的路由（G2 门禁插入点）：
-
-| SA_CODE 结论 | 下一状态 | 说明 |
-|---|---|---|
-| PASS + `final_only` | `SPRINT_<N>_DEV_DONE` | 本 sprint 开发闭环完成；不部署，继续下一 sprint |
-| PASS + legacy `per_sprint` | `SPRINT_<N>_DEPLOY_GATE` | 保持旧需求逐 sprint 部署行为 |
-| NEEDS_REVISION | `SPRINT_<N>_FIX` | 开发修复 → `FIX_DONE` → 重新代码评审 |
-
-`SPRINT_<N>_FIX` in the development loop addresses code-review findings and then returns through doc sync/code review. It is not deployment regression. Only post-release `FINAL_FIX` may lead to a new test release.
-
-### final_only integration and acceptance routing
-
-| Parse action | PASS / 通过 | FAIL / 阻塞 / 未通过 |
-|---|---|---|
-| `PARSE_INTEGRATION_REVIEW` | `TEST_RELEASE` | `INTEGRATION_REVIEW_NEEDS_REVISION` (`review_revision++`) |
-| `PARSE_FINAL_QA` | `FINAL_QA_PASSED` | `FINAL_QA_BLOCKED` and create/update BUG artifacts |
-| `PARSE_FINAL_FIX_REVIEW` | record new candidates, then `TEST_RELEASE` | `FINAL_FIX_REVIEW_NEEDS_REVISION` (`review_revision++`) |
-| `PARSE_FINAL_EVAL` | `COMPLETE` | `FINAL_ACCEPTANCE_REJECTED` (`evaluator_reject++`) |
-
-After final QA/regression parses, call `recordTestVerification()` for the current release attempt with the result and report/evidence references. A blocked deployed round must follow this complete loop:
+At `COMPLETE`, fast/full performs a final README sync; Lean/Hotfix prints the active rule's evidence and cleanup summary. Always print the optional compound-learning hint:
 
 ```text
-FINAL_QA_BLOCKED -> FINAL_FIX -> FINAL_FIX_REVIEW -> TEST_RELEASE
-                 -> FINAL_QA (regression_final) -> FINAL_EVAL
-```
-
-Local checks may move a BUG from `OPEN` to `FIXED`; only the deployed `regression_final` run may move it from `FIXED` to `VERIFIED`.
-
-Transitions to `TEST_BLOCKED`, `FINAL_QA_BLOCKED`, `ACCEPTANCE_REJECTED`, or `FINAL_ACCEPTANCE_REJECTED` invalidate the aggregate test-release status and requirement-level G2 approval while retaining immutable attempt evidence. A repaired candidate therefore re-enters `TEST_RELEASE`; it can never reuse an earlier deployment as proof.
-
-### full 模式 SA_TEST_REVIEW 结论路由
-
-`PARSE_SA_TEST_REVIEW` 解析 `sa-test-review.md` 末尾结论后的路由：
-
-| SA_TEST_REVIEW 结论 | 下一状态 | 说明 |
-|---|---|---|
-| PASS | `SPRINT_<N>_DOC_SYNC` | 用例评审通过 → Tech Lead 同步文档 |
-| NEEDS_REVISION | `SPRINT_<N>_SA_TEST_REVIEW_NEEDS_REVISION` | 用例评审未通过 → 状态机派发 QA `revise_cases` → `QA_CASES` → SA 新轮次复审 |
-
-### fast 模式解析（拆分后）
-
-#### PARSE_CODE_REVIEW（CODE_REVIEW 之后）
-
-只解析 sa-code-review.md：
-
-```bash
-CODE=$(tail -20 ${REQ_DIR}sa-code-review.md | grep -E '^结论:' | tail -1 | awk '{print $2}')
-```
-
-| CODE 结论 | 下一状态 | 计数器 |
-|---|---|---|
-| PASS + `auto_if_ready` | TEST_RELEASE | — |
-| PASS + manual/legacy | DEPLOY_GATE | — |
-| NEEDS_REVISION | CODE_REVIEW_NEEDS_REVISION | review_revision++ |
-
-#### PARSE_ACCEPTANCE（ACCEPTANCE 之后）
-
-只解析 acceptance.md（此时 test-report.md 已存在）：
-
-```bash
-ACC=$(tail -30 ${REQ_DIR}acceptance.md | grep -E '^验收结果:' | tail -1 | awk '{print $2}')
-```
-
-| ACC 验收结果 | 下一状态 | 计数器 |
-|---|---|---|
-| 通过 | COMPLETE | — |
-| 未通过 | ACCEPTANCE_REJECTED | evaluator_reject++ |
-
-`mode=fast` 在 `state == 'TEST'` 后解析 `test-report.md` 末尾结论；`通过 → TEST_PASSED`，`阻塞 → TEST_BLOCKED`。`PARSE_FIX_REVIEW` PASS 必须先记录新的 candidate 并回 `TEST_RELEASE`；NEEDS_REVISION 到 `FIX_REVIEW_NEEDS_REVISION`，先重新实现再复审。后续 release attempt > 1 时只允许 `verify regression`，不能用本地验证替代部署后回归。
-
-## Step 4.5: Artifact completeness gate (full mode, before final EVAL)
-
-Before transitioning from `FINAL_QA_PASSED` to `FINAL_EVAL`, the orchestrator runs a pre-flight check over the accumulated requirement artifacts:
-
-```bash
-FAILED=0
-for f in deploy.md api-doc.md test-report.md; do
-  FILE="${REQ_DIR}${f}"
-  if [ ! -f "$FILE" ]; then
-    echo "❌ $f 不存在，阻塞进入 Evaluator"
-    FAILED=1
-  elif grep -qE 'YYYY-MM-DD|/api/xxx/yyy|（append）|（自动填）' "$FILE"; then
-    echo "❌ $f 仍为模板内容，阻塞进入 Evaluator"
-    FAILED=1
-  fi
-done
-if [ $FAILED -ne 0 ]; then
-  echo "⚠️ 产物不完整。回退到 INTEGRATION_REVIEW_NEEDS_REVISION 让 Tech Lead 补充文档并重新评审。"
-fi
-```
-
-This is the final guardrail — even if earlier steps were skipped, the completeness gate catches template-only artifacts before Evaluator wastes a scoring cycle on incomplete input.
-
-## Step 5: Circuit counter lifecycle
-
-Circuit counters track **consecutive failures in the active loop**, not lifetime failures across unrelated sprints or phases:
-
-- Review parse `NEEDS_REVISION` → `counters.review_revision++`; the next PASS in that review loop resets it to `0` before transition.
-- A deployed regression fails the same BUG again → `counters.fix_per_bug[BUG-id]++`; when that BUG becomes `VERIFIED`, delete/reset its counter.
-- Acceptance fail → `counters.evaluator_reject++`; acceptance PASS resets it to `0` before `COMPLETE`.
-- The state machine evaluates each breaker only in its corresponding failure/retry state. High legacy counters cannot redirect `TEST_RELEASE`, gates, normal development states, or `COMPLETE`.
-
-Counters live in progress.json. Increment and reset them through an event-aware core helper; progress.md counters are a rendered mirror and must not be edited as state.
-
-## Step 6: Termination
-
-Loop exits when:
-- `current_state == COMPLETE` → fast/full sync README；Lean 输出 requirements/plan、AC evidence、base integration proof 和 cleanup 结果
-- `stop: true` from state machine (human/manual release gate, release block, manual verification requirement, or fast-mode `HUMAN_INTERVENTION` circuit breaker)
-- A tool call genuinely fails after self-repair attempts
-
-No other condition causes the orchestrator to stop and wait for user input.
-
-### Compound learnings hint (always print when reached COMPLETE)
-
-`/cc-nexs:compound` 是状态机外的旁路命令，把本次需求的"非显然教训"沉淀到仓库级 `docs/solutions/<topic>.md`。下次同类需求 RECON 阶段会自动 grep 命中、接入 repo-context.md。这是 cc-nexs 复利的关键环节——但不是每次需求都有非显然教训，所以保留人工触发。
-
-```
 💡 沉淀经验（可选）:
-   本次需求若有"反复返工 / 现状误判 / BUG 修多次"等非显然教训，建议跑:
+   本次需求若有“反复返工 / 现状误判 / BUG 修多次”等非显然教训，建议跑:
      /cc-nexs:compound <id>
-   会扫 doc/<id>/*.md 提炼成 docs/solutions/<topic>.md。
-   下次同类需求 RECON 阶段 Repo Scout 会自动接入这些经验。
-   无强信号时 compound 会跳过，不会产出空文件。
+   无强信号时会跳过，不产出空文件。
 ```
 
-### Release finalization (after MR/PR merge proof)
+The docs repository follows the same path-safety and candidate-ref discipline as code repositories. Fast/Full may create or update its docs candidate commit after each document-writing phase and again at `COMPLETE`. Lean/Hotfix are explicitly final-only: plan, Review, and verification keep their documents in the assigned docs worktree, and Git Custodian creates exactly one final docs candidate commit only after the code base release is proven and state is `COMPLETE`. An intermediate Lean/Hotfix docs candidate can invalidate exact-candidate evidence and is forbidden. In every mode, stage only the configured feature directory; prepare candidate metadata before committing so the ref—not a self-referential SHA in progress.json—remains authoritative. The docs repository integrates last.
 
-COMPLETE only means the workflow artifacts passed and does not authorize remote deletion. When the user explicitly asks to merge/push to `master`, invoke Git Custodian `prepare`, merge code repositories first and docs last, then invoke `finalizeMergedWorktree()` in the same release task. Finalize fails closed unless each worktree is clean and both local and remote feature tips are contained by the freshly fetched remote base:
-
-```
-📦 Candidate ready:
-   - progress.json 记录 candidate ref 和目标 base；实时 commit 从 ref 解析（不在 JSON 中制造 SHA 自引用）
-   - 创建/合并 MR 或 PR 属于显式发布动作，不由角色隐式执行
-   - 用户明确授权合并 master 后，必须在同一任务内运行 /cc-nexs:git-custodian finalize <id>
-   - finalize 默认完整删除远端 feature、本地 feature、worktree 和 candidate ref
-   - 只有用户明确要求保留远端分支时才使用 --keep-remote
-```
-
-### Document repository candidates
-
-The docs repository is treated exactly like every code repository. After a step writes documents, the Orchestrator asks Git Custodian to stage only the configured feature document directory and create/update a candidate commit on the feature branch. It never commits or pushes directly to `master`/`main`.
-
-**时机**：
-- 每个状态机 step 完成后（写了 spec.md / sa-review.md / test-report.md 等任何 doc 文件时）
-- COMPLETE 终态时做最后一次兜底 commit（确保不遗漏）
-
-**commit message 规范**：
-- `docs: <id> planner 产出 spec + 验收契约`
-- `docs: <id> SA 评审 Round 1 PASS`
-- `docs: <id> QA 测试报告 Sprint M1`
-- `docs: <id> Evaluator 验收通过`
-- `docs: <id> hotfix BUG-<N> 修复记录`
-
-Candidate metadata is prepared in progress.json before committing; the candidate ref is the SHA authority. For the docs repository this ordering ensures the final commit includes its own metadata and leaves a clean worktree. Publishing a branch, creating a PR/MR, merging, or deleting a remote branch always requires an explicit release action and must not be inferred from ordinary role completion.
+`COMPLETE` does not authorize remote publishing, merge, or deletion. Only an explicit user release instruction may invoke Git Custodian `prepare`/merge/finalize. Finalize freshly fetches the remote base, proves both tips are contained, requires clean worktrees, and then removes feature worktree/ref/branches unless the user explicitly asks for `--keep-remote`.

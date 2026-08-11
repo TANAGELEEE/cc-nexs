@@ -8,8 +8,10 @@ cc-nexs/                    monorepo 根
 │   ├── core/               框架：状态机、角色注册、reviewer 适配、hooks、i18n
 │   └── preset-*/           预设：声明角色清单 + 工具映射 + 栈检查 + 模板
 ├── scripts/build.mjs       build：core 物化进每个 preset
-├── dist/                   分发产物（随 release commit）
-│   ├── .claude-plugin/marketplace.json
+├── .claude-plugin/         Claude marketplace（build 生成）
+├── .agents/plugins/        Codex marketplace（build 生成）
+├── pi/                     手写 extension + build 生成的 agents/skills
+├── dist/                   Claude/Codex 分发产物（随 release commit）
 │   └── preset-*/           扁平自包含 plugin
 └── examples/               真实使用样板
 ```
@@ -47,6 +49,8 @@ core/hooks/*.mjs         →   skipExisting               →    hooks/*.mjs
 core/lib/*.mjs           →   原样拷贝                   →    lib/
 core/schemas/*.json      →   原样拷贝                   →    schemas/
 core/i18n/*.json         →   skipExisting               →    i18n/
+commands + agents       →   生成薄 Codex runtime adapter → codex-skills/
+standard commands/agents →  生成 Pi runtime adapter      → pi/skills/ + pi/agents/
 
 文本类文件路径 rewrite：
   "core/lib/X" → "lib/X"
@@ -54,7 +58,14 @@ core/i18n/*.json         →   skipExisting               →    i18n/
   "../core/X"  → "X"
 ```
 
-`dist/.claude-plugin/marketplace.json` 自动汇总所有 preset 作为 plugin 列表。
+根目录 `.claude-plugin/marketplace.json` 与 `.agents/plugins/marketplace.json` 自动汇总所有 preset；`dist/.claude-plugin/marketplace.json` 不是有效入口。
+
+`packages/core/**` 与 `packages/preset-*/**` 是 command/agent 的 source of truth；`dist/**`、`pi/agents/**`、`pi/skills/**` 以及两个根 marketplace 都是 build 产物，禁止手工维护三份。`pi/extensions/cc-nexs.ts` 是手写的 Pi runtime 入口。提交前的生成物检查应覆盖全部这些路径：
+
+```bash
+pnpm build
+git diff --exit-code -- dist pi/agents pi/skills .claude-plugin/marketplace.json .agents/plugins/marketplace.json package.json.pi
+```
 
 ## 启动时序
 
@@ -112,7 +123,7 @@ loadConfig({ projectRoot, presetRoot? })
 纯函数。无 I/O，无副作用。给定 `(state, counters, thresholds, enabledRoles, sprint, humanGateApproved)`，决定下一步。
 
 特点：
-- `mode=lean` 为新需求默认：plan gate、本地验证、一次集中 Review、test 验收、release gate、base merge
+- `mode=lean` 为新需求默认；fast-track 顺序是 plan gate、本地可执行验证、test 交付/验收、一次集中 Review、release gate、base merge
 - 三档熔断（review_revision / fix_per_bug / evaluator_reject）
 - 角色弹性（缺 evaluator 时 reviewer 兼任，缺 qa 时 reviewer 兼任）
 - 默认 stop：`SPEC_PENDING_HUMAN`（G1）；manual/legacy G2、test release block、manual verification 和熔断
@@ -129,7 +140,7 @@ loadConfig({ projectRoot, presetRoot? })
 
 把三端共用的模型决策集中在确定性核心：校验 `risk_tier` / Hotfix severity / `models.routing`，从 Gateway A binding 或 Hotfix scope 取可信风险信号，按最高风险匹配规则，再把 feature `models.roles` 作为最终显式覆盖。`resolveFeatureModelRouting()` 和 `resolveRoleRuntime()` 同时返回 matched rules、全部信号、是否自动升档以及最终 profile/model/effort，避免 Claude Code、Codex、Pi 各自实现一套优先级。
 
-Lean `risk_tier:auto` 的首稿由日常 Planner 生成；若首稿判为 high/critical 且路由发生升档，Plan 阶段只追加一次全新 escalated Planner hardening，然后进入 Gateway A。新版 Gateway A 将 concrete risk 与批准范围 hash 一起绑定。历史 binding 没有 risk 时，仅从 `plan_scope_sha256` 完全匹配的批准范围派生；无法验证或没有 concrete risk 时按 high 保守升档。可用 `migrate-feature-config --bind-plan-risk` 显式回填可证明的旧 binding，绝不从范围外文本或模型猜测。
+Lean 只派一个 Planner；`risk_tier:auto` 的首稿由日常 profile 生成，high/critical 只升级后续 Reviewer 并在 Gateway A 建议 Full，不再冷启动第二个 Planner。Gateway A 将 concrete risk、delivery lane 与批准范围 hash 一起绑定；fast-track 只允许 low/medium。历史 binding 没有 risk 时，仅从 `plan_scope_sha256` 完全匹配的批准范围派生；无法验证或没有 concrete risk 时按 high 保守升档。旧计划没有 lane 时安全解释为 standard。可用 `migrate-feature-config --bind-plan-risk` 显式回填可证明的旧 binding，绝不从范围外文本或模型猜测。
 
 ### `core/lib/reviewer-adapter.mjs`
 
@@ -167,12 +178,13 @@ Lean 默认：
 
 ```text
 INIT → PLANNING → PLAN_PENDING_HUMAN
-→ IMPLEMENTING → LOCAL_VERIFYING → CONSOLIDATED_REVIEW
-→ TEST_RELEASE → TEST_VERIFYING → RELEASE_PENDING_HUMAN
+→ IMPLEMENTING → LOCAL_VERIFYING → TEST_RELEASE → TEST_VERIFYING
+                                  ↘ TEST_DEPLOYED_NEEDS_MANUAL_VERIFY ↗
+→ CONSOLIDATED_REVIEW → RELEASE_PENDING_HUMAN
 → BASE_MERGING → COMPLETE
 ```
 
-Lean 只维护 requirements.md 和 plan.md 两份人工文档；Review 阻塞后最多一次 delta closure。
+Lean 只维护 requirements.md 和 plan.md 两份人工文档；Review 阻塞后最多一次 delta closure。无法本地启动的环境项以 `deferred_to_test` 留证并继续交付。浏览器、登录/MFA 与验收 URL 只在部署后检查，缺失时进入可恢复的 `TEST_DEPLOYED_NEEDS_MANUAL_VERIFY`，不会回滚 test merge/CI。
 
 Legacy full：
 
@@ -189,7 +201,7 @@ ALL_SPRINTS_DEV_DONE → INTEGRATION_REVIEW → TEST_RELEASE
 FINAL_QA_BLOCKED → FINAL_FIX → FINAL_FIX_REVIEW → TEST_RELEASE → FINAL_QA
 ```
 
-Sprint 是开发切片，不是部署/验收切片。新需求默认 `final_only + auto_if_ready`；旧 progress 无 delivery 时保持 `per_sprint + manual`。显式退出或 browser/driver/test branch 前置不足时，TEST_RELEASE 在任何 push 前回退人工 G2。生产发布始终人工。
+Sprint 是开发切片，不是部署/验收切片。新需求默认 `final_only + auto_if_ready`；旧 progress 无 delivery 时保持 `per_sprint + manual`。显式退出、release driver 或 test branch 配置错误可以在 push 前阻止交付；browser/login/MFA/verification URL 只影响部署后验收并进入可恢复的 manual verification。生产发布始终人工。
 
 熔断箭头（不在主图）：
 - review_revision >= 3 → SPEC_REVIEWING（强制 Planner 重审）

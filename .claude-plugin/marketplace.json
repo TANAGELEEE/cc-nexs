@@ -4,7 +4,7 @@
     "name": "cc-nexs"
   },
   "metadata": {
-    "description": "cc-nexs: Lean 默认的低 Token 多代理流水线，包含计划/发布双门禁、本地验证与一次集中 Review。",
+    "description": "cc-nexs: Lean fast-track 多代理流水线，本地可执行验证后优先交付 test/CI，部署后验收并集中 Review。",
     "version": "0.5.3"
   },
   "plugins": [

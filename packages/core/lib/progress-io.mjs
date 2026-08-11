@@ -112,7 +112,9 @@ export function readProgress(path) {
         test_release: {
           policy: progress.delivery?.test?.policy || 'manual',
           status: progress.delivery?.test?.status || 'idle',
-          attempt: progress.delivery?.test?.attempts?.length || 0,
+          attempt: (progress.delivery?.test?.attempts || [])
+            .filter((item) => item.deployment && item.environment_revision)
+            .length,
         },
       },
       history: progress.events.map((event) => `${event.timestamp} ${event.from || '-'} → ${event.to || '-'}  ${event.reason || event.type}`),
@@ -204,10 +206,10 @@ export function transitionState(path, { from, to, reason = '' }) {
   return { ts, from, to };
 }
 
-export function approveHumanGate(path, { approver }) {
+export function approveHumanGate(path, { approver, binding = null }) {
   let ts = new Date().toISOString();
   if (hasProgressV2(path)) {
-    const progress = approveProgressGate(progressJsonForMarkdown(path), { gate: 'g1', approver });
+    const progress = approveProgressGate(progressJsonForMarkdown(path), { gate: 'g1', approver, binding });
     ts = progress.gates.g1.approved_at;
   }
   const text = readFileSync(path, 'utf-8');

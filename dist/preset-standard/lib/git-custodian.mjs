@@ -55,7 +55,47 @@ function fetchBase(repo, branch) {
   return remote;
 }
 
-export function createWorkspaceWorktrees(workspace, { featureId, featureSlug, repositoryIds = null }) {
+function recoverExistingWorkspaceWorktree({ workspace, repo, featureRoot, branch }) {
+  const worktree = assertWithin(workspace.worktree_root, join(featureRoot, assertSegment(repo.id, 'repository id')));
+  const pathExists = existsSync(worktree);
+  const branchExists = refExists(repo.absolute_path, `refs/heads/${branch}`);
+  if (!pathExists || !branchExists) {
+    throw new Error(`[cc-nexs] incomplete existing worktree/branch pair for ${repo.id}; refusing automatic recovery`);
+  }
+  const realWorktree = realpathSync(worktree);
+  assertWithin(realpathSync(workspace.worktree_root), realWorktree);
+  const registered = git(repo.absolute_path, ['worktree', 'list', '--porcelain']);
+  if (!registered.split('\n').includes(`worktree ${realWorktree}`)) {
+    throw new Error(`[cc-nexs] existing worktree is not registered for ${repo.id}`);
+  }
+  if (git(worktree, ['branch', '--show-current']) !== branch) {
+    throw new Error(`[cc-nexs] existing worktree branch mismatch for ${repo.id}`);
+  }
+  if (git(worktree, ['status', '--porcelain'])) {
+    throw new Error(`[cc-nexs] existing unassigned worktree is dirty for ${repo.id}`);
+  }
+  const head = git(worktree, ['rev-parse', 'HEAD']);
+  const remoteBase = fetchBase(repo.absolute_path, repo.base_branch);
+  if (!isAncestor(repo.absolute_path, head, remoteBase)) {
+    throw new Error(`[cc-nexs] existing unassigned worktree for ${repo.id} is not an untouched ${repo.base_branch} baseline`);
+  }
+  return {
+    repository: repo.id,
+    source: repo.absolute_path,
+    branch,
+    worktree,
+    baseBranch: repo.base_branch,
+    baseCommit: head,
+    recovered: true,
+  };
+}
+
+export function createWorkspaceWorktrees(workspace, {
+  featureId,
+  featureSlug,
+  repositoryIds = null,
+  recoverExisting = false,
+}) {
   assertSegment(featureId, 'feature id');
   assertSegment(featureSlug, 'feature slug');
   const reservationFile = join(workspace.projectRoot, '.cc-nexs', 'reservations', `${featureId}.json`);
@@ -73,21 +113,32 @@ export function createWorkspaceWorktrees(workspace, { featureId, featureSlug, re
   const unknown = selectedIds.filter((id) => !workspace.repositories.some((repo) => repo.id === id));
   if (unknown.length) throw new Error(`[cc-nexs] unknown repositories: ${unknown.join(', ')}`);
   const selected = workspace.repositories.filter((repo) => selectedIds.includes(repo.id));
-  const created = [];
+  const assignments = [];
+  const newlyCreated = [];
   try {
     for (const repo of selected) {
       const branch = `feature/${featureKey}`;
       const worktree = assertWithin(workspace.worktree_root, join(featureRoot, assertSegment(repo.id, 'repository id')));
-      if (existsSync(worktree)) throw new Error(`[cc-nexs] worktree path already exists: ${worktree}`);
-      if (refExists(repo.absolute_path, `refs/heads/${branch}`)) throw new Error(`[cc-nexs] branch already exists in ${repo.id}: ${branch}`);
+      const pathExists = existsSync(worktree);
+      const branchExists = refExists(repo.absolute_path, `refs/heads/${branch}`);
+      if (pathExists || branchExists) {
+        if (!recoverExisting) {
+          if (pathExists) throw new Error(`[cc-nexs] worktree path already exists: ${worktree}`);
+          throw new Error(`[cc-nexs] branch already exists in ${repo.id}: ${branch}`);
+        }
+        assignments.push(recoverExistingWorkspaceWorktree({ workspace, repo, featureRoot, branch }));
+        continue;
+      }
       const base = fetchBase(repo.absolute_path, repo.base_branch);
       const baseCommit = git(repo.absolute_path, ['rev-parse', base]);
       git(repo.absolute_path, ['worktree', 'add', '--no-track', '-b', branch, worktree, base]);
-      created.push({ repository: repo.id, source: repo.absolute_path, branch, worktree, baseBranch: repo.base_branch, baseCommit });
+      const assignment = { repository: repo.id, source: repo.absolute_path, branch, worktree, baseBranch: repo.base_branch, baseCommit };
+      assignments.push(assignment);
+      newlyCreated.push(assignment);
     }
-    return created;
+    return assignments;
   } catch (error) {
-    for (const item of created.reverse()) {
+    for (const item of newlyCreated.reverse()) {
       try { git(item.source, ['worktree', 'remove', '--force', item.worktree]); } catch {}
       try { git(item.source, ['branch', '-D', item.branch]); } catch {}
     }
@@ -180,7 +231,14 @@ export function assertCandidateContainsRemoteBase({ repo, candidateRef, baseBran
   return { sourceCommit, baseCommit };
 }
 
-export function integrateCandidateToTest({ repo, repositoryId, candidateRef, expectedSourceCommit = null, targetBranch }) {
+export function integrateCandidateToTest({
+  repo,
+  repositoryId,
+  candidateRef,
+  expectedSourceCommit = null,
+  targetBranch,
+  requireTargetAncestor = false,
+}) {
   assertSegment(repositoryId, 'repository id');
   assertSegment(targetBranch, 'test branch');
   const sourceCommit = resolveCandidateCommit({ repo, candidateRef });
@@ -189,6 +247,9 @@ export function integrateCandidateToTest({ repo, repositoryId, candidateRef, exp
   }
   const target = fetchBase(repo, targetBranch);
   const targetBefore = git(repo, ['rev-parse', target]);
+  if (requireTargetAncestor && !isAncestor(repo, targetBefore, sourceCommit)) {
+    throw new Error(`[cc-nexs] BASE_CHANGED: candidate ${sourceCommit} does not contain current origin/${targetBranch} ${targetBefore}`);
+  }
   if (isAncestor(repo, sourceCommit, targetBefore)) {
     return {
       repository: repositoryId,
@@ -199,7 +260,6 @@ export function integrateCandidateToTest({ repo, repositoryId, candidateRef, exp
       alreadyIntegrated: true,
     };
   }
-
   const tempRoot = mkdtempSync(join(tmpdir(), `cc-nexs-test-release-${repositoryId}-`));
   const integrationWorktree = join(tempRoot, 'worktree');
   let registered = false;

@@ -23,11 +23,27 @@
 |---|---|---|---|---|---|---|
 | T-001 | AC-001 |  |  | 无 |  | W1 |
 
+## 交付策略
+
+- delivery_lane: pending
+- Fast-track 资格：复用既有能力 / 无新增表结构或迁移 / 无新增基础设施与密钥 / 无公开破坏性契约 / 风险为 low 或 medium
+- 不满足项与理由：
+
+## Test 交付拓扑
+
+每个代码仓必须保留一条机器可解析的策略行；`deploy` 必须配置 `test_branch`，`local` 仅用于从精确 candidate worktree 本地启动并连接已部署的 test 服务。
+
+- test_delivery.<repo-id>: deploy / local
+
+| 仓库 | Candidate 去向 | 验证方式 |
+|---|---|---|
+|  | test_branch / local | 部署到 test / 本地启动并连接 test 后端 |
+
 ## 本地验证矩阵
 
-| Check | AC | 类型 | 命令/Driver | 通过条件 |
-|---|---|---|---|---|
-| LV-001 | AC-001 | build/test/start/smoke/e2e |  |  |
+| Check | AC | 类型 | 命令/Driver | 通过条件 | 无法本地执行时的 Test 动作 |
+|---|---|---|---|---|---|
+| LV-001 | AC-001 | targeted build/test/start/smoke |  |  |  |
 
 ## Test 环境验收矩阵
 
