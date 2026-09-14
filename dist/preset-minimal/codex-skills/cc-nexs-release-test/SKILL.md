@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-release-test
-description: /cc-nexs:release-test 的 Codex 镜像 skill。 仅当用户显式输入 "$cc-nexs-release-test" 或在界面中选择该 skill 时使用；不得因普通自然语言请求自动触发。 Integrate final feature candidates into test, run the project release driver, then hand deployed evidence to the black-box Verifier.
+description: /cc-nexs:release-test 的 Codex 镜像 skill。 显式调用 $cc-nexs-release-test 时使用。 Integrate final feature candidates into test, run the project release driver, then hand deployed evidence to the black-box Verifier.
 ---
 
 # /cc-nexs:release-test for Codex

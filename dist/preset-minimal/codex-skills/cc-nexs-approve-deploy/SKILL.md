@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-approve-deploy
-description: /cc-nexs:approve-deploy 的 Codex 镜像 skill。 仅当用户显式输入 "$cc-nexs-approve-deploy" 或在界面中选择该 skill 时使用；不得因普通自然语言请求自动触发。 Approve deploy gate G2 in authoritative progress.json v2, mirror the human-readable view, then resume via /cc-nexs:run.
+description: /cc-nexs:approve-deploy 的 Codex 镜像 skill。 显式调用 $cc-nexs-approve-deploy 时使用。 Approve deploy gate G2 in authoritative progress.json v2, mirror the human-readable view, then resume via /cc-nexs:run.
 ---
 
 # /cc-nexs:approve-deploy for Codex

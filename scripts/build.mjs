@@ -403,7 +403,7 @@ function generateCodexSkills(dst) {
     const commandBase = basename(fileName, '.md');
     const description = [
       `${commandName} 的 Codex 镜像 skill。`,
-      `仅当用户显式输入 "$${skillName}" 或在界面中选择该 skill 时使用；不得因普通自然语言请求自动触发。`,
+      `显式调用 $${skillName} 时使用。`,
       extractDescription(commandText, commandName),
     ].join(' ');
     const skillRoot = join(codexSkillsDir, skillName);
@@ -427,7 +427,7 @@ Read and follow \`${relCommand}\` as the single source of truth for this command
 ${controlBlock}## Codex Runtime Delta
 
 - Dispatch every requested role as an independent native subagent using \`../../agents/\`; keep implementation, Review, and verification in fresh isolated sessions. For Fast/Full implementation fanout, spawn every same-wave worker with its progress-assigned worktree and frozen role runtime before awaiting any of them, then join the whole wave; never serialize spawn/await or create extra agent worktrees. Never invoke Claude Code, a Claude subagent tool, or a nested \`codex\` CLI process.
-- ${supportsLean ? 'Resolve automatic risk routing once from progress/config/approved-plan: Lean high/critical upgrades Planner and Reviewer; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. A Reviewer may use a different model or the same model with higher reasoning effort. ' : ''}Provider-specific IDs are allowed only in private project/feature config; public defaults remain portable.
+- ${supportsLean ? 'Resolve automatic risk routing once from progress/config/approved-plan: Explicit Lean high/critical can upgrade the first Planner dispatch; discovered plan risk upgrades subsequent Reviewer dispatch without starting a second Planner; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. A Reviewer may use a different model or the same model with higher reasoning effort. ' : ''}Provider-specific IDs are allowed only in private project/feature config; public defaults remain portable.
 - Translate \`$CLAUDE_PLUGIN_ROOT\` to this installed Codex plugin root and preserve the authoritative command's state transitions, gates, counters, validation, and stop behavior.
 - Browser tooling, login/MFA state, and verification-page URL availability are checked only after the exact candidate reaches test and CI delivery completes. They never block delivery. If post-deployment verification cannot run, record \`manual_required\` / \`deployed_needs_manual_verification\` with evidence and leave it recoverable; never claim a pass.
 
@@ -584,7 +584,7 @@ function generatePiResources() {
     ].join(' ');
     const modelGuard = supportsHotfix
       ? 'Resolve one Hotfix model snapshot: P0/P1 automatically routes Reviewer to escalated; an explicit feature role profile remains final. Reviewer may use another model or the same model with higher thinking in a fresh child. Encode thinking in the pi-subagents `model` selector; public files ship no provider-specific model IDs.'
-      : 'Resolve automatic risk routing once: Lean high/critical upgrades Planner and Reviewer; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. Reviewer may use another model or the same model with higher thinking. Encode the selected thinking in each pi-subagents task `model` selector; public files ship no provider-specific model IDs.';
+      : 'Resolve automatic risk routing once: Explicit Lean high/critical can upgrade the first Planner dispatch; discovered plan risk upgrades subsequent Reviewer dispatch without starting a second Planner; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. Reviewer may use another model or the same model with higher thinking. Encode the selected thinking in each pi-subagents task `model` selector; public files ship no provider-specific model IDs.';
     const skillDir = join(skillsDir, skillName);
     mkdirSync(skillDir, { recursive: true });
     const body = `---

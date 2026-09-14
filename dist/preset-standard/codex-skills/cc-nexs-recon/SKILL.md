@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-recon
-description: /cc-nexs:recon 的 Codex 镜像 skill。 仅当用户显式输入 "$cc-nexs-recon" 或在界面中选择该 skill 时使用；不得因普通自然语言请求自动触发。 Repo Scout 角色入口。读 src/ 把现存同类配置/Service/页面/API 归档成 repo-context.md，作为 Planner 的现状清单输入。在 /cc-nexs:brainstorm 之后、Planner 之前调用（编排器 RECON 阶段会自动跑）。
+description: /cc-nexs:recon 的 Codex 镜像 skill。 显式调用 $cc-nexs-recon 时使用。 Repo Scout 角色入口。读 src/ 把现存同类配置/Service/页面/API 归档成 repo-context.md，作为 Planner 的现状清单输入。在 /cc-nexs:brainstorm 之后、Planner 之前调用（编排器 RECON 阶段会自动跑）。
 ---
 
 # /cc-nexs:recon for Codex
@@ -14,7 +14,7 @@ Read and follow `../../commands/recon.md` as the single source of truth for this
 ## Codex Runtime Delta
 
 - Dispatch every requested role as an independent native subagent using `../../agents/`; keep implementation, Review, and verification in fresh isolated sessions. For Fast/Full implementation fanout, spawn every same-wave worker with its progress-assigned worktree and frozen role runtime before awaiting any of them, then join the whole wave; never serialize spawn/await or create extra agent worktrees. Never invoke Claude Code, a Claude subagent tool, or a nested `codex` CLI process.
-- Resolve automatic risk routing once from progress/config/approved-plan: Lean high/critical upgrades Planner and Reviewer; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. A Reviewer may use a different model or the same model with higher reasoning effort. Provider-specific IDs are allowed only in private project/feature config; public defaults remain portable.
+- Resolve automatic risk routing once from progress/config/approved-plan: Explicit Lean high/critical can upgrade the first Planner dispatch; discovered plan risk upgrades subsequent Reviewer dispatch without starting a second Planner; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. A Reviewer may use a different model or the same model with higher reasoning effort. Provider-specific IDs are allowed only in private project/feature config; public defaults remain portable.
 - Translate `$CLAUDE_PLUGIN_ROOT` to this installed Codex plugin root and preserve the authoritative command's state transitions, gates, counters, validation, and stop behavior.
 - Browser tooling, login/MFA state, and verification-page URL availability are checked only after the exact candidate reaches test and CI delivery completes. They never block delivery. If post-deployment verification cannot run, record `manual_required` / `deployed_needs_manual_verification` with evidence and leave it recoverable; never claim a pass.
 

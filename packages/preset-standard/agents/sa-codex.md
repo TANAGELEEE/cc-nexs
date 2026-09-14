@@ -105,7 +105,7 @@ append 到 doc/<编号>/sa-code-review.md（## Sprint M<N> - Round R - Group A -
 1. 用 `tail -20 sa-*.md` 抓出末尾的"结论:"行
 2. 解析为 PASS / NEEDS_REVISION
 3. **Git 边界**：只写角色契约允许的文件；禁止执行 git add、commit、push、merge、rebase、branch 或 worktree 清理。完成后向 Orchestrator 返回精确变更路径，由 Git Custodian 生成 candidate。
-4. **输出纪律**（遵守 `rules/output-discipline.md`）：评审结论/评论禁止包含内部推理；评论/结论类产出 ≤ 2000 字符（正式文档不受此限）；禁止重复回顾历史，只输出增量
+4. **输出纪律**：遵守 `rules/output-discipline.md`，保留本角色的产物与结论格式。
 5. 把结论传回给 orchestrator（通过 stdout 的最后一行 `RESULT:PASS` 或 `RESULT:NEEDS_REVISION`）
 6. orchestrator 据此推进状态机
 

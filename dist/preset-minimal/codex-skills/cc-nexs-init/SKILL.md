@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-init
-description: /cc-nexs:init 的 Codex 镜像 skill。 仅当用户显式输入 "$cc-nexs-init" 或在界面中选择该 skill 时使用；不得因普通自然语言请求自动触发。 Initialize progress.json v2 and create one isolated worktree per configured repository through Git Custodian.
+description: /cc-nexs:init 的 Codex 镜像 skill。 显式调用 $cc-nexs-init 时使用。 Initialize progress.json v2 and create one isolated worktree per configured repository through Git Custodian.
 ---
 
 # /cc-nexs:init for Codex

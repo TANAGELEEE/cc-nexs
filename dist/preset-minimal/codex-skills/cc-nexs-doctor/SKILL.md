@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-doctor
-description: /cc-nexs:doctor 的 Codex 镜像 skill。 仅当用户显式输入 "$cc-nexs-doctor" 或在界面中选择该 skill 时使用；不得因普通自然语言请求自动触发。 Validate workspace repositories, private overlay, and progress.json v2 files without changing project state.
+description: /cc-nexs:doctor 的 Codex 镜像 skill。 显式调用 $cc-nexs-doctor 时使用。 Validate workspace repositories, private overlay, and progress.json v2 files without changing project state.
 ---
 
 # /cc-nexs:doctor for Codex

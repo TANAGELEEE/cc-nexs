@@ -6,7 +6,7 @@ cc-nexs ships a Codex plugin beside the Claude Code plugin. Both consume the sam
 
 Inside Codex, every role is dispatched as an independent native agent. The plugin does not start Claude Code and does not recursively invoke the Codex CLI. Implementer and reviewer contexts always remain isolated.
 
-The public preset stores portable profiles only. Private project or feature config may assign each role a concrete model and reasoning effort. Automatic routing uses the shared deterministic core: Lean high/critical upgrades Planner and Reviewer to `escalated`; Hotfix P0/P1 upgrades Reviewer; a feature role profile remains the final override. The public `escalated` profile is `inherit + xhigh`, so a project must override that profile to switch to a concrete stronger model. Use only models exposed by the current native-agent override surface; top-level model-catalog visibility alone is not sufficient.
+The public preset stores portable profiles only. Private project or feature config may assign each role a concrete model and reasoning effort. Automatic routing uses the shared deterministic core: Explicit Lean high/critical can route the first Planner to `escalated`; risk discovered in the plan upgrades the subsequent Reviewer without starting a second Planner; Hotfix P0/P1 upgrades Reviewer; a feature role profile remains the final override. The public `escalated` profile is `inherit + xhigh`, so a project must override that profile to switch to a concrete stronger model. Use only models exposed by the current native-agent override surface; top-level model-catalog visibility alone is not sufficient.
 
 Inside Claude Code, all Lean roles use isolated Claude subagents, so Developer and Reviewer can use the same Claude model at different effort levels or different Claude models. Legacy full/fast SA/Evaluator/Reviewer roles retain their existing Codex CLI separation; executor-aware resolution uses the `codex` profile for those roles.
 
@@ -129,6 +129,8 @@ models:
     lean-developer: implementation
     lean-reviewer: review
 ```
+
+For GPT-6 Astra, select it in the host or set the private profile's model to `gpt-6-astra` only when that native-agent surface exposes it. The existing `medium` implementation, `high` Review, and `xhigh` escalation profiles are starting points to evaluate, not a promise of optimal performance. Keep explicit feature overrides. Do not force every role to maximum effort or replace portable preset defaults. The [official Astra guide](https://developers.openai.com/api/docs/guides/latest-model?model=gpt-6-astra) recommends auditing conflicting instructions, encouraging follow-through, specifying useful delegation, and calibrating verification to the task.
 
 New features use `config_version: 2` and `risk_tier: auto` without generated role mappings. For an older Lean/Hotfix feature, run `$cc-nexs-migrate-feature-config <id> --dry-run` and then the same skill without `--dry-run`; custom feature overrides are preserved. A legacy approved Plan risk is derived only from its exact stored scope hash; unknown legacy risk is conservatively routed as high. Use `--dry-run --bind-plan-risk` and then `--bind-plan-risk` to materialize a derivable risk with an audit event.
 

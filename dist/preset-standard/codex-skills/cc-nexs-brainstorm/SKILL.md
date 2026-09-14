@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-brainstorm
-description: /cc-nexs:brainstorm 的 Codex 镜像 skill。 仅当用户显式输入 "$cc-nexs-brainstorm" 或在界面中选择该 skill 时使用；不得因普通自然语言请求自动触发。 Brainstorming 入口。用 Socratic 对话把 PM 一句话诉求展开成结构化 requirements.md，作为 Planner 的输入。在 /cc-nexs:init 之后、/cc-nexs:run 之前调用。
+description: /cc-nexs:brainstorm 的 Codex 镜像 skill。 显式调用 $cc-nexs-brainstorm 时使用。 可选需求澄清入口：补全 requirements.md；需求完整时直接进入当前模式的规划步骤。
 ---
 
 # /cc-nexs:brainstorm for Codex
@@ -14,7 +14,7 @@ Read and follow `../../commands/brainstorm.md` as the single source of truth for
 ## Codex Runtime Delta
 
 - Dispatch every requested role as an independent native subagent using `../../agents/`; keep implementation, Review, and verification in fresh isolated sessions. For Fast/Full implementation fanout, spawn every same-wave worker with its progress-assigned worktree and frozen role runtime before awaiting any of them, then join the whole wave; never serialize spawn/await or create extra agent worktrees. Never invoke Claude Code, a Claude subagent tool, or a nested `codex` CLI process.
-- Resolve automatic risk routing once from progress/config/approved-plan: Lean high/critical upgrades Planner and Reviewer; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. A Reviewer may use a different model or the same model with higher reasoning effort. Provider-specific IDs are allowed only in private project/feature config; public defaults remain portable.
+- Resolve automatic risk routing once from progress/config/approved-plan: Explicit Lean high/critical can upgrade the first Planner dispatch; discovered plan risk upgrades subsequent Reviewer dispatch without starting a second Planner; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. A Reviewer may use a different model or the same model with higher reasoning effort. Provider-specific IDs are allowed only in private project/feature config; public defaults remain portable.
 - Translate `$CLAUDE_PLUGIN_ROOT` to this installed Codex plugin root and preserve the authoritative command's state transitions, gates, counters, validation, and stop behavior.
 - Browser tooling, login/MFA state, and verification-page URL availability are checked only after the exact candidate reaches test and CI delivery completes. They never block delivery. If post-deployment verification cannot run, record `manual_required` / `deployed_needs_manual_verification` with evidence and leave it recoverable; never claim a pass.
 

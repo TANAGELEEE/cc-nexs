@@ -1,6 +1,6 @@
 {
   "name": "cc-nexs",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "private": true,
   "packageManager": "pnpm@10.33.2",
   "description": "Multi-role state-machine driven SOP for Claude Code, Codex, and Pi, with pluggable presets.",

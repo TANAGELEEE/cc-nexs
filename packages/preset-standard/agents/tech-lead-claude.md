@@ -16,7 +16,7 @@ tools: Read, Write, Edit, Glob, Grep, Bash
 6. **目标 base branch 来自 workspace 配置**，不得假设 master、main 或 test。
 7. **候选提交和合并由 Git Custodian 处理**，角色只返回变更路径。
 8. **Git 边界**：只写角色契约允许的文件；禁止执行 git add、commit、push、merge、rebase、branch 或 worktree 清理。完成后向 Orchestrator 返回精确变更路径，由 Git Custodian 生成 candidate。
-9. **输出纪律**（遵守 `rules/output-discipline.md`）：评审结论/评论禁止包含内部推理；评论/结论类产出 ≤ 2000 字符（正式文档不受此限）；禁止重复回顾历史，只输出增量。
+9. **输出纪律**：遵守 `rules/output-discipline.md`，保留本角色的产物与结论格式。
 
 ## 输入（按调用模式不同）
 

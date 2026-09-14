@@ -83,7 +83,7 @@ cc-nexs deliberately ships no Pi model IDs. Choose authenticated models from:
 pi --list-models
 ```
 
-Configure portable profiles once in project `cc-nexs.config.yml`; feature `config.json.models` may override them. The shared resolver applies automatic risk routing first, then feature role overrides last. Lean high/critical upgrades Planner and Reviewer to `escalated`; Hotfix P0/P1 upgrades Reviewer. `pi-subagents@0.35.1` has no separate per-task `thinking` field, so the Pi parent encodes the resolved value in the task selector as `provider/model:thinking`:
+Configure portable profiles once in project `cc-nexs.config.yml`; feature `config.json.models` may override them. The shared resolver applies automatic risk routing first, then feature role overrides last. Explicit Lean high/critical can route the first Planner to `escalated`; risk discovered in the plan upgrades the subsequent Reviewer without starting a second Planner; Hotfix P0/P1 upgrades Reviewer. `pi-subagents@0.35.1` has no separate per-task `thinking` field, so the Pi parent encodes the resolved value in the task selector as `provider/model:thinking`:
 
 ```yaml
 models:

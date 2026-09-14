@@ -133,7 +133,7 @@
 1. 该 sprint 所有 AC-ID 在 acceptance.md 打分表里为 ✅
 2. 该 sprint 所有 BUG 状态为 VERIFIED
 3. sa-code-review.md 本 sprint 章节最终 `结论: PASS`
-4. 该 sprint 内 commit 数 ≤ 10（超标需 squash）
+4. candidate 与评审、验证证据一致；不因 commit 数量改写已验证历史
 
 ---
 

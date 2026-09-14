@@ -6,7 +6,9 @@ disable-model-invocation: true
 
 # md 文档聚合规则
 
-每个需求一份评审/测试/验收文件，**多 sprint 多轮全部 append 到同一文件**，用二级标题分隔。这是 cc-nexs 的核心反熵规则。
+按当前模式聚合：Lean 将执行、Review 与验证证据写入 plan.md，Hotfix 写入 hotfix.md；只有 Fast/Full 使用下表的分角色文档。不要把历史模式的文件清单套到 Lean/Hotfix。
+
+Fast/Full 同类评审、测试和验收轮次追加到对应文件，用二级标题分隔。
 
 ## 一需求一文件清单
 
@@ -85,17 +87,4 @@ doc/<编号>/test-report-archive/
 
 ## 与 orchestrator 的接口
 
-orchestrator 解析每个 md 文件的"末尾结论"行来推进状态：
-
-```bash
-# SA: 末尾找"结论:"
-LAST=$(tail -20 sa-code-review.md | grep -E '^结论:' | tail -1 | awk '{print $2}')
-
-# QA: 同上
-LAST=$(tail -20 test-report.md | grep -E '^结论:' | tail -1 | awk '{print $2}')
-
-# Evaluator: 末尾找"验收结果:"
-LAST=$(tail -30 acceptance.md | grep -E '^验收结果:' | tail -1 | awk '{print $2}')
-```
-
-每个角色 append 完都必须输出对应"结论行"，否则 orchestrator 卡住。
+保留当前命令和 active run rule 要求的章节与末尾结论行。仅由确定性控制器更新 progress.json；Markdown 是证据或镜像，不从通用 tail/grep 片段推断跨模式状态。修复后的结论必须绑定当前 candidate，不复用旧 PASS。

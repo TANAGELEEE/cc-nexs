@@ -252,8 +252,8 @@ REQ_FILE="${REQ_DIR}/$([ "$MODE" = "hotfix" ] && echo hotfix.md || echo requirem
    可留在 workspace 根目录运行，Orchestrator 会按 progress.json 分派到各仓 worktree
    A. 自己手填 requirements.md；lean 运行 /cc-nexs:plan ${ID}，fast/full 运行 /cc-nexs:run ${ID}
    B. /cc-nexs:brainstorm ${ID}
-      让 Claude 用 Socratic 对话把一句话诉求展成完整 requirements.md，
-      然后再 /cc-nexs:run ${ID}（推荐：需求模糊 / 想压一压思路时）
+      补全 requirements.md 中影响范围或验收的关键缺口，
+      然后 lean 进入 /cc-nexs:plan ${ID}，fast/full 进入 /cc-nexs:run ${ID}
    提示：下次可直接 /cc-nexs:init "<描述>" --brainstorm 一条命令到位
 ```
 
@@ -261,14 +261,14 @@ REQ_FILE="${REQ_DIR}/$([ "$MODE" = "hotfix" ] && echo hotfix.md || echo requirem
 
 ```
 🧠 init 完成，进入 brainstorming
-   HARD-GATE：禁写 spec/code，仅写 requirements.md
+   本阶段只更新 requirements.md；审批由当前模式的正式门禁承接
 ```
 
-随后**立刻读取并遵循 `brainstorming` skill 文件**（`packages/preset-standard/skills/brainstorming/SKILL.md`），按流程清单第 1 步开始；这是显式 `--brainstorm` 参数授权的内部流程加载，不依赖模型自动触发 skill：
+随后**立刻读取并遵循 `brainstorming` skill 文件**（`packages/preset-standard/skills/brainstorming/SKILL.md`），补全当前需求；这是显式 `--brainstorm` 参数授权的内部流程加载，不依赖模型自动触发 skill：
 
 - 读 `${REQ_DIR}/requirements.md`
-- 读最近 git 提交作为上下文
-- 一次一问开始 Socratic 对话
+- 只加载与关键缺口相关的项目资料
+- 对无法从现状确定且影响范围、验收或授权的问题进行澄清
 
 不要去调 `/cc-nexs:brainstorm` 这个 slash command——直接遵循 skill 文件里的流程清单即可（避免重复校验目录、重复加载 skill）。
 

@@ -9,6 +9,8 @@ argument-hint: "[feature_id] [--sprint=N | --resume] [--no-auto-test-release]"
 
 > **Core rule**: after a stage completes, immediately enter the next stage. Stop only at Lean Gateway A/B, legacy spec/deploy gates, a release/verification block, a circuit breaker, or a genuine tool failure.
 
+Use existing user authorization throughout the run. Resolve routine implementation choices within approved scope without new confirmations. A material scope change uses the active gate; while awaiting missing input, continue independent authorized work. After compaction or mid-turn steering, retain completed work and re-read authoritative state before dispatching.
+
 This file contains only the common controller. Mode-specific states, dispatches, parsing, gates, and release evidence live in one active rule file so a run does not load unrelated workflows.
 
 ## Orchestrator boundary
@@ -250,14 +252,7 @@ Loop termination is limited to:
 
 No other condition waits for user input.
 
-At `COMPLETE`, fast/full performs a final README sync; Lean/Hotfix prints the active rule's evidence and cleanup summary. Always print the optional compound-learning hint:
-
-```text
-💡 沉淀经验（可选）:
-   本次需求若有“反复返工 / 现状误判 / BUG 修多次”等非显然教训，建议跑:
-     /cc-nexs:compound <id>
-   无强信号时会跳过，不产出空文件。
-```
+At `COMPLETE`, fast/full performs a final README sync; Lean/Hotfix prints the active rule's evidence and cleanup summary. Mention `/cc-nexs:compound <id>` only when this task revealed a concrete, reusable lesson or the user requested it.
 
 The docs repository follows the same path-safety and candidate-ref discipline as code repositories. Fast/Full may create or update its docs candidate commit after each document-writing phase and again at `COMPLETE`. Lean/Hotfix are explicitly final-only: plan, Review, and verification keep their documents in the assigned docs worktree, and Git Custodian creates exactly one final docs candidate commit only after the code base release is proven and state is `COMPLETE`. An intermediate Lean/Hotfix docs candidate can invalidate exact-candidate evidence and is forbidden. In every mode, stage only the configured feature directory; prepare candidate metadata before committing so the ref—not a self-referential SHA in progress.json—remains authoritative. The docs repository integrates last.
 

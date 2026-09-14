@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-minimal-planner
-description: /cc-nexs-minimal:planner 的 Codex 镜像 skill。 仅当用户显式输入 "$cc-nexs-minimal-planner" 或在界面中选择该 skill 时使用；不得因普通自然语言请求自动触发。 Invoke Planner subagent to draft or revise spec.md.
+description: /cc-nexs-minimal:planner 的 Codex 镜像 skill。 显式调用 $cc-nexs-minimal-planner 时使用。 Invoke Planner subagent to draft or revise spec.md.
 ---
 
 # /cc-nexs-minimal:planner for Codex

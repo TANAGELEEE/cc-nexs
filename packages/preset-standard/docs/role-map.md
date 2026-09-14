@@ -14,7 +14,7 @@ cc-nexs 按 `config.json.mode` 选择三套角色：
 | 禁止 | 代码、Git、progress | approval scope、Git、progress | 代码、Git、progress | 源码、Git、progress |
 | 模型 | profile 可配置 | profile 可配置 | 可不同模型，或相同模型更高 effort/thinking | profile 可配置 |
 
-运行时映射：Claude Code 使用独立 Claude 子代理；Codex 使用独立 native agent；Pi 使用 `pi-subagents@0.35.1` 的 `subagent`。Fast/Full 同 wave 多仓实现由父级一次启动后 join，整批共享冻结的模型路由与明确 worktree；Pi 把 sibling 放进同一个异步 `tasks` 调用，设置 `worktree: false`，再由 `subagent_wait` 汇合。Lean high/critical 自动升级 Planner/Reviewer，Hotfix P0/P1 自动升级 Reviewer；feature profile 最终优先。
+运行时映射：Claude Code 使用独立 Claude 子代理；Codex 使用独立 native agent；Pi 使用 `pi-subagents@0.35.1` 的 `subagent`。Fast/Full 同 wave 多仓实现由父级一次启动后 join，整批共享冻结的模型路由与明确 worktree；Pi 把 sibling 放进同一个异步 `tasks` 调用，设置 `worktree: false`，再由 `subagent_wait` 汇合。Lean 显式 high/critical 可在首次派发前升级 Planner；计划发现的高风险升级后续 Reviewer，不追加第二个 Planner，Hotfix P0/P1 自动升级 Reviewer；feature profile 最终优先。
 
 Lean 的完整 Review 只有一次：查看全部仓累计 diff、批准边界、本地证据和风险，一次性列出全部 P0/P1。修复后最多一次 delta closure；再次阻塞转人工，不继续消耗 token。P2/P3 记录但不阻塞。
 

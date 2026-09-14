@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-minimal-review
-description: /cc-nexs-minimal:review 的 Codex 镜像 skill。 仅当用户显式输入 "$cc-nexs-minimal-review" 或在界面中选择该 skill 时使用；不得因普通自然语言请求自动触发。 Invoke Reviewer subagent for spec / code / acceptance review.
+description: /cc-nexs-minimal:review 的 Codex 镜像 skill。 显式调用 $cc-nexs-minimal-review 时使用。 Invoke Reviewer subagent for spec / code / acceptance review.
 ---
 
 # /cc-nexs-minimal:review for Codex

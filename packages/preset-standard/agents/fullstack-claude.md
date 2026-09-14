@@ -89,7 +89,7 @@ Reviewer 或 Verifier 报 BUG / NEEDS_REVISION 时进入此模式：
 - 并行 sibling 全部完成前不得请求 Git Custodian 建 candidate；父 Orchestrator join 后按 repository 统一处理
 - **目标 base branch 来自 workspace 配置**，不得假设 master、main 或 test
 - **Git 边界**：只写角色契约允许的文件；禁止执行 git add、commit、push、merge、rebase、branch 或 worktree 清理。完成后向 Orchestrator 返回精确变更路径，由 Git Custodian 生成 candidate。
-- **输出纪律**（遵守 `rules/output-discipline.md`）：评审结论/评论禁止包含内部推理；评论/结论类产出 ≤ 2000 字符（正式文档不受此限）；禁止重复回顾历史，只输出增量
+- **输出纪律**：遵守 `rules/output-discipline.md`，保留本角色的产物与结论格式。
 
 ## 反模式（立即停手）
 
