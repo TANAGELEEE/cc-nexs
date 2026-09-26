@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { resolveFeatureProgress } from './approval-command.mjs';
+import { resolveHotfixDocument } from './hotfix-contract.mjs';
 import { renderLeanPlan } from './plan-render.mjs';
 import { readProgressV2, recordReleaseChangeRequest } from './progress-v2.mjs';
 import {
@@ -29,8 +30,9 @@ export function requestReleaseChanges({
   const progressFile = resolveFeatureProgress({ cwd, featureId, progressPath });
   const before = readProgressV2(progressFile);
   const featureDir = dirname(progressFile);
+  const hotfixDocument = before.mode === 'hotfix' ? resolveHotfixDocument(before, featureDir) : null;
   if (before.mode === 'hotfix') {
-    if (!existsSync(join(featureDir, 'hotfix.md'))) throw new Error('[cc-nexs] hotfix.md is missing');
+    if (!existsSync(hotfixDocument)) throw new Error('[cc-nexs] Hotfix BUG document is missing');
   } else {
     assertReleaseChangeDocuments(featureDir, { scope: kind === 'scope' });
   }
@@ -45,8 +47,8 @@ export function requestReleaseChanges({
   });
   let rendered = null;
   if (before.mode === 'hotfix') {
-    appendHotfixChange(join(featureDir, 'hotfix.md'), result.request);
-    syncHotfixChangeStatuses(join(featureDir, 'hotfix.md'), result.progress.change_requests.items);
+    appendHotfixChange(hotfixDocument, result.request);
+    syncHotfixChangeStatuses(hotfixDocument, result.progress.change_requests.items);
   } else {
     appendPlanChange(join(featureDir, 'plan.md'), result.request);
     syncPlanChangeStatuses(join(featureDir, 'plan.md'), result.progress.change_requests.items);

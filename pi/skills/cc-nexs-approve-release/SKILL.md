@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-approve-release
-description: /cc-nexs:approve-release 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:approve-release 或 /skill:cc-nexs-approve-release 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard lean（默认）、fast 与 full 模式，并通过 pi-subagents 运行隔离角色。 Approve the exact Lean or Hotfix candidate verified in test before base-branch integration.
+description: /cc-nexs:approve-release 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:approve-release 或 /skill:cc-nexs-approve-release 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard lean（默认）、fast 与 full 模式，并通过 pi-subagents 运行隔离角色。 Record Gateway B approval for an exact Lean/Hotfix candidate and its test evidence or authorized environment exception.
 disable-model-invocation: true
 ---
 
@@ -13,10 +13,10 @@ Read and follow `../../../dist/preset-standard/commands/approve-release.md` as t
 Resolve `../../../packages/core/lib/cc-nexs-cli.mjs` relative to this SKILL.md and execute the packaged control program:
 
 ```text
-node <resolved-cli-path> approve-release <feature-id>
+node <resolved-cli-path> approve-release <feature-id> [--test-exception --authorization-evidence <text> --reason <text> --environment-evidence <text> --rollback-evidence <text>]
 ```
 
-Never execute `/cc-nexs:approve-release` as a shell path and never edit `progress.json` or `progress.md` directly. After the control program succeeds, continue the current runtime's run workflow.
+Preserve the user's original approval flags and evidence. Never execute `/cc-nexs:approve-release` as a shell path and never edit `progress.json` or `progress.md` directly. An authorized test-environment exception retains the unverified test fact and permits configured base integration only, not production deployment. After the control program succeeds, continue the current runtime's run workflow.
 
 ## P2 Runtime Contract
 
@@ -42,7 +42,7 @@ The example has two tasks, so `concurrency: 2`; for a real batch set it to `min(
 4. Never invoke Claude Code, the Claude Task tool, Codex CLI, or a nested `pi` CLI. Runtime adaptation changes dispatch only; preserve the authoritative command's paths, state transitions, gates, counters, validation, and stop behavior.
 5. Resolve automatic risk routing once: Explicit Lean high/critical can upgrade the first Planner dispatch; discovered plan risk upgrades subsequent Reviewer dispatch without starting a second Planner; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. Reviewer may use another model or the same model with higher thinking. Encode the selected thinking in each pi-subagents task `model` selector; public files ship no provider-specific model IDs.
 6. pi-subagents has no separate per-task `thinking` field. For a non-inherit selection, pass `provider/model:thinking` in the task `model`; for `inherit` with no thinking override, omit `model`; for `inherit` with a thinking override, resolve the active provider/model and append `:thinking`. After `subagent_wait`, retry ordered `fallback_models` only for failed/unavailable tasks in a new bounded parallel call; never rerun successful siblings.
-7. Role children never mutate Git or `progress.md` / `progress.json`. The parent owns state transitions and Git Custodian operations, and preserves `CC_NEXS_RUNTIME=pi` plus `CC_NEXS_PLUGIN_ROOT`.
+7. Role children never mutate Git or `progress.md` / `progress.json`. The parent owns state transitions and Git Custodian operations, and preserves `CC_NEXS_RUNTIME=pi` plus `CC_NEXS_PLUGIN_ROOT`. For Hotfix children, also pass `CC_NEXS_PROGRESS_FILE` and the resolved `BUG_FILE`; machine-state directories do not determine document paths.
 
 
 

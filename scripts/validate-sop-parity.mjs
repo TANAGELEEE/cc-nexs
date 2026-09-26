@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Validate the load-bearing SOP parity contract shared by Claude Code and Codex.
+// Validate the load-bearing SOP parity contract shared by Claude Code, Codex, and Pi.
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, extname, join, resolve } from 'node:path';
@@ -116,6 +116,9 @@ function validateInitCommand() {
     'config_version',
     'risk_tier',
     'plan.md',
+    'init-hotfix',
+    'Hotfix 提前分流',
+    '不运行后续编号',
   ]);
 }
 
@@ -175,6 +178,9 @@ function validateRunCommand() {
     'implementation-delta end',
     'validate-implementation-plan',
     'exactly one candidate refresh per changed repository',
+    'CC_NEXS_PROGRESS_FILE',
+    'progress.hotfix_document',
+    '--test-exception',
   ]);
 }
 
@@ -227,6 +233,17 @@ function validateHotfixCommand() {
     'P3',
     'mode=hotfix',
     'hotfix.md',
+    'init-hotfix',
+    'hotfix/<key>',
+    '.cc-nexs/hotfixes/<key>/',
+    'progress.hotfix_document',
+    'doc/<id>.<slug>/bugs/BUG-<key>.md',
+    'hotfix/<key>/BUG-001.md',
+    'revise-hotfix',
+    '--authorization-evidence',
+    '--promote-lean',
+    '--test-exception',
+    'P0/P1/P2/P3 全部需要独立 Review',
     'HOTFIX-SCOPE',
     'start-hotfix',
     'HOTFIX_LOCAL_VERIFYING',
@@ -240,6 +257,19 @@ function validateHotfixCommand() {
     '/cc-nexs:approve-release <id>',
     '禁止 `test -> base`',
   ]);
+  for (const obsolete of ['完成新编号、占号和 worktree 初始化', 'P3 最终 diff 不满足边界时升级 P2', '机器边界证明后跳过模型 Review']) {
+    if (text.includes(obsolete)) fail(`${path}: obsolete Hotfix contract ${obsolete}`);
+  }
+  const templatePath = join(SRC_NEXS, 'templates', 'hotfix', 'hotfix.md');
+  const template = read(templatePath);
+  const boundScope = template.split('<!-- HOTFIX-SCOPE START -->')[1]?.split('<!-- HOTFIX-SCOPE END -->')[0] || '';
+  mustContain(templatePath, boundScope, ['intended_paths:', 'affected_acs:', 'rollback_owner:', 'rollback_steps:', '| Check |', '命令/Driver']);
+  const approvalPath = join(ROOT, 'packages', 'core', 'commands', 'approve-release.md');
+  mustContain(approvalPath, read(approvalPath), ['--test-exception', '--authorization-evidence', '--environment-evidence', '--rollback-evidence', 'not production deployment', 'manual_required']);
+  for (const name of ['init-hotfix', 'revise-hotfix']) {
+    const commandPath = join(ROOT, 'packages', 'core', 'commands', `${name}.md`);
+    mustContain(commandPath, read(commandPath), [`# /cc-nexs:${name}`, `cc-nexs-cli.mjs ${name}`]);
+  }
 }
 
 function validateMirrorSkill(commandName, commandFile) {
@@ -252,6 +282,8 @@ function validateMirrorSkill(commandName, commandFile) {
     'Full / Fast / Hotfix Mode Locks',
     'all-docs/doc/{id}.{slug}/',
     'hotfix.md',
+    '.cc-nexs/hotfixes/<key>/',
+    'progress.hotfix_document',
     'docs/solutions/',
     'progress.md',
     'full',
@@ -281,6 +313,8 @@ function validateAllGeneratedMirrors() {
       'Full / Fast / Hotfix Mode Locks',
       'all-docs/doc/{id}.{slug}/',
       'hotfix.md',
+      '.cc-nexs/hotfixes/<key>/',
+      'progress.hotfix_document',
       'docs/solutions/',
       'progress.md',
     ]);
@@ -295,6 +329,8 @@ validateHotfixCommand();
 validateMirrorSkill('cc-nexs-init', 'init.md');
 validateMirrorSkill('cc-nexs-run', 'run.md');
 validateMirrorSkill('cc-nexs-hotfix', 'hotfix.md');
+validateMirrorSkill('cc-nexs-init-hotfix', 'init-hotfix.md');
+validateMirrorSkill('cc-nexs-revise-hotfix', 'revise-hotfix.md');
 validateMirrorSkill('cc-nexs-release-test', 'release-test.md');
 validateAllGeneratedMirrors();
 

@@ -149,7 +149,7 @@ SA 在评审代码 diff 时，会检查"这个 commit 是不是 Tech Lead 角色
 - Hotfix Reviewer：与实现隔离，一次集中 Review；修复后最多一次 delta。
 - Hotfix Verifier：在 test 的新 environment revision 上做黑盒 repro/回归/smoke，不读源码。
 
-Reviewer 可用不同模型，或相同模型配更高 effort/thinking；强制的是独立 session。P3 通过机器边界后可跳过 Reviewer，但不能跳过本地验证、test smoke 或 Gateway B。
+Reviewer 可用不同模型，或相同模型配更高 effort/thinking；强制的是独立 session。P3 与其他级别一样执行 Reviewer、本地验证、test smoke 和 Gateway B；行数不构成无行为变化证明。BUG 路径由 progress.hotfix_document 提供，旧任务保留 hotfix.md；角色不得修改本地机器状态。
 
 ## 五方在 progress.md 中的痕迹
 

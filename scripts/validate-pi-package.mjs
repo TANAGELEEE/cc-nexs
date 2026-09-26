@@ -22,6 +22,8 @@ const expectedCommands = [
   'evaluator',
   'git-custodian',
   'hotfix',
+  'init-hotfix',
+  'revise-hotfix',
   'init',
   'lean-review',
   'lean-verify',
@@ -117,7 +119,7 @@ for (const command of expectedCommands) {
       'explicit feature role profile remains final',
       'ship no provider-specific model IDs',
     ];
-    if (command !== 'hotfix') {
+    if (!['hotfix', 'init-hotfix', 'revise-hotfix'].includes(command)) {
       contractMarkers.push('lean (default)', 'fast, and full', 'automatic risk routing', 'Lean high/critical', 'Hotfix P0/P1');
     } else {
       contractMarkers.push('P0/P1 automatically routes Reviewer to escalated');
@@ -138,20 +140,35 @@ for (const unexpected of skillNames.filter((name) => !expectedCommands.includes(
   fail(`Pi P2 exposes unsupported command skill: ${unexpected}`);
 }
 
-const hotfixSkillPath = join(skillsRoot, 'cc-nexs-hotfix', 'SKILL.md');
-if (existsSync(hotfixSkillPath)) {
+for (const command of ['hotfix', 'init-hotfix', 'revise-hotfix']) {
+  const hotfixSkillPath = join(skillsRoot, `cc-nexs-${command}`, 'SKILL.md');
+  if (!existsSync(hotfixSkillPath)) continue;
   const hotfixSkill = readFileSync(hotfixSkillPath, 'utf8');
   for (const marker of [
     'Pi Hotfix Dispatch Contract',
     'cc-nexs.hotfix-developer',
     'cc-nexs.hotfix-reviewer',
     'cc-nexs.hotfix-verifier',
-    'single lifetime delta Review',
+    'existing delta Review limit',
+    'init-hotfix',
+    'revise-hotfix',
+    '--authorization-evidence',
+    '--promote-lean',
+    'hotfix/<key>',
+    'progress.hotfix_document',
+    '.cc-nexs/hotfixes/<key>/',
+    'never reserve a shared feature number or publish placeholders',
+    'Every severity, including P3, requires independent Review',
+    'CC_NEXS_PROGRESS_FILE',
+    'BUG_FILE',
+    'approve-release --test-exception',
+    'does not authorize production deployment',
     'Never merge test into base',
   ]) {
-    if (!hotfixSkill.includes(marker)) fail(`cc-nexs-hotfix: missing ${marker}`);
+    if (!hotfixSkill.includes(marker)) fail(`cc-nexs-${command}: missing ${marker}`);
   }
-  if (hotfixSkill.includes('request is hotfix/compound')) fail('cc-nexs-hotfix: still rejects the hotfix flow');
+  if (hotfixSkill.includes('request is hotfix/compound')) fail(`cc-nexs-${command}: still rejects the hotfix flow`);
+  if (hotfixSkill.includes('P3 Review skipping')) fail(`cc-nexs-${command}: obsolete P3 Review exemption`);
 }
 
 const agentsRoot = join(root, 'pi/agents');
@@ -228,10 +245,19 @@ for (const file of ['verifier-computer-use.md', 'qa-computer-use.md', 'lean-veri
   }
 }
 
-for (const command of ['verify-local', 'release-base', 'render-plan', 'migrate-feature-config']) {
+for (const command of ['release-base', 'render-plan', 'migrate-feature-config']) {
   const skill = readFileSync(join(skillsRoot, `cc-nexs-${command}`, 'SKILL.md'), 'utf8');
   if (!skill.includes('Deterministic Lean Control')) fail(`cc-nexs-${command}: missing deterministic Lean control`);
 }
+const localVerifySkill = readFileSync(join(skillsRoot, 'cc-nexs-verify-local', 'SKILL.md'), 'utf8');
+for (const marker of ['Deterministic Lean/Hotfix Control', 'verify-local <feature-id>', '../../../packages/core/lib/cc-nexs-cli.mjs', 'Lean plan-approved or Hotfix scope-bound commands', 'exact command/exit_code/proof evidence covering the frozen matrix', 'Hotfix accepts passed/failed only and never defers checks']) {
+  if (!localVerifySkill.includes(marker)) fail(`cc-nexs-verify-local: missing local verification contract ${marker}`);
+}
+const hotfixRunRule = readFileSync(join(root, 'packages/core/rules/run-hotfix.md'), 'utf8');
+for (const marker of ['single delta Review limit', 'revise-hotfix', 'invalidates current evidence and approval', 'retains history']) {
+  if (!hotfixRunRule.includes(marker)) fail(`run-hotfix.md: missing bound-scope recovery contract ${marker}`);
+}
+
 const gatewayBChangeSkill = readFileSync(join(skillsRoot, 'cc-nexs-request-release-changes', 'SKILL.md'), 'utf8');
 if (!gatewayBChangeSkill.includes('Deterministic Gateway B Change Control')) {
   fail('cc-nexs-request-release-changes: missing deterministic Gateway B change control');

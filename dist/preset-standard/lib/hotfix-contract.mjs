@@ -1,7 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
+import { dirname, join, relative, resolve, sep, isAbsolute } from 'node:path';
+
+import { implementationPathAllowed } from './implementation-delta.mjs';
 
 export const HOTFIX_SCOPE_MARKERS = {
   start: '<!-- HOTFIX-SCOPE START -->',
@@ -31,6 +33,15 @@ export function extractHotfixScope(text) {
     }
   }
   const nonBehavioral = ['yes', 'true'].includes(String(fields.non_behavioral_change || '').toLowerCase());
+  const intendedPaths = String(fields.intended_paths || '').split(',').map((path) => path.trim()).filter(Boolean);
+  if (!intendedPaths.length || intendedPaths.some((path) => path === '-' || isAbsolute(path) || path.split('/').includes('..'))) {
+    throw new Error('[cc-nexs] intended_paths must name repository-relative repair paths');
+  }
+  if (['P0', 'P1'].includes(severity)) {
+    for (const field of ['affected_acs', 'rollback_owner', 'rollback_steps']) {
+      if (!fields[field]?.trim() || fields[field].trim() === '-') throw new Error(`[cc-nexs] ${severity} requires ${field}`);
+    }
+  }
   if (severity === 'P3' && !nonBehavioral) {
     throw new Error('[cc-nexs] P3 requires non_behavioral_change: yes');
   }
@@ -42,32 +53,83 @@ export function extractHotfixScope(text) {
     severity,
     relatedFeature: fields.related_feature && fields.related_feature !== '-' ? fields.related_feature : null,
     nonBehavioral,
+    intendedPaths,
   };
 }
 
-export function hotfixScopeBinding(featureDir) {
-  const file = join(featureDir, 'hotfix.md');
+export function resolveHotfixDocument(progress, featureDir) {
+  if (!progress?.hotfix_document) return join(featureDir, 'hotfix.md');
+  const { repository, path } = progress.hotfix_document;
+  const worktree = progress.repositories?.[repository]?.worktree;
+  if (typeof path !== 'string' || !path.endsWith('.md') || isAbsolute(path) || path.split(/[\\/]/).includes('..') || !worktree) {
+    throw new Error('[cc-nexs] invalid Hotfix BUG document assignment');
+  }
+  let root = resolve(featureDir);
+  while (!existsSync(join(root, '.cc-nexs', 'workspace.yml')) && !existsSync(join(root, '.cc-nexs', 'workspace.json'))) {
+    const parent = dirname(root);
+    if (parent === root) throw new Error('[cc-nexs] Hotfix workspace root not found');
+    root = parent;
+  }
+  const docsRoot = realpathSync(resolve(root, worktree));
+  let parent = docsRoot;
+  for (const part of path.split(/[\\/]/)) {
+    parent = join(parent, part);
+    try {
+      if (lstatSync(parent).isSymbolicLink()) throw new Error('[cc-nexs] BUG document must not traverse symbolic links');
+    } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
+  const file = resolve(docsRoot, path);
+  const rel = relative(docsRoot, existsSync(file) ? realpathSync(file) : file);
+  if (!rel || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw new Error('[cc-nexs] BUG document escapes its docs worktree');
+  return file;
+}
+
+export function hotfixScopeBinding(featureDir, progress = null) {
+  const file = resolveHotfixDocument(progress, featureDir);
   if (!existsSync(file)) throw new Error(`[cc-nexs] missing hotfix document: ${file}`);
   const scope = extractHotfixScope(readFileSync(file, 'utf8'));
   return {
     hotfix_scope_sha256: createHash('sha256').update(scope.raw).digest('hex'),
     severity: scope.severity,
     related_feature: scope.relatedFeature,
-    file: 'hotfix.md',
+    file: progress?.hotfix_document?.path || 'hotfix.md',
   };
 }
 
 export function assertHotfixScopeCurrent(progress, featureDir) {
   if (progress.mode !== 'hotfix') throw new Error(`[cc-nexs] hotfix scope requires hotfix mode, found ${progress.mode}`);
   if (!progress.hotfix?.scope_binding) throw new Error('[cc-nexs] hotfix scope has not been bound');
-  const current = hotfixScopeBinding(featureDir);
-  if (current.hotfix_scope_sha256 !== progress.hotfix.scope_binding.hotfix_scope_sha256) {
-    throw new Error('[cc-nexs] hotfix scope changed after binding; restart as a new hotfix or convert to lean/full');
+  const current = hotfixScopeBinding(featureDir, progress);
+  if (current.hotfix_scope_sha256 !== progress.hotfix.scope_binding.hotfix_scope_sha256 || current.file !== (progress.hotfix.scope_binding.file || 'hotfix.md')) {
+    throw new Error('[cc-nexs] hotfix scope changed after binding; use revise-hotfix with the user authorization, or --promote-lean for a contract change');
   }
   if (current.severity !== progress.hotfix.severity || current.related_feature !== (progress.hotfix.related_feature || null)) {
     throw new Error('[cc-nexs] hotfix classification changed after binding');
   }
   return current;
+}
+
+export function assertHotfixCandidatePaths(context) {
+  const scope = extractHotfixScope(readFileSync(resolveHotfixDocument(context.progress, dirname(context.progressFile)), 'utf8'));
+  for (const item of context.repositories) {
+    if (!item.assignment.base_commit) throw new Error(`[cc-nexs] missing Hotfix base commit for ${item.id}`);
+    const gitOptions = { cwd: item.repository.absolute_path, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] };
+    const remoteBase = `refs/remotes/origin/${item.assignment.base_branch}`;
+    let remoteBaseExists = false;
+    try {
+      execFileSync('git', ['show-ref', '--verify', '--quiet', remoteBase], gitOptions);
+      remoteBaseExists = true;
+    } catch { /* Legacy repositories may have no remote-tracking base ref. */ }
+    const base = remoteBaseExists
+      ? execFileSync('git', ['merge-base', item.sourceCommit, remoteBase], gitOptions).trim()
+      : item.assignment.base_commit;
+    const paths = execFileSync('git', ['diff', '--name-only', '--no-renames', '-z', base, item.sourceCommit], gitOptions).split('\0').filter(Boolean);
+    const allowed = scope.intendedPaths.filter((path) => path.startsWith(`${item.id}/`)).map((path) => path.slice(item.id.length + 1));
+    // Legacy single-repository documents used unqualified paths.
+    if (context.repositories.length === 1 && !allowed.length) allowed.push(...scope.intendedPaths);
+    const outside = paths.filter((path) => !implementationPathAllowed(path, allowed));
+    if (outside.length) throw new Error(`[cc-nexs] Hotfix candidate is outside intended_paths: ${item.id}/${outside.join(', ')}; record authorized scope with revise-hotfix`);
+  }
 }
 
 export function assertP3CandidateBoundary(context) {

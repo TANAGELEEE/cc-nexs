@@ -37,6 +37,24 @@ for (const marker of ['independent native subagent', 'Never invoke Claude Code',
   if (!codexSkill.includes(marker)) errors.push(`Codex run skill: missing ${marker}`);
 }
 
+// Hotfix identity, recovery, and approval belong to the same commands on all runtimes.
+for (const name of ['hotfix', 'init-hotfix', 'revise-hotfix', 'approve-release']) {
+  const commandFile = join(root, 'dist/preset-standard/commands', `${name}.md`);
+  const command = readFileSync(commandFile, 'utf8');
+  if (!command.includes(`# /cc-nexs:${name}`)) errors.push(`${commandFile}: missing authoritative entry`);
+  for (const [runtime, file, target] of [
+    ['Codex', join(root, 'dist/preset-standard/codex-skills', `cc-nexs-${name}`, 'SKILL.md'), `../../commands/${name}.md`],
+    ['Pi', join(root, 'pi/skills', `cc-nexs-${name}`, 'SKILL.md'), `../../../dist/preset-standard/commands/${name}.md`],
+  ]) {
+    const adapter = readFileSync(file, 'utf8');
+    if (!adapter.includes(target)) errors.push(`${runtime} ${name}: does not delegate to the shared command`);
+  }
+}
+const hotfixCommand = readFileSync(join(root, 'dist/preset-standard/commands/hotfix.md'), 'utf8');
+for (const marker of ['init-hotfix', 'hotfix/<key>', 'progress.hotfix_document', 'revise-hotfix', '--promote-lean', 'P0/P1/P2/P3 全部需要独立 Review', '--test-exception']) {
+  if (!hotfixCommand.includes(marker)) errors.push(`Shared Hotfix command: missing ${marker}`);
+}
+
 const { loadConfig } = await import(pathToFileURL(join(root, 'packages/core/lib/config-loader.mjs')).href);
 const loaded = loadConfig({ projectRoot: root, presetRoot: join(root, 'packages/preset-standard') });
 for (const [profile, runtimeMap] of Object.entries(loaded.preset.models?.profiles || {})) {

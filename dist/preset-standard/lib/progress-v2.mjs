@@ -4,6 +4,7 @@ import { relative, resolve, sep } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 
 import { jsonValuesEqual } from './canonical-json.mjs';
+import { assertRecordedLocalVerification, validateLocalEvidence } from './local-evidence.mjs';
 
 export const PROGRESS_SCHEMA_VERSION = 2;
 
@@ -143,6 +144,12 @@ function hasEvidence(value) {
   return Object.keys(value).length > 0;
 }
 
+export function assertTestAttemptNotInvalidated(attempt) {
+  if (attempt?.invalidated_at != null) {
+    throw new Error('[cc-nexs] test release attempt was invalidated; create a new attempt for the current scope');
+  }
+}
+
 function assertCandidateMutationAllowed(progress) {
   if (['running', 'deploying'].includes(progress.delivery?.test?.status)) {
     throw new Error('[cc-nexs] cannot update a repository candidate while test release is running or deploying');
@@ -173,7 +180,7 @@ export function beginTestRelease(file, {
   const testDelivery = requireDelivery(progress).test;
   const fingerprint = releaseFingerprint(source);
   const previous = testDelivery.attempts.at(-1);
-  if (previous?.fingerprint === fingerprint) {
+  if (previous?.fingerprint === fingerprint && previous.invalidated_at == null) {
     if (previous.status === 'deploying' && retry) {
       throw new Error('[cc-nexs] a deploying test release must be resumed, not retried');
     }
@@ -218,6 +225,7 @@ export function recordTestIntegration(file, {
   const testDelivery = requireDelivery(progress).test;
   const attempt = testDelivery.attempts.find((item) => item.id === attemptId);
   if (!attempt) throw new Error(`[cc-nexs] unknown test release attempt: ${attemptId}`);
+  assertTestAttemptNotInvalidated(attempt);
   if (attempt !== testDelivery.attempts.at(-1) || attempt.status !== 'running') {
     throw new Error('[cc-nexs] test integration requires the latest running release attempt');
   }
@@ -267,6 +275,7 @@ export function completeTestRelease(file, {
   const testDelivery = requireDelivery(progress).test;
   const attempt = testDelivery.attempts.find((item) => item.id === attemptId);
   if (!attempt) throw new Error(`[cc-nexs] unknown test release attempt: ${attemptId}`);
+  assertTestAttemptNotInvalidated(attempt);
   if (attempt !== testDelivery.attempts.at(-1)) {
     throw new Error('[cc-nexs] only the latest test release attempt may be completed');
   }
@@ -311,6 +320,7 @@ export function recordTestVerification(file, {
   const testDelivery = requireDelivery(progress).test;
   const attempt = testDelivery.attempts.find((item) => item.id === attemptId);
   if (!attempt) throw new Error(`[cc-nexs] unknown test release attempt: ${attemptId}`);
+  assertTestAttemptNotInvalidated(attempt);
   if (attempt !== testDelivery.attempts.at(-1)) {
     throw new Error('[cc-nexs] only the latest test release attempt may be verified');
   }
@@ -712,6 +722,7 @@ export function recordLocalVerification(file, {
   status,
   context = null,
   evidence = [],
+  contractFingerprint = null,
   actor = 'local-verifier',
   expectedRevision = null,
 } = {}) {
@@ -721,9 +732,7 @@ export function recordLocalVerification(file, {
     ? ['passed', 'failed', 'deferred_to_test']
     : ['passed', 'failed'];
   if (!allowedStatuses.includes(status)) throw new Error(`[cc-nexs] invalid local verification status: ${status}`);
-  if (status === 'deferred_to_test' && !hasValidStructuredTestDeferral(evidence)) {
-    throw new Error('[cc-nexs] deferred local verification requires structured test deferral evidence');
-  }
+  validateLocalEvidence(status, evidence, { allowTestDefer: progress.mode === 'lean' });
   if (expectedRevision !== null && progress.revision !== expectedRevision) {
     throw new Error(`[cc-nexs] stale progress revision: expected ${expectedRevision}, found ${progress.revision}`);
   }
@@ -735,6 +744,7 @@ export function recordLocalVerification(file, {
     status,
     context,
     fingerprint,
+    contract_fingerprint: contractFingerprint,
     source,
     evidence,
     completed_at: new Date().toISOString(),
@@ -818,6 +828,7 @@ export function recordConsolidatedReview(file, {
     || progress.local_verification.candidate_fingerprint !== fingerprint) {
     throw new Error('[cc-nexs] consolidated review requires local verification for the same candidate');
   }
+  assertRecordedLocalVerification(progress, { source, fingerprint });
   progress.review = {
     status,
     candidate_fingerprint: fingerprint,
@@ -890,28 +901,6 @@ export { candidateFingerprint };
 
 export function isLocalVerificationReadyStatus(status) {
   return status === 'passed' || status === 'deferred_to_test';
-}
-
-function hasValidStructuredTestDeferral(evidence) {
-  if (!Array.isArray(evidence) || evidence.length === 0) return false;
-  if (evidence.some((item) => (
-    !item
-    || typeof item !== 'object'
-    || !['passed', 'deferred_to_test'].includes(item.result)
-    || typeof item.check !== 'string'
-    || !item.check.trim()
-  ))) return false;
-  const checks = evidence.map((item) => item.check.trim());
-  if (new Set(checks).size !== checks.length) return false;
-  const deferred = evidence.filter((item) => item?.result === 'deferred_to_test');
-  return deferred.length > 0 && deferred.every((item) => item
-    && typeof item === 'object'
-    && typeof item.check === 'string'
-    && item.check.trim()
-    && typeof item.reason === 'string'
-    && item.reason.trim()
-    && typeof item.test_action === 'string'
-    && item.test_action.trim());
 }
 
 export function deferredChecksForAttempt(progress, releaseAttempt) {

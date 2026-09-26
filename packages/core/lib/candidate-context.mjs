@@ -1,4 +1,5 @@
-import { existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 import { resolveFeatureProgress } from './approval-command.mjs';
@@ -63,4 +64,25 @@ export function findWorkspaceRoot(cwd, progressFile = null) {
     }
   }
   throw new Error('[cc-nexs] workspace root not found');
+}
+
+export function assertLocalCandidateWorktree({ repository, worktree, branch, sourceCommit }) {
+  if (!worktree || !existsSync(worktree)) {
+    throw new Error(`[cc-nexs] local test candidate ${repository} requires its assigned worktree`);
+  }
+  let head;
+  let dirty;
+  let actualBranch;
+  let topLevel;
+  try {
+    head = execFileSync('git', ['-C', worktree, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    actualBranch = execFileSync('git', ['-C', worktree, 'branch', '--show-current'], { encoding: 'utf8' }).trim();
+    topLevel = execFileSync('git', ['-C', worktree, 'rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
+    dirty = execFileSync('git', ['-C', worktree, 'status', '--porcelain', '--untracked-files=all'], { encoding: 'utf8' }).trim();
+  } catch (error) {
+    throw new Error(`[cc-nexs] cannot inspect local test candidate ${repository}: ${error.message}`);
+  }
+  if (realpathSync(topLevel) !== realpathSync(worktree) || actualBranch !== branch || head !== sourceCommit || dirty) {
+    throw new Error(`[cc-nexs] local test candidate ${repository} worktree must be clean at exact candidate ${sourceCommit}`);
+  }
 }

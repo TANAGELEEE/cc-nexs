@@ -1,0 +1,6 @@
+interface:
+  display_name: "/cc-nexs:revise-hotfix"
+  short_description: "Run /cc-nexs:revise-hotfix explicitly"
+  default_prompt: "Use $cc-nexs-revise-hotfix to run /cc-nexs:revise-hotfix."
+policy:
+  allow_implicit_invocation: false

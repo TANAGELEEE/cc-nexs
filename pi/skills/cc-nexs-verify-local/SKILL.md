@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 Read and follow `../../../dist/preset-standard/commands/verify-local.md` as the authoritative command. Treat the text after `/cc-nexs:verify-local` as its arguments.
 
-## Deterministic Lean Control — Local Verification
+## Deterministic Lean/Hotfix Control — Local Verification
 
 Resolve `../../../packages/core/lib/cc-nexs-cli.mjs` relative to this SKILL.md and preserve the user's original verification flags and every repeated evidence object:
 
@@ -16,7 +16,7 @@ Resolve `../../../packages/core/lib/cc-nexs-cli.mjs` relative to this SKILL.md a
 node <resolved-cli-path> verify-local <feature-id> [--passed | --failed | --deferred-to-test] [--evidence-json <json>]... [--progress <path>]
 ```
 
-With a configured driver, omit direct evidence flags. Without a driver, Lean must execute the plan-approved commands first and then pass their real structured results; never invent evidence or replace this control with model-generated progress edits.
+With a configured driver, omit direct evidence flags. Without a driver, execute Lean plan-approved or Hotfix scope-bound commands first, then pass their real structured results. Both paths require exact command/exit_code/proof evidence covering the frozen matrix. Hotfix accepts passed/failed only and never defers checks. Never invent evidence or replace this control with model-generated progress edits.
 
 ## P2 Runtime Contract
 
@@ -42,7 +42,7 @@ The example has two tasks, so `concurrency: 2`; for a real batch set it to `min(
 4. Never invoke Claude Code, the Claude Task tool, Codex CLI, or a nested `pi` CLI. Runtime adaptation changes dispatch only; preserve the authoritative command's paths, state transitions, gates, counters, validation, and stop behavior.
 5. Resolve automatic risk routing once: Explicit Lean high/critical can upgrade the first Planner dispatch; discovered plan risk upgrades subsequent Reviewer dispatch without starting a second Planner; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. Reviewer may use another model or the same model with higher thinking. Encode the selected thinking in each pi-subagents task `model` selector; public files ship no provider-specific model IDs.
 6. pi-subagents has no separate per-task `thinking` field. For a non-inherit selection, pass `provider/model:thinking` in the task `model`; for `inherit` with no thinking override, omit `model`; for `inherit` with a thinking override, resolve the active provider/model and append `:thinking`. After `subagent_wait`, retry ordered `fallback_models` only for failed/unavailable tasks in a new bounded parallel call; never rerun successful siblings.
-7. Role children never mutate Git or `progress.md` / `progress.json`. The parent owns state transitions and Git Custodian operations, and preserves `CC_NEXS_RUNTIME=pi` plus `CC_NEXS_PLUGIN_ROOT`.
+7. Role children never mutate Git or `progress.md` / `progress.json`. The parent owns state transitions and Git Custodian operations, and preserves `CC_NEXS_RUNTIME=pi` plus `CC_NEXS_PLUGIN_ROOT`. For Hotfix children, also pass `CC_NEXS_PROGRESS_FILE` and the resolved `BUG_FILE`; machine-state directories do not determine document paths.
 
 
 

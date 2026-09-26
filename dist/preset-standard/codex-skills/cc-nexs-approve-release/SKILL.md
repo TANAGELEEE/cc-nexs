@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-approve-release
-description: /cc-nexs:approve-release 的 Codex 镜像 skill。 显式调用 $cc-nexs-approve-release 时使用。 Approve the exact Lean or Hotfix candidate verified in test before base-branch integration.
+description: /cc-nexs:approve-release 的 Codex 镜像 skill。 显式调用 $cc-nexs-approve-release 时使用。 Record Gateway B approval for an exact Lean/Hotfix candidate and its test evidence or authorized environment exception.
 ---
 
 # /cc-nexs:approve-release for Codex
@@ -16,10 +16,10 @@ Read and follow `../../commands/approve-release.md` as the single source of trut
 Resolve `../../lib/cc-nexs-cli.mjs` relative to this SKILL.md and execute the packaged control program:
 
 ```text
-node <resolved-cli-path> approve-release <feature-id>
+node <resolved-cli-path> approve-release <feature-id> [--test-exception --authorization-evidence <text> --reason <text> --environment-evidence <text> --rollback-evidence <text>]
 ```
 
-Never execute `/cc-nexs:approve-release` as a shell path and never edit `progress.json` or `progress.md` directly. After the control program succeeds, continue the current runtime's run workflow.
+Preserve the user's original approval flags and evidence. Never execute `/cc-nexs:approve-release` as a shell path and never edit `progress.json` or `progress.md` directly. An authorized test-environment exception retains the unverified test fact and permits configured base integration only, not production deployment. After the control program succeeds, continue the current runtime's run workflow.
 
 ## Codex Runtime Delta
 
@@ -30,7 +30,7 @@ Never execute `/cc-nexs:approve-release` as a shell path and never edit `progres
 
 ## Document Write Map
 
-Preserve exactly the paths declared by the authoritative command, including `all-docs/doc/{id}.{slug}/`, its `progress.md` and `hotfix.md` records, command-declared `bugs/` or `qa-scripts/`, and `docs/solutions/`. Do not invent Codex-specific alternatives.
+Preserve exactly the paths declared by the authoritative command: ordinary features use `all-docs/doc/{id}.{slug}/` and `progress.md`; new Hotfix tasks use the BUG identified by `progress.hotfix_document` with machine state in workspace `.cc-nexs/hotfixes/<key>/`. A related BUG uses `doc/<id>.<slug>/bugs/BUG-<key>.md`; otherwise use docs `hotfix/<key>/BUG-001.md`. Keep legacy `hotfix.md`, command-declared `bugs/` / `qa-scripts/`, and `docs/solutions/` compatible. Hotfix does not reserve a feature number or publish placeholders. Pass `CC_NEXS_PROGRESS_FILE` and the resolved `BUG_FILE` to Hotfix children; never infer the BUG from a private-state directory. Do not invent Codex-specific alternatives.
 
 ## Full / Fast / Hotfix Mode Locks
 

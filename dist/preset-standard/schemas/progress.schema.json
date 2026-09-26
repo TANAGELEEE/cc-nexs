@@ -28,6 +28,15 @@
       }
     },
     "sprint": { "type": "object" },
+    "hotfix_document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "path"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 }
+      }
+    },
     "hotfix": {
       "type": ["object", "null"],
       "additionalProperties": false,
@@ -37,12 +46,12 @@
         "related_feature": { "type": ["string", "null"] },
         "scope_binding": {
           "type": "object",
-          "required": ["hotfix_scope_sha256", "severity", "related_feature", "file"],
+          "required": ["hotfix_scope_sha256", "severity", "related_feature"],
           "properties": {
             "hotfix_scope_sha256": { "type": "string" },
             "severity": { "enum": ["P0", "P1", "P2", "P3"] },
             "related_feature": { "type": ["string", "null"] },
-            "file": { "const": "hotfix.md" }
+            "file": { "type": "string", "minLength": 1 }
           }
         },
         "scope_bound_at": { "type": "string" },

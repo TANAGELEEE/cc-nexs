@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { assertHotfixScopeCurrent, extractHotfixScope, hotfixScopeBinding } from './hotfix-contract.mjs';
+import { assertHotfixCandidatePaths, assertHotfixScopeCurrent, extractHotfixScope, hotfixScopeBinding } from './hotfix-contract.mjs';
 
 const valid = `# Hotfix\n\n<!-- HOTFIX-SCOPE START -->\n- severity: P2\n- related_feature: 42\n- intended_paths: src/a.js\n- acceptance_contract_change: no\n- api_contract_change: no\n- database_schema_change: no\n- permission_model_change: no\n- broad_refactor: no\n- non_behavioral_change: no\n<!-- HOTFIX-SCOPE END -->\n`;
 
@@ -44,4 +45,50 @@ test('hotfix scope requires exactly one non-empty ordered marker pair', () => {
 
 test('non-behavioral declaration is rejected for P0/P1/P2', () => {
   assert.throws(() => extractHotfixScope(valid.replace('non_behavioral_change: no', 'non_behavioral_change: yes')), /reserved for P3/);
+});
+
+
+test('Hotfix path checks exclude merged upstream changes but retain the complete repair delta', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-hotfix-upstream-'));
+  const repo = join(root, 'api');
+  const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  try {
+    mkdirSync(join(repo, 'src'), { recursive: true });
+    git('init', '-b', 'main');
+    git('config', 'user.name', 'Test User');
+    git('config', 'user.email', 'test@example.com');
+    writeFileSync(join(repo, 'src', 'a.js'), 'export const fixed = false;\n');
+    git('add', '.'); git('commit', '-m', 'baseline');
+    const initialBase = git('rev-parse', 'HEAD');
+    git('switch', '-c', 'hotfix/repair');
+    writeFileSync(join(repo, 'src', 'a.js'), 'export const fixed = true;\n');
+    git('add', '.'); git('commit', '-m', 'repair');
+    writeFileSync(join(root, 'hotfix.md'), valid);
+    const context = {
+      progress: { mode: 'hotfix' }, progressFile: join(root, 'progress.json'),
+      repositories: [{ id: 'api', repository: { absolute_path: repo }, assignment: { base_commit: initialBase, base_branch: 'main' }, sourceCommit: git('rev-parse', 'HEAD') }],
+    };
+    assert.doesNotThrow(() => assertHotfixCandidatePaths(context));
+    git('switch', 'main');
+    writeFileSync(join(repo, 'src', 'b.js'), 'export const upstream = true;\n');
+    git('add', '.'); git('commit', '-m', 'upstream change');
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    git('switch', 'hotfix/repair');
+    git('merge', '--no-edit', 'main');
+    context.repositories[0].sourceCommit = git('rev-parse', 'HEAD');
+    assert.doesNotThrow(() => assertHotfixCandidatePaths(context));
+    git('switch', 'main');
+    writeFileSync(join(repo, 'src', 'b.js'), 'export const upstream = 2;\n');
+    git('add', '.'); git('commit', '-m', 'unmerged upstream change');
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    git('switch', 'hotfix/repair');
+    assert.doesNotThrow(() => assertHotfixCandidatePaths(context));
+    writeFileSync(join(repo, 'src', 'c.js'), 'export const outside = true;\n');
+    git('add', '.'); git('commit', '-m', 'outside repair scope');
+    context.repositories[0].sourceCommit = git('rev-parse', 'HEAD');
+    assert.throws(() => assertHotfixCandidatePaths(context), /outside intended_paths: api\/src\/c.js/);
+    assert.equal(context.repositories[0].assignment.base_commit, initialBase);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

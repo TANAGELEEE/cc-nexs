@@ -25,6 +25,9 @@ test('start-hotfix binds an independent scope and advances INIT deterministicall
     writeFileSync(join(docs, 'hotfix.md'), [
       '<!-- HOTFIX-SCOPE START -->',
       '- severity: P1',
+      '- affected_acs: AC-1',
+      '- rollback_owner: oncall',
+      '- rollback_steps: revert the candidate',
       '- related_feature: 09',
       '- intended_paths: api/src/payment.ts',
       '- acceptance_contract_change: no',
@@ -66,7 +69,7 @@ test('start-hotfix rejects a non-INIT feature before scope binding', () => {
   }
 });
 
-test('P3 boundary violations become a deterministic human-intervention state', () => {
+test('Hotfix path violations stop for authorized scope revision and P3 still requires Review', () => {
   const root = mkdtempSync(join(tmpdir(), 'cc-nexs-hotfix-p3-'));
   const api = join(root, 'api');
   const docs = join(root, 'all-docs', 'doc', '32.p3-boundary');
@@ -138,8 +141,9 @@ test('P3 boundary violations become a deterministic human-intervention state', (
     const passed = assertHotfixCandidate({ cwd: root, featureId: '32' });
     assert.equal(passed.status, 'passed');
     let saved = readProgressV2(progressFile);
-    assert.equal(saved.local_verification.attempts[0].evidence.at(-1).type, 'p3_boundary');
-    assert.equal(saved.events.at(-1).type, 'hotfix.p3_boundary_passed');
+    assert.equal(passed.review_required, true);
+    assert.equal(saved.review.status, 'idle');
+    assert.deepEqual(saved.local_verification.attempts[0].evidence, ['smoke']);
 
     writeFileSync(join(api, 'b.txt'), 'second file\n');
     git(api, ['add', 'b.txt']);
@@ -159,10 +163,10 @@ test('P3 boundary violations become a deterministic human-intervention state', (
 
     const result = assertHotfixCandidate({ cwd: root, featureId: '32' });
     assert.equal(result.status, 'blocked');
-    assert.match(result.reason, /exactly one changed file/);
+    assert.match(result.reason, /outside intended_paths/);
     saved = readProgressV2(progressFile);
-    assert.equal(saved.state, 'HOTFIX_P3_BOUNDARY_BLOCKED');
-    assert.equal(saved.events.at(-1).type, 'hotfix.p3_boundary_blocked');
+    assert.equal(saved.state, 'HUMAN_INTERVENTION');
+    assert.equal(saved.events.at(-1).type, 'hotfix.scope_paths_blocked');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -1,14 +1,15 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import { resolveFeatureProgress } from './approval-command.mjs';
 import { resolveCandidateContext } from './candidate-context.mjs';
-import { assertP3CandidateBoundary, hotfixScopeBinding } from './hotfix-contract.mjs';
+import { assertHotfixCandidatePaths, extractHotfixScope, hotfixScopeBinding, resolveHotfixDocument } from './hotfix-contract.mjs';
+import { extractLocalVerificationChecks } from './local-evidence.mjs';
 import {
   appendProgressEvent,
   candidateFingerprint,
   readProgressV2,
-  recordHotfixBoundaryEvidence,
   writeProgressV2,
 } from './progress-v2.mjs';
 
@@ -17,7 +18,10 @@ export function startHotfix({ cwd = process.cwd(), featureId, progressPath = nul
   const progress = readProgressV2(progressFile);
   if (progress.mode !== 'hotfix') throw new Error(`[cc-nexs] start-hotfix requires an independently initialized hotfix, found mode ${progress.mode}`);
   if (progress.state !== 'INIT') throw new Error(`[cc-nexs] start-hotfix requires INIT, found ${progress.state}`);
-  const binding = hotfixScopeBinding(dirname(progressFile));
+  const binding = hotfixScopeBinding(dirname(progressFile), progress);
+  if (progress.hotfix_document && !extractLocalVerificationChecks(extractHotfixScope(readFileSync(resolveHotfixDocument(progress, dirname(progressFile)), 'utf8')).raw).length) {
+    throw new Error('[cc-nexs] fill the BUG local verification matrix before binding');
+  }
   if (severity && String(severity).toUpperCase() !== binding.severity) {
     throw new Error(`[cc-nexs] --level ${severity} does not match hotfix.md severity ${binding.severity}`);
   }
@@ -30,7 +34,7 @@ export function startHotfix({ cwd = process.cwd(), featureId, progressPath = nul
     related_feature: binding.related_feature,
     scope_binding: binding,
     scope_bound_at: timestamp,
-    review_required: binding.severity !== 'P3',
+    review_required: true,
   };
   progress.state = 'HOTFIX_IMPLEMENTING';
   progress.revision += 1;
@@ -45,48 +49,42 @@ export function startHotfix({ cwd = process.cwd(), featureId, progressPath = nul
 
 export function assertHotfixCandidate({ cwd = process.cwd(), featureId, progressPath = null, actor = 'hotfix-boundary-controller' } = {}) {
   const context = resolveCandidateContext({ cwd, featureId, progressPath });
-  if (context.progress.mode !== 'hotfix' || context.progress.hotfix?.severity !== 'P3') {
-    throw new Error('[cc-nexs] assert-hotfix-candidate is only valid for a bound P3 hotfix');
+  if (context.progress.mode !== 'hotfix' || !context.progress.hotfix?.scope_binding) {
+    throw new Error('[cc-nexs] assert-hotfix-candidate is only valid for a bound Hotfix');
   }
   const allowedStates = new Set(['HOTFIX_LOCAL_VERIFYING', 'HOTFIX_LOCAL_REVERIFYING']);
   if (!allowedStates.has(context.progress.state)) {
-    throw new Error(`[cc-nexs] P3 candidate assertion requires HOTFIX_LOCAL_VERIFYING or HOTFIX_LOCAL_REVERIFYING, found ${context.progress.state}`);
+    throw new Error(`[cc-nexs] Hotfix candidate assertion requires HOTFIX_LOCAL_VERIFYING or HOTFIX_LOCAL_REVERIFYING, found ${context.progress.state}`);
   }
   const fingerprint = candidateFingerprint(context.source);
   if (
     context.progress.local_verification?.status !== 'passed'
     || context.progress.local_verification?.candidate_fingerprint !== fingerprint
   ) {
-    throw new Error('[cc-nexs] P3 candidate assertion requires passed local verification for the exact candidate');
+    throw new Error('[cc-nexs] Hotfix candidate assertion requires passed local verification for the exact candidate');
   }
   try {
-    const boundary = assertP3CandidateBoundary(context);
-    recordHotfixBoundaryEvidence(context.progressFile, {
-      source: context.source,
-      boundary,
-      actor,
-      expectedRevision: context.progress.revision,
-    });
+    assertHotfixCandidatePaths(context);
     return {
       kind: 'hotfix-candidate-boundary',
       status: 'passed',
       feature: context.progress.feature,
       source: context.source,
-      boundary,
+      review_required: true,
       progressFile: context.progressFile,
     };
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     const progress = appendProgressEvent(context.progressFile, {
-      type: 'hotfix.p3_boundary_blocked',
+      type: 'hotfix.scope_paths_blocked',
       actor,
       from: context.progress.state,
-      to: 'HOTFIX_P3_BOUNDARY_BLOCKED',
+      to: 'HUMAN_INTERVENTION',
       reason,
       expectedRevision: context.progress.revision,
       data: {
-        severity: 'P3',
-        recovery: 'restart as a P0/P1/P2 hotfix or initialize a lean/full change',
+        severity: context.progress.hotfix.severity,
+        recovery: 'revise-hotfix with the user authorization; retain the BUG key and branch',
       },
     });
     return {

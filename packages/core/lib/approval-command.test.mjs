@@ -19,6 +19,7 @@ import {
   readProgressV2,
   recordConsolidatedReview,
   recordLocalVerification,
+  recordTestIntegration,
   recordTestVerification,
   writeProgressV2,
 } from './progress-v2.mjs';
@@ -527,7 +528,7 @@ test('Lean Gateway B binds the exact reviewed and test-verified candidate', () =
   const fixture = createFeature({ id: '21', mode: 'lean', state: 'PLAN_PENDING_HUMAN' });
   approveFeatureGate({ cwd: fixture.root, featureId: '21', gate: 'plan', approver: 'Plan Owner' });
   const source = { api: bindCandidate(fixture) };
-  recordLocalVerification(fixture.progressFile, { source, status: 'passed', evidence: ['local.json'] });
+  recordLocalVerification(fixture.progressFile, { source, status: 'passed', evidence: [{ check: 'regression', result: 'passed', command: 'node check.mjs', exit_code: 0, proof: 'regression passed' }] });
   recordConsolidatedReview(fixture.progressFile, { source, status: 'passed' });
   const release = beginTestRelease(fixture.progressFile, { source });
   completeTestRelease(fixture.progressFile, {
@@ -567,6 +568,13 @@ test('Lean Gateway B binds the exact reviewed and test-verified candidate', () =
   );
   spawnSync('git', ['-C', join(fixture.root, 'api'), 'update-ref', 'refs/cc-nexs/candidates/api', source.api], { encoding: 'utf8' });
 
+  const validLocal = readProgressV2(fixture.progressFile);
+  const invalidLocal = structuredClone(validLocal);
+  invalidLocal.local_verification.attempts.at(-1).evidence = [];
+  writeProgressV2(fixture.progressFile, invalidLocal);
+  assert.throws(() => approveFeatureGate({ cwd: fixture.root, featureId: '21', gate: 'release', approver: 'Release Owner' }), /structured evidence/);
+  writeProgressV2(fixture.progressFile, validLocal);
+
   const result = approveFeatureGate({ cwd: fixture.root, featureId: '21', gate: 'release', approver: 'Release Owner' });
   const progress = readProgressV2(fixture.progressFile);
   assert.equal(result.state, 'RELEASE_PENDING_HUMAN');
@@ -580,6 +588,14 @@ test('Lean Gateway B binds the exact reviewed and test-verified candidate', () =
 
   progress.state = 'BASE_MERGING';
   writeProgressV2(fixture.progressFile, progress);
+  const invalidBaseEvidence = structuredClone(progress);
+  invalidBaseEvidence.local_verification.attempts.at(-1).evidence = [];
+  writeProgressV2(fixture.progressFile, invalidBaseEvidence);
+  assert.throws(() => approveFeatureGate({ cwd: fixture.root, featureId: '21', gate: 'release', approver: 'Release Owner' }), /structured evidence/);
+  assert.throws(() => runBaseRelease({ cwd: fixture.root, featureId: '21' }), /structured evidence/);
+  assert.equal(readProgressV2(fixture.progressFile).state, 'BASE_MERGE_BLOCKED');
+  writeProgressV2(fixture.progressFile, progress);
+
   writeFileSync(join(fixture.root, '.cc-nexs', 'workspace.yml'), [
     'version: 1',
     'docs_repository: docs',
@@ -622,7 +638,7 @@ test('Lean release approval fails closed when approved plan scope changed', () =
 test('Hotfix Gateway B binds the same reviewed and test-verified feature candidate', () => {
   const fixture = createFeature({ id: '23', mode: 'hotfix', state: 'HOTFIX_RELEASE_PENDING_HUMAN' });
   const source = { api: bindCandidate(fixture, 'api', 'hotfix candidate\n') };
-  recordLocalVerification(fixture.progressFile, { source, status: 'passed', evidence: ['local'] });
+  recordLocalVerification(fixture.progressFile, { source, status: 'passed', evidence: [{ check: 'regression', result: 'passed', command: 'node check.mjs', exit_code: 0, proof: 'regression passed' }] });
   recordConsolidatedReview(fixture.progressFile, { source, status: 'passed' });
   const release = beginTestRelease(fixture.progressFile, { source });
   completeTestRelease(fixture.progressFile, {
@@ -640,4 +656,139 @@ test('Hotfix Gateway B binds the same reviewed and test-verified feature candida
   assert.equal(approved.gates.release.binding.candidate_fingerprint, approved.review.candidate_fingerprint);
   assert.deepEqual(approved.gates.release.binding.base_targets, { api: 'main' });
   assert.equal(approved.gates.release.binding.hotfix_scope_binding, approved.hotfix.scope_binding.hotfix_scope_sha256);
+});
+
+const testException = {
+  authorizationEvidence: 'User explicitly authorized this candidate to proceed to base and formal acceptance',
+  reason: 'Test account permissions prevent the required acceptance path',
+  environmentEvidence: 'Test administrator confirmed the missing role; request returned HTTP 403',
+  rollbackEvidence: 'Revert to the recorded base commit; no data migration',
+};
+
+function createEnvironmentBlockedCandidate(mode, id) {
+  const fixture = createFeature({ id, mode, state: mode === 'lean' ? 'PLAN_PENDING_HUMAN' : 'HOTFIX_TEST_VERIFYING' });
+  if (mode === 'lean') approveFeatureGate({ cwd: fixture.root, featureId: id, gate: 'plan', approver: 'Owner' });
+  const base = bindCandidate(fixture);
+  const repo = join(fixture.root, 'api');
+  const git = (path, args) => {
+    const result = spawnSync('git', ['-C', path, ...args], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  git(repo, ['branch', '-M', 'main']);
+  git(repo, ['init', '--bare', join(fixture.root, 'remote.git')]);
+  git(repo, ['remote', 'add', 'origin', join(fixture.root, 'remote.git')]);
+  git(repo, ['push', 'origin', 'main']);
+  const worktree = join(fixture.root, 'api-feature');
+  git(repo, ['worktree', 'add', '-b', 'feature/test', worktree, 'main']);
+  writeFileSync(join(worktree, 'candidate.txt'), 'fixed\n');
+  git(worktree, ['add', 'candidate.txt']);
+  git(worktree, ['commit', '-m', 'fix']);
+  const source = { api: git(worktree, ['rev-parse', 'HEAD']) };
+  git(repo, ['update-ref', 'refs/cc-nexs/candidates/api', source.api]);
+  const assigned = readProgressV2(fixture.progressFile);
+  assigned.repositories.api.worktree = 'api-feature';
+  writeProgressV2(fixture.progressFile, assigned);
+  recordLocalVerification(fixture.progressFile, {
+    source, status: 'passed', evidence: [{ check: 'repro', result: 'passed', command: 'node repro.mjs', exit_code: 0, proof: 'regression passed' }],
+  });
+  recordConsolidatedReview(fixture.progressFile, { source, status: 'passed' });
+  const { attempt } = beginTestRelease(fixture.progressFile, { source });
+  recordTestIntegration(fixture.progressFile, {
+    attemptId: attempt.id, repository: 'api', sourceCommit: source.api,
+    targetBranch: 'test', targetBefore: base, integrationCommit: source.api,
+  });
+  completeTestRelease(fixture.progressFile, {
+    attemptId: attempt.id, status: 'succeeded', pipeline: { id: 'pipeline-1' },
+    deployment: { environment: 'test' }, environmentRevision: source,
+  });
+  recordTestVerification(fixture.progressFile, { attemptId: attempt.id, result: 'manual_required', evidence: [testException.environmentEvidence] });
+  const blocked = readProgressV2(fixture.progressFile);
+  blocked.state = mode === 'hotfix' ? 'HOTFIX_TEST_DEPLOYED_NEEDS_MANUAL_VERIFY' : 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY';
+  writeProgressV2(fixture.progressFile, blocked);
+  return { ...fixture, git, repo, source };
+}
+
+test('explicit test-environment exception reaches base release without claiming test passed', () => {
+  for (const [mode, id] of [['lean', '24'], ['hotfix', '25']]) {
+    const fixture = createEnvironmentBlockedCandidate(mode, id);
+    const initialAttempt = readProgressV2(fixture.progressFile).delivery.test.attempts.at(-1);
+    assert.throws(() => approveFeatureGate({ cwd: fixture.root, featureId: id, gate: 'release', approver: 'Owner' }), /release gate requires/);
+    const approval = approveFeatureGate({ cwd: fixture.root, featureId: id, gate: 'release', approver: 'Owner', testException });
+    const approved = readProgressV2(fixture.progressFile);
+    assert.equal(approval.state, mode === 'hotfix' ? 'HOTFIX_RELEASE_PENDING_HUMAN' : 'RELEASE_PENDING_HUMAN');
+    assert.deepEqual(approved.delivery.test.attempts.at(-1), initialAttempt);
+    assert.equal(approved.gates.release.binding.test_exception.authorization_evidence, testException.authorizationEvidence);
+    approved.state = mode === 'hotfix' ? 'HOTFIX_BASE_MERGING' : 'BASE_MERGING';
+    writeProgressV2(fixture.progressFile, approved);
+    assert.equal(runBaseRelease({ cwd: fixture.root, featureId: id }).status, 'succeeded');
+    const released = readProgressV2(fixture.progressFile);
+    assert.equal(released.delivery.test.status, 'deployed_needs_manual_verification');
+    assert.deepEqual(released.delivery.test.attempts.at(-1), initialAttempt);
+    fixture.git(fixture.repo, ['merge-base', '--is-ancestor', fixture.source.api, 'origin/main']);
+  }
+});
+
+test('base release refuses changed exception evidence and newly advanced base', () => {
+  for (const change of ['evidence', 'base']) {
+    const fixture = createEnvironmentBlockedCandidate('hotfix', `26-${change}`);
+    const featureId = `26-${change}`;
+    approveFeatureGate({ cwd: fixture.root, featureId, gate: 'release', approver: 'Owner', testException });
+    const approved = readProgressV2(fixture.progressFile);
+    approved.state = 'HOTFIX_BASE_MERGING';
+    if (change === 'evidence') approved.delivery.test.attempts.at(-1).verification.evidence = ['changed'];
+    else {
+      fixture.git(fixture.repo, ['commit', '--allow-empty', '-m', 'new base']);
+      fixture.git(fixture.repo, ['push', 'origin', 'main']);
+    }
+    writeProgressV2(fixture.progressFile, approved);
+    assert.throws(() => runBaseRelease({ cwd: fixture.root, featureId }), change === 'evidence' ? /exception evidence changed/ : /BASE_CHANGED/);
+    assert.equal(readProgressV2(fixture.progressFile).state, change === 'evidence' ? 'HOTFIX_BASE_MERGE_BLOCKED' : 'HOTFIX_BASE_CHANGED');
+  }
+});
+
+test('scope-invalidated test attempts cannot retain release approval or authorize base integration', () => {
+  const fixture = createEnvironmentBlockedCandidate('hotfix', '27');
+  approveFeatureGate({ cwd: fixture.root, featureId: '27', gate: 'release', approver: 'Owner', testException });
+  const progress = readProgressV2(fixture.progressFile);
+  progress.delivery.test.attempts.at(-1).invalidated_at = new Date().toISOString();
+  writeProgressV2(fixture.progressFile, progress);
+  assert.throws(() => approveFeatureGate({ cwd: fixture.root, featureId: '27', gate: 'release', approver: 'Owner', testException }), /attempt was invalidated/);
+  progress.state = 'HOTFIX_BASE_MERGING';
+  writeProgressV2(fixture.progressFile, progress);
+  assert.throws(() => approveFeatureGate({ cwd: fixture.root, featureId: '27', gate: 'release', approver: 'Owner' }), /attempt was invalidated/);
+  assert.throws(() => runBaseRelease({ cwd: fixture.root, featureId: '27' }), /attempt was invalidated/);
+  assert.equal(readProgressV2(fixture.progressFile).state, 'HOTFIX_BASE_MERGE_BLOCKED');
+});
+
+
+test('feature discovery follows configured docs and external worktrees after Hotfix promotion', () => {
+  const fixture = createFeature({ id: '20260926-repair', mode: 'lean', state: 'PLANNING' });
+  const worktrees = mkdtempSync(join(tmpdir(), 'cc-nexs-custom-worktrees-'));
+  roots.push(worktrees);
+  rmSync(fixture.progressFile);
+  rmSync(join(fixture.root, '.cc-nexs', 'workspace.yml'));
+  writeFileSync(join(fixture.root, '.cc-nexs', 'workspace.json'), JSON.stringify({
+    version: 1, docs_repository: 'docs', worktree_root: worktrees,
+    repositories: [{ id: 'docs', path: 'knowledge', docs: true }],
+  }));
+  const archived = join(fixture.root, 'knowledge', 'doc', '09.parent', 'bugs', 'BUG-repair.lean', 'progress.json');
+  const active = join(worktrees, '20260926-repair', 'docs', 'doc', '09.parent', 'bugs', 'BUG-repair.lean', 'progress.json');
+  const progress = createProgressV2({ featureId: '20260926-repair', featureSlug: 'repair', preset: 'preset-standard', mode: 'lean' });
+  for (const file of [archived, active]) {
+    mkdirSync(dirname(file), { recursive: true });
+    writeProgressV2(file, progress);
+  }
+  const nested = join(fixture.root, 'services', 'nested');
+  mkdirSync(nested, { recursive: true });
+  assert.equal(resolveFeatureProgress({ cwd: nested, featureId: progress.feature.id }), active);
+  rmSync(active);
+  assert.equal(resolveFeatureProgress({ cwd: fixture.root, featureId: progress.feature.id }), archived);
+});
+
+test('explicit progress paths reject a different task while keeping numeric ID aliases', () => {
+  const fixture = createFeature({ id: '04', state: 'DEPLOY_GATE' });
+  assert.equal(resolveFeatureProgress({ cwd: fixture.root, featureId: '4', progressPath: fixture.progressFile }), fixture.progressFile);
+  assert.throws(() => runCcNexsCommand(['revise-hotfix', 'BUG-other', '--progress', fixture.progressFile, '--reason', 'same failure', '--authorization-evidence', 'user requested repair'], { cwd: fixture.root }), /feature mismatch: requested BUG-other, found 04/);
+  assert.equal(readProgressV2(fixture.progressFile).revision, 0);
 });

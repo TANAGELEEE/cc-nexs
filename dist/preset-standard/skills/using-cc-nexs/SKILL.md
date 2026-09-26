@@ -13,7 +13,7 @@ disable-model-invocation: true
 - 常规新功能：默认 `init -> plan -> Gateway A -> run -> Gateway B`，使用 `mode=lean`。
 - 需要旧三角色、多轮代码/验收分离：显式 `--mode=fast`。
 - 高风险、复杂 DB/外部契约或确需多个 Sprint/多轮专业评审：显式 `--mode=full`。
-- 可界定的小范围 BUG：先 `init --mode=hotfix` 创建独立 latest-base feature/worktree，再执行 `hotfix <id>`；契约/schema/权限变化直接走 Lean/Full。
+- 可界定的小范围 BUG：直接 `hotfix <现象>` 创建 latest-base `hotfix/<key>` 与 BUG 文档，不占需求号；`init --mode=hotfix` 仅兼容转发到 `init-hotfix`。同故障授权修订用 `revise-hotfix`，契约/schema/权限扩展加 `--promote-lean` 在原 BUG 旁转 Lean 并通过 Gateway A。
 - 探索 spike 或纯文档任务不强制进入主流程。
 
 ## 启动
@@ -89,7 +89,7 @@ hotfix              独立 P0/P1/P2/P3 mini-Lean：scope binding -> local -> one
 
 - workspace/repository worktree 与 branch assignment 正确；
 - requirements、config.mode 和 progress mode 一致；
-- Lean 使用已配置的 `workflow.local_verify.driver`，或在缺失时运行 plan-approved 命令并记录结构化 command/exit/proof；Hotfix 仍必须配置 driver。两者都保持批准 plan 或绑定 hotfix scope 不变；
+- Lean 使用已配置的 `workflow.local_verify.driver`，或在缺失时运行 plan-approved 命令并记录结构化 command/exit/proof；Hotfix 也可执行绑定矩阵的实际命令并登记相同结构化证据，不能延期到 test。两者都保持批准 plan 或绑定 Hotfix scope 不变；授权修订通过确定性控制器重绑；
 - full 多 Sprint 切片覆盖全部 AC；
 - 自动 test 发布项目已为 deploy 仓配置 test_branch 和 driver；Lean local 仓在批准 plan 中显式绑定；
 - test URLs、allowed_hosts 与 browser prerequisite 在部署后验证；缺失时接受可恢复的 manual verification，不回滚 delivery。

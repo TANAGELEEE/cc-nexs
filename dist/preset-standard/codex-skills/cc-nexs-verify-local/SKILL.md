@@ -11,7 +11,7 @@ This explicit-only skill is a thin Codex runtime adapter for `/cc-nexs:verify-lo
 
 Read and follow `../../commands/verify-local.md` as the single source of truth for this command. Treat the user's original message after `/cc-nexs:verify-local` as the command arguments.
 
-## Deterministic Lean Control — Local Verification
+## Deterministic Lean/Hotfix Control — Local Verification
 
 Resolve `../../lib/cc-nexs-cli.mjs` relative to this SKILL.md and preserve the user's original verification flags and every repeated evidence object:
 
@@ -19,7 +19,7 @@ Resolve `../../lib/cc-nexs-cli.mjs` relative to this SKILL.md and preserve the u
 node <resolved-cli-path> verify-local <feature-id> [--passed | --failed | --deferred-to-test] [--evidence-json <json>]... [--progress <path>]
 ```
 
-With a configured driver, omit direct evidence flags. Without a driver, Lean must execute the plan-approved commands first and then pass their real structured results; never invent evidence or replace this control with model-generated progress edits.
+With a configured driver, omit direct evidence flags. Without a driver, execute Lean plan-approved or Hotfix scope-bound commands first, then pass their real structured results. Both paths require exact command/exit_code/proof evidence covering the frozen matrix. Hotfix accepts passed/failed only and never defers checks. Never invent evidence or replace this control with model-generated progress edits.
 
 ## Codex Runtime Delta
 
@@ -30,7 +30,7 @@ With a configured driver, omit direct evidence flags. Without a driver, Lean mus
 
 ## Document Write Map
 
-Preserve exactly the paths declared by the authoritative command, including `all-docs/doc/{id}.{slug}/`, its `progress.md` and `hotfix.md` records, command-declared `bugs/` or `qa-scripts/`, and `docs/solutions/`. Do not invent Codex-specific alternatives.
+Preserve exactly the paths declared by the authoritative command: ordinary features use `all-docs/doc/{id}.{slug}/` and `progress.md`; new Hotfix tasks use the BUG identified by `progress.hotfix_document` with machine state in workspace `.cc-nexs/hotfixes/<key>/`. A related BUG uses `doc/<id>.<slug>/bugs/BUG-<key>.md`; otherwise use docs `hotfix/<key>/BUG-001.md`. Keep legacy `hotfix.md`, command-declared `bugs/` / `qa-scripts/`, and `docs/solutions/` compatible. Hotfix does not reserve a feature number or publish placeholders. Pass `CC_NEXS_PROGRESS_FILE` and the resolved `BUG_FILE` to Hotfix children; never infer the BUG from a private-state directory. Do not invent Codex-specific alternatives.
 
 ## Full / Fast / Hotfix Mode Locks
 

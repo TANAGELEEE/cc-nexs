@@ -71,6 +71,8 @@ const LEAN_ONLY_CORE_COMMANDS = new Set([
   'request-release-changes.md',
   'verify-local.md',
   'migrate-feature-config.md',
+  'init-hotfix.md',
+  'revise-hotfix.md',
 ]);
 const PI_P2_COMMANDS = new Set([
   'approve-deploy',
@@ -88,6 +90,8 @@ const PI_P2_COMMANDS = new Set([
   'evaluator',
   'git-custodian',
   'hotfix',
+  'init-hotfix',
+  'revise-hotfix',
   'init',
   'lean-review',
   'lean-verify',
@@ -296,16 +300,20 @@ function scopePluginAgentsToExplicitInvocation(dst) {
 }
 
 function deterministicControlBlock(commandBase, cliPath) {
-  if (commandBase === 'hotfix') {
+  if (['hotfix', 'init-hotfix', 'revise-hotfix'].includes(commandBase)) {
     return `## Deterministic Hotfix Controls
 
-Resolve \`${cliPath}\` relative to this SKILL.md. Bind the completed hotfix scope with:
+Resolve \`${cliPath}\` relative to this SKILL.md. Follow the authoritative command for the applicable initialization, binding, or authorized revision action:
 
 \`\`\`text
-node <resolved-cli-path> start-hotfix <feature-id> [--level P0|P1|P2|P3] [--related <feature-id>]
+node <resolved-cli-path> init-hotfix <slug> --description "<bug description>" [--bug-key YYYYMMDD-slug] [--related <feature-id>] [--repos a,b] [--bug-file <docs-relative.md>]
+node <resolved-cli-path> start-hotfix <bug-key-or-legacy-id> [--level P0|P1|P2|P3] [--related <feature-id>]
+node <resolved-cli-path> revise-hotfix <bug-key-or-legacy-id> --reason "<reason>" --authorization-evidence "<existing user authorization>" [--promote-lean]
 \`\`\`
 
-Subsequent local verification, Review recording, test release/verification, release approval, and base integration must use the packaged controls named by the authoritative command. Never edit progress state or perform ad hoc merge/push operations.
+New Hotfix tasks use \`hotfix/<key>\` and one assigned BUG document; never reserve a shared feature number or publish placeholders. Resolve the BUG through \`progress.hotfix_document\` and keep machine state in \`.cc-nexs/hotfixes/<key>/\`; legacy \`hotfix.md\` tasks remain resumable. Every severity, including P3, requires independent Review. Authorized revisions retain the key/branch and invalidate current evidence; Lean promotion still requires Gateway A.
+
+Subsequent local verification, Review recording, test release/verification, release approval, and base integration must use the packaged controls named by the authoritative command. Only an explicitly authorized \`approve-release --test-exception\` may accept an actual deployed \`manual_required\` environment gap with exact local/Review and rollback evidence; it preserves the unverified fact and does not authorize production deployment. Never edit progress state or perform ad hoc merge/push operations.
 
 `;
   }
@@ -336,7 +344,7 @@ Never edit progress state directly or combine this request with release approval
 `;
   }
   if (commandBase === 'verify-local') {
-    return `## Deterministic Lean Control — Local Verification
+    return `## Deterministic Lean/Hotfix Control — Local Verification
 
 Resolve \`${cliPath}\` relative to this SKILL.md and preserve the user's original verification flags and every repeated evidence object:
 
@@ -344,7 +352,7 @@ Resolve \`${cliPath}\` relative to this SKILL.md and preserve the user's origina
 node <resolved-cli-path> verify-local <feature-id> [--passed | --failed | --deferred-to-test] [--evidence-json <json>]... [--progress <path>]
 \`\`\`
 
-With a configured driver, omit direct evidence flags. Without a driver, Lean must execute the plan-approved commands first and then pass their real structured results; never invent evidence or replace this control with model-generated progress edits.
+With a configured driver, omit direct evidence flags. Without a driver, execute Lean plan-approved or Hotfix scope-bound commands first, then pass their real structured results. Both paths require exact command/exit_code/proof evidence covering the frozen matrix. Hotfix accepts passed/failed only and never defers checks. Never invent evidence or replace this control with model-generated progress edits.
 
 `;
   }
@@ -365,16 +373,17 @@ Never replace this control with model-generated progress edits or ad hoc Git com
 `;
   }
   if (!['approve-deploy', 'approve-spec', 'approve-plan', 'approve-release'].includes(commandBase)) return '';
-  const sprint = commandBase === 'approve-deploy' ? ' [M<N>]' : '';
+  const approvalArgs = commandBase === 'approve-deploy' ? ' [M<N>]'
+    : commandBase === 'approve-release' ? ' [--test-exception --authorization-evidence <text> --reason <text> --environment-evidence <text> --rollback-evidence <text>]' : '';
   return `## Deterministic Approval Control
 
 Resolve \`${cliPath}\` relative to this SKILL.md and execute the packaged control program:
 
 \`\`\`text
-node <resolved-cli-path> ${commandBase} <feature-id>${sprint}
+node <resolved-cli-path> ${commandBase} <feature-id>${approvalArgs}
 \`\`\`
 
-Never execute \`/cc-nexs:${commandBase}\` as a shell path and never edit \`progress.json\` or \`progress.md\` directly. After the control program succeeds, continue the current runtime's run workflow.
+Preserve the user's original approval flags and evidence. Never execute \`/cc-nexs:${commandBase}\` as a shell path and never edit \`progress.json\` or \`progress.md\` directly. An authorized test-environment exception retains the unverified test fact and permits configured base integration only, not production deployment. After the control program succeeds, continue the current runtime's run workflow.
 
 `;
 }
@@ -433,7 +442,7 @@ ${controlBlock}## Codex Runtime Delta
 
 ## Document Write Map
 
-Preserve exactly the paths declared by the authoritative command, including \`all-docs/doc/{id}.{slug}/\`, its \`progress.md\` and \`hotfix.md\` records, command-declared \`bugs/\` or \`qa-scripts/\`, and \`docs/solutions/\`. Do not invent Codex-specific alternatives.
+Preserve exactly the paths declared by the authoritative command: ordinary features use \`all-docs/doc/{id}.{slug}/\` and \`progress.md\`; new Hotfix tasks use the BUG identified by \`progress.hotfix_document\` with machine state in workspace \`.cc-nexs/hotfixes/<key>/\`. A related BUG uses \`doc/<id>.<slug>/bugs/BUG-<key>.md\`; otherwise use docs \`hotfix/<key>/BUG-001.md\`. Keep legacy \`hotfix.md\`, command-declared \`bugs/\` / \`qa-scripts/\`, and \`docs/solutions/\` compatible. Hotfix does not reserve a feature number or publish placeholders. Pass \`CC_NEXS_PROGRESS_FILE\` and the resolved \`BUG_FILE\` to Hotfix children; never infer the BUG from a private-state directory. Do not invent Codex-specific alternatives.
 
 ## Full / Fast / Hotfix Mode Locks
 
@@ -572,13 +581,13 @@ function generatePiResources() {
     const commandText = readFileSync(join(commandsDir, fileName), 'utf8');
     const commandName = extractCommandName(commandText, fileName);
     const skillName = normalizeSkillName(commandName);
-    const supportsHotfix = commandBase === 'hotfix';
+    const supportsHotfix = ['hotfix', 'init-hotfix', 'revise-hotfix'].includes(commandBase);
     const controlBlock = deterministicControlBlock(commandBase, '../../../packages/core/lib/cc-nexs-cli.mjs');
     const description = [
       `${commandName} 的 Pi P2 适配 skill。`,
       `仅允许通过 /cc-nexs:${commandBase} 或 /skill:${skillName} 显式调用；不得因普通自然语言请求自动触发。`,
       supportsHotfix
-        ? '支持 preset-standard 独立 hotfix mini-Lean，并通过 pi-subagents 运行隔离角色。'
+        ? '支持 preset-standard 独立 Hotfix 分支与 BUG 文档，不占需求号，并通过 pi-subagents 运行隔离角色。'
         : '支持 preset-standard lean（默认）、fast 与 full 模式，并通过 pi-subagents 运行隔离角色。',
       extractDescription(commandText, commandName).replace(/codex CLI/gi, 'Pi subagent'),
     ].join(' ');
@@ -621,14 +630,14 @@ The example has two tasks, so \`concurrency: 2\`; for a real batch set it to \`m
 4. Never invoke Claude Code, the Claude Task tool, Codex CLI, or a nested \`pi\` CLI. Runtime adaptation changes dispatch only; preserve the authoritative command's paths, state transitions, gates, counters, validation, and stop behavior.
 5. ${modelGuard}
 6. pi-subagents has no separate per-task \`thinking\` field. For a non-inherit selection, pass \`provider/model:thinking\` in the task \`model\`; for \`inherit\` with no thinking override, omit \`model\`; for \`inherit\` with a thinking override, resolve the active provider/model and append \`:thinking\`. After \`subagent_wait\`, retry ordered \`fallback_models\` only for failed/unavailable tasks in a new bounded parallel call; never rerun successful siblings.
-7. Role children never mutate Git or \`progress.md\` / \`progress.json\`. The parent owns state transitions and Git Custodian operations, and preserves \`CC_NEXS_RUNTIME=pi\` plus \`CC_NEXS_PLUGIN_ROOT\`.
+7. Role children never mutate Git or \`progress.md\` / \`progress.json\`. The parent owns state transitions and Git Custodian operations, and preserves \`CC_NEXS_RUNTIME=pi\` plus \`CC_NEXS_PLUGIN_ROOT\`. For Hotfix children, also pass \`CC_NEXS_PROGRESS_FILE\` and the resolved \`BUG_FILE\`; machine-state directories do not determine document paths.
 
 ${supportsHotfix ? `## Pi Hotfix Dispatch Contract
 
-1. Initialize and bind the standalone \`mode=hotfix\` / \`hotfix.md\` scope before dispatch; scope expansion becomes a new Lean/Full change.
-2. Use fresh \`cc-nexs.hotfix-developer\`, \`cc-nexs.hotfix-reviewer\`, and post-deployment \`cc-nexs.hotfix-verifier\` (or \`cc-nexs.hotfix-verifier-computer-use\`) sessions. P3 Review skipping still requires deterministic boundary proof.
-3. Preserve the single lifetime delta Review across Review, test, and Gateway B feedback. Missing browser capability becomes recoverable \`manual_required\`, not a delivery failure.
-4. Only \`approve-release\` authorizes the exact verified candidate to configured base branches. Never merge test into base and never force push.
+1. Initialize \`mode=hotfix\` with \`init-hotfix\`: create \`hotfix/<key>\` and the assigned BUG without a shared feature number or placeholder push. Resolve the BUG through \`progress.hotfix_document\`; machine state stays in \`.cc-nexs/hotfixes/<key>/\`. Legacy \`hotfix.md\` tasks remain resumable.
+2. Bind intended paths, required P0/P1 rollback fields, and actual local verification commands before dispatch. Use fresh \`cc-nexs.hotfix-developer\`, \`cc-nexs.hotfix-reviewer\`, and post-deployment \`cc-nexs.hotfix-verifier\` (or \`cc-nexs.hotfix-verifier-computer-use\`) sessions. Every severity, including P3, requires independent Review; file/line counts do not prove behavior.
+3. Preserve the existing delta Review limit across Review, test, and Gateway B feedback. Use \`revise-hotfix\` for an already-authorized same-fault revision, retaining key/branch and history while invalidating current evidence. Contract expansion uses \`--promote-lean\` beside the original BUG and returns to Gateway A without reserving another number.
+4. Missing post-deployment verification capability becomes recoverable \`manual_required\`. Only explicit user authorization through \`approve-release --test-exception\` may accept that real deployed environment gap with passed exact local/Review evidence and rollback proof. Preserve the test gap; the exception does not authorize production deployment. Never merge test into base or force push.
 ` : ''}
 
 ## Required Pi Prerequisites

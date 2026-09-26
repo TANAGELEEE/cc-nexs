@@ -199,7 +199,7 @@ test('Lean evidence is candidate-bound and candidate changes invalidate stale ap
     progress.gates.release = { approved: true, binding: { candidate_fingerprint: 'old' } };
     writeProgressV2(file, progress);
     const source = { api: 'abc123' };
-    recordLocalVerification(file, { source, status: 'passed', evidence: ['build', 'smoke'] });
+    recordLocalVerification(file, { source, status: 'passed', evidence: [{ check: 'build', result: 'passed', command: 'npm run build', exit_code: 0, proof: 'compiled successfully' }] });
     recordConsolidatedReview(file, { source, status: 'passed' });
     let saved = readProgressV2(file);
     assert.equal(saved.local_verification.candidate_fingerprint, candidateFingerprint(source));
@@ -222,7 +222,7 @@ test('consolidated Review rejects a candidate not covered by local verification'
   const file = join(root, 'progress.json');
   try {
     writeProgressV2(file, createProgressV2({ featureId: '03c', featureSlug: 'review-bind', preset: 'preset-standard' }));
-    recordLocalVerification(file, { source: { api: 'abc123' }, status: 'passed' });
+    recordLocalVerification(file, { source: { api: 'abc123' }, status: 'passed', evidence: [{ check: 'smoke', result: 'passed', command: 'node smoke.mjs', exit_code: 0, proof: 'API smoke passed' }] });
     assert.throws(
       () => recordConsolidatedReview(file, { source: { api: 'def456' }, status: 'passed' }),
       /same candidate/,
@@ -241,7 +241,7 @@ test('Lean Review accepts exact-candidate local evidence deferred to test', () =
     recordLocalVerification(file, {
       source,
       status: 'deferred_to_test',
-      evidence: [{
+      evidence: [{ check: 'compile', result: 'passed', command: 'mvn package', exit_code: 0, proof: 'BUILD SUCCESS' }, {
         check: 'backend-start',
         result: 'deferred_to_test',
         reason: 'required infrastructure is unavailable locally',
@@ -268,7 +268,7 @@ test('Lean rejects mixed failed/deferred evidence and requires every deferral in
     assert.throws(() => recordLocalVerification(file, {
       source,
       status: 'deferred_to_test',
-      evidence: [deferred, { check: 'compile', result: 'failed' }],
+      evidence: [deferred, { check: 'compile', result: 'failed', command: 'mvn package', exit_code: 1, proof: 'COMPILATION ERROR' }],
     }), /structured test deferral evidence/);
     assert.throws(() => recordLocalVerification(file, {
       source,
@@ -276,7 +276,7 @@ test('Lean rejects mixed failed/deferred evidence and requires every deferral in
       evidence: [deferred, { check: 'lint', result: 'blocked' }],
     }), /structured test deferral evidence/);
 
-    recordLocalVerification(file, { source, status: 'deferred_to_test', evidence: [deferred] });
+    recordLocalVerification(file, { source, status: 'deferred_to_test', evidence: [{ check: 'compile', result: 'passed', command: 'mvn package', exit_code: 0, proof: 'BUILD SUCCESS' }, deferred] });
     const started = beginTestRelease(file, { source });
     completeTestRelease(file, {
       attemptId: started.attempt.id,
@@ -368,6 +368,49 @@ test('test release attempts are idempotent and retain integration plus verificat
     assert.equal(attempt.status, 'verified');
     assert.equal(progress.delivery.test.status, 'verified');
     assert.equal(progress.events.length, 5);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('invalidated test attempts retain history and require a fresh release even for the same candidate', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-invalidated-release-'));
+  try {
+    for (const status of ['running', 'succeeded', 'verified', 'deployed_needs_manual_verification']) {
+      const file = join(root, `${status}.json`);
+      const source = { api: 'abc123' };
+      writeProgressV2(file, createProgressV2({ featureId: 'scope-fix', featureSlug: 'fix', preset: 'preset-standard', mode: 'hotfix' }));
+      const first = beginTestRelease(file, { source });
+      const deployed = {
+        attemptId: first.attempt.id, status: 'succeeded', pipeline: { id: '42' },
+        deployment: { environment: 'test' }, environmentRevision: { api: 'abc123' },
+      };
+      if (status !== 'running') completeTestRelease(file, deployed);
+      if (status === 'verified' || status === 'deployed_needs_manual_verification') {
+        recordTestVerification(file, {
+          attemptId: first.attempt.id,
+          result: status === 'verified' ? 'passed' : 'manual_required', evidence: ['original evidence'],
+        });
+      }
+      const progress = readProgressV2(file);
+      const original = progress.delivery.test.attempts[0];
+      original.invalidated_at = new Date().toISOString();
+      original.invalidation_reason = 'authorized scope revision';
+      progress.delivery.test.status = 'idle';
+      writeProgressV2(file, progress);
+      assert.throws(() => recordTestVerification(file, { attemptId: original.id, result: 'passed' }), /attempt was invalidated/);
+      assert.throws(() => completeTestRelease(file, deployed), /attempt was invalidated/);
+      assert.throws(() => recordTestIntegration(file, {
+        attemptId: original.id, repository: 'api', sourceCommit: source.api,
+        targetBranch: 'test', targetBefore: 'base', integrationCommit: source.api,
+      }), /attempt was invalidated/);
+      const next = beginTestRelease(file, { source });
+      assert.equal(next.reused, false);
+      assert.equal(next.attempt.id, 'test-release-2');
+      assert.equal(next.attempt.verification, null);
+      assert.deepEqual(readProgressV2(file).delivery.test.attempts[0], original);
+      assert.equal(beginTestRelease(file, { source }).reused, true);
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -525,6 +568,37 @@ test('deployed failures and rejected acceptance invalidate stale release and G2 
     assert.equal(saved.delivery.test.status, 'idle');
     assert.equal(saved.gates.g2.approved, false);
     assert.equal(saved.delivery.test.attempts[0].status, 'verified');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
+test('local verification mutation rejects unstructured and contradictory results before saving', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-progress-invalid-evidence-'));
+  const file = join(root, 'progress.json');
+  try {
+    writeProgressV2(file, createProgressV2({ featureId: 'evidence', featureSlug: 'validation', preset: 'preset-standard' }));
+    const passed = { check: 'regression', result: 'passed', command: 'node --test bug.test.mjs', exit_code: 0, proof: '1 test passed' };
+    for (const evidence of [[], ['passed'], [{ ...passed, result: 'failed', exit_code: 1 }], [{ ...passed, proof: '' }], [passed, passed]]) {
+      assert.throws(() => recordLocalVerification(file, { source: { api: 'abc123' }, status: 'passed', evidence }), /local verification|local evidence/);
+    }
+    assert.equal(readProgressV2(file).revision, 0);
+    assert.equal(readProgressV2(file).local_verification.status, 'idle');
+    recordLocalVerification(file, { source: { api: 'abc123' }, status: 'passed', evidence: [passed] });
+    assert.equal(readProgressV2(file).local_verification.status, 'passed');
+    const valid = readProgressV2(file);
+    for (const evidence of [[], [{ ...passed, result: 'failed', exit_code: 1 }]]) {
+      const old = structuredClone(valid);
+      old.local_verification.attempts.at(-1).evidence = evidence;
+      writeProgressV2(file, old);
+      assert.throws(() => recordConsolidatedReview(file, { source: { api: 'abc123' }, status: 'passed' }), /structured evidence|may contain only passed evidence/);
+      assert.equal(readProgressV2(file).review.status, 'idle');
+    }
+    const newerFailure = structuredClone(valid);
+    newerFailure.local_verification.attempts.push({ ...valid.local_verification.attempts[0], id: 'local-verify-2', status: 'failed' });
+    writeProgressV2(file, newerFailure);
+    assert.throws(() => recordConsolidatedReview(file, { source: { api: 'abc123' }, status: 'passed' }), /latest passing/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

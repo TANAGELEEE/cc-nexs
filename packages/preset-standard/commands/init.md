@@ -14,14 +14,14 @@ argument-hint: "<需求描述> [--mode=lean|hotfix|fast|full] [--risk-tier=auto|
 - `$1` = 需求描述（必填，中英文都行）
 - `--mode=lean|hotfix|fast|full` 流水线模式（新需求默认 `lean`）
   - `lean`：计划门禁、并行实现、本地验证、一次集中 Review、test 验收、发布门禁
-  - `hotfix`：独立编号/feature 分支/latest-base worktree 的 mini-Lean；绝不复用旧需求分支或状态
+  - `hotfix`：兼容入口，直接调用 `init-hotfix` 创建修复分支与 BUG 文档；不占需求号
   - `full`：五方异构（Planner/Tech Lead/SA/QA/Evaluator）
   - `fast`：三角色合并（Fullstack/Reviewer/Verifier），单 sprint，比 full 少 ~50% 调用
 - `--id=<编号>` 强制使用指定编号（覆盖自动续号）
 - `--risk-tier=auto|low|medium|high|critical` Feature 风险下限（默认 `auto`）。显式 high/critical 可让首次 Lean Planner 直接升级；自动值仍由计划或 Hotfix severity 判定。
 - `--slug=<短名>` 强制使用指定 slug（覆盖自动生成）
 - `--repos=a,b` 初始化时同时创建的代码仓库 worktree；docs repository 总是包含。未指定时先只建 docs，RECON/Planner 确认影响仓库后由 Custodian 扩展。
-- `--brainstorm` 初始化完成后立即读取并遵循 brainstorming skill 文件，进入 Socratic 对话把一句话诉求展成完整 requirements.md（不传就只输出提示，不自动开启）
+- `--brainstorm` 仅适用于 Lean/Fast/Full，按需补全 requirements.md；Hotfix 直接填写 BUG 范围，不进入 requirements 脑暴
 - 工作区模式始终由 Git Custodian 为 workspace 中命中的每个仓库建立独立 worktree；不提供会污染当前分支的 `--no-worktree` 降级。
 
 ## 执行步骤
@@ -69,9 +69,21 @@ case "$RISK_TIER" in
 esac
 
 echo "🛠️  模式: ${MODE}"
-[ "$BRAINSTORM" = "1" ] && echo "🧠 init 完成后将自动进入 brainstorming"
+[ "$BRAINSTORM" = "1" ] && [ "$MODE" != "hotfix" ] && echo "🧠 init 完成后将自动进入 brainstorming"
 echo "🌲 Git Custodian 将按 workspace 配置建立多仓 worktree"
 ```
+
+### 1.5 Hotfix 提前分流
+
+若最终 `MODE=hotfix`，根据描述生成或复用 `--slug`，直接执行：
+
+```text
+node <plugin-root>/lib/cc-nexs-cli.mjs init-hotfix <slug> --description "<原始描述>" [--repos a,b]
+```
+
+需要关联旧需求或自定义 BUG 路径时，按 `/cc-nexs:init-hotfix` 传递 `--related`、`--bug-key`、`--bug-file`。`--id` 是需求编号参数，不能用于 Hotfix 占号。输出控制器返回的 bug-key、BUG 文档、机器状态和 worktree，再继续 `/cc-nexs:hotfix <key>`。Hotfix 到此结束初始化：不运行后续编号、占位提交、需求模板或 `--brainstorm` 步骤。
+
+以下步骤仅适用于 Lean/Fast/Full。
 
 ### 2. 决定编号
 
@@ -159,8 +171,8 @@ docs worktree 此时已经包含第一阶段占号目录。分支统一为 `feat
 CC_NEXS_RESOLVED_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CODEX_PLUGIN_ROOT:-${CC_NEXS_PLUGIN_ROOT:-}}}}"
 [ -n "$CC_NEXS_RESOLVED_PLUGIN_ROOT" ] || { echo "❌ 找不到 plugin root（需 CLAUDE_PLUGIN_ROOT / PLUGIN_ROOT / CODEX_PLUGIN_ROOT / CC_NEXS_PLUGIN_ROOT）"; exit 1; }
 REQ_DIR="${DOC_WORKTREE}/doc/${ID}.${SLUG}"
-# Lean/hotfix 只复制各自最小文档和机器状态；fast/full 保持旧模板集合。
-if [ "$MODE" = "lean" ] || [ "$MODE" = "hotfix" ]; then
+# Lean 只复制最小文档和机器状态；Fast/Full 保持旧模板集合。
+if [ "$MODE" = "lean" ]; then
   cp -r "${CC_NEXS_RESOLVED_PLUGIN_ROOT}/templates/${MODE}/"* "${REQ_DIR}/"
   rm -f "${REQ_DIR}/README.md"
 else
@@ -168,7 +180,7 @@ else
 fi
 ```
 
-Lean 包含 requirements.md / plan.md；hotfix 只有 hotfix.md；两者另含 progress.json / progress.md / config.json。fast/full 保持原模板集合。
+Lean 包含 requirements.md / plan.md 和 progress.json / progress.md / config.json。Fast/Full 保持原模板集合。Hotfix 已在步骤 1.5 使用独立 BUG 文档和本地机器状态。
 
 ### 6. 占位符替换
 
@@ -210,12 +222,12 @@ fi
 让用户启动时已有 PM 给的"一句话诉求"作为基线，省得 PM 还要再敲一遍。
 
 ```bash
-REQ_FILE="${REQ_DIR}/$([ "$MODE" = "hotfix" ] && echo hotfix.md || echo requirements.md)"
+REQ_FILE="${REQ_DIR}/requirements.md"
 # 在第一行 # 标题后插入用户原始描述作为"业务诉求"摘要
 # 具体插入位置由 Claude 按 requirements.md 模板结构判断
 ```
 
-实际操作：Lean 注入 requirements.md；hotfix 注入 hotfix.md 的“现象”，并要求填写 severity/影响/范围字段后运行 `/cc-nexs:hotfix <id>`。
+将原始描述注入 requirements.md。Hotfix 的初始现象由 `init-hotfix` 写入 BUG 文档。
 
 ### 8. 记录仓库分配
 
@@ -237,7 +249,7 @@ REQ_FILE="${REQ_DIR}/$([ "$MODE" = "hotfix" ] && echo hotfix.md || echo requirem
    编号:    ${ID}
    短名:    ${SLUG}
    描述:    ${DESC}
-   模式:    ${MODE}              ← lean | hotfix | fast | full
+   模式:    ${MODE}              ← lean | fast | full
    目录:    ${REQ_DIR}/
    分支:    ${BRANCH}
    工作树:  ${WORK_DIR}           ← 走 worktree 时是 .worktrees/<id>-<slug>/
@@ -272,7 +284,7 @@ REQ_FILE="${REQ_DIR}/$([ "$MODE" = "hotfix" ] && echo hotfix.md || echo requirem
 
 不要去调 `/cc-nexs:brainstorm` 这个 slash command——直接遵循 skill 文件里的流程清单即可（避免重复校验目录、重复加载 skill）。
 
-用户终审通过后，按 skill 的"交棒话术"提示用户跑 `/cc-nexs:run ${ID}`，**不要**自动调 run。
+脑暴完成后，Lean 进入 `/cc-nexs:plan ${ID}`，Fast/Full 进入 `/cc-nexs:run ${ID}`。已有继续执行的授权且无关键缺口时继续，不把脑暴变成新增审批点。
 
 ## 用法示例
 

@@ -182,7 +182,7 @@ test('test release integrates candidates, invokes structured driver, records evi
       context: 'implementation',
       fingerprint: candidateFingerprint(exactSource),
       source: exactSource,
-      evidence: ['compile and focused tests passed'],
+      evidence: [{ check: 'regression', result: 'passed', command: 'node --test regression.test.mjs', exit_code: 0, proof: 'regression passed' }],
       completed_at: new Date().toISOString(),
     }],
   };
@@ -201,6 +201,12 @@ test('test release integrates candidates, invokes structured driver, records evi
       paths: ['web.txt'],
     };
     writeProgressV2(progressFile, completeProgress);
+    const invalidLocal = structuredClone(completeProgress);
+    invalidLocal.local_verification.attempts.at(-1).evidence = [];
+    writeProgressV2(progressFile, invalidLocal);
+    assert.throws(() => runCcNexsCommand(['release-test', '05', '--dry-run', '--progress', progressFile], { cwd: root }), /structured evidence/);
+    writeProgressV2(progressFile, completeProgress);
+
 
     const approvedPlan = readFileSync(join(reqDir, 'plan.md'), 'utf8');
     writeFileSync(join(reqDir, 'plan.md'), approvedPlan.replace('test_delivery.other: local', 'test_delivery.other: deploy'));
@@ -397,7 +403,7 @@ test('resume recovers the exact running attempt after integration without anothe
     candidate_fingerprint: candidateFingerprint(source),
     attempts: [{
       id: 'local-verify-1', status: 'passed', context: 'implementation',
-      fingerprint: candidateFingerprint(source), source, evidence: ['focused tests passed'],
+      fingerprint: candidateFingerprint(source), source, evidence: [{ check: 'regression', result: 'passed', command: 'node --test regression.test.mjs', exit_code: 0, proof: 'regression passed' }],
       completed_at: new Date().toISOString(),
     }],
   };

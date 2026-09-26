@@ -1,5 +1,12 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+
+import { createProgressV2, writeProgressV2 } from './progress-v2.mjs';
 
 import {
   isGitMutation,
@@ -68,4 +75,51 @@ test('Lean planning and evidence roles write only their two-document contract', 
   assert.equal(roleBoundaryViolation({ role: 'lean-reviewer', toolName: 'edit', filePath: 'docs/doc/01/plan.md' }), null);
   assert.match(roleBoundaryViolation({ role: 'lean-reviewer', toolName: 'write', filePath: 'docs/doc/01/review.md' }), /write denied/);
   assert.match(roleBoundaryViolation({ role: 'lean-verifier', toolName: 'write', filePath: 'docs/doc/01/test-report.md' }), /write denied/);
+});
+
+test('Hotfix evidence roles and Claude hook write only the current assigned BUG document', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-role-bug-'));
+  try {
+    const stateDir = join(root, '.cc-nexs', 'hotfixes', 'fix-1');
+    const docs = join(root, 'docs');
+    mkdirSync(stateDir, { recursive: true });
+    mkdirSync(join(docs, 'notes'), { recursive: true });
+    writeFileSync(join(root, '.cc-nexs', 'workspace.json'), '{}');
+    writeFileSync(join(docs, 'notes', 'custom-bug.md'), '# Current BUG\n');
+    writeFileSync(join(docs, 'notes', 'other.md'), '# Other task\n');
+    writeFileSync(join(docs, 'hotfix.md'), '# Legacy name in another task\n');
+    const progressPath = join(stateDir, 'progress.json');
+    const progress = createProgressV2({ featureId: 'fix-1', featureSlug: 'fix', preset: 'preset-standard', mode: 'hotfix' });
+    progress.repositories.docs = { worktree: 'docs', branch: 'hotfix/fix-1', candidate: null };
+    progress.hotfix_document = { repository: 'docs', path: 'notes/custom-bug.md' };
+    writeProgressV2(progressPath, progress);
+    for (const role of ['hotfix-reviewer', 'hotfix-verifier', 'cc-nexs.hotfix-verifier-computer-use']) {
+      const args = { role, toolName: 'write', progressPath, cwd: docs };
+      assert.equal(roleBoundaryViolation({ ...args, filePath: 'notes/custom-bug.md' }), null);
+      assert.match(roleBoundaryViolation({ ...args, filePath: 'notes/other.md' }), /write denied/);
+      assert.match(roleBoundaryViolation({ ...args, filePath: 'hotfix.md' }), /write denied/);
+      assert.match(roleBoundaryViolation({ ...args, progressPath: null, filePath: 'notes/custom-bug.md' }), /write denied/);
+    }
+    const hook = join(dirname(fileURLToPath(import.meta.url)), '..', 'hooks', 'role-boundary-guard.mjs');
+    for (const [filePath, status] of [['notes/custom-bug.md', 0], ['notes/other.md', 2]]) {
+      const result = spawnSync(process.execPath, [hook], {
+        cwd: docs, input: JSON.stringify({ tool_name: 'Write', tool_input: { file_path: filePath } }), encoding: 'utf8',
+        env: { ...process.env, CC_NEXS_ROLE: 'hotfix-reviewer', CC_NEXS_PROGRESS_FILE: progressPath, CC_NEXS_REQ_DIR: '' },
+      });
+      assert.equal(result.status, status, result.stderr);
+    }
+    const fallback = spawnSync(process.execPath, [hook], {
+      cwd: docs, input: JSON.stringify({ tool_name: 'Edit', tool_input: { file_path: 'notes/custom-bug.md' } }), encoding: 'utf8',
+      env: { ...process.env, CC_NEXS_ROLE: 'hotfix-verifier', CC_NEXS_PROGRESS_FILE: '', CC_NEXS_REQ_DIR: stateDir },
+    });
+    assert.equal(fallback.status, 0, fallback.stderr);
+    const outside = join(root, 'outside');
+    mkdirSync(outside);
+    writeFileSync(join(outside, 'custom-bug.md'), '# Outside\n');
+    rmSync(join(docs, 'notes'), { recursive: true });
+    symlinkSync(outside, join(docs, 'notes'));
+    assert.match(roleBoundaryViolation({ role: 'hotfix-reviewer', toolName: 'write', progressPath, cwd: docs, filePath: 'notes/custom-bug.md' }), /cannot resolve assigned document/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

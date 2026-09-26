@@ -1,0 +1,6 @@
+interface:
+  display_name: "/cc-nexs:init-hotfix"
+  short_description: "Run /cc-nexs:init-hotfix explicitly"
+  default_prompt: "Use $cc-nexs-init-hotfix to run /cc-nexs:init-hotfix."
+policy:
+  allow_implicit_invocation: false

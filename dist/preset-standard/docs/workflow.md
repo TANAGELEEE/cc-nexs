@@ -200,15 +200,19 @@ TEST_BLOCKED -> FIX -> FIX_REVIEW -> TEST_RELEASE -> REGRESSION
 
 ## Hotfix
 
-Hotfix 是独立 `mode=hotfix` 的 mini-Lean：从各仓最新 base 创建自己的 `feature/<id>-<slug>` 与 worktree，只维护 `hotfix.md` 和机器状态。关联旧需求只是元数据。
+Hotfix 通过 `init-hotfix` 从各仓最新 base 建立 `hotfix/<key>` 和 `.worktrees/<key>/<repo>/`，不占共享需求号、不 push 占位文件。有关联需求时，BUG 文档写入 `doc/<id>.<slug>/bugs/BUG-<key>.md`；否则写入 docs 仓的 `hotfix/<key>/BUG-001.md`。机器状态位于 workspace `.cc-nexs/hotfixes/<key>/`，由 `progress.hotfix_document` 关联文档。旧 hotfix.md 任务保留兼容路径。
 
 ```text
-scope bind -> implement -> local verify -> one Review (P3 machine skip)
+scope bind -> implement -> local verify -> independent Review (all severities)
 -> exact candidate -> test -> independent black-box verify
 -> HOTFIX_RELEASE_PENDING_HUMAN -> exact candidate -> base
 ```
 
-P0/P1/P2 只做一次集中 Review；任何修复全生命周期只允许一次 delta Review。P3 仅在单文件、changed lines ≤ 20、无行为变化的确定性证明后跳过模型 Review，但仍须 test smoke。契约/schema/权限或大重构直接转新 Lean/Full 需求。Gateway B 的 evidence 意见只补文档，implementation 意见走唯一 delta + 新 test，scope 意见拒绝扩边。禁止从 test 合并 base；两条合并都使用同一 feature candidate。生产发布仍人工。
+绑定范围必须包含实际 intended_paths 和本地命令矩阵；P0/P1 还须受影响 AC、回滚负责人和步骤。没有 driver 时可登记绑定命令的真实结构化证据，Hotfix 不允许延期。P3 也必须 Review，文件数/行数仅作风险参考。保留已有一次 delta 与失败熔断，不增加固定轮次。
+
+同一故障的授权路径/分级修订用 `revise-hotfix` 在原 key/分支重绑，保留历史并失效当前证据。真实契约/schema/权限扩展用 `--promote-lean`，在 BUG 旁建立 `<BUGstem>.lean/`、迁移状态并返回 Gateway A，不重新占号。Gateway B 的 evidence 意见只补文档，implementation 意见重新验证；禁止从 test 合并 base。
+
+实际 test 部署后，若环境能力导致 `manual_required`，可以依据用户明确授权在既有 Gateway B 使用 `approve-release --test-exception`。同一 candidate 必须已有通过的本地证据和独立 Review，并记录授权、环境限制和回滚证据；产品失败不能豁免。保留 test 未通过事实，例外只授权配置 base 集成，不默认授权生产部署。最终 docs candidate 仅提交本次 BUG 文档，机器状态留在 workspace。
 
 ## Gate 与停止条件
 

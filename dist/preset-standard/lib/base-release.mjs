@@ -1,7 +1,8 @@
+import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 import { resolveCandidateContext } from './candidate-context.mjs';
-import { assertHotfixScopeCurrent } from './hotfix-contract.mjs';
+import { assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
 import {
   assertCandidateContainsRemoteBase,
   cleanupMergedWorktree,
@@ -9,17 +10,20 @@ import {
 } from './git-custodian.mjs';
 import {
   beginBaseRelease,
+  assertTestAttemptNotInvalidated,
   candidateFingerprint,
   completeBaseRelease,
   readProgressV2,
   recordBaseIntegration,
 } from './progress-v2.mjs';
-import { assertPlanApprovalCurrent } from './plan-contract.mjs';
+import { assertPlanApprovalCurrent, extractApprovalScope } from './plan-contract.mjs';
+import { assertRecordedLocalVerification, extractLocalVerificationChecks } from './local-evidence.mjs';
 import { transitionState } from './progress-io.mjs';
 import { resolveFeatureProgress } from './approval-command.mjs';
+import { assertReleaseExceptionCurrent } from './release-exception.mjs';
 
 export function runBaseRelease({ cwd = process.cwd(), featureId, progressPath = null } = {}) {
-  // Code candidates are the immutable, test-verified release payload. The docs
+  // Code candidates are the immutable, approved release payload. The docs
   // worktree contains the live progress ledger, so it is finalized and merged
   // last by Git Custodian after the orchestrator records COMPLETE.
   const progressFile = resolveFeatureProgress({ cwd, featureId, progressPath });
@@ -50,16 +54,18 @@ function executeBaseRelease(context) {
   if (currentFingerprint !== gate.binding.candidate_fingerprint) {
     throw new Error('[cc-nexs] candidate fingerprint changed after release approval');
   }
-  if (context.progress.mode === 'hotfix' && context.progress.hotfix?.severity === 'P3') {
-    const localAttempt = context.progress.local_verification?.attempts?.findLast((item) => item.status === 'passed' && item.fingerprint === currentFingerprint);
-    if (!localAttempt?.evidence?.some((item) => item?.type === 'p3_boundary' && item.files === 1 && item.lines <= 20)) {
-      throw new Error('[cc-nexs] approved P3 candidate no longer has deterministic boundary evidence');
-    }
-  } else if (context.progress.review?.status !== 'passed' || context.progress.review.candidate_fingerprint !== currentFingerprint) {
+  if (context.progress.review?.status !== 'passed' || context.progress.review.candidate_fingerprint !== currentFingerprint) {
     throw new Error('[cc-nexs] approved candidate no longer has a passing consolidated Review');
   }
+  const localChecks = extractLocalVerificationChecks(context.progress.mode === 'lean'
+    ? extractApprovalScope(readFileSync(join(dirname(context.progressFile), 'plan.md'), 'utf8'))
+    : extractHotfixScope(readFileSync(resolveHotfixDocument(context.progress, dirname(context.progressFile)), 'utf8')).raw);
+  assertRecordedLocalVerification(context.progress, { source: context.source, fingerprint: currentFingerprint, expectedChecks: localChecks });
   const testAttempt = context.progress.delivery?.test?.attempts?.find((item) => item.id === gate.binding.test_attempt);
-  if (!testAttempt || testAttempt.status !== 'verified' || testAttempt.fingerprint !== currentFingerprint) {
+  assertTestAttemptNotInvalidated(testAttempt);
+  if (gate.binding.test_exception) {
+    assertReleaseExceptionCurrent(context.progress, gate.binding);
+  } else if (!testAttempt || testAttempt.status !== 'verified' || testAttempt.fingerprint !== currentFingerprint) {
     throw new Error('[cc-nexs] approved test verification is missing or stale');
   }
   if (Object.keys(testedSource).length !== Object.keys(context.source).length) {

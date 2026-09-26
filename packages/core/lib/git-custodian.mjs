@@ -95,18 +95,20 @@ export function createWorkspaceWorktrees(workspace, {
   featureSlug,
   repositoryIds = null,
   recoverExisting = false,
+  mode = 'feature',
 }) {
   assertSegment(featureId, 'feature id');
   assertSegment(featureSlug, 'feature slug');
+  if (!['feature', 'hotfix'].includes(mode)) throw new Error('[cc-nexs] invalid worktree mode');
   const reservationFile = join(workspace.projectRoot, '.cc-nexs', 'reservations', `${featureId}.json`);
-  if (!existsSync(reservationFile)) {
+  if (mode === 'feature' && !existsSync(reservationFile)) {
     throw new Error(`[cc-nexs] no reservation for feature ${featureId}; run reserve first`);
   }
-  const reservation = JSON.parse(readFileSync(reservationFile, 'utf8'));
-  if (reservation.feature_slug !== featureSlug) {
+  const reservation = mode === 'feature' ? JSON.parse(readFileSync(reservationFile, 'utf8')) : null;
+  if (reservation && reservation.feature_slug !== featureSlug) {
     throw new Error(`[cc-nexs] feature ${featureId} is reserved for slug "${reservation.feature_slug}", not "${featureSlug}"`);
   }
-  const featureKey = `${featureId}-${featureSlug}`;
+  const featureKey = mode === 'hotfix' ? featureId : `${featureId}-${featureSlug}`;
   const featureRoot = assertWithin(workspace.worktree_root, join(workspace.worktree_root, featureKey));
   mkdirSync(featureRoot, { recursive: true });
   const selectedIds = repositoryIds || (workspace.docs_repository ? [workspace.docs_repository] : workspace.repositories.map((repo) => repo.id));
@@ -117,7 +119,7 @@ export function createWorkspaceWorktrees(workspace, {
   const newlyCreated = [];
   try {
     for (const repo of selected) {
-      const branch = `feature/${featureKey}`;
+      const branch = `${mode}/${featureKey}`;
       const worktree = assertWithin(workspace.worktree_root, join(featureRoot, assertSegment(repo.id, 'repository id')));
       const pathExists = existsSync(worktree);
       const branchExists = refExists(repo.absolute_path, `refs/heads/${branch}`);

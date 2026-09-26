@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-hotfix
-description: /cc-nexs:hotfix 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:hotfix 或 /skill:cc-nexs-hotfix 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard 独立 hotfix mini-Lean，并通过 pi-subagents 运行隔离角色。 独立 Hotfix mini-Lean：latest-base worktree、本地验证、一次集中 Review、test 黑盒验收、人工 base 门禁。
+description: /cc-nexs:hotfix 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:hotfix 或 /skill:cc-nexs-hotfix 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard 独立 Hotfix 分支与 BUG 文档，不占需求号，并通过 pi-subagents 运行隔离角色。 Hotfix：独立修复分支与 BUG 文档、本地验证、独立 Review、test 验收和 Gateway B。
 disable-model-invocation: true
 ---
 
@@ -10,13 +10,17 @@ Read and follow `../../../dist/preset-standard/commands/hotfix.md` as the author
 
 ## Deterministic Hotfix Controls
 
-Resolve `../../../packages/core/lib/cc-nexs-cli.mjs` relative to this SKILL.md. Bind the completed hotfix scope with:
+Resolve `../../../packages/core/lib/cc-nexs-cli.mjs` relative to this SKILL.md. Follow the authoritative command for the applicable initialization, binding, or authorized revision action:
 
 ```text
-node <resolved-cli-path> start-hotfix <feature-id> [--level P0|P1|P2|P3] [--related <feature-id>]
+node <resolved-cli-path> init-hotfix <slug> --description "<bug description>" [--bug-key YYYYMMDD-slug] [--related <feature-id>] [--repos a,b] [--bug-file <docs-relative.md>]
+node <resolved-cli-path> start-hotfix <bug-key-or-legacy-id> [--level P0|P1|P2|P3] [--related <feature-id>]
+node <resolved-cli-path> revise-hotfix <bug-key-or-legacy-id> --reason "<reason>" --authorization-evidence "<existing user authorization>" [--promote-lean]
 ```
 
-Subsequent local verification, Review recording, test release/verification, release approval, and base integration must use the packaged controls named by the authoritative command. Never edit progress state or perform ad hoc merge/push operations.
+New Hotfix tasks use `hotfix/<key>` and one assigned BUG document; never reserve a shared feature number or publish placeholders. Resolve the BUG through `progress.hotfix_document` and keep machine state in `.cc-nexs/hotfixes/<key>/`; legacy `hotfix.md` tasks remain resumable. Every severity, including P3, requires independent Review. Authorized revisions retain the key/branch and invalidate current evidence; Lean promotion still requires Gateway A.
+
+Subsequent local verification, Review recording, test release/verification, release approval, and base integration must use the packaged controls named by the authoritative command. Only an explicitly authorized `approve-release --test-exception` may accept an actual deployed `manual_required` environment gap with exact local/Review and rollback evidence; it preserves the unverified fact and does not authorize production deployment. Never edit progress state or perform ad hoc merge/push operations.
 
 ## P2 Runtime Contract
 
@@ -42,14 +46,14 @@ The example has two tasks, so `concurrency: 2`; for a real batch set it to `min(
 4. Never invoke Claude Code, the Claude Task tool, Codex CLI, or a nested `pi` CLI. Runtime adaptation changes dispatch only; preserve the authoritative command's paths, state transitions, gates, counters, validation, and stop behavior.
 5. Resolve one Hotfix model snapshot: P0/P1 automatically routes Reviewer to escalated; an explicit feature role profile remains final. Reviewer may use another model or the same model with higher thinking in a fresh child. Encode thinking in the pi-subagents `model` selector; public files ship no provider-specific model IDs.
 6. pi-subagents has no separate per-task `thinking` field. For a non-inherit selection, pass `provider/model:thinking` in the task `model`; for `inherit` with no thinking override, omit `model`; for `inherit` with a thinking override, resolve the active provider/model and append `:thinking`. After `subagent_wait`, retry ordered `fallback_models` only for failed/unavailable tasks in a new bounded parallel call; never rerun successful siblings.
-7. Role children never mutate Git or `progress.md` / `progress.json`. The parent owns state transitions and Git Custodian operations, and preserves `CC_NEXS_RUNTIME=pi` plus `CC_NEXS_PLUGIN_ROOT`.
+7. Role children never mutate Git or `progress.md` / `progress.json`. The parent owns state transitions and Git Custodian operations, and preserves `CC_NEXS_RUNTIME=pi` plus `CC_NEXS_PLUGIN_ROOT`. For Hotfix children, also pass `CC_NEXS_PROGRESS_FILE` and the resolved `BUG_FILE`; machine-state directories do not determine document paths.
 
 ## Pi Hotfix Dispatch Contract
 
-1. Initialize and bind the standalone `mode=hotfix` / `hotfix.md` scope before dispatch; scope expansion becomes a new Lean/Full change.
-2. Use fresh `cc-nexs.hotfix-developer`, `cc-nexs.hotfix-reviewer`, and post-deployment `cc-nexs.hotfix-verifier` (or `cc-nexs.hotfix-verifier-computer-use`) sessions. P3 Review skipping still requires deterministic boundary proof.
-3. Preserve the single lifetime delta Review across Review, test, and Gateway B feedback. Missing browser capability becomes recoverable `manual_required`, not a delivery failure.
-4. Only `approve-release` authorizes the exact verified candidate to configured base branches. Never merge test into base and never force push.
+1. Initialize `mode=hotfix` with `init-hotfix`: create `hotfix/<key>` and the assigned BUG without a shared feature number or placeholder push. Resolve the BUG through `progress.hotfix_document`; machine state stays in `.cc-nexs/hotfixes/<key>/`. Legacy `hotfix.md` tasks remain resumable.
+2. Bind intended paths, required P0/P1 rollback fields, and actual local verification commands before dispatch. Use fresh `cc-nexs.hotfix-developer`, `cc-nexs.hotfix-reviewer`, and post-deployment `cc-nexs.hotfix-verifier` (or `cc-nexs.hotfix-verifier-computer-use`) sessions. Every severity, including P3, requires independent Review; file/line counts do not prove behavior.
+3. Preserve the existing delta Review limit across Review, test, and Gateway B feedback. Use `revise-hotfix` for an already-authorized same-fault revision, retaining key/branch and history while invalidating current evidence. Contract expansion uses `--promote-lean` beside the original BUG and returns to Gateway A without reserving another number.
+4. Missing post-deployment verification capability becomes recoverable `manual_required`. Only explicit user authorization through `approve-release --test-exception` may accept that real deployed environment gap with passed exact local/Review evidence and rollback proof. Preserve the test gap; the exception does not authorize production deployment. Never merge test into base or force push.
 
 
 ## Required Pi Prerequisites

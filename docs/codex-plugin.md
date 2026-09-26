@@ -88,7 +88,7 @@ Codex must write to exactly the same locations as Claude Code:
 | `lean` | `requirements.md` and `plan.md` are the only authored documents; `config.json`, `progress.json`, and `progress.md` are control files; HTML is rendered to a local temporary directory only |
 | `full` | `all-docs/doc/{id}.{slug}/requirements.md`, `repo-context.md`, `spec.md`, `sa-review.md`, `dev-plan.md`, `api-doc.md`, `deploy.md`, `test-cases.md`, `sa-test-review.md`, `test-report.md`, `bugs/`, `sa-code-review.md`, `acceptance.md`, `progress.md`, `README.md` |
 | `fast` | Same `all-docs/doc/{id}.{slug}/` directory, single-sprint artifacts, `repo-context.md` folded into Fullstack spec phase, `test-cases.md` + `test-report.md` from Verifier, `sa-code-review.md` + `acceptance.md` from Reviewer |
-| `hotfix` | Its own `all-docs/doc/{id}.{slug}/hotfix.md`; `config.json`, `progress.json`, and `progress.md` are control files. It never writes into an older feature directory. |
+| `hotfix` | The assigned BUG document: related `doc/<id>.<slug>/bugs/BUG-<key>.md`, otherwise docs `hotfix/<key>/BUG-001.md`. Machine state/config remain in workspace `.cc-nexs/hotfixes/<key>/`; `progress.hotfix_document` locates the BUG. Legacy `hotfix.md` tasks remain resumable. |
 | `compound` | `docs/solutions/<topic>.md` plus `all-docs/doc/{id}.{slug}/compound-summary.md` |
 
 Generated Codex skills explicitly forbid relocating these paths.
@@ -102,7 +102,7 @@ Generated Codex skills explicitly forbid relocating these paths.
 1. Planner creates one requirements document and one plan document, with optional parallel read-only research.
 2. Gateway A binds both documents by hash.
 3. Developers execute non-overlapping plan tasks in per-repository worktrees and feature branches.
-4. A deterministic local driver runs the available checks. If Lean has no driver, the parent runs only plan-approved commands and records exact command/exit/proof evidence; environment-only checks become structured `deferred_to_test` rather than repeated blockers. Hotfix still requires its driver.
+4. A deterministic local driver runs the available checks. If Lean has no driver, the parent runs only plan-approved commands and records exact command/exit/proof evidence; environment-only checks become structured `deferred_to_test` rather than repeated blockers. Hotfix may also record direct evidence for its frozen scope matrix; every required command must match and pass, and Hotfix cannot defer checks.
 5. The exact candidate is integrated to test and CI/deployment runs before any browser preflight.
 6. The deployed environment is verified independently; a local web may target the deployed test backend. Missing browser/login/URL capability records recoverable `manual_required` instead of blocking delivery.
 7. One independent consolidated Review reports all P0/P1 blockers; only one delta closure is allowed after fixes.
@@ -161,15 +161,15 @@ Both modes default to `auto_if_ready`; `--no-auto-test-release` explicitly opts 
 
 ### Hotfix
 
-`/cc-nexs:hotfix` is a standalone `mode=hotfix` mini-Lean flow:
+`/cc-nexs:hotfix` starts an independent repair without reserving a shared feature number:
 
-- initialize a new id, latest-base worktrees, and `feature/<id>-<slug>`;
-- bind the sole `hotfix.md` scope, then implement and run the configured local driver;
-- P0/P1/P2 get one independent concentrated Review; P3 skips only after deterministic single-file/20-line/non-behavioral proof;
-- integrate the exact candidate to test, verify it in an independent session, then stop at Gateway B;
-- merge the same feature candidate—not test—to configured base branches after approval.
+- `init-hotfix` creates `hotfix/<key>` and latest-base `.worktrees/<key>/<repo>/` assignments, plus one BUG document in docs; it never pushes placeholders.
+- Bind paths, severity, required P0/P1 AC/rollback fields, and the local verification matrix in that BUG. `progress.hotfix_document` identifies it; local machine files live in `.cc-nexs/hotfixes/<key>/`.
+- Run the configured driver or exact scope-bound commands with structured evidence, then independent consolidated Review for every severity, including P3. File/line counts cannot prove behavior or exempt Review.
+- Deliver the exact candidate to test, verify it independently, then obtain Gateway B approval before integrating that candidate to configured bases.
+- If actual test deployment succeeded but verification requires unavailable environment capability, explicit user authorization may use `approve-release --test-exception` with exact local/Review, environment, and rollback evidence. Preserve `manual_required`; this authorizes base integration only, not production deployment.
 
-Any repair consumes at most one lifetime delta Review. Contract/schema/permission changes or broad refactoring stop and become a new Lean/Full change. Reviewer may use another model or the same model at higher effort; independent native-agent context is mandatory.
+The existing delta/circuit limits remain. For an already-authorized revision of the same fault, `revise-hotfix` records the reason and authorization, rebinds in the existing key/branch, invalidates current evidence, and preserves history. Contract/schema/permission expansion uses `--promote-lean` to create `<BUGstem>.lean/` beside the BUG and return to Lean planning/Gateway A without a new reservation. Legacy `hotfix.md` tasks retain their compatibility path. Reviewer may use another model or the same model at higher effort; independent native-agent context is mandatory.
 
 ## Hooks
 

@@ -1,14 +1,16 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { approveDeployGate, approveHumanGate, transitionState } from './progress-io.mjs';
-import { approveProgressGate, readProgressV2, recoverApprovedImplementationSprint } from './progress-v2.mjs';
-import { assertHotfixScopeCurrent } from './hotfix-contract.mjs';
-import { assertPlanApprovalCurrent, planApprovalBinding } from './plan-contract.mjs';
+import { approveProgressGate, assertTestAttemptNotInvalidated, readProgressV2, recoverApprovedImplementationSprint } from './progress-v2.mjs';
+import { assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
+import { assertPlanApprovalCurrent, extractApprovalScope, planApprovalBinding } from './plan-contract.mjs';
+import { assertRecordedLocalVerification, extractLocalVerificationChecks } from './local-evidence.mjs';
 import { syncHotfixChangeStatuses, syncPlanChangeStatuses } from './release-change-docs.mjs';
 import { loadWorkspaceConfig } from './config-loader.mjs';
 import { assertImplementationApprovalCurrent, implementationApprovalBinding } from './implementation-plan.mjs';
+import { createReleaseExceptionBinding } from './release-exception.mjs';
 
 const GATES = new Set(['g1', 'g2', 'plan', 'release']);
 const SKIP_DIRS = new Set([
@@ -22,6 +24,7 @@ export function approveFeatureGate({
   sprint = null,
   approver = null,
   progressPath = null,
+  testException = null,
 } = {}) {
   if (!featureId) throw new Error('feature id is required');
   if (!GATES.has(gate)) throw new Error(`unsupported gate: ${gate || '(missing)'}`);
@@ -83,9 +86,17 @@ export function approveFeatureGate({
   } else if (gate === 'release') {
     if (!['lean', 'hotfix'].includes(before.mode)) throw new Error(`release gate requires lean or hotfix mode, found ${before.mode}`);
     const pendingState = before.mode === 'hotfix' ? 'HOTFIX_RELEASE_PENDING_HUMAN' : 'RELEASE_PENDING_HUMAN';
-    if (before.state !== pendingState) {
+    const manualState = before.mode === 'hotfix' ? 'HOTFIX_TEST_DEPLOYED_NEEDS_MANUAL_VERIFY' : 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY';
+    if (before.state !== pendingState && !(testException && before.state === manualState)) {
       const existing = before.gates.release;
       if (existing?.approved) {
+        assertTestAttemptNotInvalidated(before.delivery?.test?.attempts?.find((item) => item.id === existing.binding?.test_attempt));
+        if (before.mode === 'lean') assertPlanApprovalCurrent(before, dirname(progressFile));
+        else assertHotfixScopeCurrent(before, dirname(progressFile));
+        const localChecks = extractLocalVerificationChecks(before.mode === 'lean'
+          ? extractApprovalScope(readFileSync(join(dirname(progressFile), 'plan.md'), 'utf8'))
+          : extractHotfixScope(readFileSync(resolveHotfixDocument(before, dirname(progressFile)), 'utf8')).raw);
+        assertRecordedLocalVerification(before, { source: existing.binding?.source, fingerprint: existing.binding?.candidate_fingerprint, expectedChecks: localChecks });
         return approvalResult({ progressFile, progress: before, gate, sprint: null, approval: existing, alreadyApproved: true });
       }
       throw new Error(`release gate requires ${pendingState}, found ${before.state}`);
@@ -93,16 +104,17 @@ export function approveFeatureGate({
     if (before.mode === 'lean') assertPlanApprovalCurrent(before, dirname(progressFile));
     else assertHotfixScopeCurrent(before, dirname(progressFile));
     const attempt = before.delivery?.test?.attempts?.at(-1);
-    if (!attempt || attempt.status !== 'verified' || attempt.verification?.result !== 'passed') {
+    assertTestAttemptNotInvalidated(attempt);
+    const exceptionBinding = testException ? createReleaseExceptionBinding(before, testException) : null;
+    if (!exceptionBinding && (!attempt || attempt.status !== 'verified' || attempt.verification?.result !== 'passed')) {
       throw new Error('[cc-nexs] release approval requires a verified test release attempt');
     }
     const baseTargets = assertReleaseCandidateRefsCurrent({ progress: before, progressFile, attempt });
-    if (before.mode === 'hotfix' && before.hotfix?.severity === 'P3') {
-      const localAttempt = before.local_verification?.attempts?.findLast((item) => item.status === 'passed' && item.fingerprint === attempt.fingerprint);
-      if (!localAttempt?.evidence?.some((item) => item?.type === 'p3_boundary' && item.files === 1 && item.lines <= 20)) {
-        throw new Error('[cc-nexs] P3 release approval requires deterministic one-file/20-line boundary evidence');
-      }
-    } else if (before.review?.status !== 'passed' || before.review.candidate_fingerprint !== attempt.fingerprint) {
+    const localChecks = extractLocalVerificationChecks(before.mode === 'lean'
+      ? extractApprovalScope(readFileSync(join(dirname(progressFile), 'plan.md'), 'utf8'))
+      : extractHotfixScope(readFileSync(resolveHotfixDocument(before, dirname(progressFile)), 'utf8')).raw);
+    assertRecordedLocalVerification(before, { source: attempt.source, fingerprint: attempt.fingerprint, expectedChecks: localChecks });
+    if (before.review?.status !== 'passed' || before.review.candidate_fingerprint !== attempt.fingerprint) {
       throw new Error('[cc-nexs] release approval requires a consolidated review for the tested candidate');
     }
     const binding = {
@@ -113,10 +125,14 @@ export function approveFeatureGate({
       environment_revision: attempt.environment_revision,
       plan_binding: before.mode === 'lean' ? before.gates.plan?.binding?.combined_sha256 || null : null,
       hotfix_scope_binding: before.mode === 'hotfix' ? before.hotfix.scope_binding.hotfix_scope_sha256 : null,
+      ...(exceptionBinding && { test_exception: exceptionBinding }),
     };
-    const approved = approveProgressGate(progressFile, { gate: 'release', approver: actor, binding });
-    if (before.mode === 'hotfix') syncHotfixChangeStatuses(join(dirname(progressFile), 'hotfix.md'), approved.change_requests?.items);
+    const approved = approveProgressGate(progressFile, { gate: 'release', approver: actor, binding, expectedRevision: before.revision });
+    if (before.mode === 'hotfix') syncHotfixChangeStatuses(resolveHotfixDocument(before, dirname(progressFile)), approved.change_requests?.items);
     else syncPlanChangeStatuses(join(dirname(progressFile), 'plan.md'), approved.change_requests?.items);
+    if (exceptionBinding && before.state === manualState) {
+      transitionState(markdownFile, { from: manualState, to: pendingState, reason: 'human authorized base release with a bound test-environment exception; test remains unverified' });
+    }
   } else if (gate === 'g1') {
     const existing = before.gates.g1;
     if (existing?.approved && before.state !== 'SPEC_PENDING_HUMAN') {
@@ -324,6 +340,8 @@ export function resolveFeatureProgress({ cwd = process.cwd(), featureId, progres
   if (progressPath) {
     const explicit = resolve(cwd, progressPath);
     if (!existsSync(explicit)) throw new Error(`progress file not found: ${explicit}`);
+    const progress = readProgressV2(explicit);
+    if (!sameFeatureId(progress.feature.id, featureId)) throw new Error(`feature mismatch: requested ${featureId}, found ${progress.feature.id}`);
     return explicit;
   }
 
@@ -332,11 +350,22 @@ export function resolveFeatureProgress({ cwd = process.cwd(), featureId, progres
 
   const roots = discoverWorkspaceRoots(resolve(cwd));
   const candidates = [];
+  const worktreeRoots = [];
   for (const root of roots) {
+    let workspace = null;
+    try { workspace = loadWorkspaceConfig({ projectRoot: root }); } catch { /* Legacy discovery remains available for invalid workspace configs. */ }
+    const docsSource = workspace?.repositories.find((repo) => repo.id === workspace.docs_repository)?.absolute_path || join(root, 'all-docs');
+    const worktreeRoot = workspace?.worktree_root || join(root, '.worktrees');
+    worktreeRoots.push(worktreeRoot);
     for (const [searchRoot, depth] of [
-      [join(root, 'doc'), 2],
-      [join(root, 'all-docs', 'doc'), 2],
-      [join(root, '.worktrees'), 5],
+      [join(root, 'doc'), 6],
+      [join(root, 'all-docs', 'doc'), 6],
+      [join(docsSource, 'doc'), 6],
+      [join(docsSource, 'hotfix'), 6],
+      [join(root, '.cc-nexs', 'hotfixes'), 2],
+      [join(root, 'all-docs', 'hotfix'), 4],
+      [join(root, '.worktrees'), 8],
+      [worktreeRoot, 8],
     ]) {
       findProgressCandidates(searchRoot, featureId, depth, candidates);
     }
@@ -344,7 +373,10 @@ export function resolveFeatureProgress({ cwd = process.cwd(), featureId, progres
 
   const unique = dedupePaths(candidates);
   if (unique.length === 1) return unique[0];
-  const worktreeMatches = unique.filter((path) => path.includes(`${join('.worktrees', String(featureId))}-`));
+  const worktreeMatches = unique.filter((path) => worktreeRoots.some((root) => {
+    const rel = relative(root, path);
+    return rel && rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
+  }));
   if (worktreeMatches.length === 1) return worktreeMatches[0];
   if (unique.length === 0) throw new Error(`no progress.json found for feature ${featureId} from ${cwd}`);
   throw new Error(`multiple progress.json files found for feature ${featureId}; pass --progress explicitly:\n${unique.map((path) => `- ${path}`).join('\n')}`);
@@ -412,7 +444,7 @@ function discoverWorkspaceRoots(cwd) {
   const roots = new Set([cwd]);
   let current = cwd;
   while (true) {
-    if (existsSync(join(current, '.cc-nexs', 'workspace.yml'))) roots.add(current);
+    if (['workspace.yml', 'workspace.json'].some((name) => existsSync(join(current, '.cc-nexs', name)))) roots.add(current);
     const parent = dirname(current);
     if (parent === current) break;
     current = parent;
@@ -423,7 +455,7 @@ function discoverWorkspaceRoots(cwd) {
 
 function findWorkspaceRoots(root, depth, maxDepth, roots) {
   if (depth > maxDepth || !isDirectory(root)) return;
-  if (existsSync(join(root, '.cc-nexs', 'workspace.yml'))) roots.add(root);
+  if (['workspace.yml', 'workspace.json'].some((name) => existsSync(join(root, '.cc-nexs', name)))) roots.add(root);
   if (depth === maxDepth) return;
   for (const entry of safeReadDir(root)) {
     if (!entry.isDirectory() || shouldSkipDirectory(entry.name)) continue;

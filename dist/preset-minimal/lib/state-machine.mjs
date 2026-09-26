@@ -62,7 +62,7 @@ function isFastReviewRevisionState(state) {
  *       → [HOTFIX_REVIEWING → HOTFIX_FIXING → HOTFIX_LOCAL_REVERIFYING → HOTFIX_DELTA_REVIEW]
  *       → HOTFIX_CANDIDATE_READY → HOTFIX_TEST_RELEASE → HOTFIX_TEST_VERIFYING
  *       → HOTFIX_RELEASE_PENDING_HUMAN → HOTFIX_BASE_MERGING → COMPLETE
- *     P3 skips the model Review only after its one-file/20-line/non-behavioral boundary is proven.
+ *     Every severity retains independent Review; diff size is not proof of unchanged behavior.
  *
  * Role mapping (role identifier in preset → state slot):
  *   repo-scout                   → recon: produce repo-context.md (full only, optional)
@@ -128,7 +128,6 @@ function nextStepHotfix({ state, counters, thresholds, enabledRoles, workflow = 
     case 'HOTFIX_LOCAL_VERIFY_FAILED':
       return { next: 'HOTFIX_IMPLEMENTED', role: developer, action: 'fix_local' };
     case 'HOTFIX_LOCAL_VERIFYING':
-      if (severity === 'P3') return { next: 'HOTFIX_CANDIDATE_READY', role: null, action: 'assert_p3_candidate' };
       if (reviewExact && ['passed', 'blocked'].includes(reviewStatus)) {
         return { next: 'HOTFIX_REVIEWING', role: null, action: 'continue' };
       }
@@ -144,7 +143,6 @@ function nextStepHotfix({ state, counters, thresholds, enabledRoles, workflow = 
     case 'HOTFIX_LOCAL_REVERIFY_FAILED':
       return { next: 'HOTFIX_FIXING', role: developer, action: 'fix_local' };
     case 'HOTFIX_LOCAL_REVERIFYING':
-      if (severity === 'P3') return { next: 'HOTFIX_CANDIDATE_READY', role: null, action: 'assert_p3_candidate' };
       if (reviewExact && closureAttempts > 0) {
         return { next: 'HOTFIX_DELTA_REVIEW', role: null, action: 'continue' };
       }

@@ -335,3 +335,86 @@ test('doctor reports a hash-verifiable legacy Gateway A risk without mutating ap
 function digestFile(file) {
   return createHash('sha256').update(readFileSync(file)).digest('hex');
 }
+
+test('doctor checks private Hotfix state and skips removed worktrees only after COMPLETE', () => {
+  const root = fixture({ complete: true });
+  try {
+    const stateDir = join(root, '.cc-nexs', 'hotfixes', '20260926-fix');
+    mkdirSync(stateDir, { recursive: true });
+    for (const repo of ['docs', 'code']) {
+      execFileSync('git', ['-C', join(root, repo), 'symbolic-ref', 'HEAD', 'refs/heads/hotfix/fix']);
+    }
+    writeFileSync(join(root, 'docs', 'BUG-001.md'), '# Bug\n');
+    const progress = createProgressV2({ featureId: '20260926-fix', featureSlug: 'fix', preset: 'preset-standard', mode: 'hotfix' });
+    progress.hotfix_document = { repository: 'docs', path: 'BUG-001.md' };
+    for (const repo of ['docs', 'code']) progress.repositories[repo] = {
+      worktree: repo, branch: 'hotfix/fix', base_branch: 'main', candidate: null,
+    };
+    const file = join(stateDir, 'progress.json');
+    writeProgressV2(file, progress);
+    const found = runDoctor(root, true, {}, progress.feature.id);
+    assert.equal(found.status, 0, found.stderr);
+    progress.repositories.code.worktree = '.worktrees/removed/code';
+    writeProgressV2(file, progress);
+    const missing = runDoctor(root, true, {}, progress.feature.id);
+    assert.equal(missing.status, 1);
+    assert.match(missing.stderr, /assigned worktree missing for code/);
+    progress.state = 'COMPLETE';
+    progress.repositories.docs.worktree = '.worktrees/removed/docs';
+    writeProgressV2(file, progress);
+    const completed = runDoctor(root, true, {}, progress.feature.id);
+    assert.equal(completed.status, 0, completed.stderr);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('doctor discovers deeper migrated worktree state and supports direct Hotfix verification', () => {
+  const root = fixture({ complete: true });
+  try {
+    const dir = join(root, '.worktrees', 'migrated', 'docs', 'doc', 'parent', 'bugs', 'a', 'b', '99.deep');
+    mkdirSync(dir, { recursive: true });
+    writeProgressV2(join(dir, 'progress.json'), createProgressV2({ featureId: '99', featureSlug: 'deep', preset: 'preset-standard', mode: 'lean' }));
+    const configFile = join(root, 'cc-nexs.config.json');
+    const config = JSON.parse(readFileSync(configFile, 'utf8'));
+    config.workflow = { default_mode: 'hotfix' };
+    writeFileSync(configFile, JSON.stringify(config));
+    const result = runDoctor(root, true, {}, '99');
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /Lean\/Hotfix must run scope-approved commands and record structured exact-candidate evidence/);
+    assert.doesNotMatch(result.stderr, /hotfix mode requires workflow.local_verify.driver/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
+test('doctor selects promoted BUG state by its ID in configured docs and worktree locations', () => {
+  const root = fixture({ complete: true });
+  const worktrees = mkdtempSync(join(tmpdir(), 'cc-nexs-doctor-worktrees-'));
+  try {
+    const workspaceFile = join(root, '.cc-nexs', 'workspace.json');
+    const workspace = JSON.parse(readFileSync(workspaceFile, 'utf8'));
+    workspace.worktree_root = worktrees;
+    writeFileSync(workspaceFile, JSON.stringify(workspace));
+    const id = '20260926-migrated';
+    const archived = join(root, 'docs', 'hotfix', id, 'BUG-001.lean');
+    const active = join(worktrees, id, 'docs', 'doc', '09.parent', 'bugs', 'BUG-001.lean');
+    const progress = createProgressV2({ featureId: id, featureSlug: 'migrated', preset: 'preset-standard', mode: 'lean' });
+    for (const dir of [archived, active]) {
+      mkdirSync(dir, { recursive: true });
+      writeProgressV2(join(dir, 'progress.json'), progress);
+    }
+    writeFileSync(join(active, 'config.json'), JSON.stringify({ mode: 'lean', config_version: 2, risk_tier: 'invalid' }));
+    const found = runDoctor(root, true, {}, id);
+    assert.equal(found.status, 1);
+    assert.match(found.stderr, /invalid risk_tier/);
+    assert.doesNotMatch(found.stderr, /progress.json not found/);
+    rmSync(worktrees, { recursive: true });
+    const archivedOnly = runDoctor(root, true, {}, id);
+    assert.equal(archivedOnly.status, 0, archivedOnly.stderr);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(worktrees, { recursive: true, force: true });
+  }
+});

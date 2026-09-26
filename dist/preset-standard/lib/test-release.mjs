@@ -1,16 +1,19 @@
 import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 
 import { loadConfig, loadWorkspaceConfig } from './config-loader.mjs';
 import { jsonValuesEqual } from './canonical-json.mjs';
-import { assertHotfixScopeCurrent } from './hotfix-contract.mjs';
+import { assertLocalCandidateWorktree } from './candidate-context.mjs';
+import { assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
 import { integrateCandidateToTest, resolveCandidateCommit } from './git-custodian.mjs';
-import { approvedPlanDeliveryContract } from './plan-contract.mjs';
+import { approvedPlanDeliveryContract, extractApprovalScope } from './plan-contract.mjs';
+import { assertRecordedLocalVerification, extractLocalVerificationChecks } from './local-evidence.mjs';
 import {
   beginTestRelease,
+  assertTestAttemptNotInvalidated,
   completeTestRelease,
   readProgressV2,
   recordTestIntegration,
@@ -148,6 +151,12 @@ export function preflightTestRelease({
     }
   }
   const source = Object.fromEntries(repositories.map((repo) => [repo.id, repo.sourceCommit]));
+  if (['lean', 'hotfix'].includes(progress.mode)) {
+    const localChecks = extractLocalVerificationChecks(progress.mode === 'lean'
+      ? extractApprovalScope(readFileSync(join(dirname(progressFile), 'plan.md'), 'utf8'))
+      : extractHotfixScope(readFileSync(resolveHotfixDocument(progress, dirname(progressFile)), 'utf8')).raw);
+    assertRecordedLocalVerification(progress, { source: source, fingerprint: releaseFingerprint(source), expectedChecks: localChecks });
+  }
   if (hotfix) assertHotfixReleaseEvidence(progress, source);
   else if (progress.mode === 'lean') assertLeanReleaseEvidence(progress, source, planDelivery.lane);
 
@@ -190,12 +199,7 @@ function assertHotfixReleaseEvidence(progress, source) {
   if (progress.local_verification?.status !== 'passed' || progress.local_verification.candidate_fingerprint !== fingerprint) {
     throw new Error('[cc-nexs] hotfix test release requires local verification for the exact candidate');
   }
-  if (progress.hotfix?.severity === 'P3') {
-    const localAttempt = progress.local_verification.attempts?.findLast((item) => item.status === 'passed' && item.fingerprint === fingerprint);
-    if (!localAttempt?.evidence?.some((item) => item?.type === 'p3_boundary' && item.files === 1 && item.lines <= 20)) {
-      throw new Error('[cc-nexs] P3 test release requires deterministic one-file/20-line boundary evidence');
-    }
-  } else if (progress.review?.status !== 'passed' || progress.review.candidate_fingerprint !== fingerprint) {
+  if (progress.review?.status !== 'passed' || progress.review.candidate_fingerprint !== fingerprint) {
     throw new Error('[cc-nexs] hotfix test release requires one passing Review for the exact candidate');
   }
 }
@@ -273,6 +277,7 @@ export function runTestRelease({
 
 function resumeTestRelease(context) {
   let attempt = context.progress.delivery?.test?.attempts?.at(-1);
+  assertTestAttemptNotInvalidated(attempt);
   if (!attempt || attempt.fingerprint !== releaseFingerprint(context.source)) {
     throw new Error('[cc-nexs] --resume requires the current exact-candidate test release attempt');
   }
@@ -504,27 +509,6 @@ function rejectProductionVerificationUrls(release) {
     let url;
     try { url = new URL(value); } catch { continue; }
     if (/(^|[.-])(prod|production|live)([.-]|$)/i.test(url.hostname)) throw new Error(`[cc-nexs] production-like host is forbidden for automatic test release: ${url.hostname}`);
-  }
-}
-
-function assertLocalCandidateWorktree({ repository, worktree, branch, sourceCommit }) {
-  if (!worktree || !existsSync(worktree)) {
-    throw new Error(`[cc-nexs] local test candidate ${repository} requires its assigned worktree`);
-  }
-  let head;
-  let dirty;
-  let actualBranch;
-  let topLevel;
-  try {
-    head = execFileSync('git', ['-C', worktree, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-    actualBranch = execFileSync('git', ['-C', worktree, 'branch', '--show-current'], { encoding: 'utf8' }).trim();
-    topLevel = execFileSync('git', ['-C', worktree, 'rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
-    dirty = execFileSync('git', ['-C', worktree, 'status', '--porcelain', '--untracked-files=all'], { encoding: 'utf8' }).trim();
-  } catch (error) {
-    throw new Error(`[cc-nexs] cannot inspect local test candidate ${repository}: ${error.message}`);
-  }
-  if (realpathSync(topLevel) !== realpathSync(worktree) || actualBranch !== branch || head !== sourceCommit || dirty) {
-    throw new Error(`[cc-nexs] local test candidate ${repository} worktree must be clean at exact candidate ${sourceCommit}`);
   }
 }
 

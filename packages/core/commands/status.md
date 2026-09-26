@@ -9,7 +9,7 @@ argument-hint: "[feature_id]"
 
 ## Steps
 
-1. Resolve workspace docs assignment and locate authoritative progress.json v2 plus its progress.md mirror
+1. Resolve authoritative progress.json v2 plus its progress.md mirror, including workspace `.cc-nexs/hotfixes/<key>/` and legacy docs state; resolve the BUG separately through `progress.hotfix_document`
 2. Read mode/state/revision/gates/counters/delivery from progress.json; require config.json.mode to agree and report config_version/risk_tier migration status, including `plan_binding_status=bound|derived|unknown` for approved Lean work
 3. Use `readProgressV2()` (or `readProgress(progress.md)` compatibility delegation)
 4. Print (Lean 显示 plan/local review/test/base；Hotfix 显示 scope/severity/local/review/test/base；fast 显示 BUILD/TEST/ACCEPT)：
@@ -35,7 +35,7 @@ Models:     <next role → matched rule / profile / model / effort / feature ove
    full: Sprint <current>/<total>  + 列出 M1, M2, ... 状态
    fast: 阶段 BUILD / TEST / ACCEPT 各自 done/in_progress/pending
    lean: PLAN / IMPLEMENT / LOCAL VERIFY / REVIEW / TEST / BASE MERGE
-   hotfix: SCOPE / IMPLEMENT / LOCAL VERIFY / REVIEW-or-P3-SKIP / TEST / GATEWAY B / BASE MERGE
+   hotfix: SCOPE / IMPLEMENT / LOCAL VERIFY / REVIEW / TEST / GATEWAY B / BASE MERGE
 
 🔢 Counters
    Review revisions:  <n>/<threshold>
@@ -53,7 +53,8 @@ Models:     <next role → matched rule / profile / model / effort / feature ove
 🚀 Test release
    Status: <idle|running|deploying|succeeded|failed|deployed_needs_manual_verification|verified>
    Latest: <attempt id / source fingerprint / integrated repos / pipeline / deployment / environment_revision>
-   Verification: <passed|blocked|not recorded + evidence refs>
+   Verification: <passed|blocked|manual_required|not recorded + evidence refs>
+   Exception: <authorized environment gap + binding/evidence, or none; never implies test passed>
 
 🧪 Lean / Hotfix evidence
    Local:  <status / candidate fingerprint / evidence refs>
@@ -68,7 +69,7 @@ Models:     <next role → matched rule / profile / model / effort / feature ove
 🌿 Files
    requirements.md:   <exist? lines>
    plan.md:           <approval scope / latest Review + Test conclusions>
-   hotfix.md:         <bound scope / Review / test / rollback evidence>
+   BUG document:      <progress.hotfix_document or legacy hotfix.md; scope / Review / test / rollback>
    spec.md:           <exist? lines>
    sa-review.md:      <last conclusion>
    sa-code-review.md: <last conclusion>

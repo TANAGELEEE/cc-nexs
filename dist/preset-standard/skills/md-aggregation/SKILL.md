@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # md 文档聚合规则
 
-按当前模式聚合：Lean 将执行、Review 与验证证据写入 plan.md，Hotfix 写入 hotfix.md；只有 Fast/Full 使用下表的分角色文档。不要把历史模式的文件清单套到 Lean/Hotfix。
+按当前模式聚合：Lean 将执行、Review 与验证证据写入 plan.md，Hotfix 写入 `progress.hotfix_document` 指定的 BUG 文档（旧任务为 hotfix.md）；只有 Fast/Full 使用下表的分角色文档。不要把历史模式的文件清单套到 Lean/Hotfix。
 
 Fast/Full 同类评审、测试和验收轮次追加到对应文件，用二级标题分隔。
 

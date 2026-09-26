@@ -15,7 +15,7 @@ This file contains only the common controller. Mode-specific states, dispatches,
 
 ## Orchestrator boundary
 
-The Orchestrator only coordinates. It does not author business artifacts, implementation, specs, reviews, or test code, and it never performs subjective model-based verification or arbitrary Git commands. It may invoke deterministic controllers and, only for Lean's documented no-local-driver fallback, execute the plan-approved build/unit/lint/start commands and record their real structured results. It may invoke the narrow Git Custodian for candidate mutations.
+The Orchestrator only coordinates. It does not author business artifacts, implementation, specs, reviews, or test code, and it never performs subjective model-based verification or arbitrary Git commands. It may invoke deterministic controllers and, for the documented no-local-driver fallback, execute Lean plan-approved or Hotfix scope-bound commands and record their real structured results. It may invoke the narrow Git Custodian for candidate mutations.
 
 When a single role reports completion:
 
@@ -31,7 +31,7 @@ When `nextStep()` returns `parallel`, dispatch the complete listed batch before 
 
 Find the workspace root containing `.cc-nexs/workspace.yml`, load it with `loadWorkspaceConfig()`, and run doctor. Invocation may start at the workspace root or any assigned repository worktree, but every dispatch uses the exact assignment stored in progress.json.
 
-Resolve `docs_repository`, find `doc/<id>.*` in its assigned feature worktree, and set `REQ_DIR`, `PROGRESS_MD`, and `PROGRESS_JSON`. Never assume the docs repository is nested in a code repository. If progress.md exists without progress.json, stop and require `/cc-nexs:migrate-progress`; never reconstruct authoritative history implicitly.
+Resolve authoritative state with `resolveFeatureProgress()`, including new Hotfix `.cc-nexs/hotfixes/<key>/`, migrated Lean state beside the BUG, and legacy docs state. Set `REQ_DIR`, `PROGRESS_MD`, and `PROGRESS_JSON` from that state location. For new Hotfix, resolve the separate BUG document through `progress.hotfix_document` and the assigned docs worktree; never infer it from the machine-state directory. For ordinary features, locate `doc/<id>.*` in the assigned docs worktree. Never assume the docs repository is nested in a code repository. If progress.md exists without progress.json, stop and require `/cc-nexs:migrate-progress`; never reconstruct authoritative history implicitly.
 
 Read `${REQ_DIR}progress.json.mode` first and require `${REQ_DIR}config.json.mode` to agree. Historical features with both values missing default to `fast`; an explicit unknown value or mismatch fails closed.
 
@@ -47,6 +47,8 @@ esac
 ```
 
 Compare config/progress using their raw stored values before this normalization. Legacy `lite` then uses Fast roles, state machine, active rule, and command validation consistently; it must never fall through to Full.
+
+For each Hotfix child, pass `CC_NEXS_PROGRESS_FILE=<absolute authoritative progress.json>` and `BUG_FILE=<resolved absolute BUG document>`. The role guard uses that exact progress assignment to authorize the one BUG document; `CC_NEXS_REQ_DIR` alone must not make it guess a private-state `hotfix.md`. Keep the role environment tied to the current task across Claude Code, Codex, and Pi.
 
 For Lean/Hotfix, require `config_version: 2` before dispatch. Otherwise stop and print:
 
@@ -227,7 +229,7 @@ Release attempts are immutable. Invoke `/cc-nexs:release-test` once per candidat
 
 Before test integration, `/cc-nexs:doctor --release-test --feature <id>` checks only delivery safety: a non-production test environment, release driver, exact candidates, and at least one approved deploy repository with `test_branch`. Feature scoping keeps a stale unrelated task from blocking this candidate while workspace/global safety remains checked. Reject plaintext credentials and production-like hosts. Missing URL, browser/login, bucket/CORS/IAM observability, or other verification capability is post-deploy work and must not block integration.
 
-After CI/CD succeeds, freeze one runtime browser provider: Claude Code uses `chrome-devtools-mcp`; Codex uses the current in-app/Chrome signed-in session; Pi prefers a successful ego lite probe and otherwise uses the dedicated headless `@injaneity/pi-computer-use@0.4.3` Verifier with `browser_use: true` and `headless: true`. Never expose two providers to one child. Enforce `release.test.allowed_hosts`, prove test-environment identity, and reuse existing authentication. Never read plaintext credentials from memory, Markdown, Git, config, or prompts; only an opaque external `credential_ref` may be resolved. If verification capability is unavailable, persist `manual_required` on the same deployed attempt so it can resume later.
+After CI/CD succeeds, freeze one runtime browser provider: Claude Code uses `chrome-devtools-mcp`; Codex uses the current in-app/Chrome signed-in session; Pi prefers a successful ego lite probe and otherwise uses the dedicated headless `@injaneity/pi-computer-use@0.4.3` Verifier with `browser_use: true` and `headless: true`. Never expose two providers to one child. Enforce `release.test.allowed_hosts`, prove test-environment identity, and reuse existing authentication. Never read plaintext credentials from memory, Markdown, Git, config, or prompts; only an opaque external `credential_ref` may be resolved. If verification capability is unavailable, persist `manual_required` on the same deployed attempt so it can resume later. Only explicit user authorization may use the existing `approve-release --test-exception` gateway with exact-candidate passed local/Review evidence, actual deployment, environment evidence, and rollback proof. Preserve the unverified test fact and limit authorization to configured base integration; product failures cannot use an environment exception.
 
 ### Compact command index
 
@@ -238,7 +240,7 @@ This index keeps cross-runtime command discovery stable; dispatch details belong
 | Full | `/cc-nexs:recon`; `/cc-nexs:planner`; `/cc-nexs:dev <id> --mode=feat --sprint=N`; `/cc-nexs:qa cases`; `/cc-nexs:evaluator` |
 | Fast/Lite | `/cc-nexs:fullstack <id> --phase=spec`; `/cc-nexs:review accept <id>`; `/cc-nexs:verify regression <id>` |
 | Lean | `/cc-nexs:plan <id>`; `/cc-nexs:execute <id>`; `/cc-nexs:lean-review <id>`; `/cc-nexs:verify-local <id>`; `/cc-nexs:approve-release <id>`; `/cc-nexs:request-release-changes <id>` |
-| Hotfix | dedicated developer/reviewer/verifier agents; `/cc-nexs:release-test <id> --hotfix`; `/cc-nexs:approve-release <id>` |
+| Hotfix | `/cc-nexs:init-hotfix`; `/cc-nexs:revise-hotfix`; dedicated developer/reviewer/verifier agents; `/cc-nexs:release-test <id> --hotfix`; `/cc-nexs:approve-release <id>` |
 
 The **Role → command dispatch table**, mode conclusion tables, and gate summaries are in the selected rule. Stable state markers include `PLAN_PENDING_HUMAN`, `CONSOLIDATED_REVIEW`, `RELEASE_PENDING_HUMAN`, `GATEWAY_B_CHANGE_REQUESTED`, `SCOPE_CHANGE_REQUESTED`, `HOTFIX_RELEASE_PENDING_HUMAN`, `SPEC_PENDING_HUMAN`, `DEPLOY_GATE`, `ALL_SPRINTS_DEV_DONE`, `INTEGRATION_REVIEW`, `TEST_RELEASE`, `FINAL_QA_BLOCKED`, and `BASE_MERGING`. The fast rule owns **fast 模式解析**. The full rule owns the **Artifact completeness gate** over `deploy.md api-doc.md test-report.md`. Lean keeps: **完整 Review 只有一次；修复只允许一次 delta closure**.
 
@@ -254,6 +256,6 @@ No other condition waits for user input.
 
 At `COMPLETE`, fast/full performs a final README sync; Lean/Hotfix prints the active rule's evidence and cleanup summary. Mention `/cc-nexs:compound <id>` only when this task revealed a concrete, reusable lesson or the user requested it.
 
-The docs repository follows the same path-safety and candidate-ref discipline as code repositories. Fast/Full may create or update its docs candidate commit after each document-writing phase and again at `COMPLETE`. Lean/Hotfix are explicitly final-only: plan, Review, and verification keep their documents in the assigned docs worktree, and Git Custodian creates exactly one final docs candidate commit only after the code base release is proven and state is `COMPLETE`. An intermediate Lean/Hotfix docs candidate can invalidate exact-candidate evidence and is forbidden. In every mode, stage only the configured feature directory; prepare candidate metadata before committing so the ref—not a self-referential SHA in progress.json—remains authoritative. The docs repository integrates last.
+The docs repository follows the same path-safety and candidate-ref discipline as code repositories. Fast/Full may create or update its docs candidate commit after each document-writing phase and again at `COMPLETE`. Lean/Hotfix are explicitly final-only: plan, Review, and verification keep their documents in the assigned docs worktree, and Git Custodian creates exactly one final docs candidate commit only after the code base release is proven and state is `COMPLETE`. An intermediate Lean/Hotfix docs candidate can invalidate exact-candidate evidence and is forbidden. Stage only the configured feature directory for ordinary/legacy tasks. For new Hotfix, stage only the assigned BUG document and keep machine state under `.cc-nexs/hotfixes/<key>/`; a promoted Lean task uses its BUG-adjacent `<BUGstem>.lean/` artifacts. Prepare candidate metadata before committing so the ref—not a self-referential SHA in progress.json—remains authoritative. The docs repository integrates last.
 
 `COMPLETE` does not authorize remote publishing, merge, or deletion. Only an explicit user release instruction may invoke Git Custodian `prepare`/merge/finalize. Finalize freshly fetches the remote base, proves both tips are contained, requires clean worktrees, and then removes feature worktree/ref/branches unless the user explicitly asks for `--keep-remote`.

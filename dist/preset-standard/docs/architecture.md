@@ -73,7 +73,7 @@ Delivery zone
 
 Fast 是单 Sprint 压缩版，同样在 CODE_REVIEW 后进入 TEST_RELEASE。多端实现按相同 ownership wave 并行，join 后由唯一 docs owner 同步共享文档。
 
-Hotfix 是独立 mini-Lean：新编号从 latest base 建同样的 worktree/feature branch，只绑定一份 `hotfix.md`。P0/P1/P2 有一次集中 Review；P3 由机器证明单文件/20 行/无行为变化后跳过模型 Review。所有修复共享一次 delta 上限，之后仍须 exact-candidate test 验收和 Gateway B，批准后同一 feature candidate 才合入 base。
+Hotfix 用独立 `hotfix/<key>` 分支和 latest-base worktree，直接维护 docs 仓的 BUG 文件，不占需求编号、不发布占位提交。状态位于 workspace `.cc-nexs/hotfixes/<key>/`，文档通过 `progress.hotfix_document` 定位；旧 hotfix.md 仍可恢复。所有级别均需本地验证、独立 Review、精确 test 证据和 Gateway B，P3 行数仅作风险参考。授权范围修订用 `revise-hotfix` 原地重绑并保留历史，契约扩展用 `--promote-lean` 在 BUG 旁迁移为 Lean、返回 Gateway A，保留原分支与 key。真实部署后的环境验收限制可经明确授权的 Gateway B 例外处理，不能标记 test 通过或默认授权生产部署。
 
 ## Git Custodian
 
@@ -136,7 +136,7 @@ controller 通过 stdin 发送一份 JSON request。driver stdout 必须只写�
 
 ## Lean 本地验证 driver
 
-项目私有配置可以提供独立于 CI 的本地 driver；Lean 未配置 driver 时，由父 Orchestrator 执行 plan 批准的命令并用严格结构化证据记录 `passed|failed|deferred_to_test`，不要求为小改动先新增项目脚本：
+项目私有配置可以提供独立于 CI 的本地 driver；没有 driver 时，由父 Orchestrator 执行 Lean plan 批准的命令或 Hotfix scope 绑定的命令，再登记严格结构化证据。Lean 支持 `passed|failed|deferred_to_test`，Hotfix 只支持 `passed|failed`，不要求先新增项目脚本：
 
 ```yaml
 workflow:
@@ -147,11 +147,13 @@ workflow:
       timeout_seconds: 1200
 ```
 
-控制器通过 stdin 发送 `{operation, feature, source, repositories}` JSON；每仓包含精确 candidate SHA 和已分配 worktree。driver 按 plan 矩阵执行 build、单元/集成测试、本地前后端启动、smoke/e2e，并只向 stdout 写一个 JSON object：
+控制器通过 stdin 发送 `{operation, feature, source, repositories}` JSON；每仓包含精确 candidate SHA 和已分配 worktree。driver 按批准的 plan 或绑定的 Hotfix scope 矩阵执行 build、单元/集成测试、本地前后端启动、smoke/e2e，并只向 stdout 写一个 JSON object：
 
 ```json
-{"status":"passed","evidence":["api build", "web build", "local smoke AC-001"]}
+{"status":"passed","evidence":[{"check":"api-smoke","result":"passed","command":"./scripts/api-smoke.sh","exit_code":0,"proof":"smoke passed"}]}
 ```
+
+上例命令仅示意；实际 command 必须与冻结矩阵一致。driver 与直接登记使用相同证据校验，覆盖全部必要 Check；字符串列表或没有执行证据的 PASS 无效。
 
 Lean 还允许 `deferred_to_test`：所有本地可执行检查必须通过，至少一个受本地基础设施限制的 start/smoke/E2E check 要提供 `{check,result,reason,test_action}`，且全部 evidence 的 result 只能是 `passed|deferred_to_test`，check 不得重复。compile/unit/lint 的真实失败不能延期。相同 fingerprint 会复用该结果，每个 deferred check 必须用精确对象 `{check,result:"passed",proof}` 在最终 test evidence 中闭环；自由文本 substring 不算。Hotfix 不允许延期。driver 必须负责 readiness、非冲突端口和成功/失败路径的进程清理。本地验证用于缩短反馈周期，但不能替代 immutable test release 和 test 环境验收。
 

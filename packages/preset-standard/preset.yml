@@ -1,5 +1,5 @@
 name: preset-standard
-version: 0.5.4
+version: 0.5.5
 description: 通用多角色开发 SOP。新需求默认 lean，保留显式 fast/full；不绑定语言、框架、仓库名或组织规范。
 language: zh-CN
 
@@ -253,7 +253,7 @@ modes:
       evaluator_reject: 1
 
   hotfix:
-    description: 独立 latest-base feature worktree 上的 mini-Lean；本地验证、一次 Review（P3 机器边界后跳过）、test 黑盒验收和人工 base 门禁。
+    description: 独立 latest-base hotfix worktree 与 BUG 文档，不占需求号；本地验证、全级别独立 Review、test 黑盒验收和人工 base 门禁。
     enabled:
       - hotfix-developer
       - hotfix-reviewer
@@ -311,6 +311,8 @@ stack:
     - "并发、事务、权限和数据迁移风险必须有对应验证或回滚方案"
     - "遵守目标仓库自身的 AGENTS.md、CLAUDE.md 和本地 overlay 规则"
 
+# 以下是普通需求路径；Hotfix 由 init-hotfix 分配 hotfix/<key> 和 BUG 文档，
+# progress.hotfix_document 定位文档，机器状态在 workspace .cc-nexs/hotfixes/<key>/。
 paths:
   doc_dir: "all-docs/doc/{id}.{slug}/"
   doc_repo: "all-docs/"

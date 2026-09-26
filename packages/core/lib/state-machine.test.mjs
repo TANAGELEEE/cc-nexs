@@ -713,7 +713,7 @@ test('lean mode: Gateway B scope feedback returns to Planner and Gateway A', () 
 
 const hotfixRoles = ['hotfix-developer', 'hotfix-reviewer', 'hotfix-verifier'];
 
-test('hotfix mode: independently bound scope starts implementation and P3 skips only model Review', () => {
+test('hotfix mode: independently bound scope starts implementation and P3 also requires independent Review', () => {
   const init = nextStep({ state: 'INIT', enabledRoles: hotfixRoles, mode: 'hotfix' });
   assert.equal(init.action, 'bind_hotfix_scope');
   assert.equal(init.stop, true);
@@ -725,7 +725,7 @@ test('hotfix mode: independently bound scope starts implementation and P3 skips 
   });
   assert.deepEqual(nextStep({
     state: 'HOTFIX_LOCAL_VERIFYING', enabledRoles: hotfixRoles, mode: 'hotfix', workflow: { hotfix: { severity: 'P3' } },
-  }), { next: 'HOTFIX_CANDIDATE_READY', role: null, action: 'assert_p3_candidate' });
+  }), { next: 'HOTFIX_REVIEWING', role: 'hotfix-reviewer', action: 'review_hotfix' });
   assert.deepEqual(nextStep({
     state: 'HOTFIX_LOCAL_VERIFYING', enabledRoles: hotfixRoles, mode: 'hotfix', workflow: { hotfix: { severity: 'P2' } },
   }), { next: 'HOTFIX_REVIEWING', role: 'hotfix-reviewer', action: 'review_hotfix' });
@@ -740,7 +740,7 @@ test('hotfix mode: one repair delta closes or stops for human intervention', () 
   });
   assert.deepEqual(nextStep({
     state: 'HOTFIX_LOCAL_REVERIFYING', enabledRoles: hotfixRoles, mode: 'hotfix', workflow: { hotfix: { severity: 'P3' } },
-  }), { next: 'HOTFIX_CANDIDATE_READY', role: null, action: 'assert_p3_candidate' });
+  }), { next: 'HOTFIX_DELTA_REVIEW', role: 'hotfix-reviewer', action: 'review_hotfix_delta' });
   const stopped = nextStep({ state: 'HOTFIX_DELTA_REVIEW_BLOCKED', enabledRoles: hotfixRoles, mode: 'hotfix' });
   assert.equal(stopped.next, 'HUMAN_INTERVENTION');
   assert.equal(stopped.stop, true);

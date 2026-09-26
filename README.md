@@ -222,8 +222,7 @@ $cc-nexs-approve-release 01
 $cc-nexs-release-base 01
 $cc-nexs-release-test 01
 $cc-nexs-approve-deploy 01
-$cc-nexs-init "现象描述" --mode=hotfix
-$cc-nexs-hotfix 02                 # Hotfix 使用自己的新编号，不附着旧需求
+$cc-nexs-hotfix "现象描述" --repos=api  # 自动创建 hotfix 分支与 BUG 文档，不占需求号
 ```
 
 Codex 侧实现方式是 command mirror skills。`$cc-nexs-run` 读取 `commands/run.md` 作为唯一事实来源，所以 lean / full / fast / hotfix 的文档写入位置和状态机逻辑不会分叉。审批 skill 会调用确定性的 `cc-nexs` 控制程序，不会手工修改 progress。详见 [docs/codex-plugin.md](./docs/codex-plugin.md)。
@@ -310,8 +309,9 @@ Claude Code、Codex 和 Pi 共享同一命令语义，但使用各运行时的�
 /cc-nexs:status [编号]            # 只读看状态
 /cc-nexs:build [--phase=...]      # 按 git diff 自动选 build/test 命令并跑
 
-/cc-nexs:init "现象描述" --mode=hotfix --repos=api  # 独立 latest-base worktree/feature 分支
-/cc-nexs:hotfix [新编号]           # mini-Lean：P0/P1/P2/P3、本地验证、一次 Review、test、Gateway B
+/cc-nexs:hotfix "现象描述" --repos=api  # hotfix/<key> + BUG 文档，不占需求号
+/cc-nexs:hotfix [bug-key]         # 恢复：本地验证、独立 Review、test、Gateway B
+/cc-nexs:revise-hotfix [bug-key] --reason "原因" --authorization-evidence "已有授权" # 原任务重绑
 ```
 
 G1/G2 是状态机暂停点，不是全局工具锁。等待人工确认时，父会话仍可执行用户授权的 Git、SQL、SSH、部署、诊断和文档操作；只有 cc-nexs 的下一角色不会被派发。
@@ -337,11 +337,11 @@ paths_override:
       test_cmd:  "cd web && pnpm test"
 ```
 
-从任一需求 worktree 运行时会向上发现 workspace 根配置，也可显式传 `--config-root`。跨模块改动（同时改了 backend + web）默认最多并行 2 个独立模块；用 `depends_on` 声明顺序约束，命中下游模块时会自动补齐依赖闭包。成功结果绑定完整 Git candidate fingerprint 并缓存在仓库外，HEAD/base/diff/untracked/命令任一变化都会重新执行。`workflow.local_verify.reuse_passed=true` 还会复用同一 candidate 的本地证据；Lean 未配置 driver 时可直接绑定 plan-approved 命令的 command/exit/proof，Hotfix 仍要求 driver。
+从任一需求 worktree 运行时会向上发现 workspace 根配置，也可显式传 `--config-root`。跨模块改动（同时改了 backend + web）默认最多并行 2 个独立模块；用 `depends_on` 声明顺序约束，命中下游模块时会自动补齐依赖闭包。成功结果绑定完整 Git candidate fingerprint 并缓存在仓库外，HEAD/base/diff/untracked/命令任一变化都会重新执行。`workflow.local_verify.reuse_passed=true` 还会复用同一 candidate 的本地证据；Lean 未配置 driver 时可直接绑定 plan-approved 命令的 command/exit/proof；Hotfix 同样支持绑定范围内的命令证据，必须覆盖冻结矩阵，且不允许延期到 test。所有 Hotfix 级别（包括 P3）均需独立 Review。
 
 ### 多仓 Worktree 与 Git Custodian（v0.4）
 
-在 workspace 根目录配置 `.cc-nexs/workspace.yml`。`/cc-nexs:init` 首先向 docs 仓远端 base fast-forward push 一个只含 README 和 reservation marker 的最小占号提交，让未使用 cc-nexs 的开发者也能立即看到编号；并发冲突会重新 fetch、换号重试。占号成功后再以各仓最新 `origin/<base_branch>` 创建 `.worktrees/<id>-<slug>/<repo-id>/`；不会使用主 checkout 当前所在的 `test`/`master`，也不会把 feature 的 upstream 错绑到 base 分支。
+在 workspace 根目录配置 `.cc-nexs/workspace.yml`。普通 Lean/Fast/Full 的 `/cc-nexs:init` 首先向 docs 仓远端 base fast-forward push 一个只含 README 和 reservation marker 的最小占号提交，让未使用 cc-nexs 的开发者也能立即看到编号；并发冲突会重新 fetch、换号重试。占号成功后再以各仓最新 `origin/<base_branch>` 创建 `.worktrees/<id>-<slug>/<repo-id>/`；不会使用主 checkout 当前所在的 `test`/`master`，也不会把 feature 的 upstream 错绑到 base 分支。
 
 ```
 /cc-nexs:init "需求 A"     → 建 .worktrees/01-feat-a/{docs,api,web}/
@@ -352,7 +352,11 @@ cd <workspace-root>
 /cc-nexs:init "需求 B"     → 建另一组多仓 worktree
 ```
 
-角色只写职责内文件，不执行 Git mutation。唯一的直接 docs-base 写入是 Custodian 的第一阶段占号，且只能新建一个此前不存在的需求目录。普通提交不执行 `git pull`。用户明确授权合并到 master 后，由 Custodian fetch 并把最新 base 合入 feature，代码仓先合并、all-docs 第二阶段归档最后合并；同一发布任务随后完整删除远端 feature、本地 feature、worktree 和 candidate ref。只有用户明确要求保留远端分支时才例外。
+Hotfix 直接创建 `hotfix/<key>` 和 `.worktrees/<key>/<repo>/`。有关联需求时将 BUG 写入其 `doc/<id>.<slug>/bugs/BUG-<key>.md`；无关联时写入 docs 仓的 `hotfix/<key>/BUG-001.md`。机器状态在 workspace `.cc-nexs/hotfixes/<key>/`，通过 `progress.hotfix_document` 定位 BUG，不发布占位提交。旧 `hotfix.md` 任务仍可恢复。同一故障的授权修订用 `revise-hotfix` 在原分支重绑；契约扩展加 `--promote-lean`，在原 BUG 旁建立 Lean 文档并通过 Gateway A。
+
+已真实部署到 test 但环境能力阻塞验收时，用户可以在现有 Gateway B 明确授权 `approve-release --test-exception`。控制器要求同一 candidate 的本地验证和 Review 通过，以及授权、环境和回滚证据；保留 test 未通过的事实，仅授权配置 base 集成，不默认授权生产部署。
+
+角色只写职责内文件，不执行 Git mutation。唯一的直接 docs-base 写入是普通需求的 Custodian 第一阶段占号，且只能新建一个此前不存在的需求目录。普通提交不执行 `git pull`。用户明确授权合并到 master 后，由 Custodian fetch 并把最新 base 合入 feature，代码仓先合并、all-docs 第二阶段归档最后合并；同一发布任务随后完整删除远端 feature、本地 feature、worktree 和 candidate ref。只有用户明确要求保留远端分支时才例外。
 
 具体阶段命令（角色单步调用）由各 preset 决定，详见各 preset 的 README。
 

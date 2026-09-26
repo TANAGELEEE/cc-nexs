@@ -1,9 +1,11 @@
-import { dirname } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 import { resolveCandidateContext } from './candidate-context.mjs';
-import { assertHotfixScopeCurrent } from './hotfix-contract.mjs';
-import { approvedPlanDeliveryLane, assertPlanApprovalCurrent } from './plan-contract.mjs';
-import { candidateFingerprint, recordConsolidatedReview } from './progress-v2.mjs';
+import { assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
+import { approvedPlanDeliveryLane, assertPlanApprovalCurrent, extractApprovalScope } from './plan-contract.mjs';
+import { assertRecordedLocalVerification, extractLocalVerificationChecks } from './local-evidence.mjs';
+import { assertTestAttemptNotInvalidated, candidateFingerprint, recordConsolidatedReview } from './progress-v2.mjs';
 
 export function recordLeanReview({
   cwd = process.cwd(),
@@ -22,14 +24,20 @@ export function recordLeanReview({
     leanDeliveryLane = approvedPlanDeliveryLane(context.progress, dirname(context.progressFile));
     if (!closure && !gatewayBDelta && leanDeliveryLane === 'fast-track') {
       const attempt = context.progress.delivery?.test?.attempts?.at(-1);
-      if (attempt?.status !== 'verified' || attempt.fingerprint !== candidateFingerprint(context.source)) {
-        throw new Error('[cc-nexs] fast-track consolidated Review requires test verification for the exact candidate');
+      assertTestAttemptNotInvalidated(attempt);
+      const deployedForManualVerification = attempt?.status === 'deployed_needs_manual_verification'
+        && attempt.verification?.result === 'manual_required'
+        && attempt.deployment?.environment === 'test'
+        && Object.keys(attempt.pipeline || {}).length > 0
+        && Object.keys(attempt.environment_revision || {}).length > 0;
+      if ((!deployedForManualVerification && attempt?.status !== 'verified')
+        || attempt.fingerprint !== candidateFingerprint(context.source)) {
+        throw new Error('[cc-nexs] fast-track consolidated Review requires verified test or a deployed manual-verification attempt for the exact candidate');
       }
     }
   }
   else {
     assertHotfixScopeCurrent(context.progress, dirname(context.progressFile));
-    if (context.progress.hotfix?.severity === 'P3') throw new Error('[cc-nexs] P3 skips model Review after deterministic boundary proof');
     if ((closure || gatewayBDelta) && (context.progress.review?.closure_attempts || 0) >= 1) {
       throw new Error('[cc-nexs] hotfix permits at most one delta Review; human intervention is required');
     }
@@ -41,10 +49,14 @@ export function recordLeanReview({
       ? ['GATEWAY_B_LOCAL_REVERIFYING', 'GATEWAY_B_DELTA_REVIEW']
       : closure
         ? ['LOCAL_REVERIFYING', 'REVIEW_CLOSURE']
-        : ['LOCAL_VERIFYING', 'CONSOLIDATED_REVIEW', ...(leanDeliveryLane === 'fast-track' ? ['TEST_VERIFIED'] : [])];
+        : ['LOCAL_VERIFYING', 'CONSOLIDATED_REVIEW', ...(leanDeliveryLane === 'fast-track' ? ['TEST_VERIFIED', 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY'] : [])];
   if (!expectedStates.includes(context.progress.state)) {
     throw new Error(`[cc-nexs] ${closure ? 'review closure' : 'consolidated review'} requires ${expectedStates.join(' or ')}, found ${context.progress.state}`);
   }
+  const localChecks = extractLocalVerificationChecks(context.progress.mode === 'lean'
+    ? extractApprovalScope(readFileSync(join(dirname(context.progressFile), 'plan.md'), 'utf8'))
+    : extractHotfixScope(readFileSync(resolveHotfixDocument(context.progress, dirname(context.progressFile)), 'utf8')).raw);
+  assertRecordedLocalVerification(context.progress, { source: context.source, fingerprint: candidateFingerprint(context.source), expectedChecks: localChecks });
   return recordConsolidatedReview(context.progressFile, {
     source: context.source,
     status,

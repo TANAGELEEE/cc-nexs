@@ -140,8 +140,8 @@ Pi registers the same P2 slash surface:
 /cc-nexs:approve-spec 01
 /cc-nexs:approve-deploy 01
 /cc-nexs:release-test 01
-/cc-nexs:init "支付回调偶现 500" --mode=hotfix --repos=api
-/cc-nexs:hotfix 02
+/cc-nexs:hotfix "支付回调偶现 500" --repos=api
+/cc-nexs:hotfix <bug-key>
 /cc-nexs:status 01
 /cc-nexs:doctor
 ```
@@ -152,7 +152,11 @@ All approval commands call the shared deterministic core. `verify-local`, `relea
 
 G1/G2 only pause cc-nexs role dispatch. They do not block the parent Pi session from performing user-authorized Git, SQL, SSH, deployment, diagnostics, or documentation work.
 
-Hotfix is a standalone mini-Lean state machine. It always reserves a new id and creates `feature/<id>-<slug>` worktrees from latest configured bases; an older feature id is association metadata only. It binds one `hotfix.md`, runs local verification, one Review (P3 machine-bound skip), exact-candidate test release and independent verification, then stops at Gateway B before merging the same feature candidate to base. Any repair permits at most one lifetime delta Review. Contract/schema/permission/refactor expansion becomes a new Lean/Full change.
+Hotfix creates `hotfix/<key>` and `.worktrees/<key>/<repo>/` from latest configured bases without a shared feature number or placeholder push. The BUG lives in a related feature's `doc/<id>.<slug>/bugs/BUG-<key>.md`, or docs `hotfix/<key>/BUG-001.md` when unrelated. `progress.hotfix_document` locates the BUG; machine state/config stay in workspace `.cc-nexs/hotfixes/<key>/`. Legacy `hotfix.md` tasks remain resumable.
+
+Bind intended paths, required P0/P1 AC/rollback fields, and a matrix of actual local commands. Use the configured driver or direct structured results from those commands. Every severity, including P3, requires independent Review; line counts do not prove behavior. Exact-candidate test delivery and independent verification precede Gateway B and base integration. Explicit user authorization may use the same gateway's `--test-exception` only after real deployment is blocked on verification capability, with passed exact local/Review evidence, environment evidence, and rollback proof. Preserve the test gap; do not infer production deployment authorization.
+
+Existing delta/circuit limits remain. `revise-hotfix` records an already-authorized same-fault scope/severity revision on the original key/branch, preserving history and invalidating current evidence. `--promote-lean` creates `<BUGstem>.lean/` beside the original BUG and returns to Gateway A for contract/schema/permission expansion, without a new number.
 
 ## Security boundary
 

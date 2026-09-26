@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { basename, dirname, resolve, join } from 'node:path';
+import { basename, dirname, resolve, join, sep } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 import { loadConfig, loadWorkspaceConfig } from './config-loader.mjs';
@@ -13,6 +13,7 @@ import {
   PI_PRIMARY_BROWSER_PROVIDER,
 } from './pi-browser-provider.mjs';
 import { readProgressV2 } from './progress-v2.mjs';
+import { resolveHotfixDocument } from './hotfix-contract.mjs';
 
 const args = process.argv.slice(2);
 const strictRelease = args.includes('--release-test');
@@ -55,7 +56,7 @@ else {
 if (config) validateReleaseReadiness({ config, workspace, strictRelease, errors, warnings, projectRoot: root });
 
 function findProgressFiles(dir, depth = 0) {
-  if (!existsSync(dir) || depth > 5) return [];
+  if (!existsSync(dir) || depth > 8) return [];
   const files = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.name.startsWith('.') && depth > 0) continue;
@@ -69,6 +70,8 @@ function findProgressFiles(dir, depth = 0) {
 const docsSource = workspace?.repositories.find((repo) => repo.id === workspace.docs_repository)?.absolute_path || join(root, 'all-docs');
 const progressFiles = new Set([
   ...findProgressFiles(join(docsSource, 'doc')),
+  ...findProgressFiles(join(docsSource, 'hotfix')),
+  ...findProgressFiles(join(root, '.cc-nexs', 'hotfixes')),
   ...(workspace ? findProgressFiles(workspace.worktree_root) : []),
 ]);
 const selectedProgressFiles = featureFilter
@@ -80,9 +83,16 @@ if (featureFilter && selectedProgressFiles.length === 0) {
 for (const file of selectedProgressFiles) {
     const featureDir = dirname(file);
     const featureName = basename(featureDir);
-    const activeWorktreeState = workspace && resolve(file).startsWith(`${resolve(workspace.worktree_root)}${process.platform === 'win32' ? '\\' : '/'}`);
     try {
       const progress = readProgressV2(file);
+      const activeWorktreeState = progress.state !== 'COMPLETE' && workspace && (
+        resolve(file).startsWith(`${resolve(workspace.worktree_root)}${sep}`)
+        || resolve(file).startsWith(`${join(root, '.cc-nexs', 'hotfixes')}${sep}`)
+      );
+      if (activeWorktreeState && progress.mode === 'hotfix' && progress.hotfix_document) {
+        const document = resolveHotfixDocument(progress, featureDir);
+        if (!existsSync(document)) errors.push(`${featureName}: assigned Hotfix BUG document is missing`);
+      }
       const featureConfig = join(featureDir, 'config.json');
       if (existsSync(featureConfig)) {
         const feature = JSON.parse(readFileSync(featureConfig, 'utf8'));
@@ -127,8 +137,8 @@ for (const file of selectedProgressFiles) {
         const repo = workspace?.repositories.find((item) => item.id === repoId);
         if (!repo) { errors.push(`${featureName}: unknown assigned repository ${repoId}`); continue; }
         // Merged docs intentionally retain their historical assignments after
-        // finalize removes runtime worktrees. Only active state under
-        // worktree_root must still resolve to a live worktree and branch.
+        // finalize removes runtime worktrees. Active worktree/private state
+        // must still resolve to a live worktree and branch.
         if (!activeWorktreeState) continue;
         if (assignment.base_branch && assignment.base_branch !== repo.base_branch) {
           errors.push(`${featureName}: configured base ${repo.base_branch} != assigned base ${assignment.base_branch} for ${repoId}`);
@@ -153,7 +163,9 @@ function optionValue(values, name) {
 
 function matchesFeature(featureDir, requested) {
   const name = basename(featureDir);
-  const actualId = name.match(/^(\d+)(?:[.\-_]|$)/)?.[1] || name;
+  let actualId = name.match(/^(\d+)(?:[.\-_]|$)/)?.[1] || name;
+  try { actualId = String(JSON.parse(readFileSync(join(featureDir, 'progress.json'), 'utf8')).feature?.id || actualId); }
+  catch { /* Keep filename matching so malformed selected state is reported below. */ }
   if (/^\d+$/.test(actualId) && /^\d+$/.test(requested)) {
     return Number(actualId) === Number(requested);
   }
@@ -171,9 +183,7 @@ function validateReleaseReadiness({ config, workspace, strictRelease, errors, wa
   const report = (message) => (strictRelease ? errors : warnings).push(message);
   const verificationWarning = (message) => warnings.push(message);
   if (['lean', 'hotfix'].includes(config.mergedWorkflow?.default_mode) && !config.mergedWorkflow?.local_verify?.driver?.command) {
-    verificationWarning(config.mergedWorkflow.default_mode === 'lean'
-      ? 'workflow.local_verify.driver.command is not configured; Lean must run plan-approved commands and record structured exact-candidate evidence'
-      : 'hotfix mode requires workflow.local_verify.driver.command before local verification');
+    verificationWarning('workflow.local_verify.driver.command is not configured; Lean/Hotfix must run scope-approved commands and record structured exact-candidate evidence');
   }
   if (!workspace) {
     report('automatic test release requires .cc-nexs/workspace.yml or workspace.json');

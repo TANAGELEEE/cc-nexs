@@ -209,8 +209,8 @@ async function assertStateMachine() {
   );
   expectStep(
     mod.nextStep({ state: 'HOTFIX_LOCAL_VERIFYING', enabledRoles: hotfixRoles, mode: 'hotfix', workflow: { hotfix: { severity: 'P3' } } }),
-    { next: 'HOTFIX_CANDIDATE_READY', action: 'assert_p3_candidate' },
-    'hotfix P3 deterministic Review skip',
+    { next: 'HOTFIX_REVIEWING', role: 'hotfix-reviewer', action: 'review_hotfix' },
+    'hotfix P3 requires independent Review',
   );
   const hotfixGate = mod.nextStep({ state: 'HOTFIX_TEST_VERIFIED', enabledRoles: hotfixRoles, mode: 'hotfix' });
   expectStep(hotfixGate, { next: 'HOTFIX_RELEASE_PENDING_HUMAN', action: 'await_release_approval' }, 'hotfix Gateway B');

@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-hotfix
-description: /cc-nexs:hotfix 的 Codex 镜像 skill。 显式调用 $cc-nexs-hotfix 时使用。 独立 Hotfix mini-Lean：latest-base worktree、本地验证、一次集中 Review、test 黑盒验收、人工 base 门禁。
+description: /cc-nexs:hotfix 的 Codex 镜像 skill。 显式调用 $cc-nexs-hotfix 时使用。 Hotfix：独立修复分支与 BUG 文档、本地验证、独立 Review、test 验收和 Gateway B。
 ---
 
 # /cc-nexs:hotfix for Codex
@@ -13,13 +13,17 @@ Read and follow `../../commands/hotfix.md` as the single source of truth for thi
 
 ## Deterministic Hotfix Controls
 
-Resolve `../../lib/cc-nexs-cli.mjs` relative to this SKILL.md. Bind the completed hotfix scope with:
+Resolve `../../lib/cc-nexs-cli.mjs` relative to this SKILL.md. Follow the authoritative command for the applicable initialization, binding, or authorized revision action:
 
 ```text
-node <resolved-cli-path> start-hotfix <feature-id> [--level P0|P1|P2|P3] [--related <feature-id>]
+node <resolved-cli-path> init-hotfix <slug> --description "<bug description>" [--bug-key YYYYMMDD-slug] [--related <feature-id>] [--repos a,b] [--bug-file <docs-relative.md>]
+node <resolved-cli-path> start-hotfix <bug-key-or-legacy-id> [--level P0|P1|P2|P3] [--related <feature-id>]
+node <resolved-cli-path> revise-hotfix <bug-key-or-legacy-id> --reason "<reason>" --authorization-evidence "<existing user authorization>" [--promote-lean]
 ```
 
-Subsequent local verification, Review recording, test release/verification, release approval, and base integration must use the packaged controls named by the authoritative command. Never edit progress state or perform ad hoc merge/push operations.
+New Hotfix tasks use `hotfix/<key>` and one assigned BUG document; never reserve a shared feature number or publish placeholders. Resolve the BUG through `progress.hotfix_document` and keep machine state in `.cc-nexs/hotfixes/<key>/`; legacy `hotfix.md` tasks remain resumable. Every severity, including P3, requires independent Review. Authorized revisions retain the key/branch and invalidate current evidence; Lean promotion still requires Gateway A.
+
+Subsequent local verification, Review recording, test release/verification, release approval, and base integration must use the packaged controls named by the authoritative command. Only an explicitly authorized `approve-release --test-exception` may accept an actual deployed `manual_required` environment gap with exact local/Review and rollback evidence; it preserves the unverified fact and does not authorize production deployment. Never edit progress state or perform ad hoc merge/push operations.
 
 ## Codex Runtime Delta
 
@@ -30,7 +34,7 @@ Subsequent local verification, Review recording, test release/verification, rele
 
 ## Document Write Map
 
-Preserve exactly the paths declared by the authoritative command, including `all-docs/doc/{id}.{slug}/`, its `progress.md` and `hotfix.md` records, command-declared `bugs/` or `qa-scripts/`, and `docs/solutions/`. Do not invent Codex-specific alternatives.
+Preserve exactly the paths declared by the authoritative command: ordinary features use `all-docs/doc/{id}.{slug}/` and `progress.md`; new Hotfix tasks use the BUG identified by `progress.hotfix_document` with machine state in workspace `.cc-nexs/hotfixes/<key>/`. A related BUG uses `doc/<id>.<slug>/bugs/BUG-<key>.md`; otherwise use docs `hotfix/<key>/BUG-001.md`. Keep legacy `hotfix.md`, command-declared `bugs/` / `qa-scripts/`, and `docs/solutions/` compatible. Hotfix does not reserve a feature number or publish placeholders. Pass `CC_NEXS_PROGRESS_FILE` and the resolved `BUG_FILE` to Hotfix children; never infer the BUG from a private-state directory. Do not invent Codex-specific alternatives.
 
 ## Full / Fast / Hotfix Mode Locks
 

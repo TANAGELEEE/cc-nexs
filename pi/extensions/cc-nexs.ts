@@ -31,6 +31,8 @@ const P2_COMMANDS = [
   "git-custodian",
   "hotfix",
   "init",
+  "init-hotfix",
+  "revise-hotfix",
   "lean-review",
   "lean-verify",
   "migrate-progress",
@@ -68,7 +70,7 @@ export default function ccNexsPiExtension(pi: ExtensionAPI) {
   if (childRole) process.env.CC_NEXS_ROLE = childRole;
 
   if (childRole) {
-    pi.on("tool_call", (event) => {
+    pi.on("tool_call", (event, ctx) => {
       const input = (event.input || {}) as Record<string, unknown>;
       const command = typeof input.command === "string" ? input.command : "";
       const filePath = typeof input.file_path === "string"
@@ -115,6 +117,9 @@ export default function ccNexsPiExtension(pi: ExtensionAPI) {
         toolName: event.toolName,
         filePath,
         command,
+        cwd: ctx.cwd,
+        progressPath: process.env.CC_NEXS_PROGRESS_FILE
+          || (process.env.CC_NEXS_REQ_DIR ? resolve(process.env.CC_NEXS_REQ_DIR, "progress.json") : null),
       });
       if (violation) return { block: true, reason: `[cc-nexs role-boundary] ${violation}` };
       return undefined;

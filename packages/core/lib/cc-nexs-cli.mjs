@@ -7,6 +7,8 @@ import { pathToFileURL } from 'node:url';
 import { approveFeatureGate, resolveAssignedCodeRepositories, resolveFeatureProgress } from './approval-command.mjs';
 import { runBaseRelease } from './base-release.mjs';
 import { assertHotfixCandidate, startHotfix } from './hotfix-control.mjs';
+import { initializeHotfix } from './hotfix-init.mjs';
+import { reviseHotfix } from './hotfix-revision.mjs';
 import { runLocalVerification } from './local-verify.mjs';
 import { recordLeanReview } from './review-control.mjs';
 import { requestReleaseChanges } from './release-change-command.mjs';
@@ -21,6 +23,8 @@ import { readProgressV2 } from './progress-v2.mjs';
 
 export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   const [command, ...args] = argv;
+  if (command === 'init-hotfix') return initializeHotfix({ cwd, ...parseHotfixLifecycleOptions(args, true) });
+  if (command === 'revise-hotfix') return reviseHotfix({ cwd, ...parseHotfixLifecycleOptions(args, false) });
   if (command === 'release-test') {
     return runTestRelease({ cwd, ...parseReleaseOptions(args) });
   }
@@ -94,7 +98,30 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   if (!gate) throw new Error(`unsupported command: ${command || '(missing)'}`);
 
   const options = parseApprovalOptions(args);
+  if (options.testException && gate !== 'release') throw new Error('--test-exception is only valid for approve-release');
   return approveFeatureGate({ cwd, gate, ...options });
+}
+
+function parseHotfixLifecycleOptions(args, initialize) {
+  const fields = initialize
+    ? { '--description': 'description', '--bug-key': 'bugKey', '--related': 'relatedFeature', '--repos': 'repositoryIds', '--bug-file': 'bugFile' }
+    : { '--reason': 'reason', '--authorization-evidence': 'authorizationEvidence', '--progress': 'progressPath' };
+  const options = {};
+  const positional = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const token = args[i];
+    if (!initialize && token === '--promote-lean') { options.promoteLean = true; continue; }
+    const equals = token.indexOf('=');
+    const flag = equals < 0 ? token : token.slice(0, equals);
+    if (fields[flag]) {
+      const value = equals < 0 ? requireValue(args, ++i, flag) : token.slice(equals + 1);
+      options[fields[flag]] = flag === '--repos' ? value.split(',').filter(Boolean) : value;
+    } else if (token.startsWith('-')) throw new Error(`unknown option: ${token}`);
+    else positional.push(token);
+  }
+  if (positional.length !== 1) throw new Error(initialize ? 'init-hotfix requires one slug' : 'revise-hotfix requires one BUG key');
+  options[initialize ? 'slug' : 'featureId'] = positional[0];
+  return options;
 }
 
 function parseStartHotfixOptions(args) {
@@ -343,9 +370,15 @@ export function splitCommandArguments(text = '') {
 function parseApprovalOptions(args) {
   const positional = [];
   const options = { featureId: null, sprint: null, approver: null, progressPath: null };
+  const exceptionFields = { '--authorization-evidence': 'authorizationEvidence', '--reason': 'reason', '--environment-evidence': 'environmentEvidence', '--rollback-evidence': 'rollbackEvidence' };
+  const exception = {};
+  let exceptionRequested = false;
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index];
-    if (token === '--approver') options.approver = requireValue(args, ++index, token);
+    const flag = token.split('=')[0];
+    if (token === '--test-exception') exceptionRequested = true;
+    else if (exceptionFields[flag]) exception[exceptionFields[flag]] = token.includes('=') ? token.slice(token.indexOf('=') + 1) : requireValue(args, ++index, token);
+    else if (token === '--approver') options.approver = requireValue(args, ++index, token);
     else if (token.startsWith('--approver=')) options.approver = token.slice('--approver='.length);
     else if (token === '--progress') options.progressPath = requireValue(args, ++index, token);
     else if (token.startsWith('--progress=')) options.progressPath = token.slice('--progress='.length);
@@ -357,6 +390,8 @@ function parseApprovalOptions(args) {
   options.featureId = positional[0] || null;
   if (positional[1] && options.sprint === null) options.sprint = positional[1];
   if (positional.length > 2) throw new Error(`unexpected arguments: ${positional.slice(2).join(' ')}`);
+  if (Object.keys(exception).length && !exceptionRequested) throw new Error('exception evidence requires --test-exception');
+  if (exceptionRequested) options.testException = exception;
   return options;
 }
 
@@ -366,6 +401,13 @@ function requireValue(args, index, option) {
 }
 
 function printResult(result) {
+  if (['hotfix-init', 'hotfix-revision'].includes(result.kind)) {
+    console.log(`cc-nexs ${result.kind}: ${result.feature.id}${result.resumed ? ' (resumed)' : ''}`);
+    console.log(`BUG: ${result.document}`);
+    console.log(`Progress: ${result.progressFile}`);
+    if (result.state) console.log(`State: ${result.state}`);
+    return;
+  }
   if (result.kind === 'implementation-delta-begin') {
     console.log(`cc-nexs implementation delta baseline ready (${result.sprint} wave ${result.wave})`);
     console.log(`Assignments: ${result.assignments.join(', ')}`);
@@ -486,10 +528,13 @@ function printResult(result) {
 
 function printUsage() {
   console.error('Usage:');
+  console.error('  cc-nexs init-hotfix <slug> --description <text> [--bug-key <key>] [--related <feature-id>] [--repos <a,b>] [--bug-file <docs-relative.md>]');
+  console.error('  cc-nexs revise-hotfix <bug-key> --reason <text> --authorization-evidence <text> [--promote-lean] [--progress <path>]');
   console.error('  cc-nexs approve-spec <feature-id> [--approver <name>] [--progress <path>]');
   console.error('  cc-nexs approve-deploy <feature-id> [M<N>] [--approver <name>] [--progress <path>]');
   console.error('  cc-nexs approve-plan <feature-id> [--approver <name>] [--progress <path>]');
   console.error('  cc-nexs approve-release <feature-id> [--approver <name>] [--progress <path>]');
+  console.error('    [--test-exception --authorization-evidence <text> --reason <text> --environment-evidence <text> --rollback-evidence <text>]');
   console.error('  cc-nexs release-test <feature-id> [--resume | --retry] [--dry-run] [--hotfix] [--progress <path>]');
   console.error('  cc-nexs verify-local <feature-id> [--passed|--failed|--deferred-to-test --evidence-json <json>] [--progress <path>]');
   console.error('  cc-nexs record-review <feature-id> <--passed|--blocked> [--finding <P0/P1 text>] [--closure|--gateway-b-delta] [--progress <path>]');
