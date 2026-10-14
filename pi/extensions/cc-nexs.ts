@@ -42,6 +42,8 @@ const P2_COMMANDS = [
   "migrate-progress",
   "migrate-feature-config",
   "recon",
+  "sync-base",
+  "switch-test-target",
   "release-test",
   "release-base",
   "render-plan",

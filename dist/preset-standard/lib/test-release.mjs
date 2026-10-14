@@ -1,3 +1,4 @@
+import { validateTestTarget } from './test-target.mjs';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -21,7 +22,7 @@ import {
 } from './progress-v2.mjs';
 import { resolveFeatureProgress } from './approval-command.mjs';
 
-const DRIVER_STATUSES = new Set(['pending', 'succeeded', 'failed', 'deployed_needs_manual_verification']);
+const DRIVER_STATUSES = new Set(['awaiting_receipt', 'pending', 'succeeded', 'failed', 'deployed_needs_manual_verification']);
 
 export function preflightTestRelease({
   cwd = process.cwd(),
@@ -92,7 +93,9 @@ export function preflightTestRelease({
   const repositories = assignedRepositoryIds
     .filter((id) => !docsRepositories.has(id))
     .map((id) => {
-      const repo = workspaceById.get(id);
+      const configuredRepo = workspaceById.get(id);
+      const repo = progress.delivery.test.target
+        ? { ...configuredRepo, test_branch: progress.delivery.test.target.branches[id] } : configuredRepo;
       const assignment = progress.repositories[id];
       if (!assignment?.candidate?.ref) {
         throw new Error(`[cc-nexs] assigned repository ${repo.id} is missing a candidate ref`);
@@ -108,7 +111,7 @@ export function preflightTestRelease({
         throw new Error(`[cc-nexs] repository ${repo.id} is marked deploy but has no test_branch; set test_delivery.${repo.id}: local in the approved plan only when it will run locally`);
       }
       const approvedTestTarget = requestedDelivery === 'deploy' && planDelivery.version >= 2
-        ? planDelivery.targets[repo.id]
+        ? (progress.delivery.test.target?.branches[repo.id] || planDelivery.targets[repo.id])
         : repo.test_branch;
       if (requestedDelivery === 'deploy' && planDelivery.version >= 2) {
         if (typeof approvedTestTarget !== 'string' || !approvedTestTarget.trim()) {
@@ -160,8 +163,9 @@ export function preflightTestRelease({
   if (hotfix) assertHotfixReleaseEvidence(progress, source);
   else if (progress.mode === 'lean') assertLeanReleaseEvidence(progress, source, planDelivery.lane);
 
-  const release = config.mergedRelease?.test || {};
-  if ((release.environment || 'test').toLowerCase() !== 'test') {
+  const release = { ...config.mergedRelease?.test, ...progress.delivery.test.target };
+  if (progress.delivery.test.target) validateTestTarget(progress.delivery.test.target, workspace.repositories, deployRepositories.map(repo => repo.id));
+  if (!progress.delivery.test.target && (release.environment || 'test').toLowerCase() !== 'test') {
     throw new Error('[cc-nexs] automatic release environment must be test');
   }
   rejectProductionVerificationUrls(release);
@@ -228,10 +232,12 @@ export function runTestRelease({
     if (resume) return resumeTestRelease(context);
     const started = beginTestRelease(context.progressFile, {
       source: context.source,
+      environment: context.release.environment || 'test',
+      target: context.progress.delivery.test.target || null,
       retry,
       expectedRevision: context.progress.revision,
     });
-    if (started.reused && ['deploying', 'succeeded', 'verified'].includes(started.attempt.status)) {
+    if (started.reused && ['awaiting_receipt', 'deploying', 'succeeded', 'verified'].includes(started.attempt.status)) {
       return { kind: 'test-release', reused: true, attempt: started.attempt, ...summary(context) };
     }
     if (started.reused && started.attempt.status === 'running') {
@@ -281,7 +287,8 @@ function resumeTestRelease(context) {
   if (!attempt || attempt.fingerprint !== releaseFingerprint(context.source)) {
     throw new Error('[cc-nexs] --resume requires the current exact-candidate test release attempt');
   }
-  if (!['running', 'deploying'].includes(attempt.status)) {
+  if ((attempt.environment || 'test') !== (context.release.environment || 'test') || !jsonValuesEqual(attempt.target || null, context.progress.delivery.test.target || null)) throw new Error('[cc-nexs] active test target changed');
+  if (!['running', 'deploying', 'awaiting_receipt'].includes(attempt.status)) {
     if (['succeeded', 'verified'].includes(attempt.status)) {
       return { kind: 'test-release', reused: true, attempt, ...summary(context) };
     }
@@ -442,6 +449,9 @@ export function invokeTestReleaseDriver({ driver, workspaceRoot, payload }) {
   let result;
   try { result = JSON.parse(output); }
   catch { throw new Error('[cc-nexs] test release driver must write one JSON object to stdout'); }
+  if (result?.status === 'awaiting_receipt' && (typeof result.reason !== 'string' || !result.reason.trim())) {
+    throw new Error('[cc-nexs] awaiting_receipt requires an explanation; no success is implied');
+  }
   if (!DRIVER_STATUSES.has(result?.status)) {
     throw new Error(`[cc-nexs] invalid test release driver status: ${result?.status || '<missing>'}`);
   }

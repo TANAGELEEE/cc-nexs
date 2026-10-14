@@ -1,8 +1,9 @@
-import { readFileSync } from 'node:fs';
+import { releaseScope } from './release-scope.mjs';
+import { execFileSync } from 'node:child_process';
+import { acquireTestReleaseLock } from './test-release.mjs';
 import { dirname, join, resolve } from 'node:path';
 
 import { resolveCandidateContext } from './candidate-context.mjs';
-import { assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
 import {
   cleanupMergedWorktree,
   integrateCandidateToTest,
@@ -15,7 +16,6 @@ import {
   readProgressV2,
   recordBaseIntegration,
 } from './progress-v2.mjs';
-import { assertPlanApprovalCurrent, extractApprovalScope } from './plan-contract.mjs';
 import { assertRecordedLocalVerification, extractLocalVerificationChecks } from './local-evidence.mjs';
 import { transitionState } from './progress-io.mjs';
 import { resolveFeatureProgress } from './approval-command.mjs';
@@ -27,19 +27,25 @@ export function runBaseRelease({ cwd = process.cwd(), featureId, progressPath = 
   // last by Git Custodian after the orchestrator records COMPLETE.
   const progressFile = resolveFeatureProgress({ cwd, featureId, progressPath });
   const initial = readProgressV2(progressFile);
-  if (!['lean', 'hotfix'].includes(initial.mode)) throw new Error(`[cc-nexs] base release requires lean or hotfix mode, found ${initial.mode}`);
+  if (initial.delivery?.base?.status === 'succeeded') {
+    const context = resolveCandidateContext({ cwd, featureId, progressPath: progressFile, includeDocs: false });
+    const attempt = initial.delivery.base.attempts.at(-1);
+    if (candidateFingerprint(context.source) !== attempt.fingerprint) throw new Error('[cc-nexs] candidate changed after successful base release');
+    return { kind: 'base-release', status: 'succeeded', feature: initial.feature, attempt, progressFile, docsFinalizationRequired: Boolean(context.workspace.docs_repository) };
+  }
+
   const mergeState = initial.mode === 'hotfix' ? 'HOTFIX_BASE_MERGING' : 'BASE_MERGING';
-  if (initial.state !== mergeState) throw new Error(`[cc-nexs] base release requires ${mergeState}, found ${initial.state}`);
+  if (![mergeState, initial.mode === 'hotfix' ? 'HOTFIX_BASE_MERGE_BLOCKED' : 'BASE_MERGE_BLOCKED'].includes(initial.state)) throw new Error(`[cc-nexs] base release requires ${mergeState}, found ${initial.state}`);
   const failureContext = { progressFile, progress: initial };
+  const unlock = acquireTestReleaseLock(progressFile);
   try {
     const context = resolveCandidateContext({ cwd, featureId, progressPath: progressFile, includeDocs: false });
-    if (context.progress.mode === 'lean') assertPlanApprovalCurrent(context.progress, dirname(context.progressFile));
-    else assertHotfixScopeCurrent(context.progress, dirname(context.progressFile));
+    releaseScope(context.progress, context.progressFile);
     return executeBaseRelease(context);
   } catch (error) {
     persistBaseReleaseFailure(failureContext, mergeState, error);
     throw error;
-  }
+  } finally { unlock(); }
 }
 
 function executeBaseRelease(context) {
@@ -56,9 +62,7 @@ function executeBaseRelease(context) {
   if (context.progress.review?.status !== 'passed' || context.progress.review.candidate_fingerprint !== currentFingerprint) {
     throw new Error('[cc-nexs] approved candidate no longer has a passing consolidated Review');
   }
-  const localChecks = extractLocalVerificationChecks(context.progress.mode === 'lean'
-    ? extractApprovalScope(readFileSync(join(dirname(context.progressFile), 'plan.md'), 'utf8'))
-    : extractHotfixScope(readFileSync(resolveHotfixDocument(context.progress, dirname(context.progressFile)), 'utf8')).raw);
+  const localChecks = extractLocalVerificationChecks(releaseScope(context.progress, context.progressFile));
   assertRecordedLocalVerification(context.progress, { source: context.source, fingerprint: currentFingerprint, expectedChecks: localChecks });
   const testAttempt = context.progress.delivery?.test?.attempts?.find((item) => item.id === gate.binding.test_attempt);
   assertTestAttemptNotInvalidated(testAttempt);
@@ -94,6 +98,11 @@ function executeBaseRelease(context) {
         expectedSourceCommit: item.sourceCommit,
         targetBranch: baseTargets[item.id],
         requireDisjointTargetChanges: true,
+        previousIntegration: attempt.integrations[item.id],
+        mergeRequest: context.config.mergedRelease?.base?.driver ? payload => {
+          const driver = context.config.mergedRelease.base.driver;
+          return JSON.parse(execFileSync(driver.command, driver.args || [], { cwd: context.workspaceRoot, encoding: 'utf8', timeout: 120000, input: JSON.stringify({ operation: 'ensure_merge_request', ...payload }) }));
+        } : null,
       });
       recordBaseIntegration(context.progressFile, {
         attemptId: attempt.id,
@@ -102,9 +111,23 @@ function executeBaseRelease(context) {
           source_commit: result.sourceCommit,
           target_branch: result.targetBranch,
           target_before: result.targetBefore,
-          integration_commit: result.remoteCommit || result.integrationCommit,
+          integration_commit: result.pending ? result.integrationCommit : result.remoteCommit || result.integrationCommit,
+          merge_request: result.mergeRequest || attempt.integrations[item.id]?.merge_request || null,
         },
       });
+      if (result.pending) {
+        return { kind: 'base-release', status: 'running', feature: context.progress.feature, attempt: readProgressV2(context.progressFile).delivery.base.attempts.at(-1), progressFile: context.progressFile };
+      }
+    }
+    // Cleanup is part of success, not a best-effort operation after success.
+  } catch (error) {
+    completeBaseRelease(context.progressFile, { attemptId: attempt.id, status: 'failed', reason: error.message });
+    throw error;
+  }
+
+  try {
+    for (const item of context.repositories) {
+      cleanupMergedWorktree({ repo: item.repository.absolute_path, worktree: resolve(context.workspaceRoot, item.assignment.worktree), branch: item.assignment.branch, baseBranch: baseTargets[item.id], candidateRef: null, deleteRemote: true });
     }
     completeBaseRelease(context.progressFile, { attemptId: attempt.id, status: 'succeeded' });
   } catch (error) {
@@ -112,16 +135,6 @@ function executeBaseRelease(context) {
     throw error;
   }
 
-  for (const item of context.repositories) {
-    cleanupMergedWorktree({
-      repo: item.repository.absolute_path,
-      worktree: resolve(context.workspaceRoot, item.assignment.worktree),
-      branch: item.assignment.branch,
-      baseBranch: baseTargets[item.id],
-      candidateRef: item.assignment.candidate.ref,
-      deleteRemote: true,
-    });
-  }
   const progress = readProgressV2(context.progressFile);
   return {
     kind: 'base-release',

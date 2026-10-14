@@ -1,3 +1,4 @@
+import { releaseScope } from './release-scope.mjs';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -84,25 +85,20 @@ export function approveFeatureGate({
       reason: 'human approved lean plan',
     });
   } else if (gate === 'release') {
-    if (!['lean', 'hotfix'].includes(before.mode)) throw new Error(`release gate requires lean or hotfix mode, found ${before.mode}`);
     const pendingState = before.mode === 'hotfix' ? 'HOTFIX_RELEASE_PENDING_HUMAN' : 'RELEASE_PENDING_HUMAN';
     const manualState = before.mode === 'hotfix' ? 'HOTFIX_TEST_DEPLOYED_NEEDS_MANUAL_VERIFY' : 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY';
-    if (before.state !== pendingState && !(testException && before.state === manualState)) {
+    const legacyAccepted = ['fast', 'full', 'lite'].includes(before.mode) && before.state === 'COMPLETE' && !before.delivery?.base?.attempts?.length;
+    if (!legacyAccepted && before.state !== pendingState && !(testException && before.state === manualState)) {
       const existing = before.gates.release;
       if (existing?.approved) {
         assertTestAttemptNotInvalidated(before.delivery?.test?.attempts?.find((item) => item.id === existing.binding?.test_attempt));
-        if (before.mode === 'lean') assertPlanApprovalCurrent(before, dirname(progressFile));
-        else assertHotfixScopeCurrent(before, dirname(progressFile));
-        const localChecks = extractLocalVerificationChecks(before.mode === 'lean'
-          ? extractApprovalScope(readFileSync(join(dirname(progressFile), 'plan.md'), 'utf8'))
-          : extractHotfixScope(readFileSync(resolveHotfixDocument(before, dirname(progressFile)), 'utf8')).raw);
+        const localChecks = extractLocalVerificationChecks(releaseScope(before, progressFile));
         assertRecordedLocalVerification(before, { source: existing.binding?.source, fingerprint: existing.binding?.candidate_fingerprint, expectedChecks: localChecks });
         return approvalResult({ progressFile, progress: before, gate, sprint: null, approval: existing, alreadyApproved: true });
       }
       throw new Error(`release gate requires ${pendingState}, found ${before.state}`);
     }
-    if (before.mode === 'lean') assertPlanApprovalCurrent(before, dirname(progressFile));
-    else assertHotfixScopeCurrent(before, dirname(progressFile));
+    const localChecks = extractLocalVerificationChecks(releaseScope(before, progressFile));
     const attempt = before.delivery?.test?.attempts?.at(-1);
     assertTestAttemptNotInvalidated(attempt);
     const exceptionBinding = testException ? createReleaseExceptionBinding(before, testException) : null;
@@ -110,9 +106,6 @@ export function approveFeatureGate({
       throw new Error('[cc-nexs] release approval requires a verified test release attempt');
     }
     const baseTargets = assertReleaseCandidateRefsCurrent({ progress: before, progressFile, attempt });
-    const localChecks = extractLocalVerificationChecks(before.mode === 'lean'
-      ? extractApprovalScope(readFileSync(join(dirname(progressFile), 'plan.md'), 'utf8'))
-      : extractHotfixScope(readFileSync(resolveHotfixDocument(before, dirname(progressFile)), 'utf8')).raw);
     assertRecordedLocalVerification(before, { source: attempt.source, fingerprint: attempt.fingerprint, expectedChecks: localChecks });
     if (before.review?.status !== 'passed' || before.review.candidate_fingerprint !== attempt.fingerprint) {
       throw new Error('[cc-nexs] release approval requires a consolidated review for the tested candidate');
@@ -129,7 +122,8 @@ export function approveFeatureGate({
     };
     const approved = approveProgressGate(progressFile, { gate: 'release', approver: actor, binding, expectedRevision: before.revision });
     if (before.mode === 'hotfix') syncHotfixChangeStatuses(resolveHotfixDocument(before, dirname(progressFile)), approved.change_requests?.items);
-    else syncPlanChangeStatuses(join(dirname(progressFile), 'plan.md'), approved.change_requests?.items);
+    else if (before.mode === 'lean') syncPlanChangeStatuses(join(dirname(progressFile), 'plan.md'), approved.change_requests?.items);
+    if (legacyAccepted) transitionState(markdownFile, { from: 'COMPLETE', to: pendingState, reason: 'user authorized base release of previously accepted candidate' });
     if (exceptionBinding && before.state === manualState) {
       transitionState(markdownFile, { from: manualState, to: pendingState, reason: 'human authorized base release with a bound test-environment exception; test remains unverified' });
     }

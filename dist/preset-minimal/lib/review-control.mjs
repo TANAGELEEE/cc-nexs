@@ -1,3 +1,4 @@
+import { releaseScope } from './release-scope.mjs';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
@@ -17,7 +18,7 @@ export function recordLeanReview({
   blockingFindings = [],
 } = {}) {
   const context = resolveCandidateContext({ cwd, featureId, progressPath });
-  if (!['lean', 'hotfix'].includes(context.progress.mode)) throw new Error(`[cc-nexs] review control requires lean or hotfix mode, found ${context.progress.mode}`);
+  releaseScope(context.progress, context.progressFile);
   let leanDeliveryLane = 'standard';
   if (context.progress.mode === 'lean') {
     assertPlanApprovalCurrent(context.progress, dirname(context.progressFile));
@@ -27,7 +28,7 @@ export function recordLeanReview({
       assertTestAttemptNotInvalidated(attempt);
       const deployedForManualVerification = attempt?.status === 'deployed_needs_manual_verification'
         && attempt.verification?.result === 'manual_required'
-        && attempt.deployment?.environment === 'test'
+        && attempt.deployment?.environment === (attempt.environment || 'test')
         && Object.keys(attempt.pipeline || {}).length > 0
         && Object.keys(attempt.environment_revision || {}).length > 0;
       if ((!deployedForManualVerification && attempt?.status !== 'verified')
@@ -36,7 +37,7 @@ export function recordLeanReview({
       }
     }
   }
-  else {
+  else if (context.progress.mode === 'hotfix') {
     assertHotfixScopeCurrent(context.progress, dirname(context.progressFile));
     if ((closure || gatewayBDelta) && (context.progress.review?.closure_attempts || 0) >= 1) {
       throw new Error('[cc-nexs] hotfix permits at most one delta Review; human intervention is required');
@@ -49,13 +50,11 @@ export function recordLeanReview({
       ? ['GATEWAY_B_LOCAL_REVERIFYING', 'GATEWAY_B_DELTA_REVIEW']
       : closure
         ? ['LOCAL_REVERIFYING', 'REVIEW_CLOSURE']
-        : ['LOCAL_VERIFYING', 'CONSOLIDATED_REVIEW', ...(leanDeliveryLane === 'fast-track' ? ['TEST_VERIFIED', 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY'] : [])];
+        : ['RELEASE_PENDING_HUMAN', 'ACCEPTANCE', 'FINAL_EVAL', 'LOCAL_VERIFYING', 'CONSOLIDATED_REVIEW', ...(leanDeliveryLane === 'fast-track' ? ['TEST_VERIFIED', 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY'] : [])];
   if (!expectedStates.includes(context.progress.state)) {
     throw new Error(`[cc-nexs] ${closure ? 'review closure' : 'consolidated review'} requires ${expectedStates.join(' or ')}, found ${context.progress.state}`);
   }
-  const localChecks = extractLocalVerificationChecks(context.progress.mode === 'lean'
-    ? extractApprovalScope(readFileSync(join(dirname(context.progressFile), 'plan.md'), 'utf8'))
-    : extractHotfixScope(readFileSync(resolveHotfixDocument(context.progress, dirname(context.progressFile)), 'utf8')).raw);
+  const localChecks = extractLocalVerificationChecks(releaseScope(context.progress, context.progressFile));
   assertRecordedLocalVerification(context.progress, { source: context.source, fingerprint: candidateFingerprint(context.source), expectedChecks: localChecks });
   return recordConsolidatedReview(context.progressFile, {
     source: context.source,

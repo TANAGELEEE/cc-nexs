@@ -110,8 +110,9 @@
           "required": ["policy", "status", "attempts"],
           "properties": {
             "policy": { "enum": ["auto_if_ready", "manual", "disabled"] },
+            "target": { "type": "object" },
             "status": {
-              "enum": ["idle", "running", "deploying", "succeeded", "failed", "deployed_needs_manual_verification", "verified"]
+              "enum": ["idle", "running", "awaiting_receipt", "deploying", "succeeded", "failed", "deployed_needs_manual_verification", "verified"]
             },
             "attempts": {
               "type": "array",

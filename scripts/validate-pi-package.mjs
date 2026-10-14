@@ -29,6 +29,8 @@ const expectedCommands = [
   'migrate-progress',
   'migrate-feature-config',
   'recon',
+  'switch-test-target',
+  'sync-base',
   'release-test',
   'release-base',
   'render-plan',

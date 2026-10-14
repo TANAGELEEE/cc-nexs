@@ -319,3 +319,19 @@ test('automatic base sync preserves conflicts on the development branch without 
     git(worktree, ['merge-base', '--is-ancestor', candidate, 'HEAD']);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('MR success text cannot replace remote ancestry proof', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-mr-proof-'));
+  try {
+    const origin = join(root, 'remote.git');
+    const repo = join(root, 'repo');
+    git(root, ['init', '--bare', origin]); git(root, ['clone', origin, repo]); configure(repo);
+    git(repo, ['checkout', '-b', 'main']);
+    writeFileSync(join(repo, 'base.txt'), 'base'); git(repo, ['add', '.']); git(repo, ['commit', '-m', 'base']); git(repo, ['push', 'origin', 'main']);
+    git(repo, ['checkout', '-b', 'feature']);
+    writeFileSync(join(repo, 'change.txt'), 'feature'); git(repo, ['add', '.']); git(repo, ['commit', '-m', 'feature']);
+    git(repo, ['update-ref', 'refs/cc-nexs/candidates/test/api', 'HEAD']);
+    assert.throws(() => integrateCandidateToTest({ repo, repositoryId: 'api', candidateRef: 'refs/cc-nexs/candidates/test/api', targetBranch: 'main', requireDisjointTargetChanges: true, mergeRequest: () => ({ status: 'merged', url: 'https://git.example/mr/1' }) }), /no remote ancestry proof/);
+    assert.throws(() => git(repo, ['show', 'origin/main:change.txt']));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

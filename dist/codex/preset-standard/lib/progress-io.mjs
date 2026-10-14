@@ -106,6 +106,10 @@ export function readProgress(path) {
       sprint: progress.sprint || {},
       gate: progress.gates || {},
       workflow: {
+        release_approved: progress.gates?.release?.approved === true,
+        base_release: progress.delivery?.base || { status: 'idle' },
+        review: progress.review,
+        local_verification: progress.local_verification,
         g2_approved: progress.gates?.g2?.approved === true,
         g2_approved_sprints: g2Sprints,
         sprint_delivery: progress.delivery?.strategy || 'per_sprint',

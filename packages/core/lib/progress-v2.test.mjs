@@ -603,3 +603,16 @@ test('local verification mutation rejects unstructured and contradictory results
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('COMPLETE cannot conceal failed or pending base release', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-incomplete-base-'));
+  try {
+    const file = join(root, 'progress.json');
+    const p = createProgressV2({ featureId: 'finalize', featureSlug: 'demo', preset: 'preset-standard' });
+    p.state = 'BASE_MERGING';
+    p.delivery.base = { status: 'failed', attempts: [{ id: 'base-release-1', status: 'failed' }] };
+    writeProgressV2(file, p);
+    assert.throws(() => appendProgressEvent(file, { type: 'state.transition', from: 'BASE_MERGING', to: 'COMPLETE' }), /requires successful base release/);
+    assert.equal(readProgressV2(file).state, 'BASE_MERGING');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

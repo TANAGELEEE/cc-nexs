@@ -857,3 +857,63 @@ test('explicit progress paths reject a different task while keeping numeric ID a
   assert.throws(() => runCcNexsCommand(['revise-hotfix', 'BUG-other', '--progress', fixture.progressFile, '--reason', 'same failure', '--authorization-evidence', 'user requested repair'], { cwd: fixture.root }), /feature mismatch: requested BUG-other, found 04/);
   assert.equal(readProgressV2(fixture.progressFile).revision, 0);
 });
+
+test('BASE_CHANGED clean sync resumes verification; real conflict remains developer-owned', () => {
+  for (const file of ['package.json', 'candidate.txt']) {
+    const fixture = createEnvironmentBlockedCandidate('lean', `sync-${file.replace('.', '-')}`);
+    withPresetEnv(fixture, () => {
+      const state = readProgressV2(fixture.progressFile);
+      state.state = 'BASE_CHANGED';
+      writeProgressV2(fixture.progressFile, state);
+      writeFileSync(join(fixture.repo, file), 'upstream\n');
+      fixture.git(fixture.repo, ['add', file]);
+      fixture.git(fixture.repo, ['commit', '-m', 'upstream']);
+      fixture.git(fixture.repo, ['push', 'origin', 'main']);
+      const result = runCcNexsCommand(['sync-base', state.feature.id], { cwd: fixture.root });
+      assert.equal(result.conflicts, file === 'candidate.txt');
+      assert.equal(result.state, file === 'candidate.txt' ? 'IMPLEMENTING' : 'LOCAL_VERIFYING');
+      const after = readProgressV2(fixture.progressFile);
+      assert.equal(after.gates.release.approved, false);
+      assert.equal(after.local_verification.status, 'idle');
+      assert.deepEqual(after.delivery.test.attempts, state.delivery.test.attempts);
+    });
+  }
+});
+
+test('protected MR pending is resumed and remote merge reconciles ledger and cleanup', () => {
+  const fixture = createEnvironmentBlockedCandidate('hotfix', 'mr-resume');
+  withPresetEnv(fixture, () => {
+    writeFileSync(join(fixture.root, 'cc-nexs.config.yml'), `preset_path: .cc-nexs\nrelease:\n  base:\n    driver:\n      command: ${process.execPath}\n      args: [mr.mjs]\n`);
+    writeFileSync(join(fixture.root, 'mr.mjs'), `import {appendFileSync} from 'node:fs'; let s=''; for await(const c of process.stdin)s+=c; const p=JSON.parse(s); appendFileSync('mr.log',JSON.stringify(p)+'\\n'); console.log(JSON.stringify({status:'pending',url:'https://git.example/mr/1'}));`);
+    approveFeatureGate({ cwd: fixture.root, featureId: 'mr-resume', gate: 'release', approver: 'Owner', testException });
+    const p = readProgressV2(fixture.progressFile); p.state = 'HOTFIX_BASE_MERGING'; writeProgressV2(fixture.progressFile, p);
+    assert.equal(runBaseRelease({ cwd: fixture.root, featureId: 'mr-resume' }).status, 'running');
+    assert.equal(runBaseRelease({ cwd: fixture.root, featureId: 'mr-resume' }).status, 'running');
+    const calls = readFileSync(join(fixture.root, 'mr.log'), 'utf8').trim().split('\n').map(JSON.parse);
+    assert.equal(calls[0].sourceBranch, calls[1].sourceBranch);
+    fixture.git(fixture.repo, ['push', 'origin', `${calls[0].integrationCommit}:refs/heads/main`]);
+    assert.equal(runBaseRelease({ cwd: fixture.root, featureId: 'mr-resume' }).status, 'succeeded');
+    assert.equal(readProgressV2(fixture.progressFile).delivery.base.attempts.length, 1);
+    assert.equal(runBaseRelease({ cwd: fixture.root, featureId: 'mr-resume' }).status, 'succeeded');
+  });
+});
+
+test('Fast and Full use G1-bound exact evidence for base release, not a Lean-only gate', () => {
+  for (const mode of ['fast', 'full']) {
+    const fixture = createEnvironmentBlockedCandidate('lean', `release-${mode}`);
+    withPresetEnv(fixture, () => {
+      const p = readProgressV2(fixture.progressFile);
+      p.mode = mode;
+      p.state = 'RELEASE_PENDING_HUMAN';
+      p.gates.g1 = { approved: true };
+      writeFileSync(join(fixture.docs, 'spec.md'), '# Spec\nLegacy single worker.\n');
+      const attempt = p.delivery.test.attempts.at(-1);
+      attempt.status = 'verified'; attempt.verification = { result: 'passed', evidence: ['smoke'] };
+      p.delivery.test.status = 'verified';
+      writeProgressV2(fixture.progressFile, p);
+      approveFeatureGate({ cwd: fixture.root, featureId: p.feature.id, gate: 'release', approver: 'Owner' });
+      const approved = readProgressV2(fixture.progressFile); approved.state = 'BASE_MERGING'; writeProgressV2(fixture.progressFile, approved);
+      assert.equal(runBaseRelease({ cwd: fixture.root, featureId: p.feature.id }).status, 'succeeded');
+    });
+  }
+});

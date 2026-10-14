@@ -151,12 +151,12 @@ export function assertTestAttemptNotInvalidated(attempt) {
 }
 
 function assertCandidateMutationAllowed(progress) {
-  if (['running', 'deploying'].includes(progress.delivery?.test?.status)) {
+  if (['running', 'deploying', 'awaiting_receipt'].includes(progress.delivery?.test?.status)) {
     throw new Error('[cc-nexs] cannot update a repository candidate while test release is running or deploying');
   }
 }
 
-function appendMutationEvent(progress, { type, actor, data }) {
+export function appendMutationEvent(progress, { type, actor, data }) {
   const timestamp = new Date().toISOString();
   progress.revision += 1;
   progress.updated_at = timestamp;
@@ -170,6 +170,8 @@ export function beginTestRelease(file, {
   source,
   actor = 'release-controller',
   retry = false,
+  environment = 'test',
+  target = null,
   expectedRevision = null,
 } = {}) {
   if (!source || Object.keys(source).length === 0) throw new Error('[cc-nexs] test release source is required');
@@ -181,7 +183,8 @@ export function beginTestRelease(file, {
   const fingerprint = releaseFingerprint(source);
   const previous = testDelivery.attempts.at(-1);
   if (previous?.fingerprint === fingerprint && previous.invalidated_at == null) {
-    if (previous.status === 'deploying' && retry) {
+    if ((previous.environment || 'test') !== environment || JSON.stringify(previous.target || null) !== JSON.stringify(target)) throw new Error('[cc-nexs] test target changed; use switch-test-target');
+    if (['deploying', 'awaiting_receipt'].includes(previous.status) && retry) {
       throw new Error('[cc-nexs] a deploying test release must be resumed, not retried');
     }
     if (['succeeded', 'verified'].includes(previous.status) || !retry) {
@@ -193,6 +196,8 @@ export function beginTestRelease(file, {
     id: `test-release-${round}`,
     round,
     fingerprint,
+    environment,
+    target,
     status: 'running',
     source,
     integrations: {},
@@ -255,7 +260,7 @@ export function completeTestRelease(file, {
   actor = 'release-controller',
   expectedRevision = null,
 } = {}) {
-  const allowed = new Set(['deploying', 'succeeded', 'failed', 'deployed_needs_manual_verification']);
+  const allowed = new Set(['awaiting_receipt', 'deploying', 'succeeded', 'failed', 'deployed_needs_manual_verification']);
   if (!allowed.has(status)) throw new Error(`[cc-nexs] invalid test release status: ${status}`);
   if (status === 'deploying' && !hasEvidence(pipeline)) {
     throw new Error('[cc-nexs] deploying test release requires pipeline evidence');
@@ -263,10 +268,6 @@ export function completeTestRelease(file, {
   if (['succeeded', 'deployed_needs_manual_verification'].includes(status)
     && (!hasEvidence(pipeline) || !hasEvidence(deployment) || !hasEvidence(environmentRevision))) {
     throw new Error(`[cc-nexs] ${status} test release requires pipeline, deployment, and environment revision evidence`);
-  }
-  if (['succeeded', 'deployed_needs_manual_verification'].includes(status)
-    && String(deployment.environment || '').toLowerCase() !== 'test') {
-    throw new Error(`[cc-nexs] ${status} test release deployment evidence must name the test environment`);
   }
   const progress = readProgressV2(file);
   if (expectedRevision !== null && progress.revision !== expectedRevision) {
@@ -279,8 +280,12 @@ export function completeTestRelease(file, {
   if (attempt !== testDelivery.attempts.at(-1)) {
     throw new Error('[cc-nexs] only the latest test release attempt may be completed');
   }
-  if (!['running', 'deploying'].includes(attempt.status)) {
+  if (!['running', 'deploying', 'awaiting_receipt'].includes(attempt.status)) {
     throw new Error(`[cc-nexs] test release attempt cannot transition from ${attempt.status} to ${status}`);
+  }
+  if (['succeeded', 'deployed_needs_manual_verification'].includes(status)
+    && deployment.environment !== (attempt.environment || 'test')) {
+    throw new Error('[cc-nexs] deployment evidence must name the bound test environment');
   }
   if (attempt.pipeline && pipeline && !jsonValuesEqual(attempt.pipeline, pipeline)) {
     throw new Error('[cc-nexs] test release pipeline identity changed while resuming');
@@ -296,7 +301,7 @@ export function completeTestRelease(file, {
   attempt.pipeline = pipeline;
   attempt.deployment = deployment;
   attempt.environment_revision = environmentRevision;
-  attempt.completed_at = status === 'deploying' ? null : new Date().toISOString();
+  attempt.completed_at = ['deploying', 'awaiting_receipt'].includes(status) ? null : new Date().toISOString();
   if (reason) attempt.reason = reason;
   testDelivery.status = status;
   appendMutationEvent(progress, {
@@ -396,6 +401,7 @@ export function appendProgressEvent(file, {
   if (from !== null && progress.state !== from) {
     throw new Error(`[cc-nexs] state mismatch: expected ${from}, found ${progress.state}`);
   }
+  if (to === 'COMPLETE' && progress.delivery?.base?.attempts?.length && progress.delivery.base.status !== 'succeeded') throw new Error('[cc-nexs] COMPLETE requires successful base release and cleanup');
   if (to !== null) progress.state = to;
   const sprintState = String(to || '').match(/^SPRINT_(\d+)_/);
   if (sprintState && progress.mode === 'full') {
@@ -435,7 +441,7 @@ export function reopenTestRelease(file, { expectedRevision = null, actor = 'rele
   const progress = readProgressV2(file);
   const blocked = progress.mode === 'hotfix' ? 'HOTFIX_TEST_RELEASE_BLOCKED' : 'TEST_RELEASE_BLOCKED';
   const ready = progress.mode === 'hotfix' ? 'HOTFIX_TEST_RELEASE' : 'TEST_RELEASE';
-  if (!['lean', 'hotfix'].includes(progress.mode) || progress.state !== blocked) {
+  if (progress.state !== blocked) {
     throw new Error(`[cc-nexs] test release retry requires ${blocked}, found ${progress.mode}/${progress.state}`);
   }
   return appendProgressEvent(file, {
@@ -856,6 +862,8 @@ export function beginBaseRelease(file, { source, actor = 'base-release-controlle
     throw new Error(`[cc-nexs] stale progress revision: expected ${expectedRevision}, found ${progress.revision}`);
   }
   const delivery = requireDelivery(progress);
+  const previous = delivery.base.attempts.at(-1);
+  if (previous?.status === 'running' && previous.fingerprint === candidateFingerprint(source)) return previous;
   const attempt = {
     id: `base-release-${delivery.base.attempts.length + 1}`,
     status: 'running',

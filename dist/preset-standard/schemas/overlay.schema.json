@@ -52,7 +52,7 @@
         },
         "base": {
           "type": "object",
-          "properties": { "policy": { "enum": ["direct_after_approval", "manual"] } }
+          "properties": { "policy": { "enum": ["direct_after_approval", "manual"] }, "driver": { "$ref": "#/definitions/driver" } }
         }
       }
     }

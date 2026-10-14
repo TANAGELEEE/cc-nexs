@@ -78,7 +78,7 @@ Parse only the corresponding file's final 30 lines with preset i18n literals:
 | `PARSE_INTEGRATION_REVIEW` | `TEST_RELEASE` | `INTEGRATION_REVIEW_NEEDS_REVISION`, `review_revision++` |
 | `PARSE_FINAL_QA` | `FINAL_QA_PASSED` | `FINAL_QA_BLOCKED`, create/update BUG artifacts |
 | `PARSE_FINAL_FIX_REVIEW` | record candidates, `TEST_RELEASE` | `FINAL_FIX_REVIEW_NEEDS_REVISION`, `review_revision++` |
-| `PARSE_FINAL_EVAL` | `COMPLETE` | `FINAL_ACCEPTANCE_REJECTED`, `evaluator_reject++` |
+| `PARSE_FINAL_EVAL` | `RELEASE_PENDING_HUMAN` | `FINAL_ACCEPTANCE_REJECTED`, `evaluator_reject++` |
 
 After QA/regression parse call `recordTestVerification()` for the exact attempt and evidence. A blocked deployed round must complete:
 
@@ -116,3 +116,5 @@ Counters are consecutive active-loop failures. Review PASS resets `review_revisi
 At `COMPLETE`, sync README and have Git Custodian capture the last docs candidate. Remote merge/finalize remains explicitly user-authorized under the common controller.
 
 Pi API compatibility: `cc_nexs_dispatch` adapts the wave above to legacy tasks or Tintin RPC v2 with assigned cwd. Tintin uses completion notifications and `get_subagent_result` instead of `subagent_wait`; the all-sibling barrier and role ownership remain unchanged.
+
+Before Gateway B, record exact-candidate local verification with verify-local and independent acceptance with record-review. approve-release binds the verified test attempt and current G1 scope. release-base supports Fast/Full as well as Lean/Hotfix; use its configured MR driver on protected branches. Do not substitute a manual cherry-pick or directly set COMPLETE. Legacy accepted COMPLETE tasks may enter this explicit release gate without rerunning acceptance, but still require exact structured evidence.

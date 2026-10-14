@@ -13,6 +13,7 @@ import {
   recordTestIntegration,
   writeProgressV2,
 } from './progress-v2.mjs';
+import { switchTestTarget, validateTestTarget } from './test-target.mjs';
 import { planApprovalBinding } from './plan-contract.mjs';
 import { integrateCandidateToTest } from './git-custodian.mjs';
 import {
@@ -323,6 +324,26 @@ test('test release integrates candidates, invokes structured driver, records evi
     ], { cwd: root });
     assert.equal(verified.status, 'passed');
     assert.equal(readProgressV2(progressFile).delivery.test.status, 'verified');
+    const previous = readProgressV2(progressFile).delivery.test.attempts.at(-1);
+    const target = { kind: 'test', environment: 'test02', branches: { code: 'test02' }, allowed_hosts: ['test02.example.com'], app_url: 'https://test02.example.com', operations_url: 'https://test02.example.com/ops' };
+    git(code, ['push', 'origin', 'origin/master:refs/heads/test02']);
+    const oldPlugin = process.env.CC_NEXS_PLUGIN_ROOT;
+    process.env.CC_NEXS_PLUGIN_ROOT = new URL('../../preset-standard', import.meta.url).pathname;
+    try { switchTestTarget({ cwd: root, featureId: '05', progressPath: progressFile, target, authorizationEvidence: 'user requested test02' }); }
+    finally { if (oldPlugin === undefined) delete process.env.CC_NEXS_PLUGIN_ROOT; else process.env.CC_NEXS_PLUGIN_ROOT = oldPlugin; }
+    writeFileSync(projectConfigFile, JSON.stringify(projectConfig));
+    writeFileSync(join(root, 'release-driver.mjs'), `let s='';for await(const c of process.stdin)s+=c;const p=JSON.parse(s);console.log(JSON.stringify(p.operation==='release_test'?{status:'awaiting_receipt',reason:'CI receipt temporarily unavailable'}:{status:'succeeded',pipeline:{id:'p2'},deployment:{environment:p.environment},environment_revision:Object.fromEntries(Object.entries(p.integrations).map(([k,v])=>[k,v.integrationCommit]))}));`);
+    const switched = runTestRelease({ cwd: root, featureId: '05', progressPath: progressFile });
+    assert.equal(switched.attempt.status, 'awaiting_receipt');
+    assert.equal(switched.environment, 'test02');
+    assert.throws(() => runTestRelease({ cwd: root, featureId: '05', progressPath: progressFile, retry: true }), /must be resumed/);
+    const completed = runTestRelease({ cwd: root, featureId: '05', progressPath: progressFile, resume: true });
+    assert.equal(completed.attempt.status, 'succeeded');
+    assert.equal(completed.attempt.id, switched.attempt.id);
+    assert.deepEqual(completed.attempt.source, previous.source);
+    assert.equal(readProgressV2(progressFile).delivery.test.attempts.length, 2);
+    assert.ok(readProgressV2(progressFile).delivery.test.attempts[0].invalidated_at);
+
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -526,4 +547,12 @@ test('test release driver fails closed on invalid output, process failure, timeo
       payload: driverPayload,
     });
   }
+});
+
+
+test('test target rejects production and driver injection', () => {
+  const target = { kind: 'test', environment: 'test02', branches: { api: 'test02' }, allowed_hosts: ['test.example.com'], app_url: 'https://test.example.com', operations_url: 'https://test.example.com' };
+  const repos = [{ id: 'api', base_branch: 'main' }];
+  validateTestTarget(target, repos, ['api']);
+  for (const invalid of [{ ...target, environment: 'production' }, { ...target, branches: { api: 'main' } }, { ...target, driver: { command: 'evil' } }, { ...target, app_url: 'https://live.example.com' }]) assert.throws(() => validateTestTarget(invalid, repos, ['api']));
 });

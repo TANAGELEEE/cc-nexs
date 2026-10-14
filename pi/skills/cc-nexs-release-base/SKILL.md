@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-release-base
-description: /cc-nexs:release-base 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:release-base 或 /skill:cc-nexs-release-base 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard lean（默认）、fast 与 full 模式，并通过 pi-subagents 运行隔离角色。 Integrate exact approved Lean/Hotfix candidates into configured base branches and clean worktrees after proof.
+description: /cc-nexs:release-base 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:release-base 或 /skill:cc-nexs-release-base 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard lean（默认）、fast 与 full 模式，并通过 pi-subagents 运行隔离角色。 Integrate exact approved candidates into configured base branches and clean worktrees after proof.
 disable-model-invocation: true
 ---
 

@@ -61,7 +61,7 @@ function assertExceptionPrerequisites(progress) {
     throw new Error('[cc-nexs] test exception candidate fingerprint is invalid');
   }
   if (!attempt.pipeline || Object.keys(attempt.pipeline).length === 0
-    || attempt.deployment?.environment !== 'test'
+    || attempt.deployment?.environment !== (attempt.environment || 'test')
     || !attempt.environment_revision || Object.keys(attempt.integrations || {}).length === 0
     || Object.entries(attempt.integrations).some(([repository, integration]) => (
       !integration.integrationCommit

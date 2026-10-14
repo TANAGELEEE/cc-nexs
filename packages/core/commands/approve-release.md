@@ -1,5 +1,5 @@
 ---
-description: "Record Gateway B approval for an exact Lean/Hotfix candidate and its test evidence or authorized environment exception."
+description: "Record Gateway B approval for an exact candidate and its test evidence or authorized environment exception."
 disable-model-invocation: true
 allowed-tools: "Read, Bash"
 argument-hint: "<id> [--test-exception --authorization-evidence <text> --reason <text> --environment-evidence <text> --rollback-evidence <text>]"
@@ -7,13 +7,13 @@ argument-hint: "<id> [--test-exception --authorization-evidence <text> --reason 
 
 # /cc-nexs:approve-release
 
-Lean/Hotfix human Gateway B. Resolve the packaged CLI and record the user's authorization:
+Human release Gateway B for Lean, Hotfix, Fast and Full. Resolve the packaged CLI and record the user's authorization:
 
 ```text
 node <plugin-root>/lib/cc-nexs-cli.mjs approve-release <feature-id-or-bug-key>
 ```
 
-Normal approval requires Lean `RELEASE_PENDING_HUMAN` or Hotfix `HOTFIX_RELEASE_PENDING_HUMAN`, passed local verification and independent consolidated Review for the same candidate, and a verified test attempt. P3 also requires Review. Approval binds candidate commits, test attempt, environment revision, and the plan or Hotfix scope hash. Later candidate/scope changes invalidate it.
+Normal approval requires `RELEASE_PENDING_HUMAN` or Hotfix `HOTFIX_RELEASE_PENDING_HUMAN`, passed local verification and independent consolidated Review for the same candidate, and a verified test attempt. P3 also requires Review. Approval binds candidate commits, test attempt, environment revision, and the current approved plan, G1 spec or Hotfix scope. Later candidate/scope changes invalidate it.
 
 If the exact candidate was actually deployed to test but environment capability prevents verification, explicit user authorization may record an exception through this same gateway:
 

@@ -65,11 +65,8 @@ const GENERATED_PATHS = [
 ];
 const LEAN_ONLY_CORE_COMMANDS = new Set([
   'approve-plan.md',
-  'approve-release.md',
-  'release-base.md',
   'render-plan.md',
   'request-release-changes.md',
-  'verify-local.md',
   'migrate-feature-config.md',
   'revise-hotfix.md',
 ]);
@@ -96,6 +93,8 @@ const PI_P2_COMMANDS = new Set([
   'migrate-progress',
   'migrate-feature-config',
   'recon',
+  'sync-base',
+  'switch-test-target',
   'release-test',
   'release-base',
   'render-plan',

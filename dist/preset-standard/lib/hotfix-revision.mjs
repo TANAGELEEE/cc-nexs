@@ -16,7 +16,7 @@ export function reviseHotfix({ cwd = process.cwd(), featureId, progressPath = nu
   const progress = readProgressV2(progressFile);
   if (progress.mode !== 'hotfix' || !progress.hotfix?.scope_binding) throw new Error('[cc-nexs] revise-hotfix requires a bound Hotfix');
   if (['COMPLETE', 'HOTFIX_BASE_MERGING'].includes(progress.state) || progress.delivery?.base?.status === 'succeeded') throw new Error('[cc-nexs] released Hotfix cannot be revised');
-  if (['running', 'deploying'].some((status) => progress.delivery?.test?.status === status || progress.delivery?.test?.attempts?.at(-1)?.status === status)) throw new Error('[cc-nexs] finish the active test release before revising the Hotfix');
+  if (['running', 'deploying', 'awaiting_receipt'].some((status) => progress.delivery?.test?.status === status || progress.delivery?.test?.attempts?.at(-1)?.status === status)) throw new Error('[cc-nexs] finish the active test release before revising the Hotfix');
   const document = resolveHotfixDocument(progress, dirname(progressFile));
   const previous = { mode: progress.mode, state: progress.state, hotfix: progress.hotfix, gates: progress.gates, review: progress.review, local_verification: progress.local_verification };
   const timestamp = new Date().toISOString();

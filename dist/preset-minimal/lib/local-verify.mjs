@@ -1,3 +1,4 @@
+import { releaseScope } from './release-scope.mjs';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
@@ -22,24 +23,16 @@ export function runLocalVerification({
   evidence: recordedEvidence = [],
 } = {}) {
   const context = resolveCandidateContext({ cwd, featureId, progressPath });
-  if (!['lean', 'hotfix'].includes(context.progress.mode)) throw new Error(`[cc-nexs] local verification control requires lean or hotfix mode, found ${context.progress.mode}`);
-  if (context.progress.mode === 'lean') assertPlanApprovalCurrent(context.progress, dirname(context.progressFile));
-  else {
-    assertHotfixScopeCurrent(context.progress, dirname(context.progressFile));
-    assertHotfixCandidatePaths(context);
-  }
+  releaseScope(context.progress, context.progressFile);
+  if (context.progress.mode === 'hotfix') assertHotfixCandidatePaths(context);
   const allowedStates = context.progress.mode === 'hotfix'
     ? ['HOTFIX_IMPLEMENTING', 'HOTFIX_IMPLEMENTED', 'HOTFIX_FIXING', 'HOTFIX_LOCAL_VERIFYING', 'HOTFIX_LOCAL_REVERIFYING']
-    : ['IMPLEMENTING', 'REVIEW_FIXING', 'TEST_FIXING', 'GATEWAY_B_FIXING', 'LOCAL_VERIFYING', 'LOCAL_REVERIFYING', 'GATEWAY_B_LOCAL_REVERIFYING'];
+    : ['BUILD', 'TEST_RELEASE', 'FINAL_QA', 'ACCEPTANCE', 'RELEASE_PENDING_HUMAN', 'IMPLEMENTING', 'REVIEW_FIXING', 'TEST_FIXING', 'GATEWAY_B_FIXING', 'LOCAL_VERIFYING', 'LOCAL_REVERIFYING', 'GATEWAY_B_LOCAL_REVERIFYING'];
   if (!allowedStates.includes(context.progress.state)) {
     throw new Error(`[cc-nexs] local verification is not valid from ${context.progress.state}`);
   }
   const driver = normalizeDriver(context.config.mergedWorkflow?.local_verify?.driver, context.workspaceRoot);
-  const scopeText = readFileSync(context.progress.mode === 'lean'
-    ? join(dirname(context.progressFile), 'plan.md')
-    : resolveHotfixDocument(context.progress, dirname(context.progressFile)), 'utf8');
-  const expectedChecks = extractLocalVerificationChecks(context.progress.mode === 'lean'
-    ? extractApprovalScope(scopeText) : extractHotfixScope(scopeText).raw);
+  const expectedChecks = extractLocalVerificationChecks(releaseScope(context.progress, context.progressFile));
   const evidencePolicy = { allowTestDefer: context.progress.mode === 'lean', expectedChecks };
   const contractFingerprint = createHash('sha256').update(JSON.stringify({ driver, ...evidencePolicy })).digest('hex');
   assertVerificationWorktrees(context);

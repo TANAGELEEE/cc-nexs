@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+import { syncReleaseBase } from './base-sync.mjs';
+import { switchTestTarget } from './test-target.mjs';
+
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -24,6 +27,10 @@ import { modelGateway } from './model-gateway.mjs';
 
 export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   const [command, ...args] = argv;
+  if (command === 'switch-test-target') {
+    if (args.length !== 2 || args[0] !== '--request') throw new Error('switch-test-target --request <json-file>');
+    return switchTestTarget({ ...JSON.parse(readFileSync(args[1], 'utf8')), cwd });
+  }
   if (command === 'model-gateway') {
     if (args.length !== 3 || args[1] !== '--request') throw new Error('model-gateway <inspect|prepare|view|start|feedback|result> --request <json-file>');
     return modelGateway(args[0], JSON.parse(readFileSync(args[2], 'utf8')), { cwd });
@@ -33,6 +40,7 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   if (command === 'release-test') {
     return runTestRelease({ cwd, ...parseReleaseOptions(args) });
   }
+  if (command === 'sync-base') return syncReleaseBase({ cwd, ...parseFeatureOptions(args) });
   if (command === 'release-base') {
     return runBaseRelease({ cwd, ...parseFeatureOptions(args) });
   }
@@ -406,6 +414,7 @@ function requireValue(args, index, option) {
 }
 
 function printResult(result) {
+  if (['test-target', 'base-sync'].includes(result.kind)) { console.log(JSON.stringify(result, null, 2)); return; }
   if (['hotfix-init', 'hotfix-revision'].includes(result.kind)) {
     console.log(`cc-nexs ${result.kind}: ${result.feature.id}${result.resumed ? ' (resumed)' : ''}`);
     console.log(`BUG: ${result.document}`);
@@ -513,7 +522,7 @@ function printResult(result) {
       console.log(`Repository: ${repo.id} ${repo.sourceCommit} -> ${repo.delivery === 'local' ? `local:${repo.worktree}` : repo.targetBranch}`);
     }
     if (result.attempt) console.log(`Attempt: ${result.attempt.id}`);
-    if (result.attempt?.status === 'deploying') console.log('CI/CD: deploying; resume this exact attempt with release-test --resume');
+    if (['deploying', 'awaiting_receipt'].includes(result.attempt?.status)) console.log('CI/CD: deploying; resume this exact attempt with release-test --resume');
     if (result.verificationPrerequisites?.ready === false) {
       console.log(`Post-deploy verification prerequisites pending: ${result.verificationPrerequisites.missing.join(', ')}`);
     }
@@ -533,6 +542,7 @@ function printResult(result) {
 
 function printUsage() {
   console.error('Usage:');
+  console.error('  cc-nexs switch-test-target --request <json-file>');
   console.error('  cc-nexs revise-hotfix <bug-key> --reason <text> --authorization-evidence <text> [--promote-lean] [--progress <path>]');
   console.error('  cc-nexs approve-spec <feature-id> [--approver <name>] [--progress <path>]');
   console.error('  cc-nexs approve-deploy <feature-id> [M<N>] [--approver <name>] [--progress <path>]');

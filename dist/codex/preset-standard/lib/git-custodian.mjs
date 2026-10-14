@@ -255,6 +255,8 @@ export function integrateCandidateToTest({
   targetBranch,
   requireTargetAncestor = false,
   requireDisjointTargetChanges = false,
+  mergeRequest = null,
+  previousIntegration = null,
 }) {
   assertSegment(repositoryId, 'repository id');
   assertSegment(targetBranch, 'test branch');
@@ -303,7 +305,19 @@ export function integrateCandidateToTest({
       try { git(integrationWorktree, ['merge', '--abort']); } catch {}
       throw new Error(`[cc-nexs] ${requireDisjointTargetChanges ? 'BASE_CHANGED: ' : ''}candidate ${candidateRef} conflicts with latest origin/${targetBranch}`);
     }
-    const integrationCommit = git(integrationWorktree, ['rev-parse', 'HEAD']);
+    const integrationCommit = previousIntegration?.merge_request && previousIntegration.source_commit === sourceCommit && previousIntegration.target_before === targetBefore
+      ? previousIntegration.integration_commit : git(integrationWorktree, ['rev-parse', 'HEAD']);
+    if (mergeRequest) {
+      const sourceBranch = `cc-nexs-mr-${repositoryId}-${integrationCommit}`;
+      git(integrationWorktree, ['push', 'origin', `${integrationCommit}:refs/heads/${sourceBranch}`]);
+      const receipt = mergeRequest({ repository: repositoryId, sourceBranch, sourceCommit, integrationCommit, targetBranch, targetBefore });
+      if (!receipt || !['pending', 'merged'].includes(receipt.status) || typeof receipt.url !== 'string' || !/^https?:\/\//.test(receipt.url)) throw new Error('[cc-nexs] invalid MR receipt');
+      const remote = fetchBase(repo, targetBranch);
+      const remoteCommit = git(repo, ['rev-parse', remote]);
+      const merged = isAncestor(repo, integrationCommit, remoteCommit);
+      if (receipt.status === 'merged' && !merged) throw new Error('[cc-nexs] MR receipt has no remote ancestry proof');
+      return { repository: repositoryId, sourceCommit, targetBranch, targetBefore, integrationCommit, remoteCommit, pending: !merged, mergeRequest: receipt };
+    }
     try {
       git(integrationWorktree, ['push', 'origin', `${integrationCommit}:refs/heads/${targetBranch}`]);
     } catch {
@@ -337,6 +351,7 @@ function isAncestor(repo, ancestor, descendant) {
 }
 
 export function cleanupMergedWorktree({ repo, worktree, branch, baseBranch, candidateRef = null, deleteRemote = false }) {
+  if (!existsSync(worktree) && !refExists(repo, `refs/heads/${branch}`)) return { removed: worktree, branchDeleted: branch, alreadyClean: true };
   const realWorktree = realpathSync(worktree);
   const registered = git(repo, ['worktree', 'list', '--porcelain']);
   if (!registered.split('\n').includes(`worktree ${realWorktree}`)) throw new Error('[cc-nexs] refusing cleanup of unregistered worktree');

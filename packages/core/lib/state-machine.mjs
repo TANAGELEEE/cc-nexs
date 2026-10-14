@@ -92,6 +92,10 @@ export function nextStep({
   if (mode === 'hotfix') {
     return nextStepHotfix({ state, counters, thresholds, enabledRoles, workflow });
   }
+  if (['BASE_MERGING', 'BASE_MERGE_BLOCKED', 'RELEASE_PENDING_HUMAN'].includes(state)) {
+    return nextStepLean({ state, counters, thresholds, enabledRoles, humanGateApproved, workflow });
+  }
+  if (state === 'BASE_CHANGED') return { next: mode === 'full' ? 'FINAL_FIX' : 'BUILD', role: null, action: 'sync_base' };
   if (mode === 'fast' || mode === 'lite') {
     return nextStepFast({ state, counters, thresholds, enabledRoles, humanGateApproved, workflow });
   }
@@ -190,7 +194,7 @@ function nextStepHotfix({ state, counters, thresholds, enabledRoles, workflow = 
       if (workflow.base_release?.status === 'succeeded') {
         return { next: 'COMPLETE', role: null, action: 'complete' };
       }
-      if ((workflow.base_release?.status || 'idle') === 'idle') {
+      if (['idle', 'running'].includes(workflow.base_release?.status || 'idle')) {
         return { next: state, role: null, action: 'release_base' };
       }
       return { next: 'HOTFIX_BASE_MERGE_BLOCKED', role: null, action: 'await_human', stop: true };
@@ -212,7 +216,7 @@ function nextHotfixTestReleaseStep({ workflow, verifier }) {
   if (status === 'succeeded') {
     return { next: 'HOTFIX_TEST_VERIFYING', role: verifier, action: attempt > 1 ? 'verify_hotfix_regression' : 'verify_hotfix_test' };
   }
-  if (status === 'deploying') return { next: 'HOTFIX_TEST_RELEASE', role: null, action: 'poll_test_release' };
+  if (['deploying', 'awaiting_receipt'].includes(status)) return { next: 'HOTFIX_TEST_RELEASE', role: null, action: 'poll_test_release' };
   if (status === 'failed') return { next: 'HOTFIX_TEST_RELEASE_BLOCKED', role: null, action: 'await_human', stop: true };
   if (status === 'deployed_needs_manual_verification') {
     return { next: 'HOTFIX_TEST_DEPLOYED_NEEDS_MANUAL_VERIFY', role: null, action: 'await_human', stop: true };
@@ -363,7 +367,7 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
       if (workflow.base_release?.status === 'succeeded') {
         return { next: 'COMPLETE', role: null, action: 'complete' };
       }
-      if ((workflow.base_release?.status || 'idle') === 'idle') {
+      if (['idle', 'running'].includes(workflow.base_release?.status || 'idle')) {
         return { next: state, role: null, action: 'release_base' };
       }
       return { next: 'BASE_MERGE_BLOCKED', role: null, action: 'await_human', stop: true };
@@ -709,7 +713,7 @@ function nextTestReleaseStep({ workflow, verifier, initial, regression, verified
   if (status === 'succeeded' || (allowLegacyG2 && workflow.g2_approved === true)) {
     return { ...(attempt > 1 ? regression : initial), role: verifier };
   }
-  if (status === 'deploying') {
+  if (['deploying', 'awaiting_receipt'].includes(status)) {
     return { next: 'TEST_RELEASE', role: null, action: 'poll_test_release' };
   }
   if (status === 'failed') {
