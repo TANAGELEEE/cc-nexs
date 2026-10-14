@@ -10,9 +10,19 @@ import {
   createWorkspaceWorktrees,
   finalizeMergedWorktree,
   integrateCandidateToTest,
+  isSensitiveBasePath,
   prepareFeatureForMerge,
 } from './git-custodian.mjs';
 import { createProgressV2, readProgressV2, recordRepositoryAssignments, writeProgressV2 } from './progress-v2.mjs';
+
+test('sensitive base paths cover dependencies, contracts and runtime configuration', () => {
+  for (const path of ['package.json', 'web/pnpm-lock.yaml', 'go.mod', 'api/dto/user.ts', 'db/migrations/001.sql', 'config/auth.yml', 'Dockerfile', '.github/workflows/build.yml']) {
+    assert.equal(isSensitiveBasePath(path), true, path);
+  }
+  for (const path of ['README.md', 'docs/guide.md', 'src/button.ts', 'unrelated.txt']) {
+    assert.equal(isSensitiveBasePath(path), false, path);
+  }
+});
 
 function git(repo, args) {
   return execFileSync('git', ['-C', repo, ...args], {
@@ -269,4 +279,43 @@ test('createWorkspaceWorktrees succeeds when slug matches reservation', () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('automatic base sync preserves conflicts on the development branch without moving the candidate', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-conflict-'));
+  try {
+    const repo = join(root, 'repo');
+    const worktree = join(root, 'feature');
+    mkdirSync(repo);
+    git(repo, ['init', '-b', 'main']);
+    configure(repo);
+    writeFileSync(join(repo, 'file.txt'), 'base\n');
+    git(repo, ['add', '.']);
+    git(repo, ['commit', '-m', 'base']);
+    git(root, ['init', '--bare', join(root, 'remote.git')]);
+    git(repo, ['remote', 'add', 'origin', join(root, 'remote.git')]);
+    git(repo, ['push', 'origin', 'main']);
+    git(repo, ['worktree', 'add', '-b', 'feature/test', worktree]);
+    writeFileSync(join(worktree, 'file.txt'), 'feature\n');
+    git(worktree, ['add', '.']);
+    git(worktree, ['commit', '-m', 'feature']);
+    const candidate = git(worktree, ['rev-parse', 'HEAD']);
+    const candidateRef = 'refs/cc-nexs/candidates/test';
+    git(repo, ['update-ref', candidateRef, candidate]);
+    writeFileSync(join(repo, 'file.txt'), 'upstream\n');
+    git(repo, ['add', '.']);
+    git(repo, ['commit', '-m', 'upstream']);
+    git(repo, ['push', 'origin', 'main']);
+    const result = prepareFeatureForMerge({ repo, worktree, branch: 'feature/test', baseBranch: 'main', candidateRef, preserveConflicts: true });
+    assert.equal(result.status, 'conflicts');
+    assert.deepEqual(result.conflicts, ['file.txt']);
+    assert.equal(git(repo, ['rev-parse', candidateRef]), candidate);
+    assert.equal(git(worktree, ['rev-parse', 'MERGE_HEAD']), result.baseCommit);
+    writeFileSync(join(worktree, 'file.txt'), 'feature and upstream\n');
+    git(worktree, ['add', 'file.txt']);
+    assert.equal(git(worktree, ['diff', '--name-only', '--diff-filter=U']), '');
+    git(worktree, ['commit', '--no-edit']);
+    git(worktree, ['merge-base', '--is-ancestor', result.baseCommit, 'HEAD']);
+    git(worktree, ['merge-base', '--is-ancestor', candidate, 'HEAD']);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

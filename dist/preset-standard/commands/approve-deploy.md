@@ -40,3 +40,7 @@ Legacy full mode keeps an independent DEPLOY_GATE per Sprint. M1 approval does n
 ## Why not manually transition state
 
 The state machine (`nextStep`) already handles `DEPLOY_GATE` + per-sprint approval → next state. Manually overriding `current_state` here would bypass the orchestrator's conclusion parsing and README sync logic. Only the deterministic control command sets the flag; the `run` workflow drives the transition.
+
+## Model dispatch preview
+
+Before any role dispatch, follow `<plugin-root>/rules/model-discovery.md` and the shared `modelGateway` protocol: inspect cached choices, prepare a non-blocking preview, start immediately without waiting for a reply, and record the actual result. Apply real user corrections before start or to the next batch; never restart a running role merely to change models. This applies to the current runtime, including Claude-native single-step commands. Commands that do not dispatch roles need no model discovery.

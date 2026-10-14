@@ -1,4 +1,5 @@
 import { applyModelRouting, resolveFeatureModelRouting } from './model-routing.mjs';
+import { selectDiscoveredModel } from './model-selection.mjs';
 
 const RUNTIMES = new Set(['claude', 'codex', 'pi']);
 const EFFORTS = new Set(['inherit', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
@@ -23,6 +24,8 @@ export function resolveRoleRuntime(preset, role, runtime = detectRuntime(), {
   featureConfig = null,
   progress = null,
   planText = '',
+  modelCatalog = null,
+  modelProposal = null,
 } = {}) {
   if (!RUNTIMES.has(runtime)) throw new Error(`[cc-nexs] unsupported runtime: ${runtime}`);
   const definition = preset?.roles?.definitions?.[role];
@@ -55,7 +58,10 @@ export function resolveRoleRuntime(preset, role, runtime = detectRuntime(), {
     ? {}
     : modelConfig?.profiles?.[roleProfile]?.[modelRuntime] || {};
   const direct = typeof configuredRole === 'object' ? configuredRole?.[modelRuntime] || {} : {};
-  const selection = normalizeModelSelection({ ...profile, ...direct }, { role, runtime: modelRuntime, profile: roleProfile });
+  const configuredSelection = normalizeModelSelection({ ...profile, ...direct }, { role, runtime: modelRuntime, profile: roleProfile });
+  const selection = selectDiscoveredModel(configuredSelection, modelRuntime, modelCatalog, modelProposal);
+  if (!EFFORTS.has(selection.effort)) throw new Error('[cc-nexs] invalid discovered model effort');
+  resolved.model_selection = { source: selection.source, reason: selection.reason || null };
   resolved.model_profile = roleProfile;
   resolved.model_runtime = modelRuntime;
   resolved.model = selection.model;

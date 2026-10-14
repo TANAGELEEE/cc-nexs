@@ -18,3 +18,7 @@ Pass `--release-test` for strict automatic-delivery readiness. Strict mode block
 Release orchestration must also pass `--feature <id>`. This scopes progress/config/worktree consistency checks to the candidate being delivered, so a stale unrelated task cannot block its safe test merge. Workspace repositories and global delivery safety are still checked in full.
 
 This command is read-only. It also validates `models.routing`, canonical `risk_tier`, feature config version, and approved Lean Gateway A risk integrity. Legacy Lean/Hotfix feature mappings are warnings with the exact `/cc-nexs:migrate-feature-config <id>` remediation. A hash-verifiable legacy Gateway A risk is reported with the opt-in `--bind-plan-risk` remediation; an unstructured legacy approval is reported as conservative-high until revision and re-approval. Doctor never performs either migration. Report every error before asking the user to repair configuration.
+
+## Model dispatch preview
+
+Before any role dispatch, follow `<plugin-root>/rules/model-discovery.md` and the shared `modelGateway` protocol: inspect cached choices, prepare a non-blocking preview, start immediately without waiting for a reply, and record the actual result. Apply real user corrections before start or to the next batch; never restart a running role merely to change models. This applies to the current runtime, including Claude-native single-step commands. Commands that do not dispatch roles need no model discovery.

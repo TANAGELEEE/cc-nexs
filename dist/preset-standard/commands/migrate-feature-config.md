@@ -20,3 +20,7 @@ For an already approved legacy Lean plan whose Gateway A binding predates `risk_
 `--bind-plan-risk` explicitly materializes a hash-verified, concrete legacy plan risk into the existing Gateway A binding. It preserves the approval, original hashes, state and approver, and appends a dedicated migration event; it refuses stale, missing or ambiguous approval scopes. This is opt-in because `progress.json` is an approval record, not feature configuration. Preview it together with `--dry-run` first.
 
 Run with `--dry-run` first when the feature config was manually curated. After migration, run `/cc-nexs:doctor`.
+
+## Model dispatch preview
+
+Before any role dispatch, follow `<plugin-root>/rules/model-discovery.md` and the shared `modelGateway` protocol: inspect cached choices, prepare a non-blocking preview, start immediately without waiting for a reply, and record the actual result. Apply real user corrections before start or to the next batch; never restart a running role merely to change models. This applies to the current runtime, including Claude-native single-step commands. Commands that do not dispatch roles need no model discovery.

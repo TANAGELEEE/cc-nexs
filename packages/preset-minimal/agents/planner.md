@@ -52,7 +52,7 @@ Each AC is testable. Format:
 
 ### 5. (Optional) Sprint slices
 
-Only if `preset.workflow.sprint_enabled = true`. Each slice ≤ 1500 LoC diff and lists which AC IDs it covers.
+Only if `preset.workflow.sprint_enabled = true`. Each slice follows independently deliverable AC dependencies and lists which AC IDs it covers; line and commit counts are estimates, not gates.
 
 ### 6. Change log (table at end)
 

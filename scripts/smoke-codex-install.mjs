@@ -57,6 +57,12 @@ function assertCachedPlugin(pluginName) {
   if (!existsSync(join(pluginRoot, '.codex-plugin', 'plugin.json'))) {
     throw new Error(`${pluginRoot}: missing Codex plugin manifest`);
   }
+  if (existsSync(join(pluginRoot, 'commands')) || existsSync(join(pluginRoot, '.claude-plugin'))) {
+    throw new Error(`${pluginRoot}: duplicate legacy command discovery remains`);
+  }
+  if (!existsSync(join(pluginRoot, 'command-docs', 'run.md'))) {
+    throw new Error(`${pluginRoot}: native command documentation missing`);
+  }
   const hooks = readFileSync(hooksPath, 'utf8');
   if (/\$\{[^}]*:-/.test(hooks)) throw new Error(`${hooksPath}: POSIX-only fallback remains`);
   if (!hooks.includes('process.env.PLUGIN_ROOT')) throw new Error(`${hooksPath}: PLUGIN_ROOT launcher missing`);

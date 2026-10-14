@@ -69,3 +69,5 @@ After test/regression parse, call `recordTestVerification()` for the exact relea
 Counters represent consecutive active-loop failures, not lifetime totals. Review PASS resets `review_revision`; verified bug clears its `fix_per_bug` entry; acceptance PASS resets `evaluator_reject`. Breakers are evaluated only in their matching retry states and cannot redirect release, gates, normal development, or `COMPLETE`.
 
 At `COMPLETE`, sync README and let Git Custodian record any final docs candidate. Remote merge/finalize still requires explicit user authorization under the common controller.
+
+Pi API compatibility: `cc_nexs_dispatch` adapts the wave above to legacy tasks or Tintin RPC v2 with assigned cwd. Tintin uses completion notifications and `get_subagent_result` instead of `subagent_wait`; the all-sibling barrier and role ownership remain unchanged.

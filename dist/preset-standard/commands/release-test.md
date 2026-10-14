@@ -54,3 +54,7 @@ Only after deployment success does the parent check URLs, allowed hosts, browser
 ## Explicit opt-out
 
 Legacy fast/full workflows may retain their manual G2 semantics. Lean/Hotfix Gateway B requires an immutable release attempt and therefore does not treat G2 alone as deployed evidence; configure the test release driver and return to `auto_if_ready` to resume. Production release always remains a separate explicit human action.
+
+## Model dispatch preview
+
+Before any role dispatch, follow `<plugin-root>/rules/model-discovery.md` and the shared `modelGateway` protocol: inspect cached choices, prepare a non-blocking preview, start immediately without waiting for a reply, and record the actual result. Apply real user corrections before start or to the next batch; never restart a running role merely to change models. This applies to the current runtime, including Claude-native single-step commands. Commands that do not dispatch roles need no model discovery.

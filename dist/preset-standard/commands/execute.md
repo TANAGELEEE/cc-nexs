@@ -15,7 +15,7 @@ argument-hint: "[需求编号] [--phase=implement|review-fix|test-fix|gateway-b-
 - 每个 child 只收到自己的 AC、task、worktree、允许路径和验证命令。
 - child 禁止 Git mutation，只返回精确修改路径和检查结果。
 - Orchestrator 校验每个 child 的路径；同一仓库所有实现波次完成后再调用一次 Git Custodian 形成单一 candidate，不按任务/波次反复提交 candidate。每仓 feature branch 固定为 `feature/<id>-<slug>`。
-- 实现前/修复后先用 Custodian prepare 同步最新 base；base 变化必须重新本地验证、Review 闭环和 test 发布。
+- 不反复追随最新 base。只有重叠路径、冲突或已知契约依赖需要同步时才用 Custodian prepare；变更后的 candidate 重新验证。不重叠的 base 更新由 release-base 集成，不改变已验收 candidate。
 - `review-fix` 只处理集中 Review 的 P0/P1 编号；`test-fix` 只处理 test 环境失败；禁止顺手重构。
 - `gateway-b-fix` 只处理 `plan.md` 当前 Gateway B implementation request 的 AC 和允许路径；发现需求/AC/批准方案变化必须停止并改走 scope request。
 
@@ -28,3 +28,7 @@ Fast-track 约束：
 - 不做 AC 外重构、通用化或“顺便加固”。发现值得做但非必需的改进，记录 follow-up 后继续当前交付。
 
 任何 requirements 或 `APPROVAL-SCOPE` 变化使 Plan Gate 失效并停止。
+
+## Model dispatch preview
+
+Before any role dispatch, follow `<plugin-root>/rules/model-discovery.md` and the shared `modelGateway` protocol: inspect cached choices, prepare a non-blocking preview, start immediately without waiting for a reply, and record the actual result. Apply real user corrections before start or to the next batch; never restart a running role merely to change models. This applies to the current runtime, including Claude-native single-step commands. Commands that do not dispatch roles need no model discovery.

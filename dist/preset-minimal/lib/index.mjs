@@ -1,4 +1,6 @@
 // cc-nexs core public API.
+export { discoverModels } from './model-discovery.mjs';
+export { modelGateway } from './model-gateway.mjs';
 export { loadConfig, loadWorkspaceConfig, mergeModelConfigs } from './config-loader.mjs';
 export { loadI18n } from './i18n.mjs';
 export { RoleRegistry } from './role-registry.mjs';

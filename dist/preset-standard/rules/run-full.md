@@ -114,3 +114,5 @@ On failure return to `INTEGRATION_REVIEW_NEEDS_REVISION` so Tech Lead completes 
 Counters are consecutive active-loop failures. Review PASS resets `review_revision`; deployed BUG verification clears its `fix_per_bug`; acceptance PASS resets `evaluator_reject`. Evaluate breakers only inside the corresponding failure loop.
 
 At `COMPLETE`, sync README and have Git Custodian capture the last docs candidate. Remote merge/finalize remains explicitly user-authorized under the common controller.
+
+Pi API compatibility: `cc_nexs_dispatch` adapts the wave above to legacy tasks or Tintin RPC v2 with assigned cwd. Tintin uses completion notifications and `get_subagent_result` instead of `subagent_wait`; the all-sibling barrier and role ownership remain unchanged.

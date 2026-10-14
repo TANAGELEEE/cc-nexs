@@ -17,6 +17,8 @@ This file contains only the common controller. Mode-specific states, dispatches,
 
 The Orchestrator only coordinates. It does not author business artifacts, implementation, specs, reviews, or test code, and it never performs subjective model-based verification or arbitrary Git commands. It may invoke deterministic controllers and, for the documented no-local-driver fallback, execute Lean plan-approved or Hotfix scope-bound commands and record their real structured results. It may invoke the narrow Git Custodian for candidate mutations.
 
+Do not add human gates for line counts, commit counts, tooling hashes, or ordinary implementation estimates. Keep scope/security/ownership bindings and exact-candidate evidence authoritative; changed verification inputs invalidate the affected evidence, not the business scope automatically. Reuse passing worker evidence for unchanged inputs rather than repeating the same commands in the parent; retain independent Review and required integrated/test checks. Missing DTO/default/error/recovery contracts must be closed in planning, not deferred to arbitrary implementation batches. Do not refresh an approved candidate merely because remote base advanced; use release-base's integration checks.
+
 When a single role reports completion:
 
 1. Prove every returned path belongs to the progress.json-assigned worktree and role write contract.
@@ -93,17 +95,29 @@ const planText = MODE === 'lean' && existsSync(join(REQ_DIR, 'plan.md'))
 if (MODE === 'lean' && progressV2.gates?.plan?.approved) {
   assertPlanApprovalCurrent(progressV2, REQ_DIR);
 }
-const roleRuntime = resolveRoleRuntime(preset, role, runtime, {
-  models: mergedModels,
-  featureConfig,
-  progress: progressV2,
-  planText,
-});
+// Run at the workspace root. hostContext identifies the non-secret account,
+// executor surface, active model and provider configuration revision.
+const saved = modelGateway('inspect', { runtime, context: hostContext }, { cwd: workspaceRoot });
+// Discover only missing executor catalogs; reuse saved.catalogs otherwise.
+// tasks includes {role, difficulty, reason, proposal?}; omit proposals when
+// reusing a successful combination, unless there is a justified change.
+const prepared = modelGateway('prepare', {
+  runtime, context: hostContext, preset, catalogs: missingCatalogs, tasks,
+  options: { models: mergedModels, featureConfig, progress: progressV2, planText },
+}, { cwd: workspaceRoot });
+// Show prepared.preview/table only if prepared.showPreview; do not await approval.
+// Apply actual user feedback already received before start.
+const frozen = modelGateway('start', {
+  runtime, context: hostContext, batchId: prepared.batch.id,
+}, { cwd: workspaceRoot });
+const roleRuntime = frozen.batch.rows.find((row) => row.role === role).selection;
 ```
 
 Do not pre-merge `featureConfig.models.roles` into `mergedModels`. Automatic routing follows public/overlay/project defaults, then the explicit feature role override is applied last. Trusted plan/hotfix risk may raise but never lower severity. Lean high/critical and Hotfix P0/P1 Reviewer routing uses `escalated`; `models.routing.enabled: false` is the explicit opt-out.
 
-Claude uses `model`/`effort`, Codex uses `model`/`reasoning_effort`, and Pi uses `model`/`thinking` plus ordered `fallback_models`. `inherit` keeps the active runtime model. Before every dispatch print risk tier/source/signals, plan binding status, `matched_rules`, feature profile override, effective profile/model/effort, and fallback chain. Recompute after every document/progress revision.
+Before dispatch, follow `rules/model-discovery.md` for every mode and role, not only Lean. Use the advisory `modelGateway` protocol above for single-step role commands as well. Reuse workspace-local catalog and successful combinations before discovery. The preview is not a new human approval state: absent feedback, start immediately; do not poll, sleep, or end the turn awaiting a response. Feedback received after start applies to the next batch. Model selection is operational metadata, not approval scope: a catalog refresh never invalidates completed Review, tests, or user approval. Overlay is optional and is not a required model registry; preserve its existing project, release, and explicit model restrictions.
+
+Claude uses `model`/`effort`, Codex uses `model`/`reasoning_effort`, and Pi uses `model`/`thinking` plus ordered `fallback_models`. `inherit` keeps the active runtime model. Record risk tier/source/signals, plan binding status, `matched_rules`, feature profile override, effective profile/model/effort, and fallback chain in dispatch evidence; show the model table only on first use or selection change. Re-resolve policy at stage boundaries without re-querying an unchanged host catalog. Record each real role result through `modelGateway('result', ...)`: learn only `succeeded`, preserve catalog on `task-failed`, invalidate the affected executor catalog on `model-unavailable`. Never mark a proposal as successfully dispatched.
 
 Every dispatch gets `CC_NEXS_REQ_DIR=<absolute-feature-doc-dir>/` and the repository-id → assigned-worktree map. Treat old `all-docs/doc/<id>` wording as logical notation, not topology.
 
@@ -213,7 +227,8 @@ Repeat until terminal or stopped:
    - `poll_test_release` → `/cc-nexs:release-test <id> --resume` once; Hotfix also requires `--hotfix`. If still `deploying`, report the same pipeline and return.
    - `configure_auto_test_release` → print the missing driver/policy fields and return. It never fabricates a release attempt.
    - `await_deploy_approval` → print the active Fast/Full G2 summary and return; it never authorizes production.
-   - `release_base` → pre-transition to mode-specific `BASE_MERGING`, run `/cc-nexs:release-base`, then record `COMPLETE` only after proof.
+   - `release_base` → pre-transition to mode-specific `BASE_MERGING`, run `/cc-nexs:release-base`, then record `COMPLETE` only after proof. If the controller records `BASE_CHANGED` or `HOTFIX_BASE_CHANGED`, re-read state and immediately continue to `sync_base`; this is recoverable automation, not a human stop or an ordinary tool failure.
+   - `sync_base` → Git Custodian calls `prepareFeatureForMerge({ ..., preserveConflicts: true })` in the assigned development worktree. If it returns conflicts, dispatch the active Developer to resolve those files while preserving both the approved feature and upstream intent. The Developer edits files only; Custodian stages the resolved paths, verifies there are no unmerged entries, completes the merge commit, and updates the candidate ref. Preserve unrelated staged upstream merge changes; do not use ordinary `commitCandidate` while a merge is pending. Never resolve by wholesale ours/theirs or force push. Continue local verification, independent Review and test verification for the new candidate through the existing mode transitions. Only unresolved business ambiguity, changes outside authorized scope, permissions, or an existing circuit breaker require human input. Existing release gates remain authoritative; do not invent approval for a changed candidate.
    - `parse_*_conclusion` → parse only the active rule's file/pattern/outcomes.
    - `continue`, `continue_to_test`, and `noop` → no role/tool side effect; apply only the returned state movement.
    - `unknown_state` or `unknown_phase` → stop as a genuine controller failure and report the exact mode/state; never guess a transition.
@@ -240,7 +255,7 @@ This index keeps cross-runtime command discovery stable; dispatch details belong
 | Full | `/cc-nexs:recon`; `/cc-nexs:planner`; `/cc-nexs:dev <id> --mode=feat --sprint=N`; `/cc-nexs:qa cases`; `/cc-nexs:evaluator` |
 | Fast/Lite | `/cc-nexs:fullstack <id> --phase=spec`; `/cc-nexs:review accept <id>`; `/cc-nexs:verify regression <id>` |
 | Lean | `/cc-nexs:plan <id>`; `/cc-nexs:execute <id>`; `/cc-nexs:lean-review <id>`; `/cc-nexs:verify-local <id>`; `/cc-nexs:approve-release <id>`; `/cc-nexs:request-release-changes <id>` |
-| Hotfix | `/cc-nexs:init-hotfix`; `/cc-nexs:revise-hotfix`; dedicated developer/reviewer/verifier agents; `/cc-nexs:release-test <id> --hotfix`; `/cc-nexs:approve-release <id>` |
+| Hotfix | `/cc-nexs:hotfix`; `/cc-nexs:revise-hotfix`; dedicated developer/reviewer/verifier agents; `/cc-nexs:release-test <id> --hotfix`; `/cc-nexs:approve-release <id>` |
 
 The **Role → command dispatch table**, mode conclusion tables, and gate summaries are in the selected rule. Stable state markers include `PLAN_PENDING_HUMAN`, `CONSOLIDATED_REVIEW`, `RELEASE_PENDING_HUMAN`, `GATEWAY_B_CHANGE_REQUESTED`, `SCOPE_CHANGE_REQUESTED`, `HOTFIX_RELEASE_PENDING_HUMAN`, `SPEC_PENDING_HUMAN`, `DEPLOY_GATE`, `ALL_SPRINTS_DEV_DONE`, `INTEGRATION_REVIEW`, `TEST_RELEASE`, `FINAL_QA_BLOCKED`, and `BASE_MERGING`. The fast rule owns **fast 模式解析**. The full rule owns the **Artifact completeness gate** over `deploy.md api-doc.md test-report.md`. Lean keeps: **完整 Review 只有一次；修复只允许一次 delta closure**.
 
@@ -259,3 +274,7 @@ At `COMPLETE`, fast/full performs a final README sync; Lean/Hotfix prints the ac
 The docs repository follows the same path-safety and candidate-ref discipline as code repositories. Fast/Full may create or update its docs candidate commit after each document-writing phase and again at `COMPLETE`. Lean/Hotfix are explicitly final-only: plan, Review, and verification keep their documents in the assigned docs worktree, and Git Custodian creates exactly one final docs candidate commit only after the code base release is proven and state is `COMPLETE`. An intermediate Lean/Hotfix docs candidate can invalidate exact-candidate evidence and is forbidden. Stage only the configured feature directory for ordinary/legacy tasks. For new Hotfix, stage only the assigned BUG document and keep machine state under `.cc-nexs/hotfixes/<key>/`; a promoted Lean task uses its BUG-adjacent `<BUGstem>.lean/` artifacts. Prepare candidate metadata before committing so the ref—not a self-referential SHA in progress.json—remains authoritative. The docs repository integrates last.
 
 `COMPLETE` does not authorize remote publishing, merge, or deletion. Only an explicit user release instruction may invoke Git Custodian `prepare`/merge/finalize. Finalize freshly fetches the remote base, proves both tips are contained, requires clean worktrees, and then removes feature worktree/ref/branches unless the user explicitly asks for `--keep-remote`.
+
+## Model dispatch preview
+
+Before any role dispatch, follow `<plugin-root>/rules/model-discovery.md` and the shared `modelGateway` protocol: inspect cached choices, prepare a non-blocking preview, start immediately without waiting for a reply, and record the actual result. Apply real user corrections before start or to the next batch; never restart a running role merely to change models. This applies to the current runtime, including Claude-native single-step commands. Commands that do not dispatch roles need no model discovery.

@@ -1,0 +1,6 @@
+interface:
+  display_name: "/cc-nexs-minimal:dev"
+  short_description: "Run /cc-nexs-minimal:dev explicitly"
+  default_prompt: "Use $cc-nexs-minimal-dev to run /cc-nexs-minimal:dev."
+policy:
+  allow_implicit_invocation: false

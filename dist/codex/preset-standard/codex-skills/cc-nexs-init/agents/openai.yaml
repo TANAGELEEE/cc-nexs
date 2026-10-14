@@ -1,0 +1,6 @@
+interface:
+  display_name: "/cc-nexs:init"
+  short_description: "Run /cc-nexs:init explicitly"
+  default_prompt: "Use $cc-nexs-init to run /cc-nexs:init."
+policy:
+  allow_implicit_invocation: false

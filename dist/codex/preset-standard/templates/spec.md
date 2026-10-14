@@ -1,0 +1,144 @@
+# Spec — {编号}.{需求短名}
+
+> **负责人**：Planner（Codex）
+> **禁止**：Planner 不写代码、不评审代码、不执行测试
+> **权威来源**：本文件。business 部分的变更走 requirements.md，技术+契约+切片走本文件。
+
+---
+
+## 业务背景
+
+（从 requirements.md 摘录核心业务诉求，一段话讲清楚"为什么做"和"给谁用"。不要复制全文，只留 Planner 做技术决策必须知道的业务要点。）
+
+- 用户角色：
+- 触发场景：
+- 业务目标：
+- 非目标（明确不做）：
+
+---
+
+## 技术方案
+
+### 架构概览
+（模块边界、调用链路、数据流向。一张图 + 三句话。）
+
+### 关键设计决策
+| # | 决策点 | 选项 | 最终选择 | 理由 |
+|---|--------|------|---------|------|
+| D1 |        |      |         |      |
+| D2 |        |      |         |      |
+
+### 数据模型
+（如涉及数据存储，列出新增/修改的表、字段、索引、迁移文件和回滚策略；具体命名遵守项目 overlay。）
+
+### API 设计
+（对外暴露的接口列表。详细契约走 api-doc.md，这里只列清单和路径。）
+
+### 第三方依赖
+（新增的 maven 依赖、外部服务、环境变量。每项给一句"为什么需要"。）
+
+---
+
+## 影响范围
+
+### 代码影响
+- 新增模块：
+- 修改模块：
+- 废弃模块：
+
+### 数据影响
+- 新增表/字段：
+- 数据迁移：
+- 回滚数据风险：
+
+### 接口影响
+- 新增接口：
+- 改变语义的接口（⚠️破坏兼容性）：
+- 下线接口：
+
+### 运维影响
+- 配置变更：
+- 部署顺序依赖：
+- 监控/告警新增：
+
+### 现状对照（来自 repo-context.md，**硬性要求**）
+
+> Planner 必须基于 RECON 阶段产出的 `repo-context.md` 逐条标注。SA 评审会校验。
+
+| 决策 | 既有项（repo-context 章节） | 复用 / 扩展 / 新建 | 理由 |
+|------|---------------------------|---------------------|------|
+|      |                           |                     |      |
+
+**冲突点**（命名 / schema / 配置开关重名等）：
+-
+
+---
+
+## 实施所有权与并行波次
+
+> 该表在 G1 前冻结。Fast/Full 对同一 Wave、不同 Repository 的实现单元并行派发；同一 Repository 必须放入不同 Wave 串行。接口契约已经在本 spec 固定时，前后端不应仅因调用关系被串行化。`Allowed paths` 使用仓库相对路径，可用 `<br>` 分隔；禁止绝对路径和 `..`。
+
+<!-- IMPLEMENTATION-OWNERSHIP:START -->
+| Assignment | Sprint | Surface | AC | Repository | Allowed paths | Depends on | Validation | Wave |
+|---|---|---|---|---|---|---|---|---|
+| IMP-backend | M1 | backend | AC-001, AC-002 | backend-java | src/main/java/example/** | - | module build + unit | 1 |
+| IMP-web | M1 | web | AC-001, AC-003 | web | src/features/example/** | - | typecheck + unit | 1 |
+<!-- IMPLEMENTATION-OWNERSHIP:END -->
+
+规则：
+
+1. 所有 AC 至少被一个 Assignment 覆盖；每个 Assignment 只能写一个已分配 Repository。
+2. 同一 Wave 不得出现两个相同 Repository；共享 worktree、lockfile、formatter、codegen 或构建目录必须串行。
+3. `Depends on` 只能引用同一 Sprint 更早 Wave；没有真实代码生成依赖时，不得把已冻结接口契约的前后端人为串行化。
+4. 实现 worker 禁写 `dev-plan.md`、`api-doc.md`、`deploy.md`；共享文档在所有实现 join 后由唯一 owner 同步。
+5. Full 模式的 AC/Assignment Sprint 必须从 M1 连续到 MN，不得缺失中间 Sprint；G1 冻结 N。Fast/Lite 只允许 M1。
+
+---
+
+## 验收契约
+
+> **规则**：每条契约必须可测试（有明确输入/输出或可观测状态）；至少 5 条；用 Given/When/Then 或 checklist。
+> **反向引用**：test-cases.md 每条用例必须标 `关联契约: AC-xxx`。
+> **Evaluator 打分依据**：acceptance.md 按此表逐条评分。
+
+| AC-ID | 模块 | Given（前置） | When（动作） | Then（预期） | 优先级 | 所属 Sprint |
+|-------|------|---------------|--------------|--------------|--------|-------------|
+| AC-001 |      |              |              |              | P0     | M1          |
+| AC-002 |      |              |              |              | P0     | M1          |
+| AC-003 |      |              |              |              | P1     | M1          |
+| AC-004 |      |              |              |              | P0     | M2          |
+| AC-005 |      |              |              |              | P1     | M2          |
+
+### 非功能契约（性能 / 安全 / 兼容性）
+| AC-ID | 维度 | 指标 | 达成判据 | 所属 Sprint |
+|-------|------|------|---------|-------------|
+| AC-NF-001 | 性能 | P99 响应时间 | ≤ 200ms | M1 |
+| AC-NF-002 | 安全 | SQL 注入 | 全部参数化查询通过扫描 | M1 |
+| AC-NF-003 | 兼容 | 老接口行为 | 既有调用方无需改动 | M2 |
+
+---
+
+## Sprint 切片
+
+> **规则**：切片按 AC 依赖和能独立交付为原则，不按预估 diff 行数或 commit 数量切分。
+
+| Sprint | 范围描述 | 覆盖 AC-ID | 预估 diff 行数 | 预估用例数 | 依赖（前置 sprint） |
+|--------|---------|-----------|---------------|-----------|---------------------|
+| M1     |         | AC-001, AC-002, AC-003, AC-NF-001, AC-NF-002 | ~800  | ~15 | 无 |
+| M2     |         | AC-004, AC-005, AC-NF-003 | ~1200 | ~20 | M1 |
+| M3     |         |           |               |           |                     |
+
+### Sprint 完成定义（DoD）
+一个 sprint 被认为完成，当且仅当：
+1. 该 sprint 所有 AC-ID 已实现且所需本地验证通过；默认 final_only 在完整需求 test 发布后统一验收打分
+2. 该 sprint 已知阻塞缺陷已修复并有验证证据；需要 test 的验证留在完整需求验收阶段
+3. sa-code-review.md 本 sprint 章节最终 `结论: PASS`
+4. candidate 与评审、验证证据一致；不因 commit 数量改写已验证历史
+
+---
+
+## 变更记录
+
+| 日期 | 变更内容 | 触发原因 | 影响的 AC-ID / Sprint | 操作人 |
+|------|---------|---------|----------------------|--------|
+| YYYY-MM-DD | 初版 | Planner 展开 requirements.md | 全部 | Planner |

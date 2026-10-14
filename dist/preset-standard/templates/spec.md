@@ -120,7 +120,7 @@
 
 ## Sprint 切片
 
-> **规则**：每片预估 diff ≤ 1500 行 / commit ≤ 10 个。切片粒度按"能独立验收"为原则，不按"开发顺序"。
+> **规则**：切片按 AC 依赖和能独立交付为原则，不按预估 diff 行数或 commit 数量切分。
 
 | Sprint | 范围描述 | 覆盖 AC-ID | 预估 diff 行数 | 预估用例数 | 依赖（前置 sprint） |
 |--------|---------|-----------|---------------|-----------|---------------------|
@@ -130,8 +130,8 @@
 
 ### Sprint 完成定义（DoD）
 一个 sprint 被认为完成，当且仅当：
-1. 该 sprint 所有 AC-ID 在 acceptance.md 打分表里为 ✅
-2. 该 sprint 所有 BUG 状态为 VERIFIED
+1. 该 sprint 所有 AC-ID 已实现且所需本地验证通过；默认 final_only 在完整需求 test 发布后统一验收打分
+2. 该 sprint 已知阻塞缺陷已修复并有验证证据；需要 test 的验证留在完整需求验收阶段
 3. sa-code-review.md 本 sprint 章节最终 `结论: PASS`
 4. candidate 与评审、验证证据一致；不因 commit 数量改写已验证历史
 

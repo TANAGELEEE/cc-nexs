@@ -253,7 +253,7 @@ function validateMarketplace(presets) {
   for (const presetRoot of presets) {
     const manifest = readJson(join(presetRoot, '.codex-plugin', 'plugin.json'));
     if (!manifest) continue;
-    const expectedPath = `./dist/${basename(presetRoot)}`;
+    const expectedPath = `./dist/codex/${basename(presetRoot)}`;
     const entry = marketplace.plugins.find((candidate) => candidate?.name === manifest.name);
     if (!entry) {
       fail(`${marketplacePath}: missing plugin entry ${manifest.name}`);
@@ -277,6 +277,22 @@ for (const presetRoot of presets) {
   validateCommandMirrors(presetRoot, manifest);
   validateNoDuplicateSkillNames(presetRoot, manifest);
   validateHooks(presetRoot);
+  const codexRoot = join(DIST, 'codex', basename(presetRoot));
+  const codexManifest = validateManifest(codexRoot);
+  validateSkills(codexRoot, codexManifest);
+  validateHooks(codexRoot);
+  if (existsSync(join(codexRoot, 'commands')) || existsSync(join(codexRoot, '.claude-plugin'))) {
+    fail(`${codexRoot}: legacy command discovery must not duplicate native skills`);
+  }
+  for (const fileName of readdirSync(join(presetRoot, 'commands')).filter((name) => name.endsWith('.md'))) {
+    const commandText = readFileSync(join(presetRoot, 'commands', fileName), 'utf8');
+    const skillName = normalizeSkillName(extractCommandName(commandText, fileName));
+    const skill = readFileSync(join(codexRoot, 'codex-skills', skillName, 'SKILL.md'), 'utf8');
+    if (!skill.includes(`../../command-docs/${fileName}`)
+      || readFileSync(join(codexRoot, 'command-docs', fileName), 'utf8') !== commandText) {
+      fail(`${codexRoot}: native adapter must retain the exact shared command ${fileName}`);
+    }
+  }
 }
 validateMarketplace(presets);
 

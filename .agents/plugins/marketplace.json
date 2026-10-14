@@ -8,7 +8,7 @@
       "name": "cc-nexs-minimal",
       "source": {
         "source": "local",
-        "path": "./dist/preset-minimal"
+        "path": "./dist/codex/preset-minimal"
       },
       "policy": {
         "installation": "AVAILABLE",
@@ -20,7 +20,7 @@
       "name": "cc-nexs",
       "source": {
         "source": "local",
-        "path": "./dist/preset-standard"
+        "path": "./dist/codex/preset-standard"
       },
       "policy": {
         "installation": "AVAILABLE",

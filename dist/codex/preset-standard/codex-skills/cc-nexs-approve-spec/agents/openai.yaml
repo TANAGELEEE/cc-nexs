@@ -1,0 +1,6 @@
+interface:
+  display_name: "/cc-nexs:approve-spec"
+  short_description: "Run /cc-nexs:approve-spec explicitly"
+  default_prompt: "Use $cc-nexs-approve-spec to run /cc-nexs:approve-spec."
+policy:
+  allow_implicit_invocation: false

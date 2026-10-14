@@ -209,3 +209,5 @@ CC_NEXS_ROLE=fullstack    # fast Fullstack
 CC_NEXS_ROLE=reviewer     # fast Reviewer
 CC_NEXS_ROLE=verifier     # fast Verifier
 ```
+
+Pi API compatibility: `cc_nexs_dispatch` adapts the wave above to legacy tasks or Tintin RPC v2 with assigned cwd. Tintin uses completion notifications and `get_subagent_result` instead of `subagent_wait`; the all-sibling barrier and role ownership remain unchanged.

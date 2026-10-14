@@ -71,7 +71,6 @@ const LEAN_ONLY_CORE_COMMANDS = new Set([
   'request-release-changes.md',
   'verify-local.md',
   'migrate-feature-config.md',
-  'init-hotfix.md',
   'revise-hotfix.md',
 ]);
 const PI_P2_COMMANDS = new Set([
@@ -90,7 +89,6 @@ const PI_P2_COMMANDS = new Set([
   'evaluator',
   'git-custodian',
   'hotfix',
-  'init-hotfix',
   'revise-hotfix',
   'init',
   'lean-review',
@@ -299,6 +297,15 @@ function scopePluginAgentsToExplicitInvocation(dst) {
   return touched;
 }
 
+function addModelGatewayContract(dst) {
+  const commands = join(dst, 'commands');
+  for (const name of readdirSync(commands).filter((file) => file.endsWith('.md'))) {
+    const path = join(commands, name);
+    const text = readFileSync(path, 'utf8');
+    writeFileSync(path, `${text.trimEnd()}\n\n## Model dispatch preview\n\nBefore any role dispatch, follow \`<plugin-root>/rules/model-discovery.md\` and the shared \`modelGateway\` protocol: inspect cached choices, prepare a non-blocking preview, start immediately without waiting for a reply, and record the actual result. Apply real user corrections before start or to the next batch; never restart a running role merely to change models. This applies to the current runtime, including Claude-native single-step commands. Commands that do not dispatch roles need no model discovery.\n`);
+  }
+}
+
 function deterministicControlBlock(commandBase, cliPath) {
   if (['hotfix', 'init-hotfix', 'revise-hotfix'].includes(commandBase)) {
     return `## Deterministic Hotfix Controls
@@ -435,6 +442,8 @@ Read and follow \`${relCommand}\` as the single source of truth for this command
 
 ${controlBlock}## Codex Runtime Delta
 
+Before role dispatch, read \`../../rules/model-discovery.md\` and use \`modelGateway\` inspect/prepare/start/result. Reuse the current host's cached choices before discovery. Show the non-blocking preview on first use or changes; never wait for a reply. Use the current native spawn tool catalog when discovery is needed; retain explicit overrides.
+
 - Dispatch every requested role as an independent native subagent using \`../../agents/\`; keep implementation, Review, and verification in fresh isolated sessions. For Fast/Full implementation fanout, spawn every same-wave worker with its progress-assigned worktree and frozen role runtime before awaiting any of them, then join the whole wave; never serialize spawn/await or create extra agent worktrees. Never invoke Claude Code, a Claude subagent tool, or a nested \`codex\` CLI process.
 - ${supportsLean ? 'Resolve automatic risk routing once from progress/config/approved-plan: Explicit Lean high/critical can upgrade the first Planner dispatch; discovered plan risk upgrades subsequent Reviewer dispatch without starting a second Planner; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. A Reviewer may use a different model or the same model with higher reasoning effort. ' : ''}Provider-specific IDs are allowed only in private project/feature config; public defaults remain portable.
 - Translate \`$CLAUDE_PLUGIN_ROOT\` to this installed Codex plugin root and preserve the authoritative command's state transitions, gates, counters, validation, and stop behavior.
@@ -516,6 +525,9 @@ function generatePiResources() {
   const standardDist = join(DIST, 'preset-standard');
   const agentsDir = join(PI_ROOT, 'agents');
   const skillsDir = join(PI_ROOT, 'skills');
+  const tintinDir = join(PI_ROOT, 'tintin-agents');
+  safeRemoveWithin(ROOT, tintinDir);
+  mkdirSync(tintinDir, { recursive: true });
   safeRemoveWithin(ROOT, agentsDir);
   safeRemoveWithin(ROOT, skillsDir);
   mkdirSync(agentsDir, { recursive: true });
@@ -563,13 +575,21 @@ function generatePiResources() {
         'Any Claude Task-tool, Claude subagent, Codex CLI, or nested agent invocation shown below is legacy runtime syntax only.',
         'Never invoke `claude`, `codex`, another `pi` process, `/cc-nexs:*`, or the `subagent` tool from this child.',
         'The parent orchestrator owns progress transitions and Git Custodian operations. Do not run Git mutation commands.',
-        'The parent resolves the cc-nexs role profile and encodes model/thinking in the pi-subagents model selector; do not choose or persist a model ID.',
+        'The parent resolves the cc-nexs role profile and passes model/thinking through the detected Pi adapter; do not choose or persist a model ID.',
         '',
         variant.addendum,
         '# Authoritative Role Contract',
         '',
       ].join('\n');
       writeFileSync(join(agentsDir, `${variant.name}.md`), `${header}${roleBody}`, 'utf8');
+      const tintinHeader = header
+        .replace(`name: ${variant.name}`, `name: cc-nexs.${variant.name}`)
+        .replace('defaultContext: fresh', 'inherit_context: false')
+        .replace('systemPromptMode: replace', 'prompt_mode: replace')
+        .replace('inheritProjectContext: true', 'extensions: true\ndisallowed_tools: Agent, subagent, cc_nexs_dispatch, cc_nexs_models, cc_nexs_model_gateway')
+        .replace('inheritSkills: false', 'inherit_skills: false')
+        .replace(`tools: ${variant.tools.join(', ')}`, `tools: ${variant.tools.map((tool) => ['read', 'write', 'edit', 'bash', 'find', 'grep', 'ls'].includes(tool) ? tool : `ext:${tool}`).join(', ')}`);
+      writeFileSync(join(tintinDir, `cc-nexs.${variant.name}.md`), `${tintinHeader}${roleBody}`, 'utf8');
     }
   }
 
@@ -592,8 +612,8 @@ function generatePiResources() {
       extractDescription(commandText, commandName).replace(/codex CLI/gi, 'Pi subagent'),
     ].join(' ');
     const modelGuard = supportsHotfix
-      ? 'Resolve one Hotfix model snapshot: P0/P1 automatically routes Reviewer to escalated; an explicit feature role profile remains final. Reviewer may use another model or the same model with higher thinking in a fresh child. Encode thinking in the pi-subagents `model` selector; public files ship no provider-specific model IDs.'
-      : 'Resolve automatic risk routing once: Explicit Lean high/critical can upgrade the first Planner dispatch; discovered plan risk upgrades subsequent Reviewer dispatch without starting a second Planner; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. Reviewer may use another model or the same model with higher thinking. Encode the selected thinking in each pi-subagents task `model` selector; public files ship no provider-specific model IDs.';
+      ? 'Resolve one Hotfix model snapshot: P0/P1 automatically routes Reviewer to escalated; an explicit feature role profile remains final. Reviewer may use another model or the same model with higher thinking in a fresh child. Use the detected Pi adapter for thinking; public files ship no provider-specific model IDs.'
+      : 'Resolve automatic risk routing once: Explicit Lean high/critical can upgrade the first Planner dispatch; discovered plan risk upgrades subsequent Reviewer dispatch without starting a second Planner; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. Reviewer may use another model or the same model with higher thinking. Use the detected Pi adapter for thinking; public files ship no provider-specific model IDs.';
     const skillDir = join(skillsDir, skillName);
     mkdirSync(skillDir, { recursive: true });
     const body = `---
@@ -608,28 +628,19 @@ Read and follow \`../../../dist/preset-standard/commands/${fileName}\` as the au
 
 ${controlBlock}## P2 Runtime Contract
 
+Before role dispatch, read \`../../../dist/preset-standard/rules/model-discovery.md\` and use \`cc_nexs_model_gateway\` inspect/prepare/start/result. Call \`cc_nexs_models\` only for missing or invalidated catalogs. Show the non-blocking preview on first use or changes; never wait for a reply. Retain explicit overrides.
+
 1. Pi supports \`preset-standard\` lean (default), standalone hotfix, fast, and full; unsupported compound flows fail closed rather than downgrade.
-2. Use the installed \`pi-subagents@0.35.1\` \`subagent\` tool with package-qualified \`cc-nexs.<role>\` agents. A Fast/Full implementation batch or wave MUST be one parallel call (include Full QA cases in the first batch), followed by one explicit barrier:
+2. Call \`cc_nexs_dispatch({})\` once to detect the installed API. Dispatch a bounded wave using \`cc_nexs_dispatch({ tasks: [{ agent: "cc-nexs.tech-lead", task: "<assignment>", cwd: "<assigned absolute worktree>", model: "<frozen provider/model>", effort: "<frozen thinking>" }], concurrency: 1 })\`. Include Full QA cases in the first wave. Start every sibling before waiting; never create child worktrees or nested children.
 
-\`\`\`js
-subagent({
-  tasks: [
-    { agent: "cc-nexs.tech-lead", task: "<assignment task>", cwd: "<assigned repository worktree>", model: "<provider/model:thinking>" },
-    { agent: "cc-nexs.qa", task: "<first-wave cases task>", cwd: "<assigned docs worktree>", model: "<provider/model:thinking>" }
-  ],
-  concurrency: 2,
-  async: true,
-  worktree: false,
-  context: "fresh"
-})
-subagent_wait({ id: "<async-run-id>" })
-\`\`\`
+The adapter preserves both APIs:
+- \`pi-subagents@0.35.1\`: one \`subagent({ tasks, concurrency, async: true, worktree: false, context: "fresh" })\`, then \`subagent_wait({ id })\`.
+- \`@tintinweb/pi-subagents@0.14.3\`: RPC v2 spawn for each sibling, separate model/thinking fields and actual assigned cwd. The public \`Agent\` tool has no cwd field; do not substitute it or ask the child to cd. Use installed \`cc-nexs.*\` role files. Await completion notifications for every returned ID, then collect \`get_subagent_result\`; no polling or sleeping. The adapter reports partial start failures without discarding already-started IDs.
 
-The example has two tasks, so \`concurrency: 2\`; for a real batch set it to \`min(task count, approved/runtime max_parallel)\`. Use only the tasks actually assigned to that batch and set each \`cwd\` to the progress-assigned worktree. Never issue one \`subagent\` call per sibling, never wait between sibling starts, never enable Pi-created worktree isolation, and never let a child invoke another child. Non-fanout roles use foreground \`subagent({ agent, task, cwd, context: "fresh", model })\`.
 3. Test merge/CI delivery runs before browser capability selection. Only after deployment, prefer ego lite; otherwise use \`@injaneity/pi-computer-use@0.4.3\` when effective config has \`browser_use: true\` and \`headless: true\`. Missing browser/login/MFA/verification URL capability records recoverable \`manual_required\` evidence and never blocks or rolls back delivery.
 4. Never invoke Claude Code, the Claude Task tool, Codex CLI, or a nested \`pi\` CLI. Runtime adaptation changes dispatch only; preserve the authoritative command's paths, state transitions, gates, counters, validation, and stop behavior.
 5. ${modelGuard}
-6. pi-subagents has no separate per-task \`thinking\` field. For a non-inherit selection, pass \`provider/model:thinking\` in the task \`model\`; for \`inherit\` with no thinking override, omit \`model\`; for \`inherit\` with a thinking override, resolve the active provider/model and append \`:thinking\`. After \`subagent_wait\`, retry ordered \`fallback_models\` only for failed/unavailable tasks in a new bounded parallel call; never rerun successful siblings.
+6. The adapter encodes thinking as \`provider/model:thinking\` only for the tasks API; RPC v2 uses \`thinkingLevel\`. Omit inherited values. After all children finish, retry ordered \`fallback_models\` only for failed/unavailable tasks; never rerun successful siblings. Record gateway success only after real successful completion, never after spawn acceptance.
 7. Role children never mutate Git or \`progress.md\` / \`progress.json\`. The parent owns state transitions and Git Custodian operations, and preserves \`CC_NEXS_RUNTIME=pi\` plus \`CC_NEXS_PLUGIN_ROOT\`. For Hotfix children, also pass \`CC_NEXS_PROGRESS_FILE\` and the resolved \`BUG_FILE\`; machine-state directories do not determine document paths.
 
 ${supportsHotfix ? `## Pi Hotfix Dispatch Contract
@@ -642,7 +653,7 @@ ${supportsHotfix ? `## Pi Hotfix Dispatch Contract
 
 ## Required Pi Prerequisites
 
-\`pi-subagents\` must be installed and its \`subagent\` tool must expose the package agents above. Run \`/subagents-doctor\`, then open \`/subagents\` to inspect package-agent model mappings. \`/subagents-models\` is only for builtin agents and must not be used for cc-nexs package roles.
+Install either supported subagent package, then run the local installer and reload Pi. \`cc_nexs_dispatch({})\` checks the actual tool surface and RPC protocol. The installer supplies translated \`cc-nexs.*\` agent files for Tintin; it does not replace unrelated custom agents. Legacy tasks users can inspect \`/subagents-doctor\` and \`/subagents\`.
 
 After test delivery, automatic verification prefers an onboarded ego lite app plus the \`ego-browser\` skill and a minimal \`ego-browser nodejs\` probe. Otherwise it may use \`@injaneity/pi-computer-use@0.4.3\` with effective \`browser_use: true\` and \`headless: true\`. If neither provider or signed-in session is ready, preserve the deployment, record \`manual_required\`, and resume manual verification later; do not silently claim a pass.
 `;
@@ -753,6 +764,7 @@ function buildPreset(presetName) {
 
   // 7a. Claude Code plugin.json
   assertExplicitClaudeEntrypoints(dst);
+  addModelGatewayContract(dst);
   const scopedAgents = scopePluginAgentsToExplicitInvocation(dst);
   console.log(`  explicit-only Claude agents: ${scopedAgents} 个`);
 
@@ -884,7 +896,7 @@ function buildCodexMarketplace(presetNames) {
       name: p.name,
       source: {
         source: 'local',
-        path: `./dist/${name}`,
+        path: `./dist/codex/${name}`,
       },
       policy: {
         installation: 'AVAILABLE',
@@ -904,6 +916,26 @@ function buildCodexMarketplace(presetNames) {
 
   writeFileSync(marketplacePath, JSON.stringify(marketplace, null, 2) + '\n', 'utf-8');
   console.log(`✓ .agents/plugins/marketplace.json (${plugins.length} 个 plugin)`);
+}
+
+function buildCodexDistribution(name) {
+  const target = join(DIST, 'codex', name);
+  safeRemoveWithin(DIST, target);
+  copyTreeNoSymlinks(join(DIST, name), target);
+  // Codex migrates commands/ automatically; ship only our native skill adapters.
+  renameSync(join(target, 'commands'), join(target, 'command-docs'));
+  safeRemoveWithin(target, join(target, '.claude-plugin'));
+  function rewrite(dir) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) rewrite(path);
+      else if (entry.name.endsWith('.md')) {
+        const text = readFileSync(path, 'utf8');
+        writeFileSync(path, text.replaceAll('../../commands/', '../../command-docs/'));
+      }
+    }
+  }
+  rewrite(join(target, 'codex-skills'));
 }
 
 function assertGeneratedOutputsCleanInCi() {
@@ -939,6 +971,7 @@ console.log(`  version: ${VERSION}`);
 console.log(`  targets: ${targets.join(', ')}`);
 
 for (const t of targets) buildPreset(t);
+for (const t of targets) buildCodexDistribution(t);
 if (targets.includes('preset-standard')) generatePiResources();
 // 总是基于全量 preset 列表刷新 marketplace.json，保证根目录入口与 dist/ 中产物一致。
 buildClaudeMarketplace(allPresets);

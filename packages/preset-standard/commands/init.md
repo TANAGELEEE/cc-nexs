@@ -14,7 +14,7 @@ argument-hint: "<需求描述> [--mode=lean|hotfix|fast|full] [--risk-tier=auto|
 - `$1` = 需求描述（必填，中英文都行）
 - `--mode=lean|hotfix|fast|full` 流水线模式（新需求默认 `lean`）
   - `lean`：计划门禁、并行实现、本地验证、一次集中 Review、test 验收、发布门禁
-  - `hotfix`：兼容入口，直接调用 `init-hotfix` 创建修复分支与 BUG 文档；不占需求号
+  - `hotfix`：直接创建修复分支与 BUG 文档；不占需求号
   - `full`：五方异构（Planner/Tech Lead/SA/QA/Evaluator）
   - `fast`：三角色合并（Fullstack/Reviewer/Verifier），单 sprint，比 full 少 ~50% 调用
 - `--id=<编号>` 强制使用指定编号（覆盖自动续号）
@@ -81,7 +81,7 @@ echo "🌲 Git Custodian 将按 workspace 配置建立多仓 worktree"
 node <plugin-root>/lib/cc-nexs-cli.mjs init-hotfix <slug> --description "<原始描述>" [--repos a,b]
 ```
 
-需要关联旧需求或自定义 BUG 路径时，按 `/cc-nexs:init-hotfix` 传递 `--related`、`--bug-key`、`--bug-file`。`--id` 是需求编号参数，不能用于 Hotfix 占号。输出控制器返回的 bug-key、BUG 文档、机器状态和 worktree，再继续 `/cc-nexs:hotfix <key>`。Hotfix 到此结束初始化：不运行后续编号、占位提交、需求模板或 `--brainstorm` 步骤。
+需要关联旧需求或自定义 BUG 路径时，直接在 `/cc-nexs:hotfix` 传递 `--related`、`--bug-key`、`--bug-file`。`--id` 是需求编号参数，不能用于 Hotfix 占号。初始化和范围绑定由 `/cc-nexs:hotfix <key-or-description>` 完成；不运行后续编号、占位提交、需求模板或 `--brainstorm` 步骤。
 
 以下步骤仅适用于 Lean/Fast/Full。
 

@@ -6,6 +6,17 @@ import { pathToFileURL } from 'node:url';
 
 const root = resolve(import.meta.dirname, '..');
 const errors = [];
+for (const file of [
+  'dist/preset-standard/commands/run.md',
+  'dist/preset-standard/commands/execute.md',
+  'dist/preset-standard/codex-skills/cc-nexs-run/SKILL.md',
+  'pi/skills/cc-nexs-run/SKILL.md',
+]) {
+  const text = readFileSync(join(root, file), 'utf8');
+  if (!text.includes('model-discovery.md') || !/modelGateway|cc_nexs_model_gateway/.test(text)) {
+    errors.push(`${file}: missing shared non-blocking model gateway`);
+  }
+}
 const checkedRoots = [join(root, 'packages/core'), join(root, 'packages/preset-standard'), join(root, 'pi')];
 
 function walk(dir) {
@@ -27,7 +38,7 @@ for (const marker of ['runtimes:', 'claude:', 'codex:', 'pi:', 'models:', 'routi
 }
 
 const piSkill = readFileSync(join(root, 'pi/skills/cc-nexs-run/SKILL.md'), 'utf8');
-for (const marker of ['lean (default)', 'pi-subagents@0.35.1', 'subagent({', 'tasks: [', 'async: true', 'worktree: false', 'context: "fresh"', 'subagent_wait({ id:', 'same model with higher thinking', 'automatic risk routing', 'Lean high/critical', 'Hotfix P0/P1', 'explicit feature role profile remains final', 'ship no provider-specific model IDs']) {
+for (const marker of ['lean (default)', 'pi-subagents@0.35.1', 'subagent({', 'cc_nexs_dispatch', 'async: true', 'worktree: false', 'context: "fresh"', 'subagent_wait({ id', 'same model with higher thinking', 'automatic risk routing', 'Lean high/critical', 'Hotfix P0/P1', 'explicit feature role profile remains final', 'ship no provider-specific model IDs']) {
   if (!piSkill.includes(marker)) errors.push(`Pi run skill: missing ${marker}`);
 }
 if (/run_in_background|background Agent calls?/i.test(piSkill)) errors.push('Pi run skill: obsolete background Agent API');
@@ -38,7 +49,7 @@ for (const marker of ['independent native subagent', 'Never invoke Claude Code',
 }
 
 // Hotfix identity, recovery, and approval belong to the same commands on all runtimes.
-for (const name of ['hotfix', 'init-hotfix', 'revise-hotfix', 'approve-release']) {
+for (const name of ['hotfix', 'revise-hotfix', 'approve-release']) {
   const commandFile = join(root, 'dist/preset-standard/commands', `${name}.md`);
   const command = readFileSync(commandFile, 'utf8');
   if (!command.includes(`# /cc-nexs:${name}`)) errors.push(`${commandFile}: missing authoritative entry`);

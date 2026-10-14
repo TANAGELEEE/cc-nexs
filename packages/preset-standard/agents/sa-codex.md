@@ -23,7 +23,7 @@ codex exec "你是本项目的 SA。读 doc/<编号>/spec.md（已通过 cat 注
 1. 章节是否齐全（业务背景 / 技术方案 / 影响范围 / 实施所有权与并行波次 / 验收契约 / Sprint 切片）
 2. 验收契约：是否每条 Given/When/Then 完整？是否可测试？是否覆盖正常+异常+边界？
 3. 技术方案：是否依赖了未明确的现有组件？是否引入新风险（并发、事务、安全）？
-4. Sprint 切片：每片是否 ≤ 1500 行 / ≤ 10 commit？是否所有 AC 都被覆盖？
+4. Sprint 切片：是否按 AC 依赖和可独立交付边界组织？是否所有 AC 都被覆盖？
 5. 影响范围：DB schema 变更是否含回滚？破坏性 API 变更是否提示？
 6. IMPLEMENTATION-OWNERSHIP 是否覆盖全部 AC；同 Wave 是否只含不同 repository；跨端契约已冻结时前后端是否并行；未知仓、路径逃逸或非法依赖必须 NEEDS_REVISION
 
@@ -55,10 +55,10 @@ append 到 doc/<编号>/sa-test-review.md（## Sprint M<N> Round N - YYYY-MM-DD 
 SPRINT=<N>
 git diff main...HEAD -- "src/main/java/**/m${SPRINT}/**" "src/main/resources/**" > /tmp/review-m${SPRINT}-a.diff
 
-# 2. 如果 diff > 1500 行，按文件分组拆成 a/b/c
+# 2. 大 diff 只按审阅输入容量分组，不改变 Sprint 或 candidate 边界
 LINES=$(wc -l < /tmp/review-m${SPRINT}-a.diff)
-if [ $LINES -gt 1500 ]; then
-  echo "⚠️ diff 超 1500 行，按文件分组拆分后分别 codex 调用"
+if [ "$LINES" -gt 1500 ]; then
+  echo "ℹ️ diff 较大，按文件分组提供审阅输入；不改变 Sprint 或 candidate 边界"
   # 实际拆分逻辑由 orchestrator 协调
 fi
 

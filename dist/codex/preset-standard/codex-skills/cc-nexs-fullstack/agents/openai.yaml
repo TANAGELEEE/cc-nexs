@@ -1,0 +1,6 @@
+interface:
+  display_name: "/cc-nexs:fullstack"
+  short_description: "Run /cc-nexs:fullstack explicitly"
+  default_prompt: "Use $cc-nexs-fullstack to run /cc-nexs:fullstack."
+policy:
+  allow_implicit_invocation: false

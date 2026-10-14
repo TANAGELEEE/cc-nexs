@@ -43,6 +43,16 @@ function remoteBranchExists(repo, branch) {
   try { return Boolean(git(repo, ['ls-remote', '--heads', 'origin', `refs/heads/${branch}`])); } catch { return false; }
 }
 
+// shortcut: filename heuristics miss custom contracts; use project dependency analysis when available.
+export function isSensitiveBasePath(file) {
+  const path = String(file || '').replaceAll('\\', '/');
+  const name = path.split('/').at(-1);
+  return /^(package\.json|package-lock\.json|pnpm-(lock|workspace)\.yaml|yarn\.lock|npm-shrinkwrap\.json|go\.(mod|sum|work)|Cargo\.(toml|lock)|pyproject\.toml|poetry\.lock|uv\.lock|composer\.(json|lock)|Gemfile(\.lock)?|pom\.xml|build\.gradle(\.kts)?|settings\.gradle(\.kts)?|gradle\.properties|requirements[^/]*\.txt)$/.test(name)
+    || /(^|\/)(\.github|\.circleci|\.buildkite|migrations?|schemas?|openapi|proto|dto|config|permissions?|generated|contracts?)(\/|$)/i.test(path)
+    || /\.(proto|graphql|prisma)$|[.-](dto|schema)\.[^/]+$|(^|\/)openapi\.[^/]+$/i.test(path)
+    || /(^|\/)(Dockerfile[^/]*|Makefile|justfile|tsconfig[^/]*\.json|vite\.config\.[^/]+|webpack\.config\.[^/]+|rollup\.config\.[^/]+|\.env[^/]*)$/i.test(path);
+}
+
 function fetchBase(repo, branch) {
   assertSegment(branch, 'base branch');
   try {
@@ -201,7 +211,7 @@ export function commitCandidate({ repositoryId, repo, worktree, branch, featureK
   return { branch, commit, candidateRef, staged: staged.split('\n') };
 }
 
-export function prepareFeatureForMerge({ repo, worktree, branch, baseBranch, candidateRef = null }) {
+export function prepareFeatureForMerge({ repo, worktree, branch, baseBranch, candidateRef = null, preserveConflicts = false }) {
   const realWorktree = realpathSync(worktree);
   const registered = git(repo, ['worktree', 'list', '--porcelain']);
   if (!registered.split('\n').includes(`worktree ${realWorktree}`)) throw new Error('[cc-nexs] unregistered worktree');
@@ -215,6 +225,10 @@ export function prepareFeatureForMerge({ repo, worktree, branch, baseBranch, can
       git(worktree, ['merge', '--no-edit', base], { env: gitIdentityEnv(identity) });
     }
   } catch {
+    const conflicts = git(worktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
+    if (preserveConflicts && conflicts.length) {
+      return { branch, baseBranch, baseCommit: git(repo, ['rev-parse', base]), oldHead, head: oldHead, updated: false, status: 'conflicts', conflicts };
+    }
     try { git(worktree, ['merge', '--abort']); } catch {}
     throw new Error(`[cc-nexs] ${branch} conflicts with latest origin/${baseBranch}; resolve before release`);
   }
@@ -240,6 +254,7 @@ export function integrateCandidateToTest({
   expectedSourceCommit = null,
   targetBranch,
   requireTargetAncestor = false,
+  requireDisjointTargetChanges = false,
 }) {
   assertSegment(repositoryId, 'repository id');
   assertSegment(targetBranch, 'test branch');
@@ -262,6 +277,19 @@ export function integrateCandidateToTest({
       alreadyIntegrated: true,
     };
   }
+  if (requireDisjointTargetChanges && !isAncestor(repo, targetBefore, sourceCommit)) {
+    const common = git(repo, ['merge-base', sourceCommit, targetBefore]);
+    const paths = (commit) => git(repo, ['diff', '--name-only', '--no-renames', '-z', common, commit]).split('\0').filter(Boolean);
+    const candidatePaths = new Set(paths(sourceCommit));
+    const targetPaths = paths(targetBefore);
+    if (targetPaths.some((path) => candidatePaths.has(path))) {
+      throw new Error(`[cc-nexs] BASE_CHANGED: origin/${targetBranch} overlaps candidate paths; resolve and verify the affected changes before release`);
+    }
+    const sensitive = targetPaths.filter(isSensitiveBasePath);
+    if (sensitive.length) {
+      throw new Error(`[cc-nexs] BASE_CHANGED: origin/${targetBranch} changed shared runtime or contract paths (${sensitive.join(', ')}); sync and re-verify automatically before release`);
+    }
+  }
   const tempRoot = mkdtempSync(join(tmpdir(), `cc-nexs-test-release-${repositoryId}-`));
   const integrationWorktree = join(tempRoot, 'worktree');
   let registered = false;
@@ -273,7 +301,7 @@ export function integrateCandidateToTest({
       git(integrationWorktree, ['merge', '--no-ff', '--no-edit', sourceCommit], { env: gitIdentityEnv(identity) });
     } catch {
       try { git(integrationWorktree, ['merge', '--abort']); } catch {}
-      throw new Error(`[cc-nexs] candidate ${candidateRef} conflicts with latest origin/${targetBranch}`);
+      throw new Error(`[cc-nexs] ${requireDisjointTargetChanges ? 'BASE_CHANGED: ' : ''}candidate ${candidateRef} conflicts with latest origin/${targetBranch}`);
     }
     const integrationCommit = git(integrationWorktree, ['rev-parse', 'HEAD']);
     try {

@@ -70,8 +70,8 @@ else
 fi
 LINES=$(wc -l < $DIFF_FILE)
 
-if [ $LINES -gt 1500 ]; then
-  echo "⚠️ diff $LINES 行 > 1500，按文件分组拆分"
+if [ "$LINES" -gt 1500 ]; then
+  echo "ℹ️ diff 较大，按文件分组提供审阅输入；不改变 Sprint 或 candidate 边界"
   # 拆分逻辑：按 java package 分组，每组单独跑一次 codex
 fi
 ```

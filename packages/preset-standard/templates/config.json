@@ -23,8 +23,7 @@
     "qa_fix_per_bug": 3,
     "evaluator_未通过": 2
   },
-  "auto_squash_on_sprint_done": true,
-  "max_commits_per_sprint": 10,
+  "auto_squash_on_sprint_done": false,
   "skip_human_gate": false,
   "_skip_human_gate_warning": "true 时跳过 spec 评审后的人工 checkpoint。仅用于 demo 或紧急 hotfix，正常需求请保持 false。"
 }

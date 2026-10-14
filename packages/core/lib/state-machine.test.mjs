@@ -807,3 +807,12 @@ test('hotfix mode: exact candidate goes test then pauses at Gateway B before bas
     workflow: { base_release: { status: 'running' } },
   }), { next: 'HOTFIX_BASE_MERGE_BLOCKED', role: null, action: 'await_human', stop: true });
 });
+
+test('base changes dispatch automatic development-branch repair without a human stop', () => {
+  for (const [mode, state, next, role] of [
+    ['lean', 'BASE_CHANGED', 'IMPLEMENTING', 'lean-developer'],
+    ['hotfix', 'HOTFIX_BASE_CHANGED', 'HOTFIX_FIXING', 'hotfix-developer'],
+  ]) {
+    assert.deepEqual(nextStep({ mode, state, workflow: {}, counters: {}, enabledRoles: [role] }), { next, role, action: 'sync_base' });
+  }
+});

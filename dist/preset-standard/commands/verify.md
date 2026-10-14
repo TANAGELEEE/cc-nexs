@@ -102,3 +102,7 @@ orchestrator 读结论 + BUG 计数后推进，并记录当前 release attempt �
    待人工接入: <数量>
 👉 接下来: /cc-nexs:run <编号>
 ```
+
+## Model dispatch preview
+
+Before any role dispatch, follow `<plugin-root>/rules/model-discovery.md` and the shared `modelGateway` protocol: inspect cached choices, prepare a non-blocking preview, start immediately without waiting for a reply, and record the actual result. Apply real user corrections before start or to the next batch; never restart a running role merely to change models. This applies to the current runtime, including Claude-native single-step commands. Commands that do not dispatch roles need no model discovery.

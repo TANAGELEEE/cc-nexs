@@ -43,7 +43,7 @@ workflow:
 含义：
 
 - Sprint 只负责开发、项目本地验证、测试用例和代码评审。
-- Sprint 完成不合入 test、不发布、不做验收打分。
+- Sprint 完成不合入 test、不发布、不做验收打分；Sprint 数量和实现批次不触发额外人工审批。
 - 所有 Sprint 开发完成后，完整 candidate 只做一次集成评审、test 发布和最终验收。
 - `--no-auto-test-release` 或 feature `release.test=manual` 显式退出自动 test 发布；Lean/Hotfix 中这是把后续发布完全交给外部流程，G2 本身不会伪造 immutable release attempt，也不能直接恢复 Gateway B。要回到 cc-nexs 验收必须配置 driver 并恢复 `auto_if_ready`。
 - test environment、deploy target、candidate 或 release driver 不足时才在 push 前停止；浏览器、登录会话和验收 URL 只影响部署后的 verification。
@@ -241,3 +241,5 @@ Legacy 模式不自动授权：
 - 清理 worktree。
 
 这些操作继续由用户显式授权 Git Custodian/发布系统执行。
+
+Pi API compatibility: `cc_nexs_dispatch` adapts the wave above to legacy tasks or Tintin RPC v2 with assigned cwd. Tintin uses completion notifications and `get_subagent_result` instead of `subagent_wait`; the all-sibling barrier and role ownership remain unchanged.

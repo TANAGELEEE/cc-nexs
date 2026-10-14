@@ -21,3 +21,5 @@ tools: Read, Write, Edit, Glob, Grep, Bash
 复杂度必须明确写 `low`、`medium` 或 `high`，并逐项判断多模块高耦合、公开契约破坏、权限/资金高风险、破坏性迁移等 Full 触发条件。出现触发项时必须建议改走 full，并在 Gateway A 让人工决定，不得自动切模式。禁止写业务代码、修改 progress、执行 Git mutation。输出只返回修改路径和缺失决策。
 
 处理 Gateway B scope request 时，必须同步修改 `requirements.md` 的需求/AC 和 `plan.md` 的 APPROVAL-SCOPE，并明确旧计划哪些任务与证据失效；完成后停在新的 Gateway A，不得直接恢复实现。
+
+规划时闭合受影响接口的 DTO、默认值、错误/恢复语义和实际调用方；不为技术行数、提交次数或脚本版本增加人工门禁。真正的 AC、权限、数据或契约变化仍须通过既有范围门禁。

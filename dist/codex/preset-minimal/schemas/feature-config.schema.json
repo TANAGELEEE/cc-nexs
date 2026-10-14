@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "cc-nexs feature config.json v2",
+  "type": "object",
+  "required": ["config_version", "mode", "risk_tier"],
+  "additionalProperties": true,
+  "properties": {
+    "config_version": { "const": 2 },
+    "mode": { "enum": ["lean", "hotfix", "fast", "full", "lite"] },
+    "risk_tier": { "enum": ["auto", "low", "medium", "high", "critical"] },
+    "models": {
+      "type": "object",
+      "properties": {
+        "profiles": { "type": "object" },
+        "roles": { "type": "object" },
+        "routing": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "default_risk_tier": { "enum": ["low", "medium", "high", "critical"] },
+            "rules": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "roles"],
+                "additionalProperties": false,
+                "properties": {
+                  "id": { "type": "string", "minLength": 1 },
+                  "when": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "modes": { "type": "array", "items": { "enum": ["lean", "hotfix", "fast", "full", "lite"] } },
+                      "risk_tiers": { "type": "array", "items": { "enum": ["low", "medium", "high", "critical"] } },
+                      "severities": { "type": "array", "items": { "enum": ["P0", "P1", "P2", "P3"] } }
+                    }
+                  },
+                  "roles": { "type": "object", "minProperties": 1 }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

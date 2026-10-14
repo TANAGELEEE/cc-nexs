@@ -4,7 +4,6 @@ import { dirname, join, resolve } from 'node:path';
 import { resolveCandidateContext } from './candidate-context.mjs';
 import { assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
 import {
-  assertCandidateContainsRemoteBase,
   cleanupMergedWorktree,
   integrateCandidateToTest,
 } from './git-custodian.mjs';
@@ -82,14 +81,6 @@ function executeBaseRelease(context) {
     testedSource,
   });
 
-  for (const item of context.repositories) {
-    assertCandidateContainsRemoteBase({
-      repo: item.repository.absolute_path,
-      candidateRef: item.assignment.candidate.ref,
-      baseBranch: baseTargets[item.id],
-    });
-  }
-
   const attempt = beginBaseRelease(context.progressFile, {
     source: context.source,
     expectedRevision: context.progress.revision,
@@ -102,7 +93,7 @@ function executeBaseRelease(context) {
         candidateRef: item.assignment.candidate.ref,
         expectedSourceCommit: item.sourceCommit,
         targetBranch: baseTargets[item.id],
-        requireTargetAncestor: true,
+        requireDisjointTargetChanges: true,
       });
       recordBaseIntegration(context.progressFile, {
         attemptId: attempt.id,

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -33,6 +33,11 @@ function createFeature({ id = '01', mode = 'fast', state, worktree = false } = {
   const root = mkdtempSync(join(tmpdir(), 'cc-nexs-approval-'));
   roots.push(root);
   mkdirSync(join(root, '.cc-nexs'), { recursive: true });
+  copyFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '../../preset-standard/preset.yml'),
+    join(root, '.cc-nexs', 'preset.yml'),
+  );
+  writeFileSync(join(root, 'cc-nexs.config.yml'), 'preset_path: .cc-nexs\n');
   writeFileSync(join(root, '.cc-nexs', 'workspace.yml'), [
     'version: 1',
     'docs_repository: docs',
@@ -592,7 +597,9 @@ test('Lean Gateway B binds the exact reviewed and test-verified candidate', () =
   invalidBaseEvidence.local_verification.attempts.at(-1).evidence = [];
   writeProgressV2(fixture.progressFile, invalidBaseEvidence);
   assert.throws(() => approveFeatureGate({ cwd: fixture.root, featureId: '21', gate: 'release', approver: 'Release Owner' }), /structured evidence/);
+  withPresetEnv(fixture, () => {
   assert.throws(() => runBaseRelease({ cwd: fixture.root, featureId: '21' }), /structured evidence/);
+  });
   assert.equal(readProgressV2(fixture.progressFile).state, 'BASE_MERGE_BLOCKED');
   writeProgressV2(fixture.progressFile, progress);
 
@@ -610,10 +617,12 @@ test('Lean Gateway B binds the exact reviewed and test-verified candidate', () =
     '    test_branch: test',
     '',
   ].join('\n'));
+  withPresetEnv(fixture, () => {
   assert.throws(
     () => runBaseRelease({ cwd: fixture.root, featureId: '21' }),
     /workspace base branch changed after release approval for api/,
   );
+  });
   assert.equal(readProgressV2(fixture.progressFile).state, 'BASE_MERGE_BLOCKED');
 });
 
@@ -665,6 +674,17 @@ const testException = {
   rollbackEvidence: 'Revert to the recorded base commit; no data migration',
 };
 
+function withPresetEnv(fixture, fn) {
+  const saved = process.env.CC_NEXS_PLUGIN_ROOT;
+  try {
+    process.env.CC_NEXS_PLUGIN_ROOT = join(fixture.root, '.cc-nexs');
+    return fn();
+  } finally {
+    if (saved === undefined) delete process.env.CC_NEXS_PLUGIN_ROOT;
+    else process.env.CC_NEXS_PLUGIN_ROOT = saved;
+  }
+}
+
 function createEnvironmentBlockedCandidate(mode, id) {
   const fixture = createFeature({ id, mode, state: mode === 'lean' ? 'PLAN_PENDING_HUMAN' : 'HOTFIX_TEST_VERIFYING' });
   if (mode === 'lean') approveFeatureGate({ cwd: fixture.root, featureId: id, gate: 'plan', approver: 'Owner' });
@@ -712,6 +732,7 @@ function createEnvironmentBlockedCandidate(mode, id) {
 test('explicit test-environment exception reaches base release without claiming test passed', () => {
   for (const [mode, id] of [['lean', '24'], ['hotfix', '25']]) {
     const fixture = createEnvironmentBlockedCandidate(mode, id);
+    withPresetEnv(fixture, () => {
     const initialAttempt = readProgressV2(fixture.progressFile).delivery.test.attempts.at(-1);
     assert.throws(() => approveFeatureGate({ cwd: fixture.root, featureId: id, gate: 'release', approver: 'Owner' }), /release gate requires/);
     const approval = approveFeatureGate({ cwd: fixture.root, featureId: id, gate: 'release', approver: 'Owner', testException });
@@ -726,29 +747,72 @@ test('explicit test-environment exception reaches base release without claiming 
     assert.equal(released.delivery.test.status, 'deployed_needs_manual_verification');
     assert.deepEqual(released.delivery.test.attempts.at(-1), initialAttempt);
     fixture.git(fixture.repo, ['merge-base', '--is-ancestor', fixture.source.api, 'origin/main']);
+    });
   }
 });
 
-test('base release refuses changed exception evidence and newly advanced base', () => {
-  for (const change of ['evidence', 'base']) {
-    const fixture = createEnvironmentBlockedCandidate('hotfix', `26-${change}`);
-    const featureId = `26-${change}`;
-    approveFeatureGate({ cwd: fixture.root, featureId, gate: 'release', approver: 'Owner', testException });
+test('base release still requires unchanged exception evidence', () => {
+  const fixture = createEnvironmentBlockedCandidate('hotfix', '26-evidence');
+  withPresetEnv(fixture, () => {
+    approveFeatureGate({ cwd: fixture.root, featureId: '26-evidence', gate: 'release', approver: 'Owner', testException });
     const approved = readProgressV2(fixture.progressFile);
     approved.state = 'HOTFIX_BASE_MERGING';
-    if (change === 'evidence') approved.delivery.test.attempts.at(-1).verification.evidence = ['changed'];
-    else {
-      fixture.git(fixture.repo, ['commit', '--allow-empty', '-m', 'new base']);
-      fixture.git(fixture.repo, ['push', 'origin', 'main']);
-    }
+    approved.delivery.test.attempts.at(-1).verification.evidence = ['changed'];
     writeProgressV2(fixture.progressFile, approved);
-    assert.throws(() => runBaseRelease({ cwd: fixture.root, featureId }), change === 'evidence' ? /exception evidence changed/ : /BASE_CHANGED/);
-    assert.equal(readProgressV2(fixture.progressFile).state, change === 'evidence' ? 'HOTFIX_BASE_MERGE_BLOCKED' : 'HOTFIX_BASE_CHANGED');
-  }
+    assert.throws(() => runBaseRelease({ cwd: fixture.root, featureId: '26-evidence' }), /exception evidence changed/);
+    assert.equal(readProgressV2(fixture.progressFile).state, 'HOTFIX_BASE_MERGE_BLOCKED');
+  });
 });
+
+test('base release integrates a newer non-conflicting base without invalidating the tested candidate', () => {
+  const fixture = createEnvironmentBlockedCandidate('hotfix', '26-base');
+  withPresetEnv(fixture, () => {
+    approveFeatureGate({ cwd: fixture.root, featureId: '26-base', gate: 'release', approver: 'Owner', testException });
+    const approved = readProgressV2(fixture.progressFile);
+    const testAttempt = approved.delivery.test.attempts.at(-1);
+    approved.state = 'HOTFIX_BASE_MERGING';
+    writeFileSync(join(fixture.repo, 'unrelated.txt'), 'another team\n');
+    fixture.git(fixture.repo, ['add', 'unrelated.txt']);
+    fixture.git(fixture.repo, ['commit', '-m', 'unrelated base change']);
+    fixture.git(fixture.repo, ['push', 'origin', 'main']);
+    const newerBase = fixture.git(fixture.repo, ['rev-parse', 'HEAD']);
+    writeProgressV2(fixture.progressFile, approved);
+    assert.equal(runBaseRelease({ cwd: fixture.root, featureId: '26-base' }).status, 'succeeded');
+    const released = readProgressV2(fixture.progressFile);
+    assert.equal(released.delivery.test.attempts.length, 1);
+    assert.deepEqual(released.delivery.test.attempts.at(-1), testAttempt);
+    fixture.git(fixture.repo, ['merge-base', '--is-ancestor', newerBase, 'origin/main']);
+    fixture.git(fixture.repo, ['merge-base', '--is-ancestor', fixture.source.api, 'origin/main']);
+    assert.equal(fixture.git(fixture.repo, ['show', 'origin/main:unrelated.txt']), 'another team');
+  });
+});
+
+for (const changedPath of ['candidate.txt', 'package.json', 'go.mod']) {
+test(`base release refuses overlapping or sensitive paths (${changedPath}) without mutating candidate or test evidence`, () => {
+  const fixture = createEnvironmentBlockedCandidate('lean', '26-overlap');
+  withPresetEnv(fixture, () => {
+    approveFeatureGate({ cwd: fixture.root, featureId: '26-overlap', gate: 'release', approver: 'Owner', testException });
+    const approved = readProgressV2(fixture.progressFile);
+    approved.state = 'BASE_MERGING';
+    writeProgressV2(fixture.progressFile, approved);
+    writeFileSync(join(fixture.repo, changedPath), 'other implementation\n');
+    fixture.git(fixture.repo, ['add', changedPath]);
+    fixture.git(fixture.repo, ['commit', '-m', 'overlapping change']);
+    fixture.git(fixture.repo, ['push', 'origin', 'main']);
+    const remoteBefore = fixture.git(fixture.repo, ['rev-parse', 'origin/main']);
+    assert.throws(() => runBaseRelease({ cwd: fixture.root, featureId: '26-overlap' }), /BASE_CHANGED.*(overlaps|shared runtime or contract)/);
+    const blocked = readProgressV2(fixture.progressFile);
+    assert.equal(blocked.state, 'BASE_CHANGED');
+    assert.deepEqual(blocked.delivery.test, approved.delivery.test);
+    assert.equal(fixture.git(fixture.repo, ['rev-parse', 'refs/cc-nexs/candidates/api']), fixture.source.api);
+    assert.equal(fixture.git(fixture.repo, ['rev-parse', 'origin/main']), remoteBefore);
+  });
+});
+}
 
 test('scope-invalidated test attempts cannot retain release approval or authorize base integration', () => {
   const fixture = createEnvironmentBlockedCandidate('hotfix', '27');
+  withPresetEnv(fixture, () => {
   approveFeatureGate({ cwd: fixture.root, featureId: '27', gate: 'release', approver: 'Owner', testException });
   const progress = readProgressV2(fixture.progressFile);
   progress.delivery.test.attempts.at(-1).invalidated_at = new Date().toISOString();
@@ -759,6 +823,7 @@ test('scope-invalidated test attempts cannot retain release approval or authoriz
   assert.throws(() => approveFeatureGate({ cwd: fixture.root, featureId: '27', gate: 'release', approver: 'Owner' }), /attempt was invalidated/);
   assert.throws(() => runBaseRelease({ cwd: fixture.root, featureId: '27' }), /attempt was invalidated/);
   assert.equal(readProgressV2(fixture.progressFile).state, 'HOTFIX_BASE_MERGE_BLOCKED');
+  });
 });
 
 

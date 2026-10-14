@@ -115,3 +115,7 @@ prompt:
    assignment / spec.md / 代码 / 文档 / BUG 状态等
 👉 接下来: /cc-nexs:run <编号>
 ```
+
+## Model dispatch preview
+
+Before any role dispatch, follow `<plugin-root>/rules/model-discovery.md` and the shared `modelGateway` protocol: inspect cached choices, prepare a non-blocking preview, start immediately without waiting for a reply, and record the actual result. Apply real user corrections before start or to the next batch; never restart a running role merely to change models. This applies to the current runtime, including Claude-native single-step commands. Commands that do not dispatch roles need no model discovery.

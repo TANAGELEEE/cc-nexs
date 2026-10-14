@@ -58,8 +58,8 @@ BASE_REF=${BASE_REF:-origin/master}
 git diff ${BASE_REF}...HEAD -- '*.java' '*.xml' '*.yml' '*.yaml' '*.sql' '*.properties' "${REQ_DIR}" > $DIFF_FILE
 LINES=$(wc -l < $DIFF_FILE)
 
-if [ $LINES -gt 1500 ]; then
-  echo "⚠️ diff $LINES 行 > 1500，单次 codex 调用风险高"
+if [ "$LINES" -gt 1500 ]; then
+  echo "ℹ️ diff 较大，按文件分组提供审阅输入；不改变 Sprint 或 candidate 边界"
   echo "   建议先把 diff 拆分（按文件分组），分批跑 review"
 fi
 ```
@@ -140,3 +140,7 @@ orchestrator 读结论后决定：
    <accept 模式>: 验收结果: 通过|未通过（✅<n> ⚠️<n> ❌<n>）
 👉 接下来: /cc-nexs:run <编号>
 ```
+
+## Model dispatch preview
+
+Before any role dispatch, follow `<plugin-root>/rules/model-discovery.md` and the shared `modelGateway` protocol: inspect cached choices, prepare a non-blocking preview, start immediately without waiting for a reply, and record the actual result. Apply real user corrections before start or to the next batch; never restart a running role merely to change models. This applies to the current runtime, including Claude-native single-step commands. Commands that do not dispatch roles need no model discovery.

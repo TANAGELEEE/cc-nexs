@@ -30,3 +30,7 @@ The G1 human checkpoint. G2 deployment approval remains a separate explicit chec
       Approved at: <ts>
    ```
 6. Continue the current runtime's `run` workflow from `SPEC_APPROVED`. Do not launch the slash-style alias as a shell command.
+
+## Model dispatch preview
+
+Before any role dispatch, follow `<plugin-root>/rules/model-discovery.md` and the shared `modelGateway` protocol: inspect cached choices, prepare a non-blocking preview, start immediately without waiting for a reply, and record the actual result. Apply real user corrections before start or to the next batch; never restart a running role merely to change models. This applies to the current runtime, including Claude-native single-step commands. Commands that do not dispatch roles need no model discovery.

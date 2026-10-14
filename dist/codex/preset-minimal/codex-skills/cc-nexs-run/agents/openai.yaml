@@ -1,0 +1,6 @@
+interface:
+  display_name: "/cc-nexs:run"
+  short_description: "Run /cc-nexs:run explicitly"
+  default_prompt: "Use $cc-nexs-run to run /cc-nexs:run."
+policy:
+  allow_implicit_invocation: false

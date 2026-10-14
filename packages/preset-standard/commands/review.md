@@ -58,8 +58,8 @@ BASE_REF=${BASE_REF:-origin/master}
 git diff ${BASE_REF}...HEAD -- '*.java' '*.xml' '*.yml' '*.yaml' '*.sql' '*.properties' "${REQ_DIR}" > $DIFF_FILE
 LINES=$(wc -l < $DIFF_FILE)
 
-if [ $LINES -gt 1500 ]; then
-  echo "⚠️ diff $LINES 行 > 1500，单次 codex 调用风险高"
+if [ "$LINES" -gt 1500 ]; then
+  echo "ℹ️ diff 较大，按文件分组提供审阅输入；不改变 Sprint 或 candidate 边界"
   echo "   建议先把 diff 拆分（按文件分组），分批跑 review"
 fi
 ```

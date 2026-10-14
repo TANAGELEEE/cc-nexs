@@ -1,0 +1,29 @@
+{
+  "schema_version": 2,
+  "feature": { "id": "{编号}", "slug": "{需求短名}" },
+  "preset": "preset-standard",
+  "mode": "hotfix",
+  "state": "INIT",
+  "revision": 0,
+  "created_at": null,
+  "updated_at": null,
+  "counters": { "review_revision": 0, "fix_per_bug": {}, "evaluator_reject": 0 },
+  "sprint": { "enabled": false, "current": 0, "total": 0, "status": {} },
+  "hotfix": null,
+  "gates": {
+    "g1": { "approved": false },
+    "g2": { "approved": false, "sprints": {} },
+    "plan": { "approved": false, "binding": null },
+    "release": { "approved": false, "binding": null }
+  },
+  "local_verification": { "status": "idle", "context": null, "candidate_fingerprint": null, "attempts": [] },
+  "review": { "status": "idle", "candidate_fingerprint": null, "reviewed_commits": {}, "blocking_findings": [], "closure_attempts": 0, "gateway_b_delta_attempts": 0 },
+  "change_requests": { "current": null, "items": [] },
+  "delivery": {
+    "strategy": "final_only",
+    "test": { "policy": "auto_if_ready", "status": "idle", "attempts": [] },
+    "base": { "status": "idle", "attempts": [] }
+  },
+  "repositories": {},
+  "events": []
+}

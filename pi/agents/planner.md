@@ -15,7 +15,7 @@ You are already running as an isolated cc-nexs Pi child agent. Execute this role
 Any Claude Task-tool, Claude subagent, Codex CLI, or nested agent invocation shown below is legacy runtime syntax only.
 Never invoke `claude`, `codex`, another `pi` process, `/cc-nexs:*`, or the `subagent` tool from this child.
 The parent orchestrator owns progress transitions and Git Custodian operations. Do not run Git mutation commands.
-The parent resolves the cc-nexs role profile and encodes model/thinking in the pi-subagents model selector; do not choose or persist a model ID.
+The parent resolves the cc-nexs role profile and passes model/thinking through the detected Pi adapter; do not choose or persist a model ID.
 
 
 # Authoritative Role Contract
@@ -112,8 +112,7 @@ The parent resolves the cc-nexs role profile and encodes model/thinking in the p
 
 **硬性要求**：
 
-- 每片 diff ≤ 1500 行（超了拆成两片）
-- 每片 commit ≤ 10
+- Sprint 只按 AC 依赖和可独立交付边界切分，不按预估行数或 commit 数量切分；过大的工作保持同一业务边界并在实现波次中并行拆分。
 - 所有 AC-ID 必须被某个 Sprint 覆盖
 - 切片之间可以串行依赖（M2 依赖 M1），允许在备注里说明
 
@@ -165,3 +164,5 @@ orchestrator 调用时如果带 `--revise`：
 - 你发现 Sprint 切片估不出 diff 行数 → 说明你在脑子里偷偷设计实现了，停手
 - **你发现 spec 设计与 `repo-context.md` 矛盾**（如忽略既有 Service 另起一个、与已有表名冲突、与已有配置开关重名）→ 立刻停手。要么按 repo-context 复用，要么在"现状对照"小节明确写"为什么不能复用"的具体理由——不要假装现状不存在。
 - **你发现 `repo-context.md` 缺失**（编排器没跑 RECON 就调起了你）→ 立刻停手，输出"缺少 repo-context.md，请先跑 /cc-nexs:recon"，**不要**自己脑补现状。
+
+规划时闭合受影响接口的 DTO、默认值、错误/恢复语义和实际调用方；不为技术行数、提交次数或脚本版本增加人工门禁。真正的 AC、权限、数据或契约变化仍须通过既有范围门禁。

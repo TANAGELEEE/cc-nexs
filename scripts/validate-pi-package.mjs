@@ -22,7 +22,6 @@ const expectedCommands = [
   'evaluator',
   'git-custodian',
   'hotfix',
-  'init-hotfix',
   'revise-hotfix',
   'init',
   'lean-review',
@@ -86,6 +85,9 @@ else {
   for (const marker of ['runCcNexsCommand', 'splitCommandArguments']) {
     if (!extension.includes(marker)) fail(`Pi extension: missing deterministic approval marker ${marker}`);
   }
+  for (const marker of ['cc_nexs_models', 'cc_nexs_model_gateway', 'ctx.modelRegistry.getAvailable()', 'modelGateway(params.operation']) {
+    if (!extension.includes(marker)) fail(`Pi extension: missing model discovery/gateway marker ${marker}`);
+  }
   for (const command of expectedCommands) {
     if (!extension.includes(`"${command}"`)) fail(`Pi extension: missing command ${command}`);
   }
@@ -106,29 +108,24 @@ for (const command of expectedCommands) {
     const contractMarkers = [
       'preset-standard',
       'pi-subagents@0.35.1',
-      'subagent({',
-      'tasks: [',
-      'concurrency: 2',
-      'async: true',
+      'cc_nexs_dispatch',
+      '@tintinweb/pi-subagents@0.14.3',
+      'RPC v2',
+      'get_subagent_result',
       'worktree: false',
-      'context: "fresh"',
-      'subagent_wait({ id:',
       'failed/unavailable tasks',
       'never rerun successful siblings',
       'same model with higher thinking',
       'explicit feature role profile remains final',
       'ship no provider-specific model IDs',
     ];
-    if (!['hotfix', 'init-hotfix', 'revise-hotfix'].includes(command)) {
+    if (!['hotfix', 'revise-hotfix'].includes(command)) {
       contractMarkers.push('lean (default)', 'fast, and full', 'automatic risk routing', 'Lean high/critical', 'Hotfix P0/P1');
     } else {
       contractMarkers.push('P0/P1 automatically routes Reviewer to escalated');
     }
     for (const marker of contractMarkers) {
       if (!skill.includes(marker)) fail(`${name}: missing P2 contract marker ${marker}`);
-    }
-    if (/run_in_background|background Agent calls?|same-message Agent calls?/i.test(skill)) {
-      fail(`${name}: obsolete non-pi-subagents background Agent API leaked into Pi contract`);
     }
     if (/\bworktree\s*:\s*true\b/.test(skill)) fail(`${name}: Pi fanout must never create child worktrees`);
     if (['cc-nexs-approve-deploy', 'cc-nexs-approve-spec', 'cc-nexs-approve-plan', 'cc-nexs-approve-release'].includes(name)
@@ -140,7 +137,7 @@ for (const unexpected of skillNames.filter((name) => !expectedCommands.includes(
   fail(`Pi P2 exposes unsupported command skill: ${unexpected}`);
 }
 
-for (const command of ['hotfix', 'init-hotfix', 'revise-hotfix']) {
+for (const command of ['hotfix', 'revise-hotfix']) {
   const hotfixSkillPath = join(skillsRoot, `cc-nexs-${command}`, 'SKILL.md');
   if (!existsSync(hotfixSkillPath)) continue;
   const hotfixSkill = readFileSync(hotfixSkillPath, 'utf8');
@@ -169,6 +166,15 @@ for (const command of ['hotfix', 'init-hotfix', 'revise-hotfix']) {
   }
   if (hotfixSkill.includes('request is hotfix/compound')) fail(`cc-nexs-${command}: still rejects the hotfix flow`);
   if (hotfixSkill.includes('P3 Review skipping')) fail(`cc-nexs-${command}: obsolete P3 Review exemption`);
+}
+
+for (const role of expectedRoles) {
+  const file = join(root, 'pi/tintin-agents', `cc-nexs.${role}.md`);
+  if (!existsSync(file)) { fail(`Missing Tintin role: ${role}`); continue; }
+  const text = readFileSync(file, 'utf8');
+  for (const marker of ['inherit_context: false', 'prompt_mode: replace', 'disallowed_tools: Agent', 'package: cc-nexs']) {
+    if (!text.includes(marker)) fail(`Tintin ${role}: missing ${marker}`);
+  }
 }
 
 const agentsRoot = join(root, 'pi/agents');

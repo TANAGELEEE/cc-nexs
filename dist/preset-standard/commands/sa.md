@@ -70,8 +70,8 @@ else
 fi
 LINES=$(wc -l < $DIFF_FILE)
 
-if [ $LINES -gt 1500 ]; then
-  echo "⚠️ diff $LINES 行 > 1500，按文件分组拆分"
+if [ "$LINES" -gt 1500 ]; then
+  echo "ℹ️ diff 较大，按文件分组提供审阅输入；不改变 Sprint 或 candidate 边界"
   # 拆分逻辑：按 java package 分组，每组单独跑一次 codex
 fi
 ```
@@ -119,3 +119,7 @@ echo "RESULT:${RESULT}"
    附文件: <sa-*.md 路径>
    <NEEDS_REVISION 时输出问题数：P0=x P1=y P2=z>
 ```
+
+## Model dispatch preview
+
+Before any role dispatch, follow `<plugin-root>/rules/model-discovery.md` and the shared `modelGateway` protocol: inspect cached choices, prepare a non-blocking preview, start immediately without waiting for a reply, and record the actual result. Apply real user corrections before start or to the next batch; never restart a running role merely to change models. This applies to the current runtime, including Claude-native single-step commands. Commands that do not dispatch roles need no model discovery.

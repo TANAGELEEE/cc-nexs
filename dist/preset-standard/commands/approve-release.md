@@ -28,3 +28,7 @@ node <plugin-root>/lib/cc-nexs-cli.mjs approve-release <id> --test-exception \
 The exception requires exact-candidate passed local command evidence, passed independent Review, actual test integration/deployment evidence, and the latest attempt's `manual_required` result. A product verification failure, missing deployment, or missing evidence cannot use it. Preserve the unverified test status and record the exception in the approval binding; never relabel the attempt as passed. This approves configured base integration only, not production deployment. Do not request another confirmation when the necessary explicit user authorization is already present; record its evidence.
 
 Continue with `/cc-nexs:run <id>` to integrate configured base branches. Production deployment requires its own applicable authorization.
+
+## Model dispatch preview
+
+Before any role dispatch, follow `<plugin-root>/rules/model-discovery.md` and the shared `modelGateway` protocol: inspect cached choices, prepare a non-blocking preview, start immediately without waiting for a reply, and record the actual result. Apply real user corrections before start or to the next batch; never restart a running role merely to change models. This applies to the current runtime, including Claude-native single-step commands. Commands that do not dispatch roles need no model discovery.

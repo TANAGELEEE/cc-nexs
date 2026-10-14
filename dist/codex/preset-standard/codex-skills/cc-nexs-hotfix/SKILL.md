@@ -1,0 +1,47 @@
+---
+name: cc-nexs-hotfix
+description: /cc-nexs:hotfix 的 Codex 镜像 skill。 显式调用 $cc-nexs-hotfix 时使用。 Hotfix：独立修复分支与 BUG 文档、本地验证、独立 Review、test 验收和 Gateway B。
+---
+
+# /cc-nexs:hotfix for Codex
+
+This explicit-only skill is a thin Codex runtime adapter for `/cc-nexs:hotfix`.
+
+## Authoritative Command
+
+Read and follow `../../command-docs/hotfix.md` as the single source of truth for this command. Treat the user's original message after `/cc-nexs:hotfix` as the command arguments.
+
+## Deterministic Hotfix Controls
+
+Resolve `../../lib/cc-nexs-cli.mjs` relative to this SKILL.md. Follow the authoritative command for the applicable initialization, binding, or authorized revision action:
+
+```text
+node <resolved-cli-path> init-hotfix <slug> --description "<bug description>" [--bug-key YYYYMMDD-slug] [--related <feature-id>] [--repos a,b] [--bug-file <docs-relative.md>]
+node <resolved-cli-path> start-hotfix <bug-key-or-legacy-id> [--level P0|P1|P2|P3] [--related <feature-id>]
+node <resolved-cli-path> revise-hotfix <bug-key-or-legacy-id> --reason "<reason>" --authorization-evidence "<existing user authorization>" [--promote-lean]
+```
+
+New Hotfix tasks use `hotfix/<key>` and one assigned BUG document; never reserve a shared feature number or publish placeholders. Resolve the BUG through `progress.hotfix_document` and keep machine state in `.cc-nexs/hotfixes/<key>/`; legacy `hotfix.md` tasks remain resumable. Every severity, including P3, requires independent Review. Authorized revisions retain the key/branch and invalidate current evidence; Lean promotion still requires Gateway A.
+
+Subsequent local verification, Review recording, test release/verification, release approval, and base integration must use the packaged controls named by the authoritative command. Only an explicitly authorized `approve-release --test-exception` may accept an actual deployed `manual_required` environment gap with exact local/Review and rollback evidence; it preserves the unverified fact and does not authorize production deployment. Never edit progress state or perform ad hoc merge/push operations.
+
+## Codex Runtime Delta
+
+Before role dispatch, read `../../rules/model-discovery.md` and use `modelGateway` inspect/prepare/start/result. Reuse the current host's cached choices before discovery. Show the non-blocking preview on first use or changes; never wait for a reply. Use the current native spawn tool catalog when discovery is needed; retain explicit overrides.
+
+- Dispatch every requested role as an independent native subagent using `../../agents/`; keep implementation, Review, and verification in fresh isolated sessions. For Fast/Full implementation fanout, spawn every same-wave worker with its progress-assigned worktree and frozen role runtime before awaiting any of them, then join the whole wave; never serialize spawn/await or create extra agent worktrees. Never invoke Claude Code, a Claude subagent tool, or a nested `codex` CLI process.
+- Resolve automatic risk routing once from progress/config/approved-plan: Explicit Lean high/critical can upgrade the first Planner dispatch; discovered plan risk upgrades subsequent Reviewer dispatch without starting a second Planner; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. A Reviewer may use a different model or the same model with higher reasoning effort. Provider-specific IDs are allowed only in private project/feature config; public defaults remain portable.
+- Translate `$CLAUDE_PLUGIN_ROOT` to this installed Codex plugin root and preserve the authoritative command's state transitions, gates, counters, validation, and stop behavior.
+- Browser tooling, login/MFA state, and verification-page URL availability are checked only after the exact candidate reaches test and CI delivery completes. They never block delivery. If post-deployment verification cannot run, record `manual_required` / `deployed_needs_manual_verification` with evidence and leave it recoverable; never claim a pass.
+
+## Document Write Map
+
+Preserve exactly the paths declared by the authoritative command: ordinary features use `all-docs/doc/{id}.{slug}/` and `progress.md`; new Hotfix tasks use the BUG identified by `progress.hotfix_document` with machine state in workspace `.cc-nexs/hotfixes/<key>/`. A related BUG uses `doc/<id>.<slug>/bugs/BUG-<key>.md`; otherwise use docs `hotfix/<key>/BUG-001.md`. Keep legacy `hotfix.md`, command-declared `bugs/` / `qa-scripts/`, and `docs/solutions/` compatible. Hotfix does not reserve a feature number or publish placeholders. Pass `CC_NEXS_PROGRESS_FILE` and the resolved `BUG_FILE` to Hotfix children; never infer the BUG from a private-state directory. Do not invent Codex-specific alternatives.
+
+## Full / Fast / Hotfix Mode Locks
+
+The authoritative command alone defines `lean, full, fast, and hotfix` semantics. This adapter changes only Codex dispatch and runtime mechanics; it must not restate, reorder, or weaken a mode.
+
+## Completion Rule
+
+The command is complete only when the artifact, state, and summary expected by `../../command-docs/hotfix.md` are present in the original cc-nexs locations.

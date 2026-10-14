@@ -20,9 +20,14 @@ import { beginImplementationDelta, endImplementationDelta } from './implementati
 import { assertImplementationApprovalCurrent, parseImplementationOwnership } from './implementation-plan.mjs';
 import { syncImplementationWorktrees } from './implementation-worktrees.mjs';
 import { readProgressV2 } from './progress-v2.mjs';
+import { modelGateway } from './model-gateway.mjs';
 
 export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   const [command, ...args] = argv;
+  if (command === 'model-gateway') {
+    if (args.length !== 3 || args[1] !== '--request') throw new Error('model-gateway <inspect|prepare|view|start|feedback|result> --request <json-file>');
+    return modelGateway(args[0], JSON.parse(readFileSync(args[2], 'utf8')), { cwd });
+  }
   if (command === 'init-hotfix') return initializeHotfix({ cwd, ...parseHotfixLifecycleOptions(args, true) });
   if (command === 'revise-hotfix') return reviseHotfix({ cwd, ...parseHotfixLifecycleOptions(args, false) });
   if (command === 'release-test') {
@@ -528,7 +533,6 @@ function printResult(result) {
 
 function printUsage() {
   console.error('Usage:');
-  console.error('  cc-nexs init-hotfix <slug> --description <text> [--bug-key <key>] [--related <feature-id>] [--repos <a,b>] [--bug-file <docs-relative.md>]');
   console.error('  cc-nexs revise-hotfix <bug-key> --reason <text> --authorization-evidence <text> [--promote-lean] [--progress <path>]');
   console.error('  cc-nexs approve-spec <feature-id> [--approver <name>] [--progress <path>]');
   console.error('  cc-nexs approve-deploy <feature-id> [M<N>] [--approver <name>] [--progress <path>]');
@@ -549,6 +553,7 @@ function printUsage() {
   console.error('  cc-nexs implementation-delta begin <feature-id> --assignment <IMP-id> [--assignment <IMP-id> ...] [--allow-doc-path <test-cases.md|qa-scripts/**>] [--progress <path>]');
   console.error('  cc-nexs implementation-delta end <feature-id> --token <token> [--progress <path>]');
   console.error('  cc-nexs validate-implementation-plan <feature-id> [--progress <path>]');
+  console.error('  cc-nexs model-gateway <inspect|prepare|view|start|feedback|result> --request <json-file>');
 }
 
 const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;

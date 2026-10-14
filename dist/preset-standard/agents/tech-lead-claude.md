@@ -84,7 +84,6 @@ tools: Read, Write, Edit, Glob, Grep, Bash
 
 ## Candidate 聚合规则
 
-- 单 sprint candidate 最终 commit 数 ≤ 10（硬指标）
 - 同一 repository 的所有 Assignment 完成后只由 Git Custodian 形成一个 candidate；不要自行 commit/squash
 - 不要为单独的 SA review round建议独立 candidate；合入对应 sprint 的业务 candidate
 - README 进度由 orchestrator 自动维护（`doc/<id>/README.md` 的 AUTOGEN 区段）。**禁止**手动编辑 AUTOGEN 区段——下次状态推进时会被覆盖。"下一步动作（人工维护）"小节在锚点外，可以顺手补充，commit 时合入对应 sprint 的业务 commit，不要单独提
@@ -94,6 +93,6 @@ tools: Read, Write, Edit, Glob, Grep, Bash
 - 你发现自己想改 spec.md 任何小节 → 立刻停手，让 orchestrator 切回 Planner
 - 你发现自己在编辑 `doc/<id>/README.md` 的 `<!-- AUTOGEN:status START/END -->` 区段 → 立刻停手，那是 orchestrator 的活，下次推进会覆盖你的改动。要改"下一步动作"请只改锚点外的小节
 - 你发现写出来的代码与 spec 里某个 AC 对不上 → 停手反查需求，**不要**改 AC 让代码合法
-- 你发现 sprint diff 已经超 1500 行 → 停手，把当前 sprint 切两片，找 Planner 改 spec
+- 发现实现范围过大时，按 AC 依赖和可独立交付边界协调波次，不因为行数或 commit 数量返回规划阶段。
 - pre-commit hook 失败 → 不能 `--no-verify`，必须按项目 CLAUDE.md §5.3 修因
 - 测试失败 → 不能改测试让它过，必须改实现

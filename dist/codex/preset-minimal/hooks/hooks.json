@@ -1,0 +1,27 @@
+{
+  "description": "cc-nexs preset-minimal hooks: 角色边界与 Git Custodian 边界。人工 gate 由状态机暂停实现，不封锁通用工具。",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|Write|Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const p=require('node:path'),u=require('node:url'),r=process.env.PLUGIN_ROOT||process.env.CLAUDE_PLUGIN_ROOT||process.env.CC_NEXS_PLUGIN_ROOT;if(!r){console.error('[cc-nexs hook] plugin root is unavailable');process.exit(1)}import(u.pathToFileURL(p.join(r,'hooks','role-boundary-guard.mjs')).href).catch(e=>{console.error('[cc-nexs hook] bootstrap failed: '+e.message);process.exit(1)})\"",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const p=require('node:path'),u=require('node:url'),r=process.env.PLUGIN_ROOT||process.env.CLAUDE_PLUGIN_ROOT||process.env.CC_NEXS_PLUGIN_ROOT;if(!r){console.error('[cc-nexs hook] plugin root is unavailable');process.exit(1)}import(u.pathToFileURL(p.join(r,'hooks','git-custodian-guard.mjs')).href).catch(e=>{console.error('[cc-nexs hook] bootstrap failed: '+e.message);process.exit(1)})\"",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}

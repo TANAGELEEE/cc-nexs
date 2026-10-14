@@ -113,3 +113,7 @@ ac_count=$(grep -cE '^\| AC-[0-9]{3}' ${REQ_DIR}spec.md)
    - 自动流程: /cc-nexs:run <编号>
    - 单独评审: /cc-nexs:sa spec <编号>
 ```
+
+## Model dispatch preview
+
+Before any role dispatch, follow `<plugin-root>/rules/model-discovery.md` and the shared `modelGateway` protocol: inspect cached choices, prepare a non-blocking preview, start immediately without waiting for a reply, and record the actual result. Apply real user corrections before start or to the next batch; never restart a running role merely to change models. This applies to the current runtime, including Claude-native single-step commands. Commands that do not dispatch roles need no model discovery.

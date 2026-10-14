@@ -1,0 +1,6 @@
+interface:
+  display_name: "/cc-nexs:approve-deploy"
+  short_description: "Run /cc-nexs:approve-deploy explicitly"
+  default_prompt: "Use $cc-nexs-approve-deploy to run /cc-nexs:approve-deploy."
+policy:
+  allow_implicit_invocation: false

@@ -27,12 +27,14 @@ The Codex marketplace is generated at:
 .agents/plugins/marketplace.json
 ```
 
-It points at the same built plugin roots as the Claude marketplace:
+It points at Codex-only distributions generated from the same sources:
 
 ```text
-./dist/preset-standard
-./dist/preset-minimal
+./dist/codex/preset-standard
+./dist/codex/preset-minimal
 ```
+
+Codex-only distributions rename `commands/` to `command-docs/` and omit `.claude-plugin/`. This prevents automatic legacy command migration from exposing a second `Source Command ...` skill alongside each native adapter. The native adapters reference the same command bodies. Reinstall the local plugin and restart Codex to replace an older migrated cache.
 
 ## Command Mirror
 
@@ -163,7 +165,7 @@ Both modes default to `auto_if_ready`; `--no-auto-test-release` explicitly opts 
 
 `/cc-nexs:hotfix` starts an independent repair without reserving a shared feature number:
 
-- `init-hotfix` creates `hotfix/<key>` and latest-base `.worktrees/<key>/<repo>/` assignments, plus one BUG document in docs; it never pushes placeholders.
+- `hotfix` invokes the internal `init-hotfix` controller and creates `hotfix/<key>` and latest-base `.worktrees/<key>/<repo>/` assignments, plus one BUG document in docs; it never pushes placeholders.
 - Bind paths, severity, required P0/P1 AC/rollback fields, and the local verification matrix in that BUG. `progress.hotfix_document` identifies it; local machine files live in `.cc-nexs/hotfixes/<key>/`.
 - Run the configured driver or exact scope-bound commands with structured evidence, then independent consolidated Review for every severity, including P3. File/line counts cannot prove behavior or exempt Review.
 - Deliver the exact candidate to test, verify it independently, then obtain Gateway B approval before integrating that candidate to configured bases.

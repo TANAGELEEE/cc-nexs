@@ -1,0 +1,6 @@
+interface:
+  display_name: "/cc-nexs:release-test"
+  short_description: "Run /cc-nexs:release-test explicitly"
+  default_prompt: "Use $cc-nexs-release-test to run /cc-nexs:release-test."
+policy:
+  allow_implicit_invocation: false

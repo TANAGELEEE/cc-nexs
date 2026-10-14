@@ -63,7 +63,7 @@ for (const script of [
 
 console.log('\n▶ Copy plugins into Codex local cache...');
 for (const plugin of PLUGINS) {
-  const pluginRoot = join(ROOT, 'dist', plugin.preset);
+  const pluginRoot = join(ROOT, 'dist', 'codex', plugin.preset);
   const manifest = JSON.parse(readFileSync(join(pluginRoot, '.codex-plugin', 'plugin.json'), 'utf-8'));
   if (typeof manifest.name !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(manifest.name)) {
     throw new Error(`unsafe plugin name in manifest: ${JSON.stringify(manifest.name)}`);

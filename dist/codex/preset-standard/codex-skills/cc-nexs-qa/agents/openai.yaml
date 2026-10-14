@@ -1,0 +1,6 @@
+interface:
+  display_name: "/cc-nexs:qa"
+  short_description: "Run /cc-nexs:qa explicitly"
+  default_prompt: "Use $cc-nexs-qa to run /cc-nexs:qa."
+policy:
+  allow_implicit_invocation: false

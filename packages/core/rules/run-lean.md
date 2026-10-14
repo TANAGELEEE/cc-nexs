@@ -115,4 +115,4 @@ Keep each request row synchronized with progress. A newer request marks the prio
 
 ## Base release and completion
 
-After exact Gateway B approval, transition to `BASE_MERGING`, invoke `/cc-nexs:release-base`, and stop on changed-base or protected-branch failure. Integrate only the bound code candidates. After success record `COMPLETE`, then Git Custodian creates the final five-file docs candidate (`requirements.md`, `plan.md`, `config.json`, `progress.md`, `progress.json`), integrates docs last, proves remote ancestry, and cleans feature worktrees/refs. Do not write docs after that final candidate.
+After exact Gateway B approval, transition to `BASE_MERGING`, invoke `/cc-nexs:release-base`, and automatically continue `sync_base` on changed-base/conflict results; protected-branch failures still require PR/MR handoff. Integrate only the bound code candidates. After success record `COMPLETE`, then Git Custodian creates the final five-file docs candidate (`requirements.md`, `plan.md`, `config.json`, `progress.md`, `progress.json`), integrates docs last, proves remote ancestry, and cleans feature worktrees/refs. Do not write docs after that final candidate.

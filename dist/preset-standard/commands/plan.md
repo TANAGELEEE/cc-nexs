@@ -24,3 +24,7 @@ argument-hint: "[需求编号]"
 高风险权限/支付/破坏性迁移/公开 API 破坏且无法用一次集中 Review 控制时，Planner 必须建议显式改走 full，不得暗中增加 Review 轮次。
 
 复用项目现有 S3 presign/direct-upload 能力，且不新增 bucket、IAM/CORS、密钥、公开权限或破坏性 API 时，不得只因出现“上传/S3/存储”字样自动判 high。只有这些基础设施、权限或公开契约真的变化时才相应升级风险。
+
+## Model dispatch preview
+
+Before any role dispatch, follow `<plugin-root>/rules/model-discovery.md` and the shared `modelGateway` protocol: inspect cached choices, prepare a non-blocking preview, start immediately without waiting for a reply, and record the actual result. Apply real user corrections before start or to the next batch; never restart a running role merely to change models. This applies to the current runtime, including Claude-native single-step commands. Commands that do not dispatch roles need no model discovery.

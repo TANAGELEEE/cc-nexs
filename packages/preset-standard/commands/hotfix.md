@@ -82,7 +82,7 @@ node <plugin-root>/lib/cc-nexs-cli.mjs release-test <id> --hotfix [--retry|--res
 
 正常验收后在 `HOTFIX_RELEASE_PENDING_HUMAN` 展示 scope hash、candidate commits、本地证据、Review、test attempt/environment revision、回滚信息和 base targets，等待 `/cc-nexs:approve-release <id>`。已有用户授权可由确定性控制器记录，无需重复增加确认轮。
 
-Gateway B 的 `evidence` 意见只追加文档；`implementation` 意见失效当前证据，修复后重新验证。批准后只把同一 candidate 合入配置的 base。禁止 `test -> base`、force push 或从 test 重新选 candidate。base 变化时先同步，再重新绑定验证和审批证据。
+Gateway B 的 `evidence` 意见只追加文档；`implementation` 意见失效当前证据，修复后重新验证。批准后只把同一 candidate 合入配置的 base。禁止 `test -> base`、force push 或从 test 重新选 candidate。base 仅有不重叠路径的更新时，保持已验收 candidate 不变，由 release-base 集成，不重跑 test 或审批。重叠路径或已知跨文件契约依赖需要处理和验证后再发布；不能把无文本冲突当作语义独立证明。
 
 只有 `HOTFIX_BASE_MERGING -> COMPLETE` 且远端 ancestry 通过才完成。新 Hotfix 最终 docs candidate 只包含本次 BUG 文档，机器状态留在 `.cc-nexs/hotfixes/<key>/`；旧任务保留原归档文件集合。docs 最后合入并安全清理 worktree/分支/ref。生产发布仍需组织规定的明确授权。
 

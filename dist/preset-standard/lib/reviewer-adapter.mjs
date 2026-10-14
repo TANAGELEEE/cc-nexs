@@ -83,7 +83,7 @@ export function planReviewerInvocation({
         model,
         thinking: effort,
         fallbackModels,
-        notes: 'Invoke the package-qualified cc-nexs role through pi-subagents with fresh context. Encode thinking as a provider/model:thinking selector; retry fallbackModels only for failed tasks.',
+        notes: 'Invoke the package-qualified cc-nexs role through pi-subagents with fresh context. Use cc_nexs_dispatch to adapt thinking and assigned cwd to tasks or Tintin RPC v2; retry fallbackModels only for failed tasks.',
       };
 
     case 'gemini':

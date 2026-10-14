@@ -16,3 +16,7 @@ argument-hint: "<需求编号>"
 5. 返回文件路径、关键缺口及模式对应的下一步：Lean 为 `/cc-nexs:plan <id>`，Fast/Full 为 `/cc-nexs:run <id>`。已授权继续且无关键缺口时执行下一步；否则本次脑暴到此完成。
 
 输出只写 requirements.md，不创建附加设计文档，不修改 progress.json/progress.md。单文件文案修复不需要本命令；Hotfix 使用独立 hotfix 流程。
+
+## Model dispatch preview
+
+Before any role dispatch, follow `<plugin-root>/rules/model-discovery.md` and the shared `modelGateway` protocol: inspect cached choices, prepare a non-blocking preview, start immediately without waiting for a reply, and record the actual result. Apply real user corrections before start or to the next batch; never restart a running role merely to change models. This applies to the current runtime, including Claude-native single-step commands. Commands that do not dispatch roles need no model discovery.

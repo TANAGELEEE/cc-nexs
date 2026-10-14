@@ -1,6 +1,6 @@
 # Pi P2 Support
 
-cc-nexs provides experimental Pi support for the `preset-standard` lean, fast, full, and hotfix workflows. It uses the external [`pi-subagents`](https://github.com/nicobailon/pi-subagents) package for isolated role sessions and does not invoke Codex CLI.
+cc-nexs provides experimental Pi support for the `preset-standard` lean, fast, full, and hotfix workflows. It supports Tintin RPC v2 (`@tintinweb/pi-subagents@0.14.3`) as well as the external [`pi-subagents`](https://github.com/nicobailon/pi-subagents) package for isolated role sessions and does not invoke Codex CLI.
 
 ## Supported boundary
 
@@ -25,7 +25,7 @@ Not yet advertised as supported:
 
 The Pi skills fail closed for those flows instead of silently changing workflow semantics.
 
-Fast/Full implementation fanout uses `pi-subagents@0.35.1` directly. Each wave is one `subagent({ tasks, concurrency, async: true, worktree: false, context: "fresh" })` call, followed by `subagent_wait({ id })`; Full includes QA case generation in the first batch. It never asks pi-subagents to create worktrees because Git Custodian owns the already assigned feature worktrees and every candidate mutation. Same-repository work remains serialized even when paths appear disjoint, and a fallback retry contains only failed/unavailable tasks.
+Fast/Full implementation fanout uses `cc_nexs_dispatch`. It detects `pi-subagents@0.35.1` or Tintin RPC v2. Tintin spawns all siblings through its event RPC with separate model/thinking and the assigned cwd; completion notifications plus `get_subagent_result` provide the barrier. The public `Agent` tool lacks cwd and must not be substituted. The local installer registers translated `cc-nexs.*` roles; child session names activate role guards without process-wide role changes. For the legacy tasks API: Each wave is one `subagent({ tasks, concurrency, async: true, worktree: false, context: "fresh" })` call, followed by `subagent_wait({ id })`; Full includes QA case generation in the first batch. It never asks pi-subagents to create worktrees because Git Custodian owns the already assigned feature worktrees and every candidate mutation. Same-repository work remains serialized even when paths appear disjoint, and a fallback retry contains only failed/unavailable tasks.
 
 ## Install
 
@@ -67,7 +67,7 @@ For local development:
 pnpm install:local:pi
 ```
 
-The local installer requires `pi-subagents` first, then builds and validates cc-nexs. It prefers the minimal ego runtime probe shown above. If ego is unavailable, it checks the installed Pi packages and effective computer-use configuration. Missing providers warn instead of blocking any deterministic work, including test merge/CI delivery. After deployment, unavailable browser/login capability records `manual_required` and can be resumed manually or automatically later.
+The local installer requires either supported subagent package first, then builds and validates cc-nexs. It prefers the minimal ego runtime probe shown above. If ego is unavailable, it checks the installed Pi packages and effective computer-use configuration. Missing providers warn instead of blocking any deterministic work, including test merge/CI delivery. After deployment, unavailable browser/login capability records `manual_required` and can be resumed manually or automatically later.
 
 All generated cc-nexs Pi skills set `disable-model-invocation: true`, so Pi excludes them from the model's available-skill prompt. Start cc-nexs only with `/cc-nexs:*` or `/skill:cc-nexs-*`; ordinary natural-language requests do not activate the package. Package role descriptions likewise permit dispatch only from that explicitly started parent workflow.
 
@@ -83,7 +83,7 @@ cc-nexs deliberately ships no Pi model IDs. Choose authenticated models from:
 pi --list-models
 ```
 
-Configure portable profiles once in project `cc-nexs.config.yml`; feature `config.json.models` may override them. The shared resolver applies automatic risk routing first, then feature role overrides last. Explicit Lean high/critical can route the first Planner to `escalated`; risk discovered in the plan upgrades the subsequent Reviewer without starting a second Planner; Hotfix P0/P1 upgrades Reviewer. `pi-subagents@0.35.1` has no separate per-task `thinking` field, so the Pi parent encodes the resolved value in the task selector as `provider/model:thinking`:
+Use the non-blocking model gateway to discover, preview, dispatch and reuse successful selections; no reply is required. Optionally configure portable profiles once in project `cc-nexs.config.yml`; feature `config.json.models` may override them. The shared resolver applies automatic risk routing first, then feature role overrides last. Explicit Lean high/critical can route the first Planner to `escalated`; risk discovered in the plan upgrades the subsequent Reviewer without starting a second Planner; Hotfix P0/P1 upgrades Reviewer. Tintin RPC v2 uses separate `model` and `thinkingLevel` fields. Legacy `pi-subagents@0.35.1` has no separate per-task `thinking` field, so the Pi parent encodes the resolved value in the task selector as `provider/model:thinking`:
 
 ```yaml
 models:
@@ -171,3 +171,19 @@ Package-qualified child roles run with explicit Pi tool allowlists. The cc-nexs 
 The parent orchestrator remains responsible for state transitions and Git Custodian operations. Pi packages and child tools still execute with the user's operating-system permissions; use Pi project trust and review package source before installation.
 
 Automatic control never targets production. Test merge/CI delivery does not depend on browser tools, login state, MFA, or verification-page URL availability. After deployment, cc-nexs may select the headless computer-use fallback before the first browser action. Missing fallback tools/configuration, a non-headless-safe action, expired login, MFA/CAPTCHA, user takeover, host mismatch, or unavailable secret-provider resolution records `manual_required` with the deployed revision and yields a recoverable verification handoff; it does not undo or block the push.
+
+## Live model workflow check
+
+After `pnpm install:local:pi`, run the opt-in inference smoke with an available model:
+
+```sh
+CC_NEXS_PI_SMOKE_MODEL='<provider/model>' node scripts/smoke-pi-model-workflow.mjs
+```
+
+This smoke uses the installed Tintin package and real generated Lean Developer role.
+It checks the advisory preview, automatic dispatch without a reply, real tool use,
+success recording and a second preparation with no new catalog or proposal.
+It consumes inference credits and retains its report and event evidence in a
+printed temporary directory. It does not run business implementation or deployment.
+The package's `Agent` API is not a cwd-capable substitute: cc-nexs uses its documented
+event RPC v2, and rejects missing/stale/shadowed role contracts before spawning.

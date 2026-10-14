@@ -2,6 +2,9 @@
 
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { writeTextAtomic } from './lib/atomic-write.mjs';
 
 import {
   inspectPiBrowserCapability,
@@ -26,9 +29,22 @@ run(process.execPath, [resolve(root, 'scripts', 'validate-pi-package.mjs')], { s
 
 const installed = run('pi', ['list']);
 if (!installed.includes('pi-subagents')) {
-  console.error('pi-subagents 0.35+ is required before installing cc-nexs for Pi.');
+  console.error('pi-subagents 0.35.1 or @tintinweb/pi-subagents 0.14.3 (RPC v2) is required.');
   console.error('Run: pi install npm:pi-subagents');
   process.exit(1);
+}
+
+if (installed.includes('@tintinweb/pi-subagents')) {
+  const target = resolve(process.env.PI_CODING_AGENT_DIR || resolve(homedir(), '.pi/agent'), 'agents');
+  const source = resolve(root, 'pi/tintin-agents');
+  mkdirSync(target, { recursive: true });
+  for (const file of readdirSync(source)) {
+    const path = resolve(target, file);
+    if (existsSync(path) && !readFileSync(path, 'utf8').includes('package: cc-nexs')) {
+      throw new Error(`Refusing to replace an unrelated custom agent: ${path}`);
+    }
+    writeTextAtomic(path, readFileSync(resolve(source, file), 'utf8'));
+  }
 }
 
 const browserCapability = inspectPiBrowserCapability({ projectRoot: root, piListOutput: installed });
@@ -43,7 +59,12 @@ if (!browserCapability.ready) {
   console.log('Pi browser provider ready: ego-lite.');
 }
 
+// Replace the previous cc-nexs source, not the user's other Pi packages.
+for (const line of installed.split('\n')) {
+  const source = line.trim();
+  if (/^git:.*\/cc-nexs(?:@[^ ]+)?$/.test(source)) run('pi', ['remove', source], { stdio: 'inherit' });
+}
 run('pi', ['install', root, '--approve'], { stdio: 'inherit' });
 console.log('cc-nexs Pi package installed. Restart Pi or run /reload.');
 console.log('Lean/Hotfix role model/thinking overrides are optional; automatic risk routing uses escalated, with feature role profiles final.');
-console.log('Fast and Full use one async pi-subagents tasks call per repository-scoped wave, followed by subagent_wait; Hotfix uses dedicated Developer/Reviewer/Verifier package agents.');
+console.log('cc_nexs_dispatch detects tasks or Tintin RPC v2, preserving assigned worktrees, fresh roles and the whole-wave completion barrier.');

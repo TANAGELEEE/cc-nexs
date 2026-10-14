@@ -169,7 +169,8 @@ function validateRunCommand() {
     'SCOPE_CHANGE_REQUESTED',
     '完整 Review 只有一次；修复只允许一次 delta closure',
     'migrate-feature-config',
-    'resolveRoleRuntime(preset, role, runtime',
+    "modelGateway('prepare'",
+    "modelGateway('start'",
     'featureConfig',
     'matched_rules',
     'fanout: implementation_repositories',
@@ -266,7 +267,7 @@ function validateHotfixCommand() {
   mustContain(templatePath, boundScope, ['intended_paths:', 'affected_acs:', 'rollback_owner:', 'rollback_steps:', '| Check |', '命令/Driver']);
   const approvalPath = join(ROOT, 'packages', 'core', 'commands', 'approve-release.md');
   mustContain(approvalPath, read(approvalPath), ['--test-exception', '--authorization-evidence', '--environment-evidence', '--rollback-evidence', 'not production deployment', 'manual_required']);
-  for (const name of ['init-hotfix', 'revise-hotfix']) {
+  for (const name of ['revise-hotfix']) {
     const commandPath = join(ROOT, 'packages', 'core', 'commands', `${name}.md`);
     mustContain(commandPath, read(commandPath), [`# /cc-nexs:${name}`, `cc-nexs-cli.mjs ${name}`]);
   }
@@ -329,10 +330,17 @@ validateHotfixCommand();
 validateMirrorSkill('cc-nexs-init', 'init.md');
 validateMirrorSkill('cc-nexs-run', 'run.md');
 validateMirrorSkill('cc-nexs-hotfix', 'hotfix.md');
-validateMirrorSkill('cc-nexs-init-hotfix', 'init-hotfix.md');
 validateMirrorSkill('cc-nexs-revise-hotfix', 'revise-hotfix.md');
 validateMirrorSkill('cc-nexs-release-test', 'release-test.md');
 validateAllGeneratedMirrors();
+
+for (const file of [
+  join(DIST_NEXS, 'commands', 'init-hotfix.md'),
+  join(DIST_NEXS, 'codex-skills', 'cc-nexs-init-hotfix', 'SKILL.md'),
+  join(ROOT, 'pi', 'skills', 'cc-nexs-init-hotfix', 'SKILL.md'),
+]) {
+  if (existsSync(file)) fail(`${file}: redundant public Hotfix initialization entry`);
+}
 
 if (errors.length > 0) {
   console.error('SOP parity validation failed:');

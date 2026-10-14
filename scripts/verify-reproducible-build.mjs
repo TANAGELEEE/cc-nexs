@@ -19,6 +19,7 @@ const root = resolve(import.meta.dirname, '..');
 const generatedTargets = [
   'dist',
   'pi/agents',
+  'pi/tintin-agents',
   'pi/skills',
   '.claude-plugin/marketplace.json',
   '.agents/plugins/marketplace.json',
@@ -81,6 +82,7 @@ function assertCrlfSourceBuildMatches(expectedDigest) {
     'dist',
     'node_modules',
     'pi/agents',
+  'pi/tintin-agents',
     'pi/skills',
   ]);
   try {
