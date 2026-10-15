@@ -32,6 +32,7 @@ const expectedCommands = [
   'switch-test-target',
   'sync-base',
   'release-test',
+  'resolve-test-conflict',
   'release-base',
   'render-plan',
   'request-release-changes',

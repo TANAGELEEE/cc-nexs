@@ -38,3 +38,9 @@ The parent resolves the cc-nexs role profile and passes model/thinking through t
 真实 test 部署后若因环境、登录或浏览器能力无法验收，提供环境限制证据并返回 `manual_required`，不得伪造 PASS。产品失败必须返回 BLOCKED。环境例外只能由父级在既有 Gateway B 根据用户明确授权记录，Verifier 不批准例外，也不把例外解释为生产部署授权。
 
 不得执行生产发布、base 合并、Git mutation 或状态文件编辑。结论由 Orchestrator 通过确定性控制器绑定到 test attempt。
+
+## Human-input blockers
+
+Before `record-test-verification --manual-required`, provide `--evidence-json` containing `type: "human_input_required"` and nonempty `check`, `reason`, `attempted`, `required_input`, and `resume_action` strings. Unfinished executable checks must continue; they are not missing human capability. Ask for the specific missing permission, login action, data or external capability immediately, without plaintext credentials. Preserve completed checks and resume the same deployed attempt when input arrives. The controller persists the verification result state; re-read it before continuing Review and release readiness.
+
+For a pre-existing defect blocking acceptance, first compare baseline/candidate reproduction and obtain independent attribution review; continue unaffected checks and try an equivalent approved representative. Do not fix unrelated product scope or mark unexecuted checks passed. If human input is still necessary, record `cause: "pre_existing_defect"` with `baseline_commit`, `baseline_proof`, `candidate_proof`, `impact`, `alternative_attempted`, `tracking`, `review_proof` in addition to the required blocker fields. Ask for working conditions or explicit acceptance of the specific coverage gap. Existing exact-candidate release exception gates remain authoritative.

@@ -47,6 +47,8 @@ Hotfix resume also includes `--hotfix`.
 
 The same driver receives `operation=release_test_status` plus the previous attempt evidence and returns `pending`, `succeeded`, or `failed`. Combined evidence across start/poll must keep the same non-empty pipeline identity; terminal deployment must name environment `test`, and every deployed repository's `environment_revision` must equal its recorded integration commit.
 
+A driver timeout or missing authenticated CI receipt records `awaiting_receipt`, not a product failure. `--resume` can also recover a legacy failed attempt with complete integration evidence and no product verification failure: it preserves the old reason in recovery history, queries `release_test_status` for that same attempt, and validates pipeline/environment revision before accepting success. It does not start a new deployment.
+
 If a terminal driver failure has moved the workflow to `TEST_RELEASE_BLOCKED` or `HOTFIX_TEST_RELEASE_BLOCKED`, an explicit `--retry` reopens the release state and creates a new attempt. It never retries a still-`deploying` pipeline; that path must use `--resume`.
 
 Only after deployment success does the parent check URLs, allowed hosts, browser/login, and environment-specific behavior. Missing verification capability records `manual_required` and stops in the recoverable `TEST_DEPLOYED_NEEDS_MANUAL_VERIFY` state without undoing the completed test delivery. A real product failure follows the normal test-fix path. Full mode runs accumulated cross-sprint final QA; fast mode runs initial or regression verification based on the release attempt number.
@@ -54,6 +56,8 @@ Only after deployment success does the parent check URLs, allowed hosts, browser
 ## Explicit opt-out
 
 Legacy fast/full workflows may retain their manual G2 semantics. Lean/Hotfix Gateway B requires an immutable release attempt and therefore does not treat G2 alone as deployed evidence; configure the test release driver and return to `auto_if_ready` to resume. Production release always remains a separate explicit human action.
+
+Once all repository integrations are recorded, a driver process/receipt-validation error is an unknown delivery outcome, not proof of product failure. The attempt remains `awaiting_receipt`; fix the driver/receipt and use `--resume` on that attempt, never `--retry` to manufacture another ledger entry. An explicit structured driver `failed` result remains a real failure. Release drivers should return pending receipts promptly, consume the candidate and integration identities from the validated request, and avoid blocking for minutes waiting for a parent-produced file.
 
 ## Model dispatch preview
 

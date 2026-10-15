@@ -1,4 +1,4 @@
-import { assertTestAttemptNotInvalidated, candidateFingerprint } from './progress-v2.mjs';
+import { assertTestAttemptNotInvalidated, assertDeferredChecksClosed, candidateFingerprint } from './progress-v2.mjs';
 import { jsonValuesEqual } from './canonical-json.mjs';
 import { assertRecordedLocalVerification } from './local-evidence.mjs';
 
@@ -70,10 +70,11 @@ function assertExceptionPrerequisites(progress) {
     ))) {
     throw new Error('[cc-nexs] test exception requires deployment evidence for the exact integrated test revision');
   }
-  if (progress.local_verification?.status !== 'passed') {
+  if (!['passed', 'deferred_to_test'].includes(progress.local_verification?.status)) {
     throw new Error('[cc-nexs] test exception requires passed local verification for the same candidate');
   }
   const local = assertRecordedLocalVerification(progress, { source: attempt.source, fingerprint });
+  assertDeferredChecksClosed(progress, attempt, attempt.verification.evidence);
   if (progress.review?.status !== 'passed' || progress.review.candidate_fingerprint !== fingerprint) {
     throw new Error('[cc-nexs] test exception requires a passing consolidated Review for the same candidate');
   }

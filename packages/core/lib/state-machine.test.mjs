@@ -816,3 +816,10 @@ test('base changes dispatch automatic development-branch repair without a human 
     assert.deepEqual(nextStep({ mode, state, workflow: {}, counters: {}, enabledRoles: [role] }), { next, role, action: 'sync_base' });
   }
 });
+
+for (const [mode, role] of [['lean', 'lean-developer'], ['hotfix', 'hotfix-developer'], ['fast', 'fullstack'], ['full', 'tech-lead']]) {
+  test(`${mode} test conflict dispatches Developer without a human gate`, () => {
+    const state = mode === 'hotfix' ? 'HOTFIX_TEST_MERGE_CONFLICT' : 'TEST_MERGE_CONFLICT';
+    assert.deepEqual(nextStep({ mode, state, enabledRoles: [role] }), { next: state, role, action: 'resolve_test_conflict' });
+  });
+}

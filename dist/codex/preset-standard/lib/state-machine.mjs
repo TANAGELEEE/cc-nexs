@@ -95,6 +95,7 @@ export function nextStep({
   if (['BASE_MERGING', 'BASE_MERGE_BLOCKED', 'RELEASE_PENDING_HUMAN'].includes(state)) {
     return nextStepLean({ state, counters, thresholds, enabledRoles, humanGateApproved, workflow });
   }
+  if (state === 'TEST_MERGE_CONFLICT') return { next: state, role: enabledRoles.find(role => ['fullstack', 'developer', 'tech-lead', 'dev'].includes(role)) || null, action: 'resolve_test_conflict' };
   if (state === 'BASE_CHANGED') return { next: mode === 'full' ? 'FINAL_FIX' : 'BUILD', role: null, action: 'sync_base' };
   if (mode === 'fast' || mode === 'lite') {
     return nextStepFast({ state, counters, thresholds, enabledRoles, humanGateApproved, workflow });
@@ -164,6 +165,8 @@ function nextStepHotfix({ state, counters, thresholds, enabledRoles, workflow = 
       return { next: 'HOTFIX_TEST_RELEASE', role: null, action: 'continue' };
     case 'HOTFIX_TEST_RELEASE':
       return nextHotfixTestReleaseStep({ workflow, verifier });
+    case 'HOTFIX_TEST_MERGE_CONFLICT':
+      return { next: state, role: developer, action: 'resolve_test_conflict' };
     case 'HOTFIX_TEST_RELEASE_BLOCKED':
       return { next: state, role: null, action: 'await_human', stop: true };
     case 'HOTFIX_TEST_DEPLOYED_NEEDS_MANUAL_VERIFY':
@@ -217,6 +220,8 @@ function nextHotfixTestReleaseStep({ workflow, verifier }) {
     return { next: 'HOTFIX_TEST_VERIFYING', role: verifier, action: attempt > 1 ? 'verify_hotfix_regression' : 'verify_hotfix_test' };
   }
   if (['deploying', 'awaiting_receipt'].includes(status)) return { next: 'HOTFIX_TEST_RELEASE', role: null, action: 'poll_test_release' };
+  if (status === 'configuration_blocked') return { next: 'HOTFIX_TEST_RELEASE_BLOCKED', role: null, action: 'configure_test_release', stop: true };
+  if (status === 'merge_conflict') return { next: 'HOTFIX_TEST_MERGE_CONFLICT', role: null, action: 'resolve_test_conflict' };
   if (status === 'failed') return { next: 'HOTFIX_TEST_RELEASE_BLOCKED', role: null, action: 'await_human', stop: true };
   if (status === 'deployed_needs_manual_verification') {
     return { next: 'HOTFIX_TEST_DEPLOYED_NEEDS_MANUAL_VERIFY', role: null, action: 'await_human', stop: true };
@@ -316,6 +321,8 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
         verified: { next: 'TEST_VERIFIED', action: 'continue' },
         allowLegacyG2: false,
       });
+    case 'TEST_MERGE_CONFLICT':
+      return { next: state, role: developer, action: 'resolve_test_conflict' };
     case 'TEST_RELEASE_BLOCKED':
       return { next: state, role: null, action: 'await_human', stop: true };
     case 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY':
@@ -670,6 +677,8 @@ function nextStepFast({ state, counters, thresholds, enabledRoles, humanGateAppr
         regression: { next: 'REGRESSION', action: 'verify_regression' },
         verified: { next: 'TEST_PASSED', action: 'continue' },
       });
+    case 'TEST_MERGE_CONFLICT':
+      return { next: state, role: fullstack, action: 'resolve_test_conflict' };
     case 'TEST_RELEASE_BLOCKED':
       return { next: state, role: null, action: 'await_human', stop: true };
     case 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY':
@@ -716,6 +725,8 @@ function nextTestReleaseStep({ workflow, verifier, initial, regression, verified
   if (['deploying', 'awaiting_receipt'].includes(status)) {
     return { next: 'TEST_RELEASE', role: null, action: 'poll_test_release' };
   }
+  if (status === 'merge_conflict') return { next: 'TEST_MERGE_CONFLICT', role: null, action: 'resolve_test_conflict' };
+  if (status === 'configuration_blocked') return { next: 'TEST_RELEASE_BLOCKED', role: null, action: 'configure_test_release', stop: true };
   if (status === 'failed') {
     return { next: 'TEST_RELEASE_BLOCKED', role: null, action: 'await_human', stop: true };
   }

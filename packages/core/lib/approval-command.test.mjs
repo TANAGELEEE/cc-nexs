@@ -257,7 +257,7 @@ test('G1 crash recovery rechecks the exact approved implementation binding befor
     approved_at: new Date().toISOString(),
     binding: implementationApprovalBinding(specText, { repositories: ['api'], mode: 'fast' }),
   };
-  writeProgressV2(fixture.progressFile, progress);
+  writeProgressV2(fixture.progressFile, structuredClone(progress));
 
   writeFileSync(specFile, specText.replace('src/upload/**', 'src/other/**'));
   assert.throws(() => approveFeatureGate({
@@ -529,7 +529,7 @@ test('Lean Gateway A explicitly upgrades an approved v1 delivery contract with e
   assert.deepEqual(recovered.gates.plan.binding.test_targets, { api: 'test' });
 });
 
-test('Lean Gateway B binds the exact reviewed and test-verified candidate', () => {
+for (const initialReleaseState of ['RELEASE_PENDING_HUMAN', 'TEST_RELEASE']) test(`Lean Gateway B binds verified evidence from ${initialReleaseState}`, () => {
   const fixture = createFeature({ id: '21', mode: 'lean', state: 'PLAN_PENDING_HUMAN' });
   approveFeatureGate({ cwd: fixture.root, featureId: '21', gate: 'plan', approver: 'Plan Owner' });
   const source = { api: bindCandidate(fixture) };
@@ -545,7 +545,7 @@ test('Lean Gateway B binds the exact reviewed and test-verified candidate', () =
   });
   recordTestVerification(fixture.progressFile, { attemptId: release.attempt.id, result: 'passed', evidence: ['test.json'] });
   const ready = readProgressV2(fixture.progressFile);
-  ready.state = 'RELEASE_PENDING_HUMAN';
+  ready.state = initialReleaseState;
   ready.change_requests = {
     current: 'gateway-b-1',
     items: [{
@@ -578,7 +578,7 @@ test('Lean Gateway B binds the exact reviewed and test-verified candidate', () =
   invalidLocal.local_verification.attempts.at(-1).evidence = [];
   writeProgressV2(fixture.progressFile, invalidLocal);
   assert.throws(() => approveFeatureGate({ cwd: fixture.root, featureId: '21', gate: 'release', approver: 'Release Owner' }), /structured evidence/);
-  writeProgressV2(fixture.progressFile, validLocal);
+  writeProgressV2(fixture.progressFile, structuredClone(validLocal));
 
   const result = approveFeatureGate({ cwd: fixture.root, featureId: '21', gate: 'release', approver: 'Release Owner' });
   const progress = readProgressV2(fixture.progressFile);
@@ -601,7 +601,7 @@ test('Lean Gateway B binds the exact reviewed and test-verified candidate', () =
   assert.throws(() => runBaseRelease({ cwd: fixture.root, featureId: '21' }), /structured evidence/);
   });
   assert.equal(readProgressV2(fixture.progressFile).state, 'BASE_MERGE_BLOCKED');
-  writeProgressV2(fixture.progressFile, progress);
+  writeProgressV2(fixture.progressFile, structuredClone(progress));
 
   writeFileSync(join(fixture.root, '.cc-nexs', 'workspace.yml'), [
     'version: 1',
@@ -916,4 +916,23 @@ test('Fast and Full use G1-bound exact evidence for base release, not a Lean-onl
       assert.equal(runBaseRelease({ cwd: fixture.root, featureId: p.feature.id }).status, 'succeeded');
     });
   }
+});
+
+test('environment exception accepts CI-closed local deferrals but never unclosed checks', () => {
+  const fixture = createEnvironmentBlockedCandidate('lean', '98');
+  const progress = readProgressV2(fixture.progressFile);
+  const attempt = progress.delivery.test.attempts.at(-1);
+  const local = progress.local_verification.attempts.at(-1);
+  progress.local_verification.status = local.status = 'deferred_to_test';
+  local.evidence.push({ check: 'docs-bootstrap', result: 'deferred_to_test', reason: 'test docs API unavailable locally', test_action: 'CI must bootstrap docs and compile the exact integrated candidate' });
+  writeProgressV2(fixture.progressFile, progress);
+  assert.throws(() => approveFeatureGate({ cwd: fixture.root, featureId: '98', gate: 'release', approver: 'Owner', testException }), /close deferred checks/);
+  const closed = readProgressV2(fixture.progressFile);
+  closed.delivery.test.attempts.at(-1).verification.evidence.push({ check: 'docs-bootstrap', result: 'passed', proof: 'CI job completed bootstrap and compilation for the bound revision' });
+  writeProgressV2(fixture.progressFile, closed);
+  approveFeatureGate({ cwd: fixture.root, featureId: '98', gate: 'release', approver: 'Owner', testException });
+  const approved = readProgressV2(fixture.progressFile);
+  assert.equal(approved.gates.release.approved, true);
+  assert.equal(approved.delivery.test.attempts.at(-1).id, attempt.id);
+  assert.equal(approved.delivery.test.status, 'deployed_needs_manual_verification');
 });

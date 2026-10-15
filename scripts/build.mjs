@@ -96,6 +96,7 @@ const PI_P2_COMMANDS = new Set([
   'sync-base',
   'switch-test-target',
   'release-test',
+  'resolve-test-conflict',
   'release-base',
   'render-plan',
   'request-release-changes',

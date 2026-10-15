@@ -17,12 +17,15 @@ import {
   assertTestAttemptNotInvalidated,
   completeTestRelease,
   readProgressV2,
+  appendProgressEvent,
   recordTestIntegration,
   reopenTestRelease,
+  writeProgressV2,
 } from './progress-v2.mjs';
 import { resolveFeatureProgress } from './approval-command.mjs';
+import { assertRuntimeCompatible, runtimeIdentity } from './runtime-identity.mjs';
 
-const DRIVER_STATUSES = new Set(['awaiting_receipt', 'pending', 'succeeded', 'failed', 'deployed_needs_manual_verification']);
+const DRIVER_STATUSES = new Set(['awaiting_receipt', 'pending', 'succeeded', 'failed', 'configuration_blocked', 'deployed_needs_manual_verification']);
 
 export function preflightTestRelease({
   cwd = process.cwd(),
@@ -45,6 +48,7 @@ export function preflightTestRelease({
     || null;
   const config = loadConfig({ projectRoot: workspaceRoot, ...(pluginRoot && { presetRoot: pluginRoot }) });
   const progress = readProgressV2(progressFile);
+  assertRuntimeCompatible(progress, runtimeIdentity(pluginRoot));
   const planDelivery = progress.mode === 'lean'
     ? approvedPlanDeliveryContract(progress, dirname(progressFile))
     : { version: 0, lane: 'standard', repositories: {} };
@@ -66,7 +70,7 @@ export function preflightTestRelease({
     if (progress.mode !== 'hotfix') throw new Error(`[cc-nexs] --hotfix requires mode hotfix, found ${progress.mode}`);
     const allowedStates = verification
       ? ['HOTFIX_TEST_RELEASE', 'HOTFIX_TEST_VERIFYING', 'HOTFIX_TEST_DEPLOYED_NEEDS_MANUAL_VERIFY']
-      : retry ? ['HOTFIX_TEST_RELEASE', 'HOTFIX_TEST_RELEASE_BLOCKED'] : ['HOTFIX_TEST_RELEASE'];
+      : retry ? ['HOTFIX_TEST_RELEASE', 'HOTFIX_TEST_RELEASE_BLOCKED', 'HOTFIX_TEST_MERGE_CONFLICT'] : ['HOTFIX_TEST_RELEASE'];
     if (!allowedStates.includes(progress.state)) {
       throw new Error(`[cc-nexs] hotfix test release requires HOTFIX_TEST_RELEASE readiness, found ${progress.state}`);
     }
@@ -75,7 +79,7 @@ export function preflightTestRelease({
     throw new Error('[cc-nexs] hotfix test release requires the explicit --hotfix control');
   } else if (!(verification
     ? ['TEST_RELEASE', 'TEST_VERIFYING', 'TEST', 'REGRESSION', 'FINAL_QA', 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY'].includes(progress.state)
-    : (retry ? ['TEST_RELEASE', 'TEST_RELEASE_BLOCKED'] : ['TEST_RELEASE']).includes(progress.state))) {
+    : (retry ? ['TEST_RELEASE', 'TEST_RELEASE_BLOCKED', 'TEST_MERGE_CONFLICT'] : ['TEST_RELEASE']).includes(progress.state))) {
     throw new Error(`[cc-nexs] test release requires TEST_RELEASE readiness, found ${progress.state}`);
   }
 
@@ -218,17 +222,18 @@ export function runTestRelease({
   resume = false,
   capabilityAttested: _capabilityAttested = false,
 } = {}) {
-  let context = preflightTestRelease({ cwd, featureId, progressPath, hotfix, retry });
+  let context = preflightTestRelease({ cwd, featureId, progressPath, hotfix, retry: retry || resume });
   if (dryRun) return { kind: 'test-release', dryRun: true, ...summary(context) };
 
   const releaseLock = acquireTestReleaseLock(context.progressFile, { allowStaleRecovery: retry || resume });
   try {
-    context = preflightTestRelease({ cwd, featureId, progressPath, hotfix, retry });
+    context = preflightTestRelease({ cwd, featureId, progressPath, hotfix, retry: retry || resume });
     const blockedState = hotfix ? 'HOTFIX_TEST_RELEASE_BLOCKED' : 'TEST_RELEASE_BLOCKED';
-    if (retry && context.progress.state === blockedState) {
+    if ((retry || resume) && context.progress.state === blockedState) {
       reopenTestRelease(context.progressFile, { expectedRevision: context.progress.revision });
       context = preflightTestRelease({ cwd, featureId, progressPath, hotfix });
     }
+    if (context.progress.delivery.test.attempts.at(-1)?.status === 'merge_conflict') throw new Error('[cc-nexs] resolve-test-conflict must finish the current integration before retry');
     if (resume) return resumeTestRelease(context);
     const started = beginTestRelease(context.progressFile, {
       source: context.source,
@@ -251,7 +256,8 @@ export function runTestRelease({
     }
     const attemptId = started.attempt.id;
     try {
-      integratePendingRepositories(context, attemptId);
+      const integration = integratePendingRepositories(context, attemptId);
+      if (integration?.status === 'conflicts') return { kind: 'test-release', reused: false, attempt: readProgressV2(context.progressFile).delivery.test.attempts.find((item) => item.id === attemptId), ...integration, ...summary(context) };
 
       const current = readProgressV2(context.progressFile);
       const attempt = current.delivery.test.attempts.find((item) => item.id === attemptId);
@@ -269,7 +275,7 @@ export function runTestRelease({
       if (attempt && attempt.status === 'running') {
         completeTestRelease(context.progressFile, {
           attemptId,
-          status: 'failed',
+          status: context.deployRepositories.every(repository => attempt.integrations?.[repository.id]?.integrationCommit) ? 'awaiting_receipt' : 'failed',
           reason: error.message,
           expectedRevision: latest.revision,
         });
@@ -288,6 +294,18 @@ function resumeTestRelease(context) {
     throw new Error('[cc-nexs] --resume requires the current exact-candidate test release attempt');
   }
   if ((attempt.environment || 'test') !== (context.release.environment || 'test') || !jsonValuesEqual(attempt.target || null, context.progress.delivery.test.target || null)) throw new Error('[cc-nexs] active test target changed');
+  if (attempt.status === 'failed' && !attempt.verification && context.deployRepositories.every(repository => attempt.integrations?.[repository.id]?.integrationCommit)) {
+    // A driver failure is not proof CI failed. Poll the existing attempt, never start another deployment.
+    const progress = readProgressV2(context.progressFile);
+    const recovered = progress.delivery.test.attempts.at(-1);
+    recovered.recovery = { previous_status: recovered.status, reason: recovered.reason, completed_at: recovered.completed_at };
+    recovered.status = 'awaiting_receipt';
+    recovered.completed_at = null;
+    progress.delivery.test.status = 'awaiting_receipt';
+    writeProgressV2(context.progressFile, progress);
+    appendProgressEvent(context.progressFile, { type: 'delivery.test.receipt_recovery', data: { attempt: attempt.id, previous: recovered.recovery } });
+    attempt = readProgressV2(context.progressFile).delivery.test.attempts.at(-1);
+  }
   if (!['running', 'deploying', 'awaiting_receipt'].includes(attempt.status)) {
     if (['succeeded', 'verified'].includes(attempt.status)) {
       return { kind: 'test-release', reused: true, attempt, ...summary(context) };
@@ -295,10 +313,17 @@ function resumeTestRelease(context) {
     throw new Error(`[cc-nexs] --resume requires a running or deploying attempt, found ${attempt.status}`);
   }
   if (attempt.status === 'running') {
-    integratePendingRepositories(context, attempt.id);
+    const integration = integratePendingRepositories(context, attempt.id);
+    if (integration?.status === 'conflicts') return { kind: 'test-release', reused: true, ...integration, attempt: readProgressV2(context.progressFile).delivery.test.attempts.at(-1), ...summary(context) };
     attempt = readProgressV2(context.progressFile).delivery.test.attempts.at(-1);
   }
-  const driverResult = invokeDriver(context, attempt, 'release_test_status');
+  const startAfterConflict = attempt.conflict_resolved && !attempt.driver_started;
+  if (startAfterConflict) {
+    const progress = readProgressV2(context.progressFile);
+    progress.delivery.test.attempts.at(-1).driver_started = true;
+    writeProgressV2(context.progressFile, progress);
+  }
+  const driverResult = invokeDriver(context, attempt, startAfterConflict ? 'release_test' : 'release_test_status');
   persistDriverResult(context.progressFile, attempt, driverResult);
   return {
     kind: 'test-release',
@@ -325,7 +350,19 @@ function integratePendingRepositories(context, attemptId) {
       candidateRef: repository.candidateRef,
       expectedSourceCommit: repository.sourceCommit,
       targetBranch: repository.targetBranch,
+      preserveConflicts: true,
+      conflictWorktree: resolve(context.workspaceRoot, '.cc-nexs', 'runtime', 'test-conflicts', context.progress.feature.id, attemptId, repository.id),
     });
+    if (result.status === 'conflicts') {
+      recordTestIntegration(context.progressFile, {
+        attemptId, repository: repository.id, sourceCommit: result.sourceCommit,
+        targetBranch: result.targetBranch, targetBefore: result.targetBefore,
+        integrationCommit: null, status: 'conflicts', conflicts: result.conflicts, worktree: result.worktree,
+      });
+      completeTestRelease(context.progressFile, { attemptId, status: 'merge_conflict', reason: `resolve ${result.conflicts.join(', ')}` });
+      appendProgressEvent(context.progressFile, { type: 'delivery.test.merge_conflict', from: context.progress.state, to: context.progress.mode === 'hotfix' ? 'HOTFIX_TEST_MERGE_CONFLICT' : 'TEST_MERGE_CONFLICT', reason: result.conflicts.join(', '), data: { repository: repository.id, worktree: result.worktree } });
+      return { status: 'conflicts', repository: repository.id, conflicts: result.conflicts, worktree: result.worktree };
+    }
     recordTestIntegration(context.progressFile, {
       attemptId,
       repository: repository.id,
@@ -336,6 +373,7 @@ function integratePendingRepositories(context, attemptId) {
     });
     progress = readProgressV2(context.progressFile);
   }
+  return null;
 }
 
 function persistDriverResult(progressFile, attempt, driverResult) {
@@ -444,6 +482,7 @@ export function invokeTestReleaseDriver({ driver, workspaceRoot, payload }) {
       env: { ...process.env, CC_NEXS_RELEASE_ATTEMPT: payload.attempt, CC_NEXS_RELEASE_ENVIRONMENT: payload.environment },
     }).trim();
   } catch (error) {
+    if (error.code === 'ETIMEDOUT' || /Authenticated CI receipt unavailable|resume this exact attempt/i.test(error.stderr?.toString() || '')) return { status: 'awaiting_receipt', reason: `Driver receipt unavailable: ${error.message}`, pipeline: payload.previous?.pipeline || null, deployment: payload.previous?.deployment || null, environment_revision: payload.previous?.environment_revision || null };
     throw new Error(`[cc-nexs] test release driver failed: ${error.stderr?.toString().trim() || error.message}`);
   }
   let result;
@@ -487,6 +526,7 @@ export function invokeTestReleaseDriver({ driver, workspaceRoot, payload }) {
       }
     }
   }
+  if (result?.status === 'failed' && /No (?:release|test) driver configured|driver configuration|not configured/i.test(result.reason || '')) result.status = 'configuration_blocked';
   return result;
 }
 

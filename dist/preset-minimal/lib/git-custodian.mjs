@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, relative, resolve, sep } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 
 import { gitIdentityEnv, resolveGitIdentity } from './git-identity.mjs';
 import { recordRepositoryCandidatePrepared } from './progress-v2.mjs';
@@ -257,6 +257,9 @@ export function integrateCandidateToTest({
   requireDisjointTargetChanges = false,
   mergeRequest = null,
   previousIntegration = null,
+  verifyIntegration = null,
+  preserveConflicts = false,
+  conflictWorktree = null,
 }) {
   assertSegment(repositoryId, 'repository id');
   assertSegment(targetBranch, 'test branch');
@@ -279,6 +282,7 @@ export function integrateCandidateToTest({
       alreadyIntegrated: true,
     };
   }
+  let sensitive = [];
   if (requireDisjointTargetChanges && !isAncestor(repo, targetBefore, sourceCommit)) {
     const common = git(repo, ['merge-base', sourceCommit, targetBefore]);
     const paths = (commit) => git(repo, ['diff', '--name-only', '--no-renames', '-z', common, commit]).split('\0').filter(Boolean);
@@ -287,14 +291,16 @@ export function integrateCandidateToTest({
     if (targetPaths.some((path) => candidatePaths.has(path))) {
       throw new Error(`[cc-nexs] BASE_CHANGED: origin/${targetBranch} overlaps candidate paths; resolve and verify the affected changes before release`);
     }
-    const sensitive = targetPaths.filter(isSensitiveBasePath);
-    if (sensitive.length) {
+    sensitive = targetPaths.filter(isSensitiveBasePath);
+    if (sensitive.length && !verifyIntegration) {
       throw new Error(`[cc-nexs] BASE_CHANGED: origin/${targetBranch} changed shared runtime or contract paths (${sensitive.join(', ')}); sync and re-verify automatically before release`);
     }
   }
-  const tempRoot = mkdtempSync(join(tmpdir(), `cc-nexs-test-release-${repositoryId}-`));
-  const integrationWorktree = join(tempRoot, 'worktree');
+  const tempRoot = conflictWorktree ? null : mkdtempSync(join(tmpdir(), `cc-nexs-test-release-${repositoryId}-`));
+  const integrationWorktree = conflictWorktree || join(tempRoot, 'worktree');
+  mkdirSync(dirname(integrationWorktree), { recursive: true });
   let registered = false;
+  let keepWorktree = false;
   try {
     git(repo, ['worktree', 'add', '--detach', integrationWorktree, target]);
     registered = true;
@@ -302,11 +308,26 @@ export function integrateCandidateToTest({
     try {
       git(integrationWorktree, ['merge', '--no-ff', '--no-edit', sourceCommit], { env: gitIdentityEnv(identity) });
     } catch {
+      const conflicts = git(integrationWorktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
+      if (preserveConflicts && conflicts.length) {
+        keepWorktree = true;
+        return { repository: repositoryId, sourceCommit, targetBranch, targetBefore, status: 'conflicts', conflicts, worktree: integrationWorktree };
+      }
       try { git(integrationWorktree, ['merge', '--abort']); } catch {}
       throw new Error(`[cc-nexs] ${requireDisjointTargetChanges ? 'BASE_CHANGED: ' : ''}candidate ${candidateRef} conflicts with latest origin/${targetBranch}`);
     }
     const integrationCommit = previousIntegration?.merge_request && previousIntegration.source_commit === sourceCommit && previousIntegration.target_before === targetBefore
       ? previousIntegration.integration_commit : git(integrationWorktree, ['rev-parse', 'HEAD']);
+    let integrationVerification = null;
+    if (sensitive.length) {
+      integrationVerification = verifyIntegration({ repository: repositoryId, sourceCommit, targetBefore, integrationCommit, worktree: integrationWorktree, sensitivePaths: sensitive });
+      if (integrationVerification?.status !== 'passed'
+        || integrationVerification.integrationCommit !== integrationCommit
+        || typeof integrationVerification.proof !== 'string' || !integrationVerification.proof.trim()) {
+        throw new Error('[cc-nexs] BASE_CHANGED: integration checks did not prove the exact merged candidate; sync and re-verify');
+      }
+      if (git(integrationWorktree, ['rev-parse', 'HEAD']) !== integrationCommit || git(integrationWorktree, ['status', '--porcelain'])) throw new Error('[cc-nexs] integration verifier modified the merged candidate');
+    }
     if (mergeRequest) {
       const sourceBranch = `cc-nexs-mr-${repositoryId}-${integrationCommit}`;
       git(integrationWorktree, ['push', 'origin', `${integrationCommit}:refs/heads/${sourceBranch}`]);
@@ -316,12 +337,15 @@ export function integrateCandidateToTest({
       const remoteCommit = git(repo, ['rev-parse', remote]);
       const merged = isAncestor(repo, integrationCommit, remoteCommit);
       if (receipt.status === 'merged' && !merged) throw new Error('[cc-nexs] MR receipt has no remote ancestry proof');
-      return { repository: repositoryId, sourceCommit, targetBranch, targetBefore, integrationCommit, remoteCommit, pending: !merged, mergeRequest: receipt };
+      return { repository: repositoryId, sourceCommit, targetBranch, targetBefore, integrationCommit, remoteCommit, pending: !merged, mergeRequest: receipt, integrationVerification };
     }
     try {
       git(integrationWorktree, ['push', 'origin', `${integrationCommit}:refs/heads/${targetBranch}`]);
-    } catch {
-      throw new Error(`[cc-nexs] origin/${targetBranch} advanced during test integration; retry from the new remote tip`);
+    } catch (error) {
+      const detail = error.stderr?.toString().trim() || error.message;
+      const remote = fetchBase(repo, targetBranch);
+      if (git(repo, ['rev-parse', remote]) !== targetBefore) throw new Error(`[cc-nexs] origin/${targetBranch} advanced during integration; retry from the new remote tip: ${detail}`);
+      throw new Error(`[cc-nexs] PUSH_REJECTED: origin/${targetBranch} did not advance; check branch protection/permissions and configure release.base.driver for MR delivery: ${detail}`);
     }
     const remote = fetchBase(repo, targetBranch);
     const remoteCommit = git(repo, ['rev-parse', remote]);
@@ -336,14 +360,40 @@ export function integrateCandidateToTest({
       integrationCommit,
       remoteCommit,
       alreadyIntegrated: false,
+      integrationVerification,
     };
   } finally {
-    if (registered) {
+    if (registered && !keepWorktree) {
       try { git(repo, ['worktree', 'remove', '--force', integrationWorktree]); } catch {}
       try { git(repo, ['worktree', 'prune']); } catch {}
     }
-    rmSync(tempRoot, { recursive: true, force: true });
+    if (tempRoot && !keepWorktree) rmSync(tempRoot, { recursive: true, force: true });
   }
+}
+
+export function resolveTestIntegrationConflict({ repo, worktree, targetBranch, sourceCommit, targetBefore }) {
+  assertSegment(targetBranch, 'test branch');
+  const commonDir = path => realpathSync(git(path, ['rev-parse', '--path-format=absolute', '--git-common-dir']));
+  if (commonDir(repo) !== commonDir(worktree)) throw new Error('[cc-nexs] conflict worktree belongs to another repository');
+  let mergeHead = null;
+  try { mergeHead = git(worktree, ['rev-parse', '--verify', 'MERGE_HEAD']); } catch {}
+  if (mergeHead) {
+    if (mergeHead !== sourceCommit || git(worktree, ['rev-parse', 'HEAD']) !== targetBefore) throw new Error('[cc-nexs] test merge no longer matches recorded source and target');
+    const unresolved = git(worktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
+    if (unresolved.length) throw new Error(`[cc-nexs] unresolved test integration files remain: ${unresolved.join(', ')}`);
+    // The Developer stages only resolved paths; never sweep unrelated files into the merge.
+    const identity = resolveGitIdentity(repo);
+    git(worktree, ['commit', '--no-edit'], { env: gitIdentityEnv(identity) });
+  }
+  const integrationCommit = git(worktree, ['rev-parse', 'HEAD']);
+  const parents = git(worktree, ['show', '-s', '--format=%P', 'HEAD']).split(' ');
+  if (parents.length !== 2 || parents[0] !== targetBefore || parents[1] !== sourceCommit) throw new Error('[cc-nexs] resolved test integration must preserve both recorded parents');
+  if (git(worktree, ['status', '--porcelain'])) throw new Error('[cc-nexs] conflict worktree must be clean before push');
+  git(worktree, ['push', 'origin', `${integrationCommit}:refs/heads/${targetBranch}`]);
+  const remote = fetchBase(repo, targetBranch);
+  const remoteCommit = git(repo, ['rev-parse', remote]);
+  if (!isAncestor(repo, integrationCommit, remoteCommit)) throw new Error('[cc-nexs] resolved test integration remote proof failed');
+  return { integrationCommit, remoteCommit, targetBranch };
 }
 
 function isAncestor(repo, ancestor, descendant) {

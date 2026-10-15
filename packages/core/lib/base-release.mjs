@@ -98,6 +98,10 @@ function executeBaseRelease(context) {
         expectedSourceCommit: item.sourceCommit,
         targetBranch: baseTargets[item.id],
         requireDisjointTargetChanges: true,
+        verifyIntegration: context.config.mergedRelease?.base?.verify_driver ? payload => {
+          const driver = context.config.mergedRelease.base.verify_driver;
+          return JSON.parse(execFileSync(driver.command, driver.args || [], { cwd: context.workspaceRoot, encoding: 'utf8', timeout: 120000, input: JSON.stringify({ operation: 'verify_base_integration', ...payload }) }));
+        } : null,
         previousIntegration: attempt.integrations[item.id],
         mergeRequest: context.config.mergedRelease?.base?.driver ? payload => {
           const driver = context.config.mergedRelease.base.driver;
@@ -108,6 +112,7 @@ function executeBaseRelease(context) {
         attemptId: attempt.id,
         repository: item.id,
         integration: {
+          integration_verification: result.integrationVerification || null,
           source_commit: result.sourceCommit,
           target_branch: result.targetBranch,
           target_before: result.targetBefore,

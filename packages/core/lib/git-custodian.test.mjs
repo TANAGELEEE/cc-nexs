@@ -335,3 +335,46 @@ test('MR success text cannot replace remote ancestry proof', () => {
     assert.throws(() => git(repo, ['show', 'origin/main:change.txt']));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('exact merged-tree checks permit disjoint sensitive base changes without moving the tested ref', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-integration-check-'));
+  try {
+    const repo = join(root, 'repo');
+    git(root, ['init', '--bare', join(root, 'remote.git')]);
+    git(root, ['clone', join(root, 'remote.git'), repo]); configure(repo);
+    git(repo, ['checkout', '-b', 'main']);
+    writeFileSync(join(repo, 'base.txt'), 'base'); git(repo, ['add', '.']); git(repo, ['commit', '-m', 'base']); git(repo, ['push', 'origin', 'main']);
+    git(repo, ['checkout', '-b', 'feature']);
+    writeFileSync(join(repo, 'fix.txt'), 'fix'); git(repo, ['add', '.']); git(repo, ['commit', '-m', 'fix']);
+    const source = git(repo, ['rev-parse', 'HEAD']);
+    const ref = 'refs/cc-nexs/candidates/check/api'; git(repo, ['update-ref', ref, source]);
+    git(repo, ['checkout', 'main']); writeFileSync(join(repo, 'package.json'), '{"name":"fixture"}');
+    git(repo, ['add', '.']); git(repo, ['commit', '-m', 'base dependency']); git(repo, ['push', 'origin', 'main']);
+    const target = git(repo, ['rev-parse', 'HEAD']);
+    const options = { repo, repositoryId: 'api', candidateRef: ref, targetBranch: 'main', requireDisjointTargetChanges: true };
+    assert.throws(() => integrateCandidateToTest(options), /BASE_CHANGED/);
+    assert.throws(() => integrateCandidateToTest({ ...options, verifyIntegration: () => ({status:'passed', integrationCommit:source, proof:'wrong tree'}) }), /exact merged candidate/);
+    assert.equal(git(repo, ['rev-parse', 'origin/main']), target);
+    const result = integrateCandidateToTest({ ...options, verifyIntegration: payload => {
+      assert.deepEqual(payload.sensitivePaths, ['package.json']);
+      assert.equal(git(payload.worktree, ['show', 'HEAD:fix.txt']), 'fix');
+      assert.equal(git(payload.worktree, ['show', 'HEAD:package.json']), '{"name":"fixture"}');
+      return { status:'passed', integrationCommit:payload.integrationCommit, proof:'merged tree fixture checks passed' };
+    }});
+    assert.equal(result.integrationVerification.status, 'passed');
+    assert.equal(git(repo, ['rev-parse', ref]), source);
+    git(repo, ['merge-base', '--is-ancestor', source, 'origin/main']);
+  } finally { rmSync(root, { recursive:true, force:true }); }
+});
+
+test('protected branch rejection retains the server reason instead of claiming base advanced', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-rejected-'));
+  try {
+    const origin = join(root, 'remote.git'), repo = join(root, 'repo');
+    git(root, ['init', '--bare', origin]); git(root, ['clone', origin, repo]); configure(repo);
+    git(repo, ['checkout', '-b', 'main']); writeFileSync(join(repo, 'base'), 'base'); git(repo, ['add', '.']); git(repo, ['commit', '-m', 'base']); git(repo, ['push', 'origin', 'main']);
+    writeFileSync(join(repo, 'fix'), 'fix'); git(repo, ['add', '.']); git(repo, ['commit', '-m', 'fix']); git(repo, ['update-ref', 'refs/cc-nexs/candidates/rejected/api', 'HEAD']);
+    writeFileSync(join(origin, 'hooks', 'pre-receive'), '#!/bin/sh\necho "protected branch" >&2\nexit 1\n', {mode:0o755});
+    assert.throws(() => integrateCandidateToTest({repo, repositoryId:'api', candidateRef:'refs/cc-nexs/candidates/rejected/api', targetBranch:'main'}), /PUSH_REJECTED.*did not advance[\s\S]*protected branch/);
+  } finally { rmSync(root, {recursive:true, force:true}); }
+});

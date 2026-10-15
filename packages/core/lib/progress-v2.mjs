@@ -1,9 +1,11 @@
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { relative, resolve, sep } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import { hostname } from 'node:os';
 
 import { jsonValuesEqual } from './canonical-json.mjs';
+import { runtimeIdentity } from './runtime-identity.mjs';
 import { assertRecordedLocalVerification, validateLocalEvidence } from './local-evidence.mjs';
 
 export const PROGRESS_SCHEMA_VERSION = 2;
@@ -31,6 +33,7 @@ export function createProgressV2({
     schema_version: PROGRESS_SCHEMA_VERSION,
     feature: { id: featureId, slug: featureSlug },
     preset,
+    runtime: runtimeIdentity(),
     mode,
     state: 'INIT',
     revision: 0,
@@ -62,6 +65,7 @@ export function validateProgressV2(progress) {
   const errors = [];
   if (!progress || typeof progress !== 'object') errors.push('progress must be an object');
   if (progress?.schema_version !== PROGRESS_SCHEMA_VERSION) errors.push('schema_version must be 2');
+  if (progress?.runtime && (typeof progress.runtime.version !== 'string' || progress.runtime.name !== 'cc-nexs')) errors.push('runtime binding is invalid');
   if (!progress?.feature?.id || !progress?.feature?.slug) errors.push('feature.id and feature.slug are required');
   if (!['lean', 'fast', 'full', 'hotfix', 'lite'].includes(progress?.mode)) errors.push('mode is invalid');
   if (typeof progress?.state !== 'string' || !progress.state) errors.push('state is required');
@@ -224,6 +228,7 @@ export function recordTestIntegration(file, {
   targetBranch,
   targetBefore,
   integrationCommit,
+  status = null, conflicts = [], worktree = null,
   actor = 'git-custodian',
 } = {}) {
   const progress = readProgressV2(file);
@@ -231,17 +236,18 @@ export function recordTestIntegration(file, {
   const attempt = testDelivery.attempts.find((item) => item.id === attemptId);
   if (!attempt) throw new Error(`[cc-nexs] unknown test release attempt: ${attemptId}`);
   assertTestAttemptNotInvalidated(attempt);
-  if (attempt !== testDelivery.attempts.at(-1) || attempt.status !== 'running') {
+  if (attempt !== testDelivery.attempts.at(-1) || !['running', 'merge_conflict'].includes(attempt.status)) {
     throw new Error('[cc-nexs] test integration requires the latest running release attempt');
   }
   if (attempt.source?.[repository] !== sourceCommit) {
     throw new Error(`[cc-nexs] test integration source does not match the bound candidate for ${repository}`);
   }
   const existing = attempt.integrations[repository];
-  if (existing && JSON.stringify(existing) !== JSON.stringify({ sourceCommit, targetBranch, targetBefore, integrationCommit })) {
+  const evidence = { sourceCommit, targetBranch, targetBefore, integrationCommit, ...(status ? { status, conflicts, worktree } : {}) };
+  if (existing && !(existing.status === 'conflicts' && status === 'resolved' && existing.sourceCommit === sourceCommit && existing.targetBranch === targetBranch && existing.targetBefore === targetBefore) && JSON.stringify(existing) !== JSON.stringify(evidence)) {
     throw new Error(`[cc-nexs] test integration evidence is immutable for ${repository}`);
   }
-  attempt.integrations[repository] = { sourceCommit, targetBranch, targetBefore, integrationCommit };
+  attempt.integrations[repository] = evidence;
   appendMutationEvent(progress, {
     type: 'delivery.test.repository_integrated', actor,
     data: { attempt: attemptId, repository, ...attempt.integrations[repository] },
@@ -260,7 +266,7 @@ export function completeTestRelease(file, {
   actor = 'release-controller',
   expectedRevision = null,
 } = {}) {
-  const allowed = new Set(['awaiting_receipt', 'deploying', 'succeeded', 'failed', 'deployed_needs_manual_verification']);
+  const allowed = new Set(['awaiting_receipt', 'deploying', 'merge_conflict', 'configuration_blocked', 'succeeded', 'failed', 'deployed_needs_manual_verification']);
   if (!allowed.has(status)) throw new Error(`[cc-nexs] invalid test release status: ${status}`);
   if (status === 'deploying' && !hasEvidence(pipeline)) {
     throw new Error('[cc-nexs] deploying test release requires pipeline evidence');
@@ -301,7 +307,7 @@ export function completeTestRelease(file, {
   attempt.pipeline = pipeline;
   attempt.deployment = deployment;
   attempt.environment_revision = environmentRevision;
-  attempt.completed_at = ['deploying', 'awaiting_receipt'].includes(status) ? null : new Date().toISOString();
+  attempt.completed_at = ['deploying', 'awaiting_receipt', 'merge_conflict', 'configuration_blocked'].includes(status) ? null : new Date().toISOString();
   if (reason) attempt.reason = reason;
   testDelivery.status = status;
   appendMutationEvent(progress, {
@@ -367,19 +373,49 @@ export function recordTestVerification(file, {
   return progress;
 }
 
+const progressSnapshots = new WeakMap();
+
 export function readProgressV2(file) {
   const value = JSON.parse(readFileSync(file, 'utf8'));
   const errors = validateProgressV2(value);
   if (errors.length) throw new Error(`[cc-nexs] invalid ${basename(file)}: ${errors.join('; ')}`);
+  progressSnapshots.set(value, { file: resolve(file), value: JSON.stringify(value) });
   return value;
 }
 
 export function writeProgressV2(file, progress) {
   const errors = validateProgressV2(progress);
   if (errors.length) throw new Error(`[cc-nexs] refusing invalid progress: ${errors.join('; ')}`);
-  const temp = join(dirname(file), `.${basename(file)}.${process.pid}.${randomUUID()}.tmp`);
-  writeFileSync(temp, `${JSON.stringify(progress, null, 2)}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-  renameSync(temp, file);
+  const releaseLease = acquireProgressLease(file);
+  try {
+    const snapshot = progressSnapshots.get(progress);
+    if (snapshot?.file === resolve(file) && JSON.stringify(JSON.parse(readFileSync(file, 'utf8'))) !== snapshot.value) throw new Error('[cc-nexs] stale progress snapshot; reload before writing');
+    const temp = join(dirname(file), `.${basename(file)}.${process.pid}.${randomUUID()}.tmp`);
+    writeFileSync(temp, `${JSON.stringify(progress, null, 2)}\n`, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    renameSync(temp, file);
+    progressSnapshots.set(progress, { file: resolve(file), value: JSON.stringify(progress) });
+  } finally { releaseLease(); }
+}
+
+function acquireProgressLease(file) {
+  const lease = `${file}.lease`;
+  try { mkdirSync(lease); } catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+    let owner;
+    try { owner = JSON.parse(readFileSync(join(lease, 'owner.json'), 'utf8')); } catch {}
+    if (owner?.hostname === hostname() && Number.isInteger(owner.pid) && owner.pid > 0) {
+      try { process.kill(owner.pid, 0); } catch (probe) {
+        if (probe.code === 'ESRCH') {
+          rmSync(lease, { recursive: true });
+          return acquireProgressLease(file);
+        }
+      }
+    }
+    throw new Error('[cc-nexs] task is being modified by another session; resume after its lease is released');
+  }
+  try { writeFileSync(join(lease, 'owner.json'), JSON.stringify({ pid: process.pid, hostname: hostname() })); }
+  catch (error) { rmSync(lease, { recursive: true, force: true }); throw error; }
+  return () => rmSync(lease, { recursive: true, force: true });
 }
 
 export function appendProgressEvent(file, {
@@ -920,7 +956,7 @@ export function deferredChecksForAttempt(progress, releaseAttempt) {
   return (localAttempt?.evidence || []).filter((item) => item?.result === 'deferred_to_test');
 }
 
-function assertDeferredChecksClosed(progress, releaseAttempt, evidence) {
+export function assertDeferredChecksClosed(progress, releaseAttempt, evidence) {
   const deferred = deferredChecksForAttempt(progress, releaseAttempt);
   if (deferred.length === 0) return;
   const missing = deferred

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { resolveTestConflict } from './test-conflict.mjs';
 import { syncReleaseBase } from './base-sync.mjs';
 import { switchTestTarget } from './test-target.mjs';
 
@@ -40,6 +41,7 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   if (command === 'release-test') {
     return runTestRelease({ cwd, ...parseReleaseOptions(args) });
   }
+  if (command === 'resolve-test-conflict') return resolveTestConflict({ cwd, ...parseFeatureOptions(args) });
   if (command === 'sync-base') return syncReleaseBase({ cwd, ...parseFeatureOptions(args) });
   if (command === 'release-base') {
     return runBaseRelease({ cwd, ...parseFeatureOptions(args) });
@@ -542,6 +544,7 @@ function printResult(result) {
 
 function printUsage() {
   console.error('Usage:');
+  console.error('  cc-nexs resolve-test-conflict <feature-id> [--progress <path>]');
   console.error('  cc-nexs switch-test-target --request <json-file>');
   console.error('  cc-nexs revise-hotfix <bug-key> --reason <text> --authorization-evidence <text> [--promote-lean] [--progress <path>]');
   console.error('  cc-nexs approve-spec <feature-id> [--approver <name>] [--progress <path>]');

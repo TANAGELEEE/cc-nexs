@@ -45,6 +45,7 @@ const P2_COMMANDS = [
   "sync-base",
   "switch-test-target",
   "release-test",
+  "resolve-test-conflict",
   "release-base",
   "render-plan",
   "request-release-changes",

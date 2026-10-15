@@ -13,6 +13,7 @@
       "properties": { "id": { "type": "string" }, "slug": { "type": "string" } }
     },
     "preset": { "type": "string" },
+    "runtime": { "type": "object", "additionalProperties": false, "required": ["name", "version"], "properties": { "name": { "const": "cc-nexs" }, "version": { "type": "string" } } },
     "mode": { "enum": ["lean", "fast", "full", "hotfix", "lite"] },
     "state": { "type": "string", "minLength": 1 },
     "revision": { "type": "integer", "minimum": 0 },
@@ -112,7 +113,7 @@
             "policy": { "enum": ["auto_if_ready", "manual", "disabled"] },
             "target": { "type": "object" },
             "status": {
-              "enum": ["idle", "running", "awaiting_receipt", "deploying", "succeeded", "failed", "deployed_needs_manual_verification", "verified"]
+              "enum": ["idle", "running", "awaiting_receipt", "deploying", "merge_conflict", "configuration_blocked", "succeeded", "failed", "deployed_needs_manual_verification", "verified"]
             },
             "attempts": {
               "type": "array",

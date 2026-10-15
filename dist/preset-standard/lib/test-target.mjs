@@ -13,7 +13,7 @@ export function switchTestTarget({ cwd, featureId, progressPath, target, authori
     if (['running', 'deploying', 'awaiting_receipt'].includes(progress.delivery.test.status)) {
       throw new Error('finish or explicitly cancel the active deployment before switching targets');
     }
-    if (!['ACCEPTANCE', 'FINAL_EVAL', 'TEST_RELEASE', 'TEST_RELEASE_BLOCKED', 'TEST_VERIFYING', 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY', 'RELEASE_PENDING_HUMAN', 'TEST', 'REGRESSION', 'FINAL_QA', 'HOTFIX_TEST_RELEASE', 'HOTFIX_TEST_RELEASE_BLOCKED', 'HOTFIX_TEST_VERIFYING', 'HOTFIX_TEST_DEPLOYED_NEEDS_MANUAL_VERIFY', 'HOTFIX_RELEASE_PENDING_HUMAN'].includes(progress.state)) throw new Error('test target switch requires an active test or release gate');
+    if (!['TEST_VERIFIED', 'HOTFIX_TEST_VERIFIED', 'ACCEPTANCE', 'FINAL_EVAL', 'TEST_RELEASE', 'TEST_RELEASE_BLOCKED', 'TEST_VERIFYING', 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY', 'RELEASE_PENDING_HUMAN', 'TEST', 'REGRESSION', 'FINAL_QA', 'HOTFIX_TEST_RELEASE', 'HOTFIX_TEST_RELEASE_BLOCKED', 'HOTFIX_TEST_VERIFYING', 'HOTFIX_TEST_DEPLOYED_NEEDS_MANUAL_VERIFY', 'HOTFIX_RELEASE_PENDING_HUMAN'].includes(progress.state)) throw new Error('test target switch requires an active test or release gate');
     const delivery = progress.mode === 'lean' ? approvedPlanDeliveryContract(progress, dirname(context.progressFile)) : null;
     const ids = Object.keys(context.source).filter(id => delivery?.repositories[id] !== 'local');
     validateTestTarget(target, context.workspace.repositories, ids);

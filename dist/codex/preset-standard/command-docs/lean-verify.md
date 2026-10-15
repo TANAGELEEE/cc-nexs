@@ -13,6 +13,12 @@ Test 交付拓扑标为 `local` 的 Web candidate 不需要 `test_branch`：从�
 
 结果写入 `plan.md`，不得创建 test-cases/test-report/acceptance/BUG 文档。父 Orchestrator 调 `recordTestVerification()` 将结果绑定当前 attempt/environment revision：通过进入 `TEST_VERIFIED`，真实产品失败进入 `TEST_VERIFY_FAILED`。若部署已成功但浏览器、登录/MFA、人工环境配置或其他验收能力不可用，调用 `record-test-verification --manual-required` 进入可恢复的 `TEST_DEPLOYED_NEEDS_MANUAL_VERIFY`，不得当成代码失败，也不得回滚已完成的 test 交付。人工补证后可用同一 attempt 记录 passed 并继续。
 
+## Human-input blockers
+
+Before `record-test-verification --manual-required`, provide `--evidence-json` containing `type: "human_input_required"` and nonempty `check`, `reason`, `attempted`, `required_input`, and `resume_action` strings. Unfinished executable checks must continue; they are not missing human capability. Ask for the specific missing permission, login action, data or external capability immediately, without plaintext credentials. Preserve completed checks and resume the same deployed attempt when input arrives. The controller persists the verification result state; re-read it before continuing Review and release readiness.
+
+For a pre-existing defect blocking acceptance, first compare baseline/candidate reproduction and obtain independent attribution review; continue unaffected checks and try an equivalent approved representative. Do not fix unrelated product scope or mark unexecuted checks passed. If human input is still necessary, record `cause: "pre_existing_defect"` with `baseline_commit`, `baseline_proof`, `candidate_proof`, `impact`, `alternative_attempted`, `tracking`, `review_proof` in addition to the required blocker fields. Ask for working conditions or explicit acceptance of the specific coverage gap. Existing exact-candidate release exception gates remain authoritative.
+
 ## Model dispatch preview
 
 Before any role dispatch, follow `<plugin-root>/rules/model-discovery.md` and the shared `modelGateway` protocol: inspect cached choices, prepare a non-blocking preview, start immediately without waiting for a reply, and record the actual result. Apply real user corrections before start or to the next batch; never restart a running role merely to change models. This applies to the current runtime, including Claude-native single-step commands. Commands that do not dispatch roles need no model discovery.

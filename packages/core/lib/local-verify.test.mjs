@@ -119,7 +119,7 @@ test('Lean local verification invokes the configured driver and binds evidence t
     writeProgressV2(progressFile, invalidReviewEvidence);
     assert.throws(() => recordLeanReview({ cwd: root, featureId: '30', progressPath: progressFile, status: 'passed' }), /may contain only passed evidence/);
 
-    writeProgressV2(progressFile, beforeReview);
+    writeProgressV2(progressFile, structuredClone(beforeReview));
 
 
     const reused = runLocalVerification({ cwd: root, featureId: '30', progressPath: progressFile });
@@ -286,12 +286,12 @@ test('Lean local verification can defer an environment-only backend start to tes
     });
     const manual = readProgressV2(progressFile);
     manual.state = 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY';
-    writeProgressV2(progressFile, manual);
+    writeProgressV2(progressFile, structuredClone(manual));
     const incomplete = structuredClone(manual);
     delete incomplete.delivery.test.attempts.at(-1).deployment;
     writeProgressV2(progressFile, incomplete);
     assert.throws(() => recordLeanReview({ cwd: root, featureId: '31', progressPath: progressFile, status: 'passed' }), /deployed manual-verification attempt/);
-    writeProgressV2(progressFile, manual);
+    writeProgressV2(progressFile, structuredClone(manual));
     recordLeanReview({ cwd: root, featureId: '31', progressPath: progressFile, status: 'passed' });
     assert.equal(readProgressV2(progressFile).delivery.test.attempts.at(-1).verification.result, 'manual_required');
 

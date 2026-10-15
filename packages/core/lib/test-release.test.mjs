@@ -13,6 +13,8 @@ import {
   recordTestIntegration,
   writeProgressV2,
 } from './progress-v2.mjs';
+import { resolveTestConflict } from './test-conflict.mjs';
+import { completeTestRelease, appendProgressEvent } from './progress-v2.mjs';
 import { switchTestTarget, validateTestTarget } from './test-target.mjs';
 import { planApprovalBinding } from './plan-contract.mjs';
 import { integrateCandidateToTest } from './git-custodian.mjs';
@@ -201,12 +203,12 @@ test('test release integrates candidates, invokes structured driver, records evi
       ref: localCandidateRef,
       paths: ['web.txt'],
     };
-    writeProgressV2(progressFile, completeProgress);
+    writeProgressV2(progressFile, structuredClone(completeProgress));
     const invalidLocal = structuredClone(completeProgress);
     invalidLocal.local_verification.attempts.at(-1).evidence = [];
     writeProgressV2(progressFile, invalidLocal);
     assert.throws(() => runCcNexsCommand(['release-test', '05', '--dry-run', '--progress', progressFile], { cwd: root }), /structured evidence/);
-    writeProgressV2(progressFile, completeProgress);
+    writeProgressV2(progressFile, structuredClone(completeProgress));
 
 
     const approvedPlan = readFileSync(join(reqDir, 'plan.md'), 'utf8');
@@ -324,6 +326,7 @@ test('test release integrates candidates, invokes structured driver, records evi
     ], { cwd: root });
     assert.equal(verified.status, 'passed');
     assert.equal(readProgressV2(progressFile).delivery.test.status, 'verified');
+    assert.equal(readProgressV2(progressFile).state, 'TEST_VERIFIED');
     const previous = readProgressV2(progressFile).delivery.test.attempts.at(-1);
     const target = { kind: 'test', environment: 'test02', branches: { code: 'test02' }, allowed_hosts: ['test02.example.com'], app_url: 'https://test02.example.com', operations_url: 'https://test02.example.com/ops' };
     git(code, ['push', 'origin', 'origin/master:refs/heads/test02']);
@@ -349,7 +352,7 @@ test('test release integrates candidates, invokes structured driver, records evi
   }
 });
 
-test('resume recovers the exact running attempt after integration without another push or start request', () => {
+for (const scenario of ['running', 'failed', 'conflict', 'receipt-error']) test(`resume recovers the same attempt: ${scenario}`, () => {
   const root = mkdtempSync(join(tmpdir(), 'cc-nexs-release-resume-running-'));
   const origin = join(root, 'origin.git');
   const code = join(root, 'code');
@@ -431,6 +434,39 @@ test('resume recovers the exact running attempt after integration without anothe
   writeProgressV2(progressFile, progress);
 
   try {
+    if (scenario === 'receipt-error') {
+      const driverFile = join(root, 'recovery-driver.mjs');
+      const validDriver = readFileSync(driverFile, 'utf8');
+      writeFileSync(driverFile, "console.error('Missing authenticated exact-revision pipeline evidence'); process.exit(1);");
+      assert.throws(() => runTestRelease({ cwd: root, featureId: '06', progressPath: progressFile }), /pipeline evidence/);
+      assert.equal(readProgressV2(progressFile).delivery.test.status, 'awaiting_receipt');
+      assert.throws(() => runTestRelease({ cwd: root, featureId: '06', progressPath: progressFile, retry: true }), /must be resumed/);
+      writeFileSync(driverFile, validDriver);
+      const resumed = runTestRelease({ cwd: root, featureId: '06', progressPath: progressFile, resume: true });
+      assert.equal(resumed.attempt.status, 'succeeded');
+      assert.equal(readProgressV2(progressFile).delivery.test.attempts.length, 1);
+      const requests = readFileSync(join(root, 'recovery-driver.log'), 'utf8').trim().split('\n').map(JSON.parse);
+      assert.deepEqual(requests.map(request => request.operation), ['release_test_status']);
+      return;
+    }
+    if (scenario === 'conflict') {
+      writeFileSync(join(code, 'feature.txt'), 'test-only version\n');
+      git(code, ['add', '.']); git(code, ['commit', '-m', 'test concurrent change']); git(code, ['push', 'origin', 'test']);
+      const conflict = runTestRelease({ cwd: root, featureId: '06', progressPath: progressFile });
+      assert.equal(conflict.status, 'conflicts');
+      assert.equal(readProgressV2(progressFile).state, 'TEST_MERGE_CONFLICT');
+      assert.throws(() => resolveTestConflict({ cwd: root, featureId: '06', progressPath: progressFile }), /unresolved/);
+      writeFileSync(join(conflict.worktree, 'feature.txt'), 'feature and test-only version\n');
+      git(conflict.worktree, ['add', 'feature.txt']);
+      resolveTestConflict({ cwd: root, featureId: '06', progressPath: progressFile });
+      const resumed = runTestRelease({ cwd: root, featureId: '06', progressPath: progressFile, resume: true });
+      assert.equal(resumed.attempt.status, 'succeeded');
+      assert.equal(readProgressV2(progressFile).delivery.test.attempts.length, 1);
+      assert.equal(git(code, ['rev-parse', candidateRef]), sourceCommit);
+      const requests = readFileSync(join(root, 'recovery-driver.log'), 'utf8').trim().split('\n').map(JSON.parse);
+      assert.deepEqual(requests.map(request => request.operation), ['release_test']);
+      return;
+    }
     const started = beginTestRelease(progressFile, { source });
     const integration = integrateCandidateToTest({
       repo: code,
@@ -447,6 +483,10 @@ test('resume recovers the exact running attempt after integration without anothe
       targetBefore: integration.targetBefore,
       integrationCommit: integration.remoteCommit || integration.integrationCommit,
     });
+    if (scenario === 'failed') {
+      completeTestRelease(progressFile, { attemptId: started.attempt.id, status: 'failed', reason: 'legacy driver receipt timeout' });
+      appendProgressEvent(progressFile, { type: 'state.transition', from: 'TEST_RELEASE', to: 'TEST_RELEASE_BLOCKED' });
+    }
     const beforeResume = readProgressV2(progressFile);
     const integrationEvidence = structuredClone(beforeResume.delivery.test.attempts[0].integrations.code);
     const remoteBeforeResume = git(code, ['rev-parse', 'origin/test']);
@@ -464,7 +504,7 @@ test('resume recovers the exact running attempt after integration without anothe
     assert.deepEqual(requests.map(({ operation, attempt }) => ({ operation, attempt })), [{
       operation: 'release_test_status', attempt: started.attempt.id,
     }]);
-    assert.equal(requests[0].previous.status, 'running');
+    assert.equal(requests[0].previous.status, scenario === 'failed' ? 'awaiting_receipt' : 'running');
     assert.equal(requests[0].previous.pipeline, null);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -486,7 +526,8 @@ test('test release driver fails closed on invalid output, process failure, timeo
   try {
     assert.throws(run("console.log('not json')"), /must write one JSON object/);
     assert.throws(run("console.error('driver exploded'); process.exit(2)"), /driver exploded|driver failed/);
-    assert.throws(run("await new Promise((resolve) => setTimeout(resolve, 500));", 50), /driver failed/);
+    assert.equal(run("await new Promise((resolve) => setTimeout(resolve, 500));", 50)().status, 'awaiting_receipt');
+    assert.equal(run("console.error('Authenticated CI receipt unavailable; resume this exact attempt'); process.exit(1)")().status, 'awaiting_receipt');
     assert.throws(
       run("console.log(JSON.stringify({status:'succeeded', pipeline:{id:'p'}}))"),
       /requires pipeline, deployment, and environment_revision/,

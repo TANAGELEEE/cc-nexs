@@ -88,7 +88,8 @@ export function approveFeatureGate({
     const pendingState = before.mode === 'hotfix' ? 'HOTFIX_RELEASE_PENDING_HUMAN' : 'RELEASE_PENDING_HUMAN';
     const manualState = before.mode === 'hotfix' ? 'HOTFIX_TEST_DEPLOYED_NEEDS_MANUAL_VERIFY' : 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY';
     const legacyAccepted = ['fast', 'full', 'lite'].includes(before.mode) && before.state === 'COMPLETE' && !before.delivery?.base?.attempts?.length;
-    if (!legacyAccepted && before.state !== pendingState && !(testException && before.state === manualState)) {
+    const recoverableTestState = ['lean', 'hotfix'].includes(before.mode) && ['TEST_RELEASE', 'TEST_VERIFYING', 'TEST_VERIFIED', 'HOTFIX_TEST_RELEASE', 'HOTFIX_TEST_VERIFYING'].includes(before.state);
+    if (!recoverableTestState && !legacyAccepted && before.state !== pendingState && !(testException && before.state === manualState)) {
       const existing = before.gates.release;
       if (existing?.approved) {
         assertTestAttemptNotInvalidated(before.delivery?.test?.attempts?.find((item) => item.id === existing.binding?.test_attempt));
@@ -123,6 +124,7 @@ export function approveFeatureGate({
     const approved = approveProgressGate(progressFile, { gate: 'release', approver: actor, binding, expectedRevision: before.revision });
     if (before.mode === 'hotfix') syncHotfixChangeStatuses(resolveHotfixDocument(before, dirname(progressFile)), approved.change_requests?.items);
     else if (before.mode === 'lean') syncPlanChangeStatuses(join(dirname(progressFile), 'plan.md'), approved.change_requests?.items);
+    if (recoverableTestState) transitionState(markdownFile, { from: before.state, to: pendingState, reason: 'reconciled exact verified candidate and Review with existing user release authorization' });
     if (legacyAccepted) transitionState(markdownFile, { from: 'COMPLETE', to: pendingState, reason: 'user authorized base release of previously accepted candidate' });
     if (exceptionBinding && before.state === manualState) {
       transitionState(markdownFile, { from: manualState, to: pendingState, reason: 'human authorized base release with a bound test-environment exception; test remains unverified' });
