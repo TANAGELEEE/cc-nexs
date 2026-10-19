@@ -1,23 +1,22 @@
 ---
-description: "Tech Lead 编码入口。Sprint 实现可按已批准 repository assignment 并行；文档、评审修订与修复保持边界隔离。"
+description: "Tech Lead coding entry point. Sprint implementation may run in parallel per approved repository assignment; documentation, review revisions, and fixes remain boundary-isolated."
 disable-model-invocation: true
 allowed-tools: "Read, Write, Edit, Bash, Glob, Grep, Task"
-argument-hint: "[需求编号] [--mode=feat|fix|doc|review-fix|integration] [--sprint=N] [--assignment=IMP-id] [--bug=ID]"
+argument-hint: "[requirement ID] [--mode=feat|fix|doc|review-fix|integration] [--sprint=N] [--assignment=IMP-id] [--bug=ID]"
 ---
 
 # /cc-nexs:dev
 
-参数：
-- `$1` = 需求编号
-- `--mode=feat`（默认）/ `fix` / `doc` / `review-fix` / `integration` / `re-evaluate`
-- `--sprint=N` 编码 Sprint N（feat / doc 必需）
-- `--assignment=IMP-id` 将 feat 限定为 ownership 表中的一个 repository/worktree/Allowed paths；新 spec 的并行 worker 必传
-- `--bug=BUG-<N>` 修 bug（fix 必需）
+Parameters:
+- `$1` = requirement ID
+- `--mode=feat` (default) / `fix` / `doc` / `review-fix` / `integration` / `re-evaluate`
+- `--sprint=N` code Sprint N (required for feat / doc)
+- `--assignment=IMP-id` limit feat to one repository/worktree/Allowed paths in the ownership table; required for parallel workers on a new spec
+- `--bug=BUG-<N>` fix a bug (required for fix)
 
-## 执行步骤
+## Execution steps
 
-### 1. 校验前置条件
-
+### 1. Validate prerequisites
 ```bash
 # 必须在 feature 分支
 BRANCH=$(git branch --show-current)
@@ -37,13 +36,11 @@ if [ "$MODE" = "feat" ] || [ "$MODE" = "doc" ]; then
   esac
 fi
 ```
+### 2. Invoke the tech-lead-claude agent
 
-### 2. 调起 tech-lead-claude agent
+Invoke the `tech-lead-claude` agent through the Task tool. Prompt template:
 
-通过 Task 工具调起 `tech-lead-claude` agent。Prompt 模板：
-
-#### feat 模式
-
+#### feat mode
 ```
 你是 Tech Lead（独立 session）。
 先验证 G1 binding 仍匹配当前 spec，再读 Sprint M${SPRINT} 的 Assignment ${ASSIGNMENT_ID}。
@@ -56,9 +53,7 @@ fi
 禁改 spec.md / 禁改 AC / 禁改 progress.md。
 禁写 dev-plan.md / api-doc.md / deploy.md；这些由现有 DOC_SYNC 单写者阶段处理。
 ```
-
-#### fix 模式
-
+#### fix mode
 ```
 你是 Tech Lead（独立 session）。
 读 ${REQ_DIR}bugs/${BUG_ID}.md。
@@ -70,9 +65,7 @@ fi
 - commit message: fix(<模块>): <简述> (${BUG_ID})
 - 必须回答 BUG 文件中"为什么原测试没抓到"
 ```
-
-#### doc 模式
-
+#### doc mode
 ```
 你是 Tech Lead（独立 session）。
 本 sprint 实现与本地验证已完成。同步部署/API 文档，之后再进入 SA 代码评审。
@@ -80,24 +73,18 @@ fi
 - ${REQ_DIR}deploy.md：append 本 sprint 部署步骤；DB 变更必须含回滚步骤
 不修改代码。
 ```
-
-#### review-fix 模式
-
+#### review-fix Mode
 ```
 读取 sa-code-review.md 最新 NEEDS_REVISION 章节，只修该轮明确问题并同步受影响文档。
 不得要求 BUG_ID，不得改 spec/AC。项目验证通过后返回精确 candidate 路径；随后必须进入新的 SA 代码评审。
 ```
-
-#### integration 模式
-
+#### integration mode
 ```
 读取 Integration Review 或最终验收最新未通过项，修复跨 Sprint/跨仓集成问题并同步 api-doc.md、deploy.md、test-cases.md。
 不得改 AC；若必须改契约，停止并回到 Planner/G1。
 完成项目级构建与测试后返回全部受影响仓库的精确 candidate 路径，随后必须重新执行 integration review。
 ```
-
-#### re-evaluate 模式（熔断后）
-
+#### re-evaluate mode (after the circuit breaker trips)
 ```
 你是 Tech Lead（独立 session），熔断重评模式。
 读 spec.md 当前技术方案 + sa-code-review.md 历次反馈。
@@ -107,21 +94,19 @@ fi
 - 需要重写的代码范围
 不动 AC 表 / 不动 Sprint 切片（除非确实需要重切）。
 ```
+### 3. Build Self-Check
 
-### 3. 编译自检
+When an assignment worker invokes `/cc-nexs:build`, it selects only the changed modules in that repository. After all implementation waves have joined, the Orchestrator runs one additional aggregate build/test/lint pass per repository; these passes may run in parallel across repositories, while dependencies within a repository are respected. If any check fails, the state is not advanced and no new candidate is created.
 
-assignment worker 调用 `/cc-nexs:build` 时仅选择该 repository/changed modules；全部实现 wave join 后，Orchestrator 再按 repository 做一次 aggregate build/test/lint（可跨仓并行、仓内遵守依赖）。任一失败不推进状态、不创建新 candidate。
+### 4. Return Candidate Paths
 
-### 4. 返回候选路径
+Do not stage or commit on your own. After an individual worker returns, only path validation is performed; only after all waves and aggregate verification have succeeded does the Orchestrator have the Git Custodian generate exactly one candidate commit per repository, serially.
 
-不得自行 stage 或 commit。单个 worker 返回后只做路径校验；所有 wave 和 aggregate verification 成功后，Orchestrator 才让 Git Custodian 按 repository 串行生成恰好一个候选提交。
+### 5. Do Not Advance State
 
-### 5. 不推进状态
+A single `/cc-nexs:dev` step does not modify progress.md; advancement is driven by `/cc-nexs:run`.
 
-`/cc-nexs:dev` 单步不动 progress.md，由 `/cc-nexs:run` 推进。
-
-## 输出
-
+## Output
 ```
 ✅ Tech Lead 完成: mode=<mode> sprint=M<N>
    assignment: <IMP-id 或 legacy-single>

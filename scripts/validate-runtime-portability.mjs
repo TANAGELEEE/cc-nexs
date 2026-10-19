@@ -62,7 +62,7 @@ for (const name of ['hotfix', 'revise-hotfix', 'approve-release']) {
   }
 }
 const hotfixCommand = readFileSync(join(root, 'dist/preset-standard/commands/hotfix.md'), 'utf8');
-for (const marker of ['init-hotfix', 'hotfix/<key>', 'progress.hotfix_document', 'revise-hotfix', '--promote-lean', 'P0/P1/P2/P3 全部需要独立 Review', '--test-exception']) {
+for (const marker of ['init-hotfix', 'hotfix/<key>', 'progress.hotfix_document', 'revise-hotfix', '--promote-lean', 'P0/P1/P2/P3 all require an independent Review', '--test-exception']) {
   if (!hotfixCommand.includes(marker)) errors.push(`Shared Hotfix command: missing ${marker}`);
 }
 

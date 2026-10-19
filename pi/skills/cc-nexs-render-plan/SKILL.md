@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-render-plan
-description: /cc-nexs:render-plan 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:render-plan 或 /skill:cc-nexs-render-plan 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard lean（默认）、fast 与 full 模式，并通过 pi-subagents 运行隔离角色。 Render the Lean plan Markdown as a human-friendly temporary HTML page.
+description: /cc-nexs:render-plan Pi P2 adapter skill. Invoke only through /cc-nexs:render-plan or /skill:cc-nexs-render-plan; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default), fast, and full modes with isolated roles through pi-subagents. Render the Lean plan Markdown as a human-friendly temporary HTML page.
 disable-model-invocation: true
 ---
 

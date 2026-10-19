@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-status
-description: /cc-nexs:status 的 Codex 镜像 skill。 显式调用 $cc-nexs-status 时使用。 Read-only status snapshot of the active feature pipeline.
+description: /cc-nexs:status Codex mirror skill. Use when $cc-nexs-status is explicitly invoked. Read-only status snapshot of the active feature pipeline.
 ---
 
 # /cc-nexs:status for Codex

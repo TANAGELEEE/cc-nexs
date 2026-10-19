@@ -1,35 +1,32 @@
 ---
-description: "QA 黑盒测试入口。Sprint 阶段写/评用例；完整需求发布到 test 后执行 final 或 final-regression。禁读 src/。"
+description: "QA black-box testing entry point. During the Sprint phase, write/review test cases; once the complete requirement is released to test, run final or final-regression. Reading src/ is prohibited."
 disable-model-invocation: true
 allowed-tools: "Read, Write, Edit, Bash, Glob, Task, mcp__chrome-devtools__*"
-argument-hint: "<phase: cases|run|regression|final|final-regression> [需求编号] [--sprint=N] [--revise]"
+argument-hint: "<phase: cases|run|regression|final|final-regression> [requirement ID] [--sprint=N] [--revise]"
 ---
 
 # /cc-nexs:qa
 
-参数：
-- `$1` = phase: `cases` / `run` / `regression`（legacy per_sprint）/ `final` / `final-regression`
-- `$2` = 需求编号
-- `--sprint=N`（cases/run/regression 必需；final/final-regression 禁止缩小到单 sprint）
-- `--revise`（仅 cases；SA 打回后按最新 `sa-test-review.md` 修订既有 Sprint 章节）
+Parameters:
+- `$1` = phase: `cases` / `run` / `regression` (legacy per_sprint) / `final` / `final-regression`
+- `$2` = requirement ID
+- `--sprint=N` (required for cases/run/regression; final/final-regression must not be narrowed to a single sprint)
+- `--revise` (cases only; after SA rejects, revise the existing Sprint section per the latest `sa-test-review.md`)
 
-## 执行步骤
+## Execution Steps
 
-### 1. 解析参数 + 定位文件
-
+### 1. Parse parameters + locate files
 ```bash
 PHASE=$1
 REQ_NUM=$2
 SPRINT=$(echo "$@" | grep -oE 'sprint=[0-9]+' | cut -d= -f2)
 [ -n "$CC_NEXS_REQ_DIR" ] && REQ_DIR="$CC_NEXS_REQ_DIR" || REQ_DIR=$(ls -d all-docs/doc/${REQ_NUM}*/ | head -1)
 ```
+### 2. Dispatch by phase
 
-### 2. 按 phase 分派
-
-调起独立 `qa-claude` agent，按 `agents/qa-claude.md` 的模式执行。Codex 映射为原生隔离 agent；Pi 映射为 `cc-nexs.qa`，浏览器 fallback 使用 `cc-nexs.qa-computer-use`。
+Invoke an independent `qa-claude` agent and run it according to the pattern in `agents/qa-claude.md`. Codex maps to a native isolated agent; Pi maps to `cc-nexs.qa`, and the browser fallback uses `cc-nexs.qa-computer-use`.
 
 #### phase=cases
-
 ```
 QA 起草 Sprint M${SPRINT} 测试用例。
 读 ${REQ_DIR}spec.md（AC 表 M${SPRINT} 子集）+ ${REQ_DIR}api-doc.md。
@@ -90,9 +87,7 @@ QA 仅在修复 candidate 重新发布到 test 后执行需求级回归。
 append 到 test-report.md 的 ## Final Regression Release R<N> 章节并记录环境证据。
 末尾必须 结论: 通过 或 阻塞。
 ```
-
-### 3. 解析结果
-
+### 3. Parsing Results
 ```bash
 # 抓 test-report.md 末尾结论
 RESULT=$(tail -20 ${REQ_DIR}test-report.md | grep -E '^结论:' | tail -1 | awk '{print $2}')
@@ -104,13 +99,11 @@ VERIFIED=$(grep -l '状态.*VERIFIED' ${REQ_DIR}bugs/BUG-*.md 2>/dev/null | wc -
 
 echo "RESULT:${RESULT} OPEN=${OPEN} FIXED=${FIXED} VERIFIED=${VERIFIED}"
 ```
+### 4. No Status Advancement
 
-### 4. 不推进状态
+`/cc-nexs:run` advances only after reading the conclusion and BUG count, and binds the final/final-regression results to the current release attempt. QA does not write progress directly.
 
-由 `/cc-nexs:run` 读结论 + BUG 计数后推进，并把 final/final-regression 结果绑定到当前 release attempt。QA 不直接写 progress。
-
-## 输出
-
+## Output
 ```
 ✅ QA 完成: phase=<phase> sprint=M<N>
    结论: <通过|阻塞>

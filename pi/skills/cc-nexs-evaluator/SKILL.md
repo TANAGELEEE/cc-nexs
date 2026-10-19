@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-evaluator
-description: /cc-nexs:evaluator 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:evaluator 或 /skill:cc-nexs-evaluator 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard lean（默认）、fast 与 full 模式，并通过 pi-subagents 运行隔离角色。 Evaluator 契约验收入口。新流程默认 final，仅在完整需求发布并通过最终 QA 后全量验收；sprint 仅供 legacy per_sprint。
+description: /cc-nexs:evaluator Pi P2 adapter skill. Invoke only through /cc-nexs:evaluator or /skill:cc-nexs-evaluator; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default), fast, and full modes with isolated roles through pi-subagents. Evaluator contract acceptance entry point. The new flow defaults to final, with full acceptance only after the complete requirement is published and passes final QA; sprint is only for legacy per_sprint.
 disable-model-invocation: true
 ---
 

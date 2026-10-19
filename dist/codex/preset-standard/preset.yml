@@ -1,7 +1,7 @@
 name: preset-standard
-version: 0.5.9
-description: 通用多角色开发 SOP。新需求默认 lean，保留显式 fast/full；不绑定语言、框架、仓库名或组织规范。
-language: zh-CN
+version: 0.6.0
+description: General multi-role development SOP. New requirements default to lean, with explicit fast/full modes; no language, framework, repository, or organization conventions are bound.
+language: en-US
 
 # 默认 enabled 列表（向后兼容）。orchestrator 会按 all-docs/doc/<id>/config.json 的 mode 字段
 # 选用 modes.<mode>.enabled 覆盖；未声明 mode 时回退到 modes.fast.enabled。
@@ -238,7 +238,7 @@ models:
 # orchestrator 启动时读需求目录的 config.json.mode 选择对应分支；lean 为新需求默认。
 modes:
   lean:
-    description: 计划前置、两个人工门禁；合格小需求默认先快速交付 test 再集中 Review，环境型本地检查可结构化转 test 必验。
+    description: Plan-first with two human gates; qualifying small requirements default to fast test delivery followed by one consolidated Review, while environment-only local checks can be structured as mandatory test verification.
     enabled:
       - lean-planner
       - lean-developer
@@ -253,7 +253,7 @@ modes:
       evaluator_reject: 1
 
   hotfix:
-    description: 独立 latest-base hotfix worktree 与 BUG 文档，不占需求号；本地验证、全级别独立 Review、test 黑盒验收和人工 base 门禁。
+    description: Standalone latest-base Hotfix worktree and BUG document without consuming a requirement number; local verification, independent Review at every severity, black-box test acceptance, and a human base gate.
     enabled:
       - hotfix-developer
       - hotfix-reviewer
@@ -267,7 +267,7 @@ modes:
       evaluator_reject: 1
 
   full:
-    description: 完整五方异构 + 现状勘察前置。多端按批准 repository wave 并行 Tech Lead 实现，同时保持 Planner / SA / QA / Evaluator 隔离。
+    description: Full five-party heterogeneous workflow with repository reconnaissance first. Multi-end Tech Lead implementation runs in approved repository waves while Planner / SA / QA / Evaluator remain isolated.
     enabled:
       - repo-scout
       - planner
@@ -280,7 +280,7 @@ modes:
     g2_enabled: true            # final_only 默认自动 test release；G2 仅作显式退出/前置不足 fallback
 
   fast:
-    description: 单 sprint 三角色合并；多端按批准 repository wave 并行 Fullstack code worker，join 后单一文档 owner。Reviewer 与 Verifier 保持隔离。
+    description: Single-sprint three-role workflow; multi-end Fullstack code workers run in approved repository waves, followed by one document owner after join. Reviewer and Verifier remain isolated.
     enabled:
       - fullstack
       - reviewer
@@ -358,7 +358,7 @@ i18n:
   locale_dir: "i18n/"
   conclusion_pass: "PASS"
   conclusion_fail: "NEEDS_REVISION"
-  acceptance_pass: "通过"
-  acceptance_fail: "未通过"
-  test_pass: "通过"
-  test_fail: "阻塞"
+  acceptance_pass: "PASSED"
+  acceptance_fail: "FAILED"
+  test_pass: "PASS"
+  test_fail: "BLOCKED"

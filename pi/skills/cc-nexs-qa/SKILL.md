@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-qa
-description: /cc-nexs:qa 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:qa 或 /skill:cc-nexs-qa 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard lean（默认）、fast 与 full 模式，并通过 pi-subagents 运行隔离角色。 QA 黑盒测试入口。Sprint 阶段写/评用例；完整需求发布到 test 后执行 final 或 final-regression。禁读 src/。
+description: /cc-nexs:qa Pi P2 adapter skill. Invoke only through /cc-nexs:qa or /skill:cc-nexs-qa; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default), fast, and full modes with isolated roles through pi-subagents. QA black-box testing entry point. During the Sprint phase, write/review test cases; once the complete requirement is released to test, run final or final-regression. Reading src/ is prohibited.
 disable-model-invocation: true
 ---
 

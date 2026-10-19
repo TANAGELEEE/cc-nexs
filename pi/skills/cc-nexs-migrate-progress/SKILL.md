@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-migrate-progress
-description: /cc-nexs:migrate-progress 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:migrate-progress 或 /skill:cc-nexs-migrate-progress 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard lean（默认）、fast 与 full 模式，并通过 pi-subagents 运行隔离角色。 Migrate a legacy human-readable progress.md into authoritative progress.json v2 while preserving progress.md as a rendered view.
+description: /cc-nexs:migrate-progress Pi P2 adapter skill. Invoke only through /cc-nexs:migrate-progress or /skill:cc-nexs-migrate-progress; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default), fast, and full modes with isolated roles through pi-subagents. Migrate a legacy human-readable progress.md into authoritative progress.json v2 while preserving progress.md as a rendered view.
 disable-model-invocation: true
 ---
 

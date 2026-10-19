@@ -1,45 +1,45 @@
-# GPT-6 Astra 指令审计
+# GPT-6 Astra Instruction Audit
 
-核对日期：2026-09-07。范围为当前仓库的指令源、生成适配层与交付工作流；不修改用户全局配置、已安装插件缓存或既有 feature 配置。
+Review date: 2026-09-07. Scope covers the current repository's instruction sources, generated adaptation layers, and delivery workflows; the audit does not modify the user's global configuration, installed plugin caches, or existing feature configuration.
 
-## 官方依据
+## Official References
 
-- [GPT-6 Astra 模型指导](https://developers.openai.com/api/docs/guides/latest-model?model=gpt-6-astra)：模型对技能和指令文件更敏感；应明确持续执行、必要澄清、有效委派及适度验证的边界。本次据此清理额外停顿和相互冲突的规则。
-- [AGENTS.md 指导](https://learn.chatgpt.com/docs/agent-configuration/agents-md)：项目指令按目录分层加载。本次新增简短的根级维护契约，区分仓库维护与被打包的 SOP 角色指令。
-- [技能指导](https://learn.chatgpt.com/docs/build-skills)：名称与描述先进入发现上下文，正文按需加载。本次缩短镜像描述，保留已有显式调用策略，继续以 commands 为流程来源。
+- [GPT-6 Astra model guidance](https://developers.openai.com/api/docs/guides/latest-model?model=gpt-6-astra): The model is more sensitive to skills and instruction files; the boundaries of sustained execution, necessary clarification, effective delegation, and appropriate verification should be explicit. This audit used this guidance to remove extra pauses and conflicting rules.
+- [AGENTS.md guidance](https://learn.chatgpt.com/docs/agent-configuration/agents-md): Project instructions load hierarchically by directory. This audit added a concise root-level maintenance contract that distinguishes repository maintenance from packaged SOP role instructions.
+- [Skill guidance](https://learn.chatgpt.com/docs/build-skills): Names and descriptions enter the discovery context first, while the body loads on demand. This audit shortened the mirror descriptions, retained the existing explicit-invocation policy, and continues to use commands as the source of workflows.
 
-## 审计范围与处理
+## Audit Scope and Handling
 
-清点 10 个源 SKILL.md、37 个源 command、20 个源 agent，以及 core rules、标准 workflow、模板、模型路由配置、生成器和 GitHub CI。跨目录检索审批、暂停、角色隔离、输出限额、历史改写与模型路由要求；重点逐项核对冲突来源及其调用位置。dist 和 Pi 镜像由构建同步，不作为独立指令源编辑。
+We inventoried 10 source SKILL.md files, 37 source commands, 20 source agents, plus core rules, standard workflows, templates, model routing configuration, generators, and GitHub CI. We searched across directories for approval, pause, role isolation, output limits, history rewriting, and model routing requirements, focusing on checking each source of conflict and its invocation sites one by one. The dist and Pi mirrors are synchronized by the build and are not edited as independent instruction sources.
 
-| 问题 | 处理 | 保留的契约 |
+| Issue | Action | Retained Contract |
 |---|---|---|
-| 根目录缺少 AGENTS.md，维护时容易把产品角色当作当前身份 | 新增源码地图、任务边界和验证入口 | 用户显式调用的 SOP 仍按原流程执行 |
-| 脑暴技能要求所有任务必经、逐节确认，与命令的可选语义冲突 | 改为关键缺口澄清；完整草稿一次交付；有授权则继续对应模式的规划 | 只写 requirements；不改批准范围或权威状态 |
-| 脑暴命令读取 progress.md 并允许 shell 确认越过状态限制 | 读取 progress.json；明确 Gate B scope controller 的适用状态 | 不把非 Gate B 状态误送入该 controller |
-| commit 数量上限和 Sprint squash 会改变 candidate 历史 | 删除硬配额、rebase 示例及重复审批提示，同步 spec 模板 | Git Custodian、不可变 candidate、重新验证 |
-| 身份技能重复旧五方矩阵，引用不存在的 .sh hook，并建议 git restore | 指向当前角色契约与 .mjs hook；按具体变更归属修复 | 独立 Review、黑盒角色读写边界、保护他人改动 |
-| 统一 2000 字符和五项上限可能截断 finding；角色重复抄写风格规则 | 输出规则集中维护，长度服从证据完整度 | 机器结论行、AC、candidate、attempt 绑定 |
-| 文档聚合把 Fast/Full 文件清单推广到所有模式 | 明确 Lean 写 plan、Hotfix 写 hotfix，删除通用 tail/grep 状态推断 | 历史轮次与当前 candidate 证据 |
-| 完成后无条件输出经验沉淀提示 | 只在有具体可复用教训或用户要求时提示 | 完成定义和最终交付摘要 |
-| 模型说明容易将高风险升档理解为再次启动 Planner | 区分首次显式风险升档与计划发现风险后的 Reviewer 升档 | 单 Planner、现有 resolver、feature override 优先 |
+| AGENTS.md was missing from the repository root, making it easy to mistake a product role for the current identity during maintenance | Added a source map, task boundaries, and validation entry points | SOPs explicitly invoked by the user still follow their original workflows |
+| The brainstorming skill required every task to pass through it with section-by-section confirmation, conflicting with the command's optional semantics | Changed to clarification of critical gaps; complete drafts delivered in one pass; planning for the corresponding mode continues when authorized | Writes requirements only; does not change the approval scope or authoritative state |
+| The brainstorming command read progress.md and allowed shell confirmation to bypass state restrictions | Reads progress.json; specifies the applicable states for the Gate B scope controller | Does not mistakenly route non-Gate B states into that controller |
+| Commit count caps and Sprint squash can alter candidate history | Removed hard quotas, the rebase example, and duplicate approval prompts; synchronized the spec template | Git Custodian, immutable candidate, re-verification |
+| The identity skill repeated the old five-party matrix, referenced a nonexistent .sh hook, and recommended git restore | Points to the current role contract and .mjs hook; repairs based on the ownership of the specific change | Independent Review, black-box role read/write boundaries, protection of others' changes |
+| A uniform 2000-character limit and five-item cap could truncate findings; roles duplicated style rules | Output rules maintained centrally; length is subordinate to evidence completeness | Machine conclusion line, AC, candidate, and attempt binding |
+| Documentation aggregation generalized the Fast/Full file lists to all modes | Specified that Lean writes a plan and Hotfix writes a hotfix; removed generic tail/grep state inference | Historical rounds and current candidate evidence |
+| Unconditional lessons-learned prompt after completion | Prompt only when there are specific reusable lessons or the user requests it | Definition of done and final delivery summary |
+| Model documentation can easily make a high-risk escalation look like restarting the Planner | Distinguishes the initial explicit risk escalation from a Reviewer escalation after the plan identifies risk | Single Planner, existing resolver, feature override takes precedence |
 
-## 保留与适配
+## Retention and Adaptation
 
-保持 public preset 的 inherit 模型和风险分档。Astra 可由当前宿主选择，或在支持该模型的私有 profile 中设置；medium / high / xhigh 是现有起点，应按真实任务评估，不统一改成最高推理档位。具体配置入口见 [Codex 插件说明](codex-plugin.md)。
+Retain the public preset's inherit model and risk tiers. Astra can be selected by the current host or configured in a private profile that supports the model; medium / high / xhigh are existing starting points and should be evaluated against the real task rather than uniformly changed to the highest reasoning tier. See [Codex plugin documentation](codex-plugin.md) for the specific configuration entry point.
 
-保持四种模式状态机、Gateway A/B、旧 G1/G2、同仓写入串行和跨仓 wave barrier。它们承担可验证的交付约束，不能作为冗余文本删除。简短 branch/worktree/merge 兼容技能保留。历史 CHANGELOG 和任务记录保留原貌。
+Retain the four-mode state machine, Gateway A/B, legacy G1/G2, serialized writes within the same repository, and the cross-repository wave barrier. They carry verifiable delivery constraints and must not be deleted as redundant text. Keep the short branch/worktree/merge compatibility skills. Historical CHANGELOG and task records retain their original form.
 
-GitHub CI 保留 Node 20/22 和 Windows 覆盖。此次改变的是提示、模板与适配描述，没有证据支持删除平台兼容性检查。构建、可复现校验和安装 smoke 会重建共享生成目录，执行时应串行，避免校验读到中间状态。
+GitHub CI retains Node 20/22 and Windows coverage. This change affects prompts, templates, and adaptation descriptions; there is no evidence to support removing platform compatibility checks. Builds, reproducibility verification, and installation smoke tests rebuild shared generated directories, so they should run serially to avoid validation reading an intermediate state.
 
-## 验证与效果边界
+## Validation and Effect Boundaries
 
-- 233 项核心测试通过，覆盖状态机、审批绑定、模型路由、candidate、release 与 worktree 边界。
-- 13 项安全及版本一致性测试通过。
-- 三端插件验证、SOP parity、runtime portability 与隔离安装 smoke 通过。
-- 可复现构建通过，包含 LF/CRLF 源码一致性。
-- 静态场景复核：简单文案不进入脑暴；完整需求无额外问答；只请求脑暴交付草稿后结束；批准范围变化不直接实现；代码变化不复用旧 PASS；长评审保留完整 finding。
+- 233 core tests passed, covering the state machine, approval binding, model routing, candidate, release, and worktree boundaries.
+- 13 security and version consistency tests passed.
+- Three-platform plugin validation, SOP parity, runtime portability, and isolated installation smoke tests passed.
+- The reproducible build passed, including LF/CRLF source consistency.
+- Static scenario review: simple copywriting does not enter the brainstorming flow; complete requirements need no extra Q&A; a request for only a brainstorming draft ends after delivery; approval scope changes are not implemented directly; code changes do not reuse an old PASS; long reviews retain complete findings.
 
-五个重点文件（脑暴 command/skill、commit skill、role-isolation skill、output rule）由 14,727 个 Unicode 字符降至 3,430 个，减少 76.7%。这只是文本长度变化，不等于 token、延迟或成功率提升。此次未运行真实 Astra A/B 行为评测，也未执行生产交付。
+The five key files (brainstorming command/skill, commit skill, role-isolation skill, and output rule) fell from 14,727 Unicode characters to 3,430, a reduction of 76.7%. This is only a text-length change and does not equate to improvements in token usage, latency, or success rate. This audit did not run a real Astra A/B behavioral evaluation or perform production delivery.
 
-后续评测应固定模型、effort、任务输入和验收标准，比较修改前后的无必要确认次数、工具调用、用时、token、AC 通过率与门禁违规情况；不要只以字数下降判断质量。
+Future evaluations should hold the model, effort, task inputs, and acceptance criteria constant, then compare the number of unnecessary confirmations, tool calls, elapsed time, tokens, AC pass rate, and gate violations before and after the change; do not judge quality solely by the reduction in character count.

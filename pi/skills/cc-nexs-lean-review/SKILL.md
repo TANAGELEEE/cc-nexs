@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-lean-review
-description: /cc-nexs:lean-review 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:lean-review 或 /skill:cc-nexs-lean-review 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard lean（默认）、fast 与 full 模式，并通过 pi-subagents 运行隔离角色。 Lean 一次集中 Review 与最多一次 delta 闭环检查。
+description: /cc-nexs:lean-review Pi P2 adapter skill. Invoke only through /cc-nexs:lean-review or /skill:cc-nexs-lean-review; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default), fast, and full modes with isolated roles through pi-subagents. Lean: one consolidated Review and at most one delta closure check.
 disable-model-invocation: true
 ---
 

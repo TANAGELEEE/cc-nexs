@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-verify
-description: /cc-nexs:verify 的 Codex 镜像 skill。 显式调用 $cc-nexs-verify 时使用。 fast 模式 Verifier 入口。initial 在首次 test 发布后执行，regression 在修复重新发布后执行；两者都是黑盒环境验证。
+description: /cc-nexs:verify Codex mirror skill. Use when $cc-nexs-verify is explicitly invoked. fast mode Verifier entry point. initial runs after the first test release, regression runs after a fix is re-released; both are black-box environment verifications.
 ---
 
 # /cc-nexs:verify for Codex

@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-execute
-description: /cc-nexs:execute 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:execute 或 /skill:cc-nexs-execute 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard lean（默认）、fast 与 full 模式，并通过 pi-subagents 运行隔离角色。 Lean 实现入口。按 plan 任务和路径所有权并行实现，不负责 Git mutation。
+description: /cc-nexs:execute Pi P2 adapter skill. Invoke only through /cc-nexs:execute or /skill:cc-nexs-execute; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default), fast, and full modes with isolated roles through pi-subagents. Lean implementation entry point. Implements in parallel by plan task and path ownership; not responsible for Git mutation.
 disable-model-invocation: true
 ---
 

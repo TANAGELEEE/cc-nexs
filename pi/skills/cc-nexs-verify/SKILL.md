@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-verify
-description: /cc-nexs:verify 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:verify 或 /skill:cc-nexs-verify 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard lean（默认）、fast 与 full 模式，并通过 pi-subagents 运行隔离角色。 fast 模式 Verifier 入口。initial 在首次 test 发布后执行，regression 在修复重新发布后执行；两者都是黑盒环境验证。
+description: /cc-nexs:verify Pi P2 adapter skill. Invoke only through /cc-nexs:verify or /skill:cc-nexs-verify; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default), fast, and full modes with isolated roles through pi-subagents. fast mode Verifier entry point. initial runs after the first test release, regression runs after a fix is re-released; both are black-box environment verifications.
 disable-model-invocation: true
 ---
 

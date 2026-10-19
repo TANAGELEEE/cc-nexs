@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-evaluator
-description: /cc-nexs:evaluator 的 Codex 镜像 skill。 显式调用 $cc-nexs-evaluator 时使用。 Evaluator 契约验收入口。新流程默认 final，仅在完整需求发布并通过最终 QA 后全量验收；sprint 仅供 legacy per_sprint。
+description: /cc-nexs:evaluator Codex mirror skill. Use when $cc-nexs-evaluator is explicitly invoked. Evaluator contract acceptance entry point. The new flow defaults to final, with full acceptance only after the complete requirement is published and passes final QA; sprint is only for legacy per_sprint.
 ---
 
 # /cc-nexs:evaluator for Codex

@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-hotfix
-description: /cc-nexs:hotfix 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:hotfix 或 /skill:cc-nexs-hotfix 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard 独立 Hotfix 分支与 BUG 文档，不占需求号，并通过 pi-subagents 运行隔离角色。 Hotfix：独立修复分支与 BUG 文档、本地验证、独立 Review、test 验收和 Gateway B。
+description: /cc-nexs:hotfix Pi P2 adapter skill. Invoke only through /cc-nexs:hotfix or /skill:cc-nexs-hotfix; never auto-trigger from ordinary natural-language requests. Supports the preset-standard standalone Hotfix branch and BUG document without consuming a requirement number, with isolated roles through pi-subagents. Hotfix — independent fix branch and BUG document, local verification, independent Review, test acceptance, and Gateway B.
 disable-model-invocation: true
 ---
 

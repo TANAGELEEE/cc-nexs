@@ -35,9 +35,19 @@ const SECTION_KEYS_EN = {
   history: 'History',
   human_required: 'Human Required',
 };
+const SECTION_KEYS_ZH_TW = {
+  state: '當前狀態',
+  counters: '計數器',
+  sprint: 'Sprint 進度',
+  gate: '人工 gate',
+  history: '歷史軌跡',
+  human_required: '待人工接入',
+};
 
 function detectKeys(text) {
-  return text.includes('## 当前状态') ? SECTION_KEYS_ZH : SECTION_KEYS_EN;
+  if (text.includes('## 当前状态')) return SECTION_KEYS_ZH;
+  if (text.includes('## 當前狀態')) return SECTION_KEYS_ZH_TW;
+  return SECTION_KEYS_EN;
 }
 
 function extractYamlBlock(text, heading) {

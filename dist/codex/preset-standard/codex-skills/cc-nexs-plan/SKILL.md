@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-plan
-description: /cc-nexs:plan 的 Codex 镜像 skill。 显式调用 $cc-nexs-plan 时使用。 Lean 默认模式计划入口。并行只读调研，生成唯一 requirements.md 与 plan.md，并停在 Gateway A。
+description: /cc-nexs:plan Codex mirror skill. Use when $cc-nexs-plan is explicitly invoked. Lean default-mode planning entry point. Parallel read-only research, producing a single requirements.md and plan.md, and stopping at Gateway A.
 ---
 
 # /cc-nexs:plan for Codex

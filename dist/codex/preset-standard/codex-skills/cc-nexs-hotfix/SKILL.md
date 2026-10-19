@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-hotfix
-description: /cc-nexs:hotfix 的 Codex 镜像 skill。 显式调用 $cc-nexs-hotfix 时使用。 Hotfix：独立修复分支与 BUG 文档、本地验证、独立 Review、test 验收和 Gateway B。
+description: /cc-nexs:hotfix Codex mirror skill. Use when $cc-nexs-hotfix is explicitly invoked. Hotfix — independent fix branch and BUG document, local verification, independent Review, test acceptance, and Gateway B.
 ---
 
 # /cc-nexs:hotfix for Codex

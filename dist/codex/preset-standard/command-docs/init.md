@@ -1,33 +1,32 @@
 ---
-description: "用模板初始化新需求目录。自动按 all-docs/doc/ 下已有编号续号，自动从需求描述生成 slug。默认在 .worktrees/<id>-<slug>/ 创建独立 git worktree，多需求可并行。"
+description: "Initialize a new requirement directory from a template. Automatically continues numbering from existing numbers under all-docs/doc/, and automatically generates a slug from the requirement description. By default, creates an independent git worktree in .worktrees/<id>-<slug>/, so multiple requirements can run in parallel."
 disable-model-invocation: true
 allowed-tools: "Read, Write, Edit, Bash, Glob, Skill"
-argument-hint: "<需求描述> [--mode=lean|hotfix|fast|full] [--risk-tier=auto|low|medium|high|critical] [--id=<编号>] [--slug=<短名>] [--repos=a,b] [--brainstorm]"
+argument-hint: "<requirement description> [--mode=lean|hotfix|fast|full] [--risk-tier=auto|low|medium|high|critical] [--id=<number>] [--slug=<short-name>] [--repos=a,b] [--brainstorm]"
 ---
 
 # /cc-nexs:init
 
-一句话需求描述，自动续号 + 自动生成 slug + **建 worktree** + 拷模板 + 写入 mode。
+A one-line requirement description: automatically continue numbering + automatically generate a slug + **create a worktree** + copy the template + write the mode.
 
-参数：
+Parameters:
 
-- `$1` = 需求描述（必填，中英文都行）
-- `--mode=lean|hotfix|fast|full` 流水线模式（新需求默认 `lean`）
-  - `lean`：计划门禁、并行实现、本地验证、一次集中 Review、test 验收、发布门禁
-  - `hotfix`：直接创建修复分支与 BUG 文档；不占需求号
-  - `full`：五方异构（Planner/Tech Lead/SA/QA/Evaluator）
-  - `fast`：三角色合并（Fullstack/Reviewer/Verifier），单 sprint，比 full 少 ~50% 调用
-- `--id=<编号>` 强制使用指定编号（覆盖自动续号）
-- `--risk-tier=auto|low|medium|high|critical` Feature 风险下限（默认 `auto`）。显式 high/critical 可让首次 Lean Planner 直接升级；自动值仍由计划或 Hotfix severity 判定。
-- `--slug=<短名>` 强制使用指定 slug（覆盖自动生成）
-- `--repos=a,b` 初始化时同时创建的代码仓库 worktree；docs repository 总是包含。未指定时先只建 docs，RECON/Planner 确认影响仓库后由 Custodian 扩展。
-- `--brainstorm` 仅适用于 Lean/Fast/Full，按需补全 requirements.md；Hotfix 直接填写 BUG 范围，不进入 requirements 脑暴
-- 工作区模式始终由 Git Custodian 为 workspace 中命中的每个仓库建立独立 worktree；不提供会污染当前分支的 `--no-worktree` 降级。
+- `$1` = requirement description (required; Chinese or English both work)
+- `--mode=lean|hotfix|fast|full` pipeline mode (new requirements default to `lean`)
+  - `lean`: planning gate, parallel implementation, local verification, one consolidated Review, test acceptance, release gate
+  - `hotfix`: directly create the fix branch and BUG document; does not consume a requirement number
+  - `full`: five-party heterogeneous setup (Planner/Tech Lead/SA/QA/Evaluator)
+  - `fast`: three roles consolidated (Fullstack/Reviewer/Verifier), single sprint, ~50% fewer calls than full
+- `--id=<number>` force the specified number (overrides automatic numbering)
+- `--risk-tier=auto|low|medium|high|critical` Feature risk floor (default `auto`). Explicitly setting high/critical lets the first Lean Planner escalate directly; automatic values are still determined by the plan or the Hotfix severity.
+- `--slug=<short-name>` force the specified slug (overrides automatic generation)
+- `--repos=a,b` code repository worktrees to also create at initialization; the docs repository is always included. When not specified, only docs is created first; after RECON/Planner confirms the affected repositories, the Custodian expands it.
+- `--brainstorm` applies only to Lean/Fast/Full, and fills in requirements.md as needed; Hotfix directly fills in the BUG scope and does not enter requirements brainstorming
+- Workspace mode always has the Git Custodian create an independent worktree for each repository matched in the workspace; there is no `--no-worktree` fallback that would pollute the current branch.
 
-## 执行步骤
+## Execution Steps
 
-### 1. 校验参数
-
+### 1. Validate parameters
 ```bash
 DESC="$1"
 if [ -z "$DESC" ]; then
@@ -72,23 +71,19 @@ echo "🛠️  模式: ${MODE}"
 [ "$BRAINSTORM" = "1" ] && [ "$MODE" != "hotfix" ] && echo "🧠 init 完成后将自动进入 brainstorming"
 echo "🌲 Git Custodian 将按 workspace 配置建立多仓 worktree"
 ```
+### 1.5 Hotfix Early Routing
 
-### 1.5 Hotfix 提前分流
-
-若最终 `MODE=hotfix`，根据描述生成或复用 `--slug`，直接执行：
-
+If the final `MODE=hotfix`, generate or reuse `--slug` based on the description, then execute directly:
 ```text
 node <plugin-root>/lib/cc-nexs-cli.mjs init-hotfix <slug> --description "<原始描述>" [--repos a,b]
 ```
+When you need to link an existing requirement or a custom BUG path, pass `--related`, `--bug-key`, and `--bug-file` directly to `/cc-nexs:hotfix`. `--id` is a requirement-number parameter and cannot be used to reserve a number for a Hotfix. Initialization and scope binding are handled by `/cc-nexs:hotfix <key-or-description>`; the subsequent numbering, placeholder commit, requirement template, or `--brainstorm` steps do not run.
 
-需要关联旧需求或自定义 BUG 路径时，直接在 `/cc-nexs:hotfix` 传递 `--related`、`--bug-key`、`--bug-file`。`--id` 是需求编号参数，不能用于 Hotfix 占号。初始化和范围绑定由 `/cc-nexs:hotfix <key-or-description>` 完成；不运行后续编号、占位提交、需求模板或 `--brainstorm` 步骤。
+The following steps apply only to Lean/Fast/Full.
 
-以下步骤仅适用于 Lean/Fast/Full。
+### 2. Decide the number
 
-### 2. 决定编号
-
-加载 workspace 后调用 core 的 `publishDocsReservation(workspace, { featureId, featureSlug, description })`。用户没有传 `--id` 时由该函数基于最新远端 docs base 自动分配；返回的 id 才是权威编号。
-
+After loading the workspace, call core's `publishDocsReservation(workspace, { featureId, featureSlug, description })`. If the user did not pass `--id`, this function assigns one automatically based on the latest remote docs base; the returned id is the authoritative number.
 ```bash
 # 解析显式 --id 参数
 ID=$(echo "$@" | grep -oE -- '--id=[^ ]+' | cut -d= -f2)
@@ -99,91 +94,88 @@ ID=$RESERVATION.featureId
 
 echo "📦 编号: ${ID}"
 ```
+**Numbering rules**:
+- Fetch the remote base of the configured docs repository, scan its `doc/` directory, and take the highest number + 1
+- Do not fill gaps in non-consecutive numbering (if 01, 03, 05 exist → the next is 06, not 02)
+- Zero-pad to two digits by default
+- When the user passes `--id`, use the value the user gives (formats with a version or prefix such as `14.2` and `auth-001` are supported)
 
-**续号规则**：
-- fetch 配置的 docs repository 远端 base，扫描其 `doc/` 取最大数字 + 1
-- 不连续编号不补缺（已有 01、03、05 → 下一个是 06，不是 02）
-- 默认两位零填充
-- 用户带 `--id` 时按用户给的（支持 `14.2`、`auth-001` 这种带版本/前缀的格式）
+### 3. Determine the slug
 
-### 3. 决定 slug
-
-如果用户传了 `--slug=<X>`，直用。否则**根据需求描述生成 kebab-case slug**：
-
+If the user passed `--slug=<X>`, use it directly. Otherwise, **generate a kebab-case slug from the requirements description**:
 ```bash
 SLUG=$(echo "$@" | grep -oE -- '--slug=[^ ]+' | cut -d= -f2)
 ```
+If `$SLUG` is empty, **Claude itself** generates it according to the following rules (no brute-force shell conversion):
 
-如果 `$SLUG` 为空，按以下规则**由 Claude 自己**生成（不用 shell 暴力转换）：
+**slug generation rules (executed by Claude)**:
 
-**slug 生成规则（Claude 执行）**：
+- Extract 2-4 core English words from the description
+- All lowercase, kebab-case
+- Chinese must be translated into English first, then compressed
+- No project prefix (do not use `<project-prefix>-xxx`)
+- No type prefix (do not use `feat-xxx` / `fix-xxx`)
+- Keep numbers (e.g. `api-v2-migration`)
+- Length ≤ 30 characters
 
-- 提炼描述里的 2-4 个核心英文词
-- 全部小写、kebab-case
-- 中文需先翻译成英文再压缩
-- 不带项目前缀（不要 `<project-prefix>-xxx`）
-- 不带类型前缀（不要 `feat-xxx` / `fix-xxx`）
-- 数字保留（如 `api-v2-migration`）
-- 长度 ≤ 30 字符
+**Examples**:
 
-**例子**：
-
-| 需求描述 | 生成 slug |
+| Requirement description | Generated slug |
 |---------|----------|
-| 添加 /api/health 健康检查接口 | `api-health-check` |
-| 用户注册接入邮箱验证 | `user-register-email-verify` |
-| 修复支付回调超时问题 | `payment-callback-timeout` |
-| 后台管理新增订单导出功能 | `admin-order-export` |
+| Add /api/health health check endpoint | `api-health-check` |
+| Add email verification to user registration | `user-register-email-verify` |
+| Fix payment callback timeout issue | `payment-callback-timeout` |
+| Add order export feature to admin panel | `admin-order-export` |
 | Add JWT refresh endpoint | `jwt-refresh` |
-| 重构 OrderService 拆分查询/写入 | `order-service-cqrs-split` |
+| Refactor OrderService to split queries/writes | `order-service-cqrs-split` |
 
-生成后 echo 给用户确认：
-
+After generation, echo it to the user for confirmation:
 ```
 🏷️  生成 slug: api-health-check
    （不满意可加 --slug=<你的> 重跑）
 ```
+### 4. Publish remote seat reservations (Phase 1 all-docs)
 
-### 4. 发布远端占号（第一阶段 all-docs）
-
-在建立任何代码 worktree 前，Git Custodian 使用 detached 临时 worktree，仅创建：
-
+Before creating any code worktree, Git Custodian uses a detached temporary worktree to create only:
 ```text
 doc/<id>.<slug>/README.md
 doc/<id>.<slug>/.cc-nexs-reservation.json
 ```
+Then commit and write to the docs base with a normal fast-forward push. Force pushes are forbidden, and modifying existing directories is forbidden. When automatic numbering encounters a concurrent push conflict, it must fetch and then retry with a new number; an explicit numbering conflict fails immediately. If master is protected or there is no direct-push permission, init stops here and must not continue to create a local-only requirement.
 
-然后提交并以普通 fast-forward push 写入 docs base。禁止 force push、禁止修改已有目录。自动编号遇到并发 push 冲突时必须 fetch 后换号重试；显式编号冲突直接失败。如果 master 受保护或无直推权限，init 在这里停止，不能继续创建本地-only 的需求。
+### 4.5 Creating Multi-Repo Worktrees via the Git Custodian
 
-### 4.5 由 Git Custodian 建立多仓 worktree
-
-远端占号成功后，将 docs repository 与 `--repos` 合并去重，再调用 `createWorkspaceWorktrees(workspace, { featureId: ID, featureSlug: SLUG, repositoryIds })`。每个选中仓库先 fetch 最新 `origin/<base_branch>`，然后从该精确提交获得：
+After the remote number reservation succeeds, merge the docs repository with `--repos` and deduplicate, then call `createWorkspaceWorktrees(workspace, { featureId: ID, featureSlug: SLUG, repositoryIds })`. For each selected repository, first fetch the latest `origin/<base_branch>`, then create from that exact commit:
 
 `<workspace>/.worktrees/<id>-<slug>/<repository-id>/`
 
-docs worktree 此时已经包含第一阶段占号目录。分支统一为 `feature/<id>-<slug>`，base branch 严格取各仓库自己的 workspace 配置，且使用 `--no-track`，不得把 upstream 设成 base。主 checkout 当前即使停在 `test` 也不影响基线。创建任一仓失败时，Custodian 回滚本次已创建的 worktree 和分支，但保留已发布的远端占号，方便用同一 `--id` 重试。
+At this point the docs worktree already contains the number-reservation directory from the first phase. Branches are uniformly named `feature/<id>-<slug>`, the base branch is taken strictly from each repository's own workspace configuration, and `--no-track` is used; upstream must not be set to the base. Even if the main checkout currently sits on `test`, the baseline is unaffected. If creating any repository fails, the Custodian rolls back the worktrees and branches created in this run, but retains the published remote number reservation so the same `--id` can be used to retry.
 
-把返回映射写入 progress.json 的 `repositories`，并将 `docs_repository` 对应 worktree 记为 `DOC_WORKTREE`。
+Write the returned mapping into `repositories` in progress.json, and record the worktree corresponding to `docs_repository` as `DOC_WORKTREE`.
 
-### 5. 拷贝模板（在 WORK_DIR）
-
+### 5. Copy Templates (in WORK_DIR)
 ```bash
 CC_NEXS_RESOLVED_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CODEX_PLUGIN_ROOT:-${CC_NEXS_PLUGIN_ROOT:-}}}}"
 [ -n "$CC_NEXS_RESOLVED_PLUGIN_ROOT" ] || { echo "❌ 找不到 plugin root（需 CLAUDE_PLUGIN_ROOT / PLUGIN_ROOT / CODEX_PLUGIN_ROOT / CC_NEXS_PLUGIN_ROOT）"; exit 1; }
 REQ_DIR="${DOC_WORKTREE}/doc/${ID}.${SLUG}"
-# Lean 只复制最小文档和机器状态；Fast/Full 保持旧模板集合。
+# Optional locale-specific template overlays fall back to the preset's default templates. The default path remains `${PLUGIN_ROOT}/templates/${MODE}/`.
+TEMPLATE_ROOT="${CC_NEXS_RESOLVED_PLUGIN_ROOT}/templates"
+CC_NEXS_LOCALE="${CC_NEXS_LOCALE:-en-US}"
+LOCALE_TEMPLATE_ROOT=""
+if [ -n "${CC_NEXS_LOCALE:-}" ] && [ -d "${TEMPLATE_ROOT}/${CC_NEXS_LOCALE}" ]; then LOCALE_TEMPLATE_ROOT="${TEMPLATE_ROOT}/${CC_NEXS_LOCALE}"; fi
+# Lean copies the smallest document set; Fast/Full keep the existing complete template set.
 if [ "$MODE" = "lean" ]; then
-  cp -r "${CC_NEXS_RESOLVED_PLUGIN_ROOT}/templates/${MODE}/"* "${REQ_DIR}/"
+  cp -r "${TEMPLATE_ROOT}/${MODE}/"* "${REQ_DIR}/"
+  [ -d "${LOCALE_TEMPLATE_ROOT}/${MODE}" ] && cp -r "${LOCALE_TEMPLATE_ROOT}/${MODE}/"* "${REQ_DIR}/"
   rm -f "${REQ_DIR}/README.md"
 else
-  find "${CC_NEXS_RESOLVED_PLUGIN_ROOT}/templates" -mindepth 1 -maxdepth 1 ! -name lean ! -name hotfix -exec cp -R {} "${REQ_DIR}/" \;
+  find "${TEMPLATE_ROOT}" -mindepth 1 -maxdepth 1 ! -name lean ! -name hotfix ! -name en-US ! -name zh-TW -exec cp -R {} "${REQ_DIR}/" \;
+  if [ -d "$LOCALE_TEMPLATE_ROOT" ]; then find "$LOCALE_TEMPLATE_ROOT" -mindepth 1 -maxdepth 1 ! -name lean ! -name hotfix ! -name en-US ! -name zh-TW -exec cp -R {} "${REQ_DIR}/" \; fi
 fi
 ```
-
-Lean 包含 requirements.md / plan.md 和 progress.json / progress.md / config.json。Fast/Full 保持原模板集合。Hotfix 已在步骤 1.5 使用独立 BUG 文档和本地机器状态。
+Lean 包含 requirements.md、plan.md 以及 progress.json、progress.md、config.json。Fast 和 Full 保留原有模板集合。Hotfix 已在步骤 1.5 中使用独立的 BUG 文档和本地机器状态。
 
 ### 6. 占位符替换
-
 ```bash
 # macOS/BSD vs Linux/GNU sed 兼容
 if sed --version >/dev/null 2>&1; then
@@ -196,11 +188,9 @@ find "$REQ_DIR" -type f \( -name "*.md" -o -name "*.json" \) | while read f; do
   sed "${SED_INPLACE[@]}" -e "s/{编号}/${ID}/g" -e "s/{需求短名}/${SLUG}/g" "$f"
 done
 ```
+### 6.5 Writing mode to config.json
 
-### 6.5 写入 mode 到 config.json
-
-新模板必须保留 `config_version: 2` 与 `risk_tier`；Lean 模板默认 mode 是 `lean`，仍按最终 `MODE` 明确覆写：
-
+The new template must retain `config_version: 2` and `risk_tier`; the Lean template's default mode is `lean`, but the final `MODE` still overrides it explicitly:
 ```bash
 CFG="${REQ_DIR}/config.json"
 # 注意：BSD/macOS sed 不识别 \s，用 [[:space:]] 兼容
@@ -214,36 +204,32 @@ if [ "$MODE" = "full" ]; then
   sed "${SED_INPLACE[@]}" -E 's/("enabled"[[:space:]]*:[[:space:]]*)false/\1true/' "$PROGRESS_JSON"
 fi
 ```
+> Validation: `grep -E '"mode"[[:space:]]*:[[:space:]]*"'"$MODE"'"' "$CFG"` should match; otherwise it errors out and falls back.
 
-> 校验：`grep -E '"mode"[[:space:]]*:[[:space:]]*"'"$MODE"'"' "$CFG"` 应能匹配，否则报错回退。
+### 7. Inject the Initial Description
 
-### 7. 注入初始描述
-
-让用户启动时已有 PM 给的"一句话诉求"作为基线，省得 PM 还要再敲一遍。
-
+So that the user already has the PM's "one-sentence request" as a baseline at startup, sparing the PM from having to type it out again.
 ```bash
 REQ_FILE="${REQ_DIR}/requirements.md"
 # 在第一行 # 标题后插入用户原始描述作为"业务诉求"摘要
 # 具体插入位置由 Claude 按 requirements.md 模板结构判断
 ```
+Inject the raw description into requirements.md. The initial symptoms of the Hotfix are written to the BUG document by `init-hotfix`.
 
-将原始描述注入 requirements.md。Hotfix 的初始现象由 `init-hotfix` 写入 BUG 文档。
+### 8. Record the repository assignment
 
-### 8. 记录仓库分配
+Roles must not switch branches on their own. Write the repository id, branch, and worktree returned by the Custodian into progress.json, and append a `workspace.worktrees_created` event.
 
-禁止角色自行切分支。将 Custodian 返回的 repository id、branch 和 worktree 写入 progress.json，并追加 `workspace.worktrees_created` 事件。
+### 9. Update the initial state in progress.md
 
-### 9. 更新 progress.md 初始状态
-
-把 progress.md 里：
+In progress.md:
 - `current_state: INIT`
 - `updated_at: <now ISO8601>`
-- 历史轨迹 append 一行：`- <ts> (init) → INIT  /cc-nexs:init "<DESC>"`
+- Append one line to the history trace: `- <ts> (init) → INIT  /cc-nexs:init "<DESC>"`
 
-### 10. 输出确认 + 决定收尾
+### 10. Output confirmation + decide on wrap-up
 
-先输出固定头部：
-
+First output the fixed header:
 ```
 ✅ 需求目录已初始化
    编号:    ${ID}
@@ -254,11 +240,9 @@ REQ_FILE="${REQ_DIR}/requirements.md"
    分支:    ${BRANCH}
    工作树:  ${WORK_DIR}           ← 走 worktree 时是 .worktrees/<id>-<slug>/
 ```
+Then, depending on the `BRAINSTORM` flag, there are two different endings:
 
-然后按 `BRAINSTORM` flag 走两条不同收尾：
-
-**a) `BRAINSTORM=0`（默认）**——只输出提示，不自动激活，命令到此结束：
-
+**a) `BRAINSTORM=0` (default)** — only output the prompt, do not activate automatically, and the command ends here:
 ```
 👉 下一步（任选其一）:
    可留在 workspace 根目录运行，Orchestrator 会按 progress.json 分派到各仓 worktree
@@ -268,26 +252,22 @@ REQ_FILE="${REQ_DIR}/requirements.md"
       然后 lean 进入 /cc-nexs:plan ${ID}，fast/full 进入 /cc-nexs:run ${ID}
    提示：下次可直接 /cc-nexs:init "<描述>" --brainstorm 一条命令到位
 ```
-
-**b) `BRAINSTORM=1`（命中 `--brainstorm`）**——跳过"任选其一"，直接进入对话：
-
+**b) `BRAINSTORM=1` (matches `--brainstorm`)**——Skip "pick one" and go straight into the conversation:
 ```
 🧠 init 完成，进入 brainstorming
    本阶段只更新 requirements.md；审批由当前模式的正式门禁承接
 ```
+Then **immediately read and follow the `brainstorming` skill file** (`packages/preset-standard/skills/brainstorming/SKILL.md`) to flesh out the current requirement; this is an internal process load authorized by the explicit `--brainstorm` argument, and does not rely on the model auto-triggering the skill:
 
-随后**立刻读取并遵循 `brainstorming` skill 文件**（`packages/preset-standard/skills/brainstorming/SKILL.md`），补全当前需求；这是显式 `--brainstorm` 参数授权的内部流程加载，不依赖模型自动触发 skill：
+- Read `${REQ_DIR}/requirements.md`
+- Load only project materials related to the key gaps
+- Clarify questions that cannot be determined from the current state and that affect scope, acceptance, or authorization
 
-- 读 `${REQ_DIR}/requirements.md`
-- 只加载与关键缺口相关的项目资料
-- 对无法从现状确定且影响范围、验收或授权的问题进行澄清
+Do not call the `/cc-nexs:brainstorm` slash command—just follow the process checklist in the skill file (this avoids re-validating the directory and re-loading the skill).
 
-不要去调 `/cc-nexs:brainstorm` 这个 slash command——直接遵循 skill 文件里的流程清单即可（避免重复校验目录、重复加载 skill）。
+After brainstorming is complete, Lean enters `/cc-nexs:plan ${ID}`, and Fast/Full enter `/cc-nexs:run ${ID}`. If authorization to continue already exists and there are no key gaps, continue; do not turn brainstorming into an additional approval point.
 
-脑暴完成后，Lean 进入 `/cc-nexs:plan ${ID}`，Fast/Full 进入 `/cc-nexs:run ${ID}`。已有继续执行的授权且无关键缺口时继续，不把脑暴变成新增审批点。
-
-## 用法示例
-
+## Usage example
 ```bash
 # 默认 lean 模式（自动续号 + 自动 slug）
 /cc-nexs:init 添加 /api/health 健康检查接口
@@ -311,11 +291,9 @@ REQ_FILE="${REQ_DIR}/requirements.md"
 # → 立即进入 Socratic 对话补全 requirements.md
 
 ```
+## About worktrees
 
-## 关于 worktree
-
-init 会在 `<workspace>/.worktrees/<id>-<slug>/<repo-id>/` 为每个命中仓库建立独立 worktree。这样多个需求和多个仓库都能互不干扰。
-
+init creates a separate worktree for each matched repository at `<workspace>/.worktrees/<id>-<slug>/<repo-id>/`. This keeps multiple requirements and multiple repositories from interfering with each other.
 ```
 # 主仓库目录
 $ cd ~/projects/myrepo
@@ -329,29 +307,28 @@ $ /cc-nexs:init "需求 B"
 ✅ 已建 .worktrees/02-feat-b/ + feature/02-feat-b 分支
 $ cd .worktrees/02-feat-b && /cc-nexs:run 02    # B 跟 A 完全独立
 ```
+Constraints:
 
-约束：
+- **No nested init**: one feature worktree set corresponds to one requirement.
+- **Roles work only inside the repository worktree assigned by progress.json**.
+- **Safe cleanup after merge**: only the Git Custodian deletes the worktree, local branch, and candidate ref after verifying that the worktree is clean and the branch has been merged into the configured base.
+- **No in-place degradation**: if creation fails, roll back and stop; do not pollute the caller's current branch.
 
-- **禁止嵌套 init**：一个 feature worktree 集合对应一个需求。
-- **角色只在 progress.json 分配的仓库 worktree 内工作**。
-- **合并后安全清理**：仅 Git Custodian 在验证 worktree clean 且分支已合入配置 base 后删除 worktree、local branch 和 candidate ref。
-- **无原地降级**：创建失败即回滚并停止，不污染调用者当前分支。
+## When to override the default lean
 
-## 何时覆盖默认 lean
-
-| 显式用 full | 显式用 fast |
+| Explicitly use full | Explicitly use fast |
 |---|---|
-| 多 Sprint、含 DB schema 变更 | 单 Sprint、改动 ≤ 800 行 diff |
-| 破坏性对外契约、合规风险 | 可含契约冻结、不同仓库的前后端并行 |
-| Sprint 切片 ≥ 2 | 无并发/事务复杂度 |
-| 需要严格五方异构纪律 | 接受 spec/code 同 session 的风险换效率 |
+| Multiple Sprints, includes DB schema changes | Single Sprint, changes ≤ 800 lines of diff |
+| Breaking external contracts, compliance risk | May include contract freeze, frontend/backend parallelism across different repositories |
+| Sprint slices ≥ 2 | No concurrency/transaction complexity |
+| Requires strict five-party heterogeneous discipline | Accepts the risk of spec/code in the same session in exchange for efficiency |
 
-## 与原来的差异
+## Differences from the original
 
-之前：`/cc-nexs:init 01 health-check` （位置参数 + 必须人工想 slug）
-现在：`/cc-nexs:init "添加 /api/health 健康检查接口" [--mode=lean|hotfix|fast|full]`（自动续号 + 自动 slug + mode 一次到位；默认 lean）
+Before: `/cc-nexs:init 01 health-check` (positional arguments + must manually come up with a slug)
+Now: `/cc-nexs:init "添加 /api/health 健康检查接口" [--mode=lean|hotfix|fast|full]` (automatic number continuation + automatic slug + mode in one step; defaults to lean)
 
-旧用法仍兼容：如果 `$1` 是纯数字格式（如 `01`、`14.2`）且 `$2` 是 kebab-case，按旧用法处理。
+Old usage remains compatible: if `$1` is in pure numeric format (such as `01`, `14.2`) and `$2` is kebab-case, handle it as the old usage.
 
 ## Model dispatch preview
 

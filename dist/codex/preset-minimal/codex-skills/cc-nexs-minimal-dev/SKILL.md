@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-minimal-dev
-description: /cc-nexs-minimal:dev 的 Codex 镜像 skill。 显式调用 $cc-nexs-minimal-dev 时使用。 Invoke Developer subagent to implement, fix bugs, or sync docs.
+description: /cc-nexs-minimal:dev Codex mirror skill. Use when $cc-nexs-minimal-dev is explicitly invoked. Invoke Developer subagent to implement, fix bugs, or sync docs.
 ---
 
 # /cc-nexs-minimal:dev for Codex

@@ -1,23 +1,22 @@
 ---
 name: "using-cc-nexs"
-description: "引导新功能、跨模块需求、完整开发测试验收或“按 SOP 跑”进入 cc-nexs。新需求默认 lean，支持一次集中 Review、full/fast、test 发布、自动浏览器验收、manual fallback 和 hotfix 分流。"
+description: "Guides new features, cross-module requirements, full development-test acceptance, or 'run by the SOP' requests into cc-nexs. New requirements default to lean, with support for a single consolidated Review, full/fast, test release, automated browser acceptance, manual fallback, and hotfix triage."
 disable-model-invocation: true
 ---
 
-# 使用 cc-nexs
+# Using cc-nexs
 
-以 `commands/*.md` 为流程事实来源。Claude Code、Codex 和 Pi 只适配入口/角色工具，不得分叉状态、产物或 Git 语义。
+Use `commands/*.md` as the source of truth for the workflow. Claude Code, Codex, and Pi only adapt entry points and role tooling; they must not fork state, artifacts, or Git semantics.
 
-## 选择入口
+## Choosing an entry point
 
-- 常规新功能：默认 `init -> plan -> Gateway A -> run -> Gateway B`，使用 `mode=lean`。
-- 需要旧三角色、多轮代码/验收分离：显式 `--mode=fast`。
-- 高风险、复杂 DB/外部契约或确需多个 Sprint/多轮专业评审：显式 `--mode=full`。
-- 可界定的小范围 BUG：直接 `hotfix <现象>` 创建 latest-base `hotfix/<key>` 与 BUG 文档，不占需求号；`init --mode=hotfix` 仅兼容转发到 `init-hotfix`。同故障授权修订用 `revise-hotfix`，契约/schema/权限扩展加 `--promote-lean` 在原 BUG 旁转 Lean 并通过 Gateway A。
-- 探索 spike 或纯文档任务不强制进入主流程。
+- Standard new feature: default to `init -> plan -> Gateway A -> run -> Gateway B` with `mode=lean`.
+- When the legacy three-role, multi-round separation of code and acceptance is needed: specify `--mode=fast` explicitly.
+- High risk, complex DB/external contracts, or a genuine need for multiple Sprints or multiple rounds of specialist review: specify `--mode=full` explicitly.
+- Bounded, small-scope BUG: run `hotfix <symptom>` directly to create a latest-base `hotfix/<key>` and a BUG document without consuming a requirement number; `init --mode=hotfix` only provides compatibility forwarding to `init-hotfix`. For authorized revisions to the same failure, use `revise-hotfix`; for contract/schema/permission extensions, add `--promote-lean` to convert to Lean alongside the original BUG and pass through Gateway A.
+- Exploratory spikes or pure documentation tasks are not required to enter the main workflow.
 
-## 启动
-
+## Starting
 ```text
 /cc-nexs:init <需求> [--mode=lean|hotfix|fast|full]
 /cc-nexs:brainstorm <id>          # requirements 模糊时可选
@@ -25,48 +24,44 @@ disable-model-invocation: true
 /cc-nexs:approve-plan <id>
 /cc-nexs:run <id>                 # 实现、本地验证、一次集中 Review、test 验收
 ```
+Codex uses the `$cc-nexs-*` mirror skill; do not treat `/cc-nexs:*` as a shell path. Pi/Claude uses slash commands.
 
-Codex 使用 `$cc-nexs-*` mirror skill；不要把 `/cc-nexs:*` 当 shell path。Pi/Claude 使用 slash command。
+## Default delivery
 
-## 默认交付
-
-Lean 新需求默认：
-
+New Lean requirements default to:
 ```yaml
 workflow:
   sprint_delivery: final_only
   test_release:
     policy: auto_if_ready
 ```
+- Maintain only the two human-authored documents `requirements.md` and `plan.md`; HTML is a temporary rendering artifact.
+- Implement in parallel according to the plan's path ownership; complete items that can be executed locally, and items limited by the environment may be structured as `deferred_to_test`. For fast-track, do test/CI and acceptance first, then a single independent consolidated Review; standard remains Review-first.
+- A Review block permits only one delta closure after fixes; test failures likewise require re-running local verification, delta closure, and release.
+- After test acceptance passes, stop at Gateway B; only `/cc-nexs:approve-release` authorizes merging into the configured base branch.
+- `--no-auto-test-release` or the feature `release.test=manual` explicitly switches to a manual test handoff.
+- Stop before push only when delivery-safety prerequisites such as the test environment, candidate, deploy test branch, or release driver are insufficient. browser/login/verification URL are checked only after deployment; if missing, enter the recoverable `manual_required`.
+- Legacy requirements without a `delivery` field remain `per_sprint + manual`.
+- Production merge/release is always manual.
 
-- 只维护 `requirements.md` 和 `plan.md` 两份人工文档；HTML 是临时渲染物。
-- 按 plan 的路径所有权并行实现；本地可执行项完成，环境受限项可结构化 `deferred_to_test`。Fast-track 先 test/CI 与验收再做一次独立集中 Review，standard 保持 Review-first。
-- Review 阻塞只允许一次修复后的 delta closure；test 失败也必须重新本地验证、delta closure 和发布。
-- test 验收通过后停在 Gateway B；只有 `/cc-nexs:approve-release` 才授权合并配置的 base 分支。
-- `--no-auto-test-release` 或 feature `release.test=manual` 显式改走人工 test handoff。
-- 只有 test environment、candidate、deploy test branch 或 release driver 等交付安全前置不足时才在 push 前停止。browser/login/verification URL 只在部署后检查，缺失进入可恢复的 `manual_required`。
-- 没有 `delivery` 字段的历史需求保持 `per_sprint + manual`。
-- 生产 merge/release 始终人工。
+## Post-deployment Browser Acceptance
 
-## 部署后 Browser 验收
+- Claude Code: `chrome-devtools-mcp` is callable.
+- Codex: reuse the currently logged-in in-app/Chrome session.
+- Pi: prefer installing and completing the ego lite onboarding plus the `ego-browser` skill; when on Windows or when ego lite is unavailable, install `@injaneity/pi-computer-use@0.4.3` and set `browser_use: true` and `headless: true` in `.pi/computer-use.json`. If neither is available, keep the completed test delivery and let verification enter `manual_required`.
 
-- Claude Code：`chrome-devtools-mcp` 可调用。
-- Codex：复用当前已登录的 in-app/Chrome session。
-- Pi：优先安装并完成 ego lite 引导以及 `ego-browser` skill；Windows 或 ego lite 不可用时，安装 `@injaneity/pi-computer-use@0.4.3`，并在 `.pi/computer-use.json` 设置 `browser_use: true`、`headless: true`。若两者都不可用，已完成的 test delivery 保留，verification 进入 `manual_required`。
+Access only `release.test.allowed_hosts`. URLs may be discovered from project documentation, but must be entered into the structured `release.test` configuration before automated execution. Reading plaintext usernames or passwords from memory, Markdown, Git, or config is prohibited; prefer reusing existing logins, and when necessary use only an opaque `credential_ref` to connect to an external secret provider.
 
-只访问 `release.test.allowed_hosts`。URL 可从项目说明发现，但自动执行前必须进入结构化 `release.test` 配置。禁止从 memory、Markdown、Git 或 config 读取明文账号密码；优先复用登录，必要时仅使用 opaque `credential_ref` 对接外部 secret provider。
+## Manual Checkpoints
 
-## 人工点
+1. Lean Gateway A: approve the hash binding of requirements + plan.
+2. Lean Gateway B: approve the exact candidate fingerprint that has passed consolidated Review, local verification, and test acceptance.
+3. Hotfix Gateway B: after test black-box acceptance passes, approve merging the exact candidate into base.
+4. Legacy G1/G2: retain the original semantics for fast/full only.
 
-1. Lean Gateway A：批准 requirements + plan 的哈希绑定。
-2. Lean Gateway B：批准已集中 Review、本地验证和 test 验收的精确 candidate fingerprint。
-3. Hotfix Gateway B：test 黑盒验收通过后批准 exact candidate 合入 base。
-4. Legacy G1/G2：仅 fast/full 保留原语义。
+Gates only pause cc-nexs role dispatch; they do not block the parent session's user-authorization tools.
 
-Gate 只暂停 cc-nexs 角色派发，不阻断父会话的用户授权工具。
-
-## 运行时命令映射
-
+## Runtime Command Mapping
 ```text
 run                 主编排
 plan                Lean 计划 + HTML
@@ -82,14 +77,13 @@ status              只读状态和 release evidence
 doctor --release-test 严格发布前置检查
 hotfix              独立 P0/P1/P2/P3 mini-Lean：scope binding -> local -> one Review -> test -> Gateway B
 ```
+Single-step role commands do not advance progress; only `run`/deterministic core controls can advance or record events.
 
-单步角色命令不推进 progress；只有 `run`/确定性 core controls 可以推进或记录事件。
+## Startup Checks
 
-## 启动检查
-
-- workspace/repository worktree 与 branch assignment 正确；
-- requirements、config.mode 和 progress mode 一致；
-- Lean 使用已配置的 `workflow.local_verify.driver`，或在缺失时运行 plan-approved 命令并记录结构化 command/exit/proof；Hotfix 也可执行绑定矩阵的实际命令并登记相同结构化证据，不能延期到 test。两者都保持批准 plan 或绑定 Hotfix scope 不变；授权修订通过确定性控制器重绑；
-- full 多 Sprint 切片覆盖全部 AC；
-- 自动 test 发布项目已为 deploy 仓配置 test_branch 和 driver；Lean local 仓在批准 plan 中显式绑定；
-- test URLs、allowed_hosts 与 browser prerequisite 在部署后验证；缺失时接受可恢复的 manual verification，不回滚 delivery。
+- The workspace/repository worktree and branch assignment are correct;
+- requirements, config.mode, and progress mode are consistent;
+- Lean uses the configured `workflow.local_verify.driver`, or, when it is missing, runs the plan-approved command and records structured command/exit/proof; Hotfix may also execute the actual command bound to the matrix and register the same structured evidence, and must not defer it to test. Both keep the approved plan or bound Hotfix scope unchanged; authorized revisions are rebound through the deterministic controller;
+- full multi-Sprint slices cover all AC;
+- The automated test release project has test_branch and driver configured for the deploy repository; the Lean local repository is explicitly bound in the approved plan;
+- test URLs, allowed_hosts, and browser prerequisites are verified after deployment; when missing, recoverable manual verification is accepted, and delivery is not rolled back.

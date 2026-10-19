@@ -4,105 +4,103 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
-### 新增
+### Added
 
-- **三端风险驱动模型自动升级**：新增 `risk_tier`、`models.routing`、provider-neutral `escalated` profile 与统一 resolver。Lean high/critical 自动升级 Planner/Reviewer，Hotfix P0/P1 自动升级 Reviewer；feature 显式 profile 最终优先，决策输出 risk source/signals/matched rules。新模板不再写死 `models.roles`，并提供 `/cc-nexs:migrate-feature-config` 安全迁移历史 feature；Gateway A 同时绑定 concrete risk。
-- **自动升级复核加固**：历史 Gateway A 只从 hash 匹配的批准 scope 派生风险，未知风险按 high 保守升档；`migrate-feature-config --bind-plan-risk` 可审计回填。文档补充 native-agent 模型可用性与 Fast/Full 全角色低预算映射要求。
-- **Lean 默认省 token 流程**：两个人工门禁、一次集中 Review、worktree/feature 分支隔离、精确 candidate 绑定的本地验证与 test/base 发布；Gateway B 意见按 evidence / implementation / scope 分流并同步回唯一 requirements/plan 文档。构建改为按变更模块选择、依赖感知并行、精确候选缓存，Claude Code、Codex、Pi 均支持按角色配置 model 与 effort/thinking。
-- **Hotfix mini-Lean**：Hotfix 改为独立 `mode=hotfix` 需求，从最新 base 创建自己的 feature/worktree，只维护一份 `hotfix.md`；P0/P1/P2 一次集中 Review，P3 机器边界后跳过，修复全生命周期最多一次 delta。Exact candidate 先进入 test 黑盒验收，Gateway B 批准后同一 candidate 才进入 base。Claude Code、Codex、Pi 使用专用可配置角色。
-- **per-feature README 自动同步**：每次 orchestrator 状态推进后自动调 `syncFeatureReadme(...)` 刷新 `doc/<id>/README.md` 的 AUTOGEN 区段（当前状态 / 产物索引 / 契约覆盖快照 / 待人工接入），兑现 README 模板"进入目录第一件事：读本文件"的承诺。
-  - 新文件：`packages/core/lib/readme-sync.mjs` + 单测
-  - templates/README.md 重组：加 `<!-- AUTOGEN:status START/END -->` 锚点；"下一步动作"小节移到锚点外人工维护
-  - 触发点：`/cc-nexs:run` 的 transitionState 之后、human gate 之前、COMPLETE 之前；`/cc-nexs:init` 完成后种入初始 README
-  - **向后兼容**：旧 README 没有 AUTOGEN 锚点 → readme-sync 自动跳过 + warn，不强改
-  - **失败安全**：sync 出错只 console.warn，不阻塞主流程
-  - **idempotent**：再次跑无变化时 return `no_change`，不写文件（避免 git 噪音）
-  - tech-lead-claude.md 反模式加"禁手动编辑 AUTOGEN 区段"
-- **`docs/solutions/` 复利沉淀机制**：新增 `compound` 旁路角色 + `/cc-nexs:compound <id>` 命令，需求收尾后把"非显然教训"沉淀到仓库级 `docs/solutions/<topic>.md`。下次同类需求 RECON 阶段 Repo Scout 自动 grep `frontmatter.keywords` 命中、摘进 repo-context.md `## 7.6 既往教训命中`，Planner 第一稿就避坑——这是 cc-nexs 复利的字面定义。
-  - 新文件：`agents/compound-claude.md`、`commands/compound.md`、`templates/solution.md`
-  - **强信号过滤**：必须满足"同 BUG 修 ≥ 2 次 / SA 反馈跨 sprint 重复 / RECON 推翻 / 验收驳回 / spec 变更 ≥ 3 行"任一才产出 solution；不命中**禁强写**，在 compound-summary.md 写"跳过"
-  - **dedupe by frontmatter.slug**：同 topic 多次需求触发 → Edit 既有文件追加观察，不新建
-  - 旁路命令，**不入状态机**——支持回溯历史需求（`--force` 跳过 COMPLETE 校验），保持状态机简单
-  - run.md COMPLETE 输出加一行"💡 建议跑 /cc-nexs:compound"提示，但不强制
-- **AGENTS.md / CLAUDE.md grounding**：Repo Scout 工作流程加 step 1.5，扫描项目根 AGENTS.md（优先）/ CLAUDE.md（fallback），把项目级强制约定（命名/注入/禁用 API 等）摘进 repo-context.md `## 7.5 项目级强制约定`。让 Planner 设计 spec 时不撞项目级强制规则。
-- **RECON 阶段（现状勘察）**：在 Planner 起草 spec 之前，新增 `repo-scout` 角色独立 session 扫 src/ 产 `repo-context.md`（同类配置/Service/Mapper/页面/API/DTO 的事实清单）。Planner 仍守"禁读 src/"铁律，但通过 repo-context.md 间接获得现状信息，避免在真空里设计与现有工程脱节的 spec。
-  - 新文件：`agents/repo-scout-claude.md`、`templates/repo-context.md`、`commands/recon.md`
-  - 状态机（full 模式）：`REQ_DRAFTED → RECON_DONE → SPEC_DRAFTED`，`SPEC_NEEDS_REVISION` 不重跑 recon
-  - fast 模式：recon 折叠到 `/cc-nexs:fullstack --phase=spec` 前置 sub-step，状态机不暴露 RECON_DONE
-  - spec.md 模板"影响范围"硬性新增"现状对照"小节（复用 / 扩展 / 新建 + 理由 + 冲突点）
-  - **向后兼容**：当 preset 未启用 `repo-scout` 角色时，`REQ_DRAFTED` 直接跳 `SPEC_DRAFTED`（旧行为）
-- `using-worktrees` skill（`packages/preset-standard/skills/using-worktrees/SKILL.md`）：检测当前是否已在 worktree → `git worktree add .worktrees/<id>-<slug>` → 自动给宿主仓库加 `.gitignore` → 创建 `feature/<id>-<slug>` 分支。针对 cc-nexs 做了三处特别处理：固定 `.worktrees/` 路径（不用 Claude Code 内置 EnterWorktree 的 `.claude/worktrees/`）、嵌套 init refuse、gitignore 自动 commit。
-- `/cc-nexs:build` 命令 + `lib/build-selector.mjs`：按 git diff 自动选 build/test 命令。`cc-nexs.config.yml` 新增 `paths_override.modules[]` 字段，每个 module 含 `name`、`match`（glob 数组）、`build_cmd`、`test_cmd`。selector 用 `git diff <diff_base>...HEAD` + `git status --porcelain` 取改动文件，按 module 的 glob 匹配；命中模块按 yml 顺序串行跑命令，未命中回退 `paths_override.build_cmd` / `test_cmd` 顶层。
-  - 跨模块改动会顺序跑命中的所有模块；任一失败 fail fast。
-  - 顶层 `build_cmd` 留空 = 仅文档/无源码改动时不跑构建。
-  - `paths_override.diff_base` 默认 `main`，主分支叫别的（`master`、`develop`）需覆盖。
-  - 用法：`/cc-nexs:build [--phase=build|test|both] [--dry-run]`。
+- **Three-runtime risk-driven automatic model escalation**: Added `risk_tier`, `models.routing`, a provider-neutral `escalated` profile, and a unified resolver. Lean high/critical automatically escalates the Planner/Reviewer, Hotfix P0/P1 automatically escalates the Reviewer; an explicit feature profile takes final precedence, and decisions output the risk source/signals/matched rules. New templates no longer hard-code `models.roles`, and `/cc-nexs:migrate-feature-config` safely migrates historical features; Gateway A also binds the concrete risk.
+- **Hardened escalation review**: Historical Gateway A derives risk only from hash-matched approved scopes, and unknown risk is conservatively escalated as high; `migrate-feature-config --bind-plan-risk` provides auditable backfill. The docs now cover native-agent model availability and the low-budget mapping requirements for all roles in Fast/Full.
+- **Lean default token-saving flow**: Two human gates, one consolidated Review, worktree/feature branch isolation, local verification bound to the exact candidate, and test/base release; Gateway B feedback is triaged by evidence / implementation / scope and synced back to the single requirements/plan document. Builds now select by changed module, run in parallel with dependency awareness, and cache by exact candidate; Claude Code, Codex, and Pi all support per-role configuration of model and effort/thinking.
+- **Hotfix mini-Lean**: Hotfix is now an independent `mode=hotfix` requirement that creates its own feature/worktree from the latest base and maintains only one `hotfix.md`; P0/P1/P2 get one consolidated Review, P3 is skipped after the machine boundary, and the entire fix lifecycle allows at most one delta. The exact candidate first goes through test black-box acceptance, and only after Gateway B approval does the same candidate enter base. Claude Code, Codex, and Pi use dedicated configurable roles.
+- **Per-feature README auto-sync**: After every orchestrator state advance, `syncFeatureReadme(...)` is called automatically to refresh the AUTOGEN sections of `doc/<id>/README.md` (current status / artifact index / contract coverage snapshot / pending manual integration), delivering on the README template's promise that "the first thing to do when entering the directory is to read this file."
+  - New file: `packages/core/lib/readme-sync.mjs` + unit tests
+  - templates/README.md restructured: added `<!-- AUTOGEN:status START/END -->` anchors; the "Next actions" subsection moved outside the anchors for manual maintenance
+  - Trigger points: after transitionState in `/cc-nexs:run`, before the human gate, and before COMPLETE; the initial README is seeded after `/cc-nexs:init` completes
+  - **Backward compatible**: Old READMEs without AUTOGEN anchors → readme-sync skips automatically + warns, without forcing changes
+  - **Fail-safe**: sync errors only console.warn and do not block the main flow
+  - **Idempotent**: returns `no_change` when a rerun produces no changes and writes no file (avoiding git noise)
+  - tech-lead-claude.md anti-patterns now include "do not manually edit AUTOGEN sections"
+- **`docs/solutions/` compounding capture mechanism**: Added a `compound` side-channel role + `/cc-nexs:compound <id>` command; after a requirement wraps up, "non-obvious lessons" are deposited into the repo-level `docs/solutions/<topic>.md`. In the RECON phase of the next similar requirement, Repo Scout automatically greps for `frontmatter.keywords` hits and extracts them into repo-context.md `## 7.6 既往教训命中`, so the Planner avoids the pitfall on the very first draft — this is the literal definition of cc-nexs compounding.
+  - New files: `agents/compound-claude.md`, `commands/compound.md`, `templates/solution.md`
+  - **Strong-signal filter**: A solution is produced only when at least one of the following holds: "the same BUG fixed ≥ 2 times / SA feedback repeated across sprints / RECON overturned / acceptance rejected / spec change ≥ 3 lines"; if none applies, **forcing a write is forbidden**, and "skipped" is written to compound-summary.md
+  - **Dedupe by frontmatter.slug**: Multiple requirement triggers on the same topic → Edit the existing file to append observations rather than creating a new one
+  - Side-channel command that **does not enter the state machine** — supports going back over historical requirements (`--force` skips the COMPLETE check), keeping the state machine simple
+  - run.md COMPLETE output adds a one-line "💡 suggest running /cc-nexs:compound" hint, but does not enforce it
+- **AGENTS.md / CLAUDE.md grounding**: Repo Scout's workflow gains step 1.5, which scans the project root's AGENTS.md (preferred) / CLAUDE.md (fallback) and extracts project-level mandatory conventions (naming/injection/banned APIs, etc.) into repo-context.md `## 7.5 项目级强制约定`. This keeps the Planner from colliding with project-level mandatory rules when designing the spec.
+- **RECON phase (current-state survey)**: Before the Planner drafts the spec, a new `repo-scout` role runs in an independent session to scan src/ and produce `repo-context.md` (a factual inventory of comparable configuration/Service/Mapper/pages/API/DTO). The Planner still keeps the iron rule of "do not read src/", but obtains current-state information indirectly through repo-context.md, avoiding a spec designed in a vacuum that is disconnected from the existing codebase.
+  - New files: `agents/repo-scout-claude.md`, `templates/repo-context.md`, `commands/recon.md`
+  - State machine (full mode): `REQ_DRAFTED → RECON_DONE → SPEC_DRAFTED`; `SPEC_NEEDS_REVISION` does not rerun recon
+  - fast mode: recon is folded into a pre-step before `/cc-nexs:fullstack --phase=spec`, and the state machine does not expose RECON_DONE
+  - The spec.md template's "Impact scope" section now mandatorily adds a "current-state comparison" subsection (reuse / extend / new + rationale + conflict points)
+  - **Backward compatible**: When the preset does not enable the `repo-scout` role, `REQ_DRAFTED` jumps directly to `SPEC_DRAFTED` (old behavior)
+- `using-worktrees` skill (`packages/preset-standard/skills/using-worktrees/SKILL.md`): detects whether it is already in a worktree → `git worktree add .worktrees/<id>-<slug>` → automatically adds a `.gitignore` entry to the host repo → creates the `feature/<id>-<slug>` branch. Three special adaptations were made for cc-nexs: a fixed `.worktrees/` path (instead of `.claude/worktrees/` used by Claude Code's built-in EnterWorktree), nested init refusal, and auto-committing the gitignore.
+- `/cc-nexs:build` command + `lib/build-selector.mjs`: automatically selects build/test commands based on the git diff. `cc-nexs.config.yml` gains a `paths_override.modules[]` field, where each module contains `name`, `match` (glob array), `build_cmd`, and `test_cmd`. The selector uses `git diff <diff_base>...HEAD` + `git status --porcelain` to obtain changed files and matches them against each module's globs; matched modules run their commands serially in yml order, and if nothing matches it falls back to the top-level `paths_override.build_cmd` / `test_cmd`.
+  - Cross-module changes run all matched modules in sequence; any failure fails fast.
+  - Leaving the top-level `build_cmd` empty = do not run a build when there are only docs/no source changes.
+  - `paths_override.diff_base` defaults to `main`; if your main branch is named something else (`master`, `develop`), override it.
+  - Usage: `/cc-nexs:build [--phase=build|test|both] [--dry-run]`.
 
-### 修复
+### Fixed
 
-- Windows 原生 Codex/Claude hook 启动不再依赖 `${VAR:-fallback}`：插件根目录由 Node 从 `PLUGIN_ROOT` / `CLAUDE_PLUGIN_ROOT` 解析，支持空格与中文路径；本地安装器增加隔离 Home、原子配置写入、preset 互斥和 Windows CI/smoke 覆盖。
-- Hotfix test 阻塞现在持久化计数并按 `fix_per_bug` 阈值熔断，已消耗唯一 delta 后不再重新进入修复循环；重复写入同一 test attempt 不重复计数。
-- P3 边界违规改为结构化 `HOTFIX_P3_BOUNDARY_BLOCKED -> HUMAN_INTERVENTION`，通过时将机器证明绑定 exact candidate，避免 Orchestrator 异常退出或证据丢失。
-- Lean 本地重验记录 `review` / `test` / `gateway_b` 来源，失败后回到准确修复状态；Hotfix Gateway B 三类意见补齐控制器级覆盖。
-- Lean Gateway A 计划增加复杂度与模式适配字段，Planner 在高耦合、契约破坏和高风险变更时明确建议 Full，由人工决定是否另建流程。
+- Windows-native Codex/Claude hook startup no longer depends on `${VAR:-fallback}`: the plugin root is resolved by Node from `PLUGIN_ROOT` / `CLAUDE_PLUGIN_ROOT`, supporting spaces and Chinese paths; the local installer adds an isolated Home, atomic config writes, preset mutual exclusion, and Windows CI/smoke coverage.
+- Hotfix test blocks now persist a counter and trip the breaker at the `fix_per_bug` threshold; once the single delta has been consumed, the fix loop is not re-entered; rewriting the same test attempt is not counted twice.
+- P3 boundary violations are now structured as `HOTFIX_P3_BOUNDARY_BLOCKED -> HUMAN_INTERVENTION`, and on pass the machine proof is bound to the exact candidate, preventing an abnormal Orchestrator exit or evidence loss.
+- Lean local re-verification records the `review` / `test` / `gateway_b` source and returns to the precise fix state after a failure; controller-level coverage is completed for the three categories of Hotfix Gateway B feedback.
+- The Lean Gateway A plan adds complexity and mode-fit fields; the Planner explicitly recommends Full for high-coupling, contract-breaking, and high-risk changes, with humans deciding whether to start a separate flow.
+- `lib/config-loader.mjs::parseYaml` rewritten as a recursive descent parser. The previous stack-machine version crashed on nested array-of-object structures (e.g. `forbidden_patterns:` + `excludes:` arrays, `modules:` + `match:` arrays), but because the loader had not previously been called on the orchestrator's critical path, the bug remained hidden. The fix correctly parses every structure in `preset-standard/preset.yml`, with new capabilities: inline flow arrays (`["a","b"]`) and `#` inside strings no longer being truncated as a comment.
 
-- `lib/config-loader.mjs::parseYaml` 重写为递归下降。原栈机版本在嵌套 array-of-object（如 `forbidden_patterns:` + `excludes:` 数组、`modules:` + `match:` 数组）会崩，但因 loader 此前未在 orchestrator 关键路径调用，bug 一直未暴露。修复后能正确解析 `preset-standard/preset.yml` 的所有结构，新增能力：inline flow 数组（`["a","b"]`）、字符串里的 `#` 不再被当注释切掉。
+### Changed
 
-### 变更
+- **BREAKING (default behavior)**: `/cc-nexs:init` now creates an independent git worktree at `<repo>/.worktrees/<id>-<slug>/` by default, so multiple requirements can be developed in parallel; it no longer runs `git checkout -b` directly in the current directory.
+  - `--no-worktree` falls back to the old behavior
+  - Running init again inside a worktree is forbidden (one worktree per requirement)
+- `/cc-nexs:run` adds Step -1: checks whether cwd is inside the expected `.worktrees/<id>-*`; if not → refuses and prompts the user to `cd`. Requirements created with `--no-worktree` are unaffected.
+- `/cc-nexs:run` prints the manual worktree cleanup command (`git worktree remove`) on `COMPLETE` and does not clean up automatically.
 
-- **BREAKING（默认行为）**：`/cc-nexs:init` 默认在 `<repo>/.worktrees/<id>-<slug>/` 建独立 git worktree，多需求可并行开发；不再在当前目录直接 `git checkout -b`。
-  - `--no-worktree` 退回旧行为
-  - 在 worktree 内禁止再次 init（一个 worktree 对应一个需求）
-- `/cc-nexs:run` 增加 Step -1：检测 cwd 是否在期望的 `.worktrees/<id>-*` 内；不在 → 拒绝并提示 `cd`。`--no-worktree` 创建的需求不受影响。
-- `/cc-nexs:run` 在 `COMPLETE` 时打印手动 worktree 清理指令（`git worktree remove`），不自动清理。
+### Migration Guide
 
-### 迁移指引
-
-老用户继续走旧 `git checkout -b` 流程：所有 `init` 命令加 `--no-worktree`。或在 `cc-nexs.config.yml` 配置默认值（暂未实现，可后续添加）。
+Users who want to keep the old `git checkout -b` flow: add `--no-worktree` to every `init` command. Alternatively, configure a default in `cc-nexs.config.yml` (not yet implemented; may be added later).
 
 ## [0.3.0-dev] - 2026-05-22
+Added **fast mode**: a single-sprint, three-role merged pipeline that uses ~50% fewer subagent calls than full mode, suited to small changes to a single endpoint or module.
 
-新增 **fast 模式**：单 sprint 三角色合并流水线，比 full 模式少 ~50% 子代理调用，适合单接口/单模块小改动。
+### Added
 
-### 新增
+- 3 merged roles:
+  - `fullstack-claude` (merges Planner + Tech Lead): handles spec drafting + coding + doc sync + bug fixing in one pass
+  - `reviewer-codex` (merges SA code review + Evaluator contract acceptance): a single codex call produces both sa-code-review.md + acceptance.md
+  - `verifier-codex` (merges QA cases + run + regression): the first call produces both test-cases.md + test-report.md
+- 3 slash commands: `/cc-nexs:fullstack` / `/cc-nexs:review` / `/cc-nexs:verify`
+- preset.yml adds a top-level `modes:` field declaring enabled + state_machine + thresholds_override for both full and fast modes
+- core/lib/state-machine.mjs adds a `mode='fast'` branch: the state sequence is `BUILD → TEST → [FIX → REGRESSION]* → ACCEPT → COMPLETE`, with no SPRINT_<N>_* naming (single sprint enforced)
+- core/schemas/preset.schema.json adds `modes` validation
+- templates/config.json adds a fast option and selection guidance to `_mode_options` (`_mode_选择建议`)
+- templates/progress.md splits the state-machine dictionary into two sets of tables, full and fast
 
-- 3 个合并角色：
-  - `fullstack-claude`（合并 Planner + Tech Lead）：一手包办 spec 起草 + 编码 + 文档同步 + bug 修复
-  - `reviewer-codex`（合并 SA 代码评审 + Evaluator 契约验收）：单次 codex 调用同时产 sa-code-review.md + acceptance.md
-  - `verifier-codex`（合并 QA cases + run + regression）：首次调用同时产 test-cases.md + test-report.md
-- 3 个 slash commands：`/cc-nexs:fullstack` / `/cc-nexs:review` / `/cc-nexs:verify`
-- preset.yml 新增 `modes:` 顶层字段，声明 full / fast 两种模式的 enabled + state_machine + thresholds_override
-- core/lib/state-machine.mjs 新增 `mode='fast'` 分支：状态序列 `BUILD → TEST → [FIX → REGRESSION]* → ACCEPT → COMPLETE`，无 SPRINT_<N>_* 命名（强制单 sprint）
-- core/schemas/preset.schema.json 新增 `modes` 校验
-- templates/config.json 在 `_mode_options` 增加 fast 选项与选择建议（`_mode_选择建议`）
-- templates/progress.md 状态机字典拆成 full / fast 两套表
+### Changed
 
-### 变更
+- preset.yml version `0.2.0-dev → 0.3.0-dev`, with the description now noting "supports both full and fast modes"
+- run.md adds Step 0.5 (resolve mode) + a role → command dispatch table (columns per mode) + a fast-mode merged parsing section (parse both md files at once after state=ACCEPT)
+- fast mode has stricter circuit-breaker thresholds: `review_revision: 2` / `fix_per_bug: 2` (full mode is still 3 / 3); after 2 fixes on the same BUG it stops for a human, with no TECH_LEAD_REVIEW fallback role
 
-- preset.yml 版本 `0.2.0-dev → 0.3.0-dev`，描述补充 "支持 full / fast 两种模式"
-- run.md 增加 Step 0.5（解析 mode）+ 角色 → 命令 dispatch 表（按 mode 分列）+ fast 模式合并解析章节（state=ACCEPT 后同时解析两个 md）
-- fast 模式熔断阈值更严：`review_revision: 2` / `fix_per_bug: 2`（full 模式仍是 3 / 3）；同 BUG 修 2 次直接停下要人工，没有 TECH_LEAD_REVIEW 兜底岗
+### Choosing a Mode
 
-### 选择建议
-
-| 用 full 当 | 用 fast 当 |
+| Use full when | Use fast when |
 |---|---|
-| 跨模块、含 DB schema 变更 | 单模块单接口 |
-| 涉及对外契约、合规风险 | 改动 ≤ 800 行 diff |
-| Sprint 切片 ≥ 2 | 无并发/事务复杂度 |
+| Cross-module, includes DB schema changes | Single module, single endpoint |
+| Involves external contracts or compliance risk | Change ≤ 800 lines of diff |
+| Sprint slices ≥ 2 | No concurrency or transaction complexity |
 
 ## [0.1.0] - 2026-05-17
 
-首次发布。把 v2.1 五方异构 SOP 拆成 Claude Code Plugin 形态。
+Initial release. Splits the v2.1 five-party heterogeneous SOP into a Claude Code Plugin form.
 
-### 新增
+### Added
 
-- 9 个 slash commands：run / planner / sa / dev / qa / evaluator / hotfix / approve-spec / status
-- 5 个角色 agents：planner-claude / tech-lead-claude / sa-codex / qa-codex / evaluator-codex
-- 4 个被动触发 skills：using-cc-nexs / role-isolation / md-aggregation / commit-discipline
-- 3 个 PreToolUse hooks：role-boundary-guard / spec-gate-guard / pre-merge-check
-- 完整模板集：requirements / spec / dev-plan / test-cases / api-doc / deploy / acceptance / test-report / progress（状态机骨架）/ config / bugs/BUG-template
-- 状态机编排：progress.md 驱动的自循环
-- 唯一人工 gate：spec 通过 SA 评审后停一次
-- 三档熔断：SA review / dev 循环 / Evaluator 未通过
-- Hotfix 三档分级：P3 / P2 / P0-P1
+- 9 slash commands: run / planner / sa / dev / qa / evaluator / hotfix / approve-spec / status
+- 5 role agents: planner-claude / tech-lead-claude / sa-codex / qa-codex / evaluator-codex
+- 4 passively triggered skills: using-cc-nexs / role-isolation / md-aggregation / commit-discipline
+- 3 PreToolUse hooks: role-boundary-guard / spec-gate-guard / pre-merge-check
+- Complete template set: requirements / spec / dev-plan / test-cases / api-doc / deploy / acceptance / test-report / progress (state-machine skeleton) / config / bugs/BUG-template
+- State-machine orchestration: a self-loop driven by progress.md
+- The only human gate: stop once after the spec passes SA review
+- Three-level circuit breakers: SA review / dev loop / Evaluator failure
+- Three-tier hotfix classification: P3 / P2 / P0-P1

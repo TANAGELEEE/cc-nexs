@@ -1,23 +1,22 @@
 ---
-description: "Compound 角色入口。读完成需求的 all-docs/doc/<id>/* 把\"非显然教训\"沉淀到 docs/solutions/<topic>.md，下次同类需求 Repo Scout 自动接入。旁路命令，不进状态机。"
+description: "Compound role entry point. Read all-docs/doc/<id>/* for the completed requirement and distill \"non-obvious lessons\" into docs/solutions/<topic>.md, so the next similar requirement is automatically picked up by Repo Scout. Bypass command; does not enter the state machine."
 disable-model-invocation: true
 allowed-tools: "Read, Write, Edit, Glob, Grep, Bash, Task"
-argument-hint: "[需求编号] [可选: --force]"
+argument-hint: "[Requirement ID] [optional: --force]"
 ---
 
 # /cc-nexs:compound
 
-完成的需求跑这条命令把教训沉淀到仓库级 `docs/solutions/`。下次同类需求 RECON 阶段会自动 grep 命中、接入 repo-context.md。
+For a completed requirement, run this command to distill lessons into the repository-level `docs/solutions/`. The next similar requirement will be automatically matched by grep during the RECON phase and pulled into repo-context.md.
 
-参数：
+Parameters:
 
-- `$1` = 需求编号（必填）
-- `--force` = 跳过"current_state == COMPLETE"前置校验，便于回溯历史需求 / 补沉淀
+- `$1` = requirement ID (required)
+- `--force` = skip the "current_state == COMPLETE" precondition check, useful for retroactively reviewing historical requirements / backfilling lessons
 
-## 执行步骤
+## Execution Steps
 
-### 1. 校验参数
-
+### 1. Validate Arguments
 ```bash
 ID="$1"
 FORCE=0
@@ -32,9 +31,7 @@ if [ -z "$ID" ]; then
   exit 1
 fi
 ```
-
-### 2. 定位需求目录
-
+### 2. Locate the requirements directory
 ```bash
 [ -n "$CC_NEXS_REQ_DIR" ] && REQ_DIR="$CC_NEXS_REQ_DIR" || REQ_DIR=$(ls -d all-docs/doc/${ID}.*/ 2>/dev/null | head -1)
 if [ -z "$REQ_DIR" ]; then
@@ -43,9 +40,7 @@ if [ -z "$REQ_DIR" ]; then
 fi
 echo "📂 目录: ${REQ_DIR}"
 ```
-
-### 3. 校验 progress 状态（除非 --force）
-
+### 3. Validate the progress status (unless --force)
 ```bash
 if [ "$FORCE" != "1" ]; then
   PROG="${REQ_DIR}progress.md"
@@ -62,18 +57,14 @@ if [ "$FORCE" != "1" ]; then
   fi
 fi
 ```
-
-### 4. 准备 docs/solutions/ 目录
-
+### 4. Prepare the docs/solutions/ directory
 ```bash
 SOL_DIR="docs/solutions"
 mkdir -p "$SOL_DIR"
 ```
+### 5. Launch the Compound Subagent
 
-### 5. 启动 Compound 子代理
-
-通过 Task 工具调起 `compound-claude`。Prompt 模板：
-
+Use the Task tool to invoke `compound-claude`. Prompt template:
 ```
 你是 Compound（独立 session），经验沉淀员。
 
@@ -112,9 +103,7 @@ frontmatter keywords 必须 ≥ 3 个；少于 3 个直接跳过本条 solution�
 
 完成后仅写文件，不输出额外摘要。
 ```
-
-### 6. 校验产出
-
+### 6. Verify Outputs
 ```bash
 SUMMARY="${REQ_DIR}compound-summary.md"
 if [ ! -s "$SUMMARY" ]; then
@@ -144,13 +133,11 @@ if grep -q "无非显然教训" "$SUMMARY"; then
   fi
 fi
 ```
+### 7. Does not advance the state machine
 
-### 7. 不推进状态机
+`/cc-nexs:compound` does not modify progress.md. It is a bypass command outside the state machine.
 
-`/cc-nexs:compound` 不修改 progress.md。它是状态机外的旁路命令。
-
-## 输出
-
+## Output
 ```
 ✅ Compound 完成
    summary: ${REQ_DIR}compound-summary.md
@@ -163,28 +150,25 @@ fi
    - 不信任：直接 git checkout 撤销 docs/solutions/ 改动
    - 信任：commit 入库，下次同类需求 RECON 自动接入
 ```
+## When Not to Use
 
-## 何时不该用
+- Status has not reached COMPLETE → add --force to run (generally not recommended)
+- The requirement is purely docs/typo → no strong signal to capture
+- The requirement is too small (single commit, no SA rework, no BUG) → running it is just an empty run
 
-- 状态未到 COMPLETE → 加 --force 才能跑（一般不建议）
-- 需求纯文档/typo → 没有强信号可沉淀
-- 需求规模太小（单 commit、无 SA 返工、无 BUG）→ 跑也是空跑
-
-## 与其他命令的关系
-
+## Relationship to Other Commands
 ```
 /cc-nexs:run          ← 跑流水线到 COMPLETE
 /cc-nexs:compound     ← 本命令，需求收尾后沉淀经验（旁路，可选）
 /cc-nexs:recon        ← 下个需求时 Repo Scout 会扫 docs/solutions/，命中即接入
 ```
+## Output Contract
 
-## 输出契约
-
-成功路径：
-- `${REQ_DIR}compound-summary.md` 存在且含强信号检查章节
-- 若声明产出 N 条 solution，`docs/solutions/` 下有对应 N 个文件存在或被更新
-- 若声明跳过，`docs/solutions/` 在本次跑后无新增文件
-- 不修改 `progress.md`、不修改 `all-docs/doc/${ID}/` 下其他历史档案
+Success path:
+- `${REQ_DIR}compound-summary.md` exists and contains a strong-signal check section
+- If it declares N solutions produced, the corresponding N files exist or have been updated under `docs/solutions/`
+- If it declares a skip, `docs/solutions/` has no newly added files after this run
+- Do not modify `progress.md`, and do not modify other historical archives under `all-docs/doc/${ID}/`
 
 ## Model dispatch preview
 

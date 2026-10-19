@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-review
-description: /cc-nexs:review 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:review 或 /skill:cc-nexs-review 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard lean（默认）、fast 与 full 模式，并通过 pi-subagents 运行隔离角色。 fast 模式 Reviewer 入口。spec、每轮发布前代码评审、部署后最终契约验收三者保持独立调用。
+description: /cc-nexs:review Pi P2 adapter skill. Invoke only through /cc-nexs:review or /skill:cc-nexs-review; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default), fast, and full modes with isolated roles through pi-subagents. fast mode Reviewer entry point. spec, per-round pre-release code review, and post-deployment final contract acceptance remain three independent invocations.
 disable-model-invocation: true
 ---
 

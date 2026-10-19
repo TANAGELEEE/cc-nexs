@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-compound
-description: /cc-nexs:compound 的 Codex 镜像 skill。 显式调用 $cc-nexs-compound 时使用。 Compound 角色入口。读完成需求的 all-docs/doc/<id>/* 把\"非显然教训\"沉淀到 docs/solutions/<topic>.md，下次同类需求 Repo Scout 自动接入。旁路命令，不进状态机。
+description: /cc-nexs:compound Codex mirror skill. Use when $cc-nexs-compound is explicitly invoked. Compound role entry point. Read all-docs/doc/<id>/* for the completed requirement and distill \"non-obvious lessons\" into docs/solutions/<topic>.md, so the next similar requirement is automatically picked up by Repo Scout. Bypass command; does not enter the state machine.
 ---
 
 # /cc-nexs:compound for Codex

@@ -104,7 +104,7 @@ function validateInitCommand() {
   mustContain(path, text, [
     '--mode=lean|hotfix|fast|full',
     '--risk-tier=auto|low|medium|high|critical',
-    '默认 `lean`',
+    /(?:默认 `lean`|new requirements default to `lean`)/,
     'createWorkspaceWorktrees',
     '.worktrees/<id>-<slug>/<repo-id>/',
     'templates/${MODE}/',
@@ -117,8 +117,8 @@ function validateInitCommand() {
     'risk_tier',
     'plan.md',
     'init-hotfix',
-    'Hotfix 提前分流',
-    '不运行后续编号',
+    /(?:Hotfix 提前分流|Hotfix Early Routing)/,
+    /(?:不运行后续编号|subsequent numbering[^\n]*do not run)/,
   ]);
 }
 
@@ -215,12 +215,12 @@ function validateParallelImplementationRules() {
   mustContain(plannerPath, read(plannerPath), [
     'sync-implementation-worktrees',
     'validate-implementation-plan',
-    'G1 前',
+    /(?:G1 前|before G1)/,
   ]);
   mustContain(fullstackPath, read(fullstackPath), [
     'sync-implementation-worktrees',
     'validate-implementation-plan',
-    'G1 前',
+    /(?:G1 前|before G1)/,
   ]);
 }
 
@@ -244,19 +244,19 @@ function validateHotfixCommand() {
     '--authorization-evidence',
     '--promote-lean',
     '--test-exception',
-    'P0/P1/P2/P3 全部需要独立 Review',
+    /(?:P0\/P1\/P2\/P3 全部需要独立 Review|P0\/P1\/P2\/P3 all require an independent Review)/,
     'HOTFIX-SCOPE',
     'start-hotfix',
     'HOTFIX_LOCAL_VERIFYING',
     'HOTFIX_DELTA_REVIEW',
     'HOTFIX_TEST_RELEASE',
     'HOTFIX_RELEASE_PENDING_HUMAN',
-    '同一模型但更高 effort/thinking',
-    'P0/P1 的 Reviewer 自动路由到 `escalated`',
+    /(?:同一模型但更高 effort\/thinking|same model with higher effort\/thinking)/,
+    /(?:P0\/P1 的 Reviewer 自动路由到 `escalated`|Reviewer for P0\/P1 is automatically routed to `escalated`)/,
     'Git Custodian',
     'release-test <id> --hotfix',
     '/cc-nexs:approve-release <id>',
-    '禁止 `test -> base`',
+    /(?:禁止 `test -> base`|`test -> base`[^\n]*prohibited)/,
   ]);
   for (const obsolete of ['完成新编号、占号和 worktree 初始化', 'P3 最终 diff 不满足边界时升级 P2', '机器边界证明后跳过模型 Review']) {
     if (text.includes(obsolete)) fail(`${path}: obsolete Hotfix contract ${obsolete}`);

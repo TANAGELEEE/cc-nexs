@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-resolve-test-conflict
-description: /cc-nexs:resolve-test-conflict 的 Codex 镜像 skill。 显式调用 $cc-nexs-resolve-test-conflict 时使用。 Continue test delivery after a real test branch merge conflict.
+description: /cc-nexs:resolve-test-conflict Codex mirror skill. Use when $cc-nexs-resolve-test-conflict is explicitly invoked. Continue test delivery after a real test branch merge conflict.
 ---
 
 # /cc-nexs:resolve-test-conflict for Codex

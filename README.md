@@ -1,33 +1,34 @@
 # cc-nexs
 
-> 多角色 + 状态机驱动的 Claude Code / Codex / Pi 开发流程框架。源码用 monorepo 维护，发布产物按各运行时的原生扩展机制分发。
+[English](./README.en-US.md) · [繁體中文（台灣）](./README.zh-TW.md)
 
-## 这是什么
+> A multi-role, state-machine-driven development workflow framework for Claude Code / Codex / Pi. The source is maintained as a monorepo, and release artifacts are distributed through each runtime's native extension mechanism.
 
-把开发流程 SOP 拆成两层：
+## What This Is
 
-- **`packages/core/`** —— 通用框架。状态机引擎、角色注册、reviewer 工具适配、跨平台 hooks、i18n、共享 commands。
-- **`packages/preset-*/`** —— 项目预设。声明启用哪些角色、用什么工具、做什么栈检查、加载什么模板。
+The development workflow SOP is split into two layers:
 
-源码维护方便（monorepo），分发产物扁平（每个 preset 物化进 `dist/`，自包含可装），通过 `pnpm build` 把 core 内容物化进每个 preset 的 dist 目录。Claude Code 与 Codex 使用 dist plugin；Pi 使用根 package manifest、扩展、skills 和 package agents，但三边共用同一份 command SOP。
+- **`packages/core/`** — the shared framework. State machine engine, role registration, reviewer tool adaptation, cross-platform hooks, i18n, shared commands.
+- **`packages/preset-*/`** — project presets. They declare which roles are enabled, which tools are used, which stack checks run, and which templates are loaded.
 
-## 当前预设
+Source stays easy to maintain (monorepo) while distribution artifacts stay flat (each preset is materialized into `dist/`, self-contained and installable); `pnpm build` materializes the core contents into each preset's dist directory. Claude Code and Codex use the dist plugin; Pi uses the root package manifest, extensions, skills, and package agents, but all three share the same command SOP.
 
-| Preset | 适用场景 | 角色 | 工具 | 语言 |
+## Current Presets
+
+| Preset | Use case | Roles | Tools | Language |
 |--------|---------|------|------|------|
-| `preset-standard` | 通用多仓项目；具体技术栈由私有 overlay 注入 | 支持 **lean（默认）/ hotfix / fast / full**；Pi 使用 pi-subagents 隔离角色 | 每个 Lean/Hotfix 角色可配置模型与 effort/thinking；公开 preset 不固定模型 ID | 中文 |
-| `preset-minimal` | 通用 / 个人项目 / 跨语言起步 | 3 角色（Planner / Developer / Reviewer）| Claude 单工具 + 子代理隔离 | 英文 |
+| `preset-standard` | General multi-repo projects; the concrete tech stack is injected by a private overlay | Supports **lean (default) / hotfix / fast / full**; Pi uses pi-subagents to isolate roles | Each Lean/Hotfix role can configure its model and effort/thinking; the public preset does not pin model IDs | English |
+| `preset-minimal` | General / personal projects / cross-language starting point | 3 roles (Planner / Developer / Reviewer)| Single Claude tool + subagent isolation | English |
 
-新增预设按 [docs/extending-presets.md](./docs/extending-presets.md) 操作。模式和角色选择见 `preset-standard` 的 [docs/role-map.md](./packages/preset-standard/docs/role-map.md)。
+To add a preset, follow [docs/extending-presets.md](./docs/extending-presets.md). For modes and role selection, see [docs/role-map.md](./packages/preset-standard/docs/role-map.md) in `preset-standard`.
 
-`preset-standard` 新需求默认 Lean；满足 low/medium、复用既有能力、无新表结构/基础设施/破坏性契约的小需求默认走 fast-track：计划批准后按 worktree/feature branch 并行实现，能本地完成的 build/start/smoke 立即完成；例如 backend-java 无法本地启动时，记录结构化 `deferred_to_test` 证据后继续，不再反复尝试。随后冻结精确 candidate，先合入 test 并触发 CI/部署，再在部署环境验收（web 可本地启动并连接已部署的 test backend），最后做一次集中 Review 并停在 Gateway B。浏览器、登录/MFA 与验收页面 URL 都只属于部署后 verification；缺少能力时进入可恢复的 `manual_required`，不会阻塞或回滚 test merge/CI。高风险 Lean 使用 Review-first standard lane，Fast/Full 需显式指定；没有 `delivery` 字段的历史需求继续保持旧的逐 Sprint + manual 语义。
+New requirements in `preset-standard` default to Lean; small requirements that are low/medium risk, reuse existing capabilities, and add no new table schemas/infrastructure/breaking contracts take the fast-track by default: once the plan is approved, implementation runs in parallel across worktree/feature branches, and any build/start/smoke that can be completed locally is completed immediately; for example, when backend-java cannot be started locally, it records structured `deferred_to_test` evidence and moves on instead of retrying repeatedly. The exact candidate is then frozen, merged into test first with CI/deployment triggered, accepted in the deployed environment (web can start locally and connect to the deployed test backend), and finally given one consolidated Review, stopping at Gateway B. Browser, login/MFA, and acceptance page URLs all belong only to post-deployment verification; when a capability is missing, the flow enters a recoverable `manual_required` and does not block or roll back the test merge/CI. High-risk Lean uses the Review-first standard lane; Fast/Full must be specified explicitly; historical requirements without a `delivery` field keep the old per-Sprint + manual semantics.
 
-显式 Fast/Full 的多端实现也不再由一个 Fullstack/Tech Lead 串行包办。G1 会绑定 spec 中的 repository ownership DAG；同一 wave、不同 assigned worktree 的 backend/web worker 在 Claude Code、Codex、Pi 上同时启动，整批共享冻结的模型路由。全部 join 后才进行每仓聚合验证、唯一共享文档同步和每仓一个 candidate；同一 repository 始终串行，避免 lockfile、codegen、formatter 与构建目录互相污染。
+Explicit Fast/Full multi-end implementations are no longer handled serially by a single Fullstack/Tech Lead either. G1 binds the repository ownership DAG from the spec; backend/web workers in the same wave on different assigned worktrees start simultaneously on Claude Code, Codex, and Pi, and the whole batch shares the frozen model routing. Only after all have joined does per-repo aggregate verification run, along with the single shared-document sync and one candidate per repo; the same repository always runs serially, avoiding lockfile, codegen, formatter, and build-directory cross-contamination.
 
-Lean/Hotfix 模型采用风险驱动路由。有效优先级是：公开 preset < 私有 overlay < 项目 `cc-nexs.config.yml.models` < feature profiles/routing < 命中的 routing rules < feature `models.roles` 显式覆盖。新 feature 模板不再生成 `models.roles`，因此日常项目配置会真正生效。
+Lean/Hotfix models use risk-driven routing. The effective precedence is: public preset < private overlay < project `cc-nexs.config.yml.models` < feature profiles/routing < matched routing rules < explicit overrides in feature `models.roles`. New feature templates no longer generate `models.roles`, so everyday project configuration actually takes effect.
 
-`risk_tier:auto` 时，Lean 从 Gateway A 绑定的计划风险取值，Hotfix 从绑定的 P0/P1/P2/P3 severity 推断。历史 Gateway A 缺少风险字段时，只从 hash 完全匹配的已批准 scope 派生；无法证明则按 `high` 保守升档，绝不静默回落 `medium`。公开规则自动把 Lean `high|critical` 的 Planner/Reviewer、Hotfix P0/P1 的 Reviewer 切到 `escalated`。公开 `escalated` 仍是 provider-neutral 的 `inherit + xhigh`；项目要切换实际高能力模型，应在私有配置覆盖同名 profile：
-
+Under `risk_tier:auto`, Lean takes its value from the plan risk bound at Gateway A, and Hotfix infers it from the bound P0/P1/P2/P3 severity. When a historical Gateway A lacks the risk field, the value is derived only from an approved scope whose hash matches exactly; if that cannot be proven, the tier is conservatively raised to `high` and never silently falls back to `medium`. The public rules automatically switch the Planner/Reviewer for Lean `high|critical` and the Reviewer for Hotfix P0/P1 to `escalated`. The public `escalated` profile remains provider-neutral `inherit + xhigh`; to switch to an actual high-capability model, a project should override the same-named profile in its private configuration:
 ```yaml
 models:
   profiles:
@@ -66,50 +67,46 @@ models:
     lean-developer: daily-development
     lean-reviewer: daily-review
 ```
+Projects can continue to configure a low-budget everyday profile for Planner, Developer, Reviewer, and Verifier separately; only roles that match a risk rule are upgraded. An explicit feature profile remains the final human decision, and `models.routing.enabled: false` explicitly disables automatic routing. All three hosts always use an independent Reviewer session.
 
-项目可以继续分别给 Planner、Developer、Reviewer、Verifier 配置低预算日常 profile；只有命中风险规则的角色升档。feature 显式 profile 仍是最终人工决定，`models.routing.enabled: false` 可显式关闭自动路由。三端始终使用独立 Reviewer session。
+Before configuring a specific model, you must defer to the host's native subagent override capability; a model appearing in the top-level catalog does not mean the current native-agent dispatch will necessarily allow it. Fast/Full still resolve `repo-scout/planner/tech-lead/sa/qa/evaluator/fullstack/reviewer/verifier`, and projects that mainly run these two modes should also map these roles explicitly; otherwise they inherit the host model.
 
-配置具体模型前必须以宿主的原生子代理 override 能力为准；模型出现在顶层目录中，不等于当前 native-agent dispatch 一定允许它。Fast/Full 仍会解析 `repo-scout/planner/tech-lead/sa/qa/evaluator/fullstack/reviewer/verifier`，主要运行这两种模式的项目也应显式映射这些角色，否则它们会继承宿主模型。
+Note: `models.routing.rules` is an ordered array, and later matching rules override earlier matching rules; once an overlay/project/feature declares this array, it replaces the lower-level array as a whole rather than appending by `id`. When only overriding profiles/roles, do not redeclare rules.
 
-注意：`models.routing.rules` 是有顺序的数组，后匹配规则覆盖先匹配规则；overlay/project/feature 一旦声明该数组，会整体替换低层数组，而不是按 `id` 追加。仅覆盖 profiles/roles 时不要重复声明 rules。
-
-旧 Lean/Hotfix feature 已生成的默认 `models.roles` 会遮蔽项目配置，先安全预览再迁移：
-
+The default `models.roles` already generated by legacy Lean/Hotfix features will shadow the project configuration; preview safely before migrating:
 ```text
 /cc-nexs:migrate-feature-config <id> --dry-run
 /cc-nexs:migrate-feature-config <id>
 /cc-nexs:migrate-feature-config <id> --dry-run --bind-plan-risk
 /cc-nexs:migrate-feature-config <id> --bind-plan-risk
 ```
+Migration only removes complete default mappings that structurally and exactly match the old template; any custom role/profile/routing is preserved. `--bind-plan-risk` is a separate opt-in: it only backfills hash-verified concrete risks into the legacy Gateway A and records a migration event; stale/missing/ambiguous scopes are rejected for writing.
 
-迁移只移除结构化精确匹配旧模板的完整默认映射；任何自定义 role/profile/routing 都会保留。`--bind-plan-risk` 是独立 opt-in：仅将 hash 验证通过的 concrete risk 回填旧 Gateway A，并记录 migration event；stale/缺失/歧义 scope 会拒绝写入。
+All four Lean roles in Claude Code use independent Claude subagents; all four Lean roles in Codex use independent native agents; Pi uses the `subagent` from `pi-subagents@0.35.1`, encoding thinking as the task's `provider/model:thinking` selector, with no need to maintain a separate role mapping in `.pi/settings.json`. Pi's `fallback_models` only retries failed tasks and does not re-run parallel siblings that already succeeded.
 
-Claude Code 的 Lean 四角色全部使用独立 Claude 子代理；Codex 的 Lean 四角色全部使用独立 native agent；Pi 使用 `pi-subagents@0.35.1` 的 `subagent`，将 thinking 编码为任务的 `provider/model:thinking` selector，无需在 `.pi/settings.json` 再维护一份角色映射。Pi 的 `fallback_models` 只重试失败任务，不重复运行已成功的并行 sibling。
-
-## 目录结构
-
+## Directory Structure
 ```
 cc-nexs/
-├── packages/                       源码（monorepo）
-│   ├── core/                       通用框架
-│   │   ├── commands/               共享 orchestrator commands（run/approve-spec/status/init）
-│   │   ├── lib/                    Node.js 框架代码
-│   │   ├── hooks/                  跨平台 .mjs hooks
+├── packages/                       source (monorepo)
+│   ├── core/                       shared framework
+│   │   ├── commands/               shared orchestrator commands (run/approve-spec/status/init)
+│   │   ├── lib/                    Node.js framework code
+│   │   ├── hooks/                  cross-platform .mjs hooks
 │   │   ├── schemas/                preset / workspace / overlay / progress.json v2 Schema
 │   │   └── i18n/{zh-CN,en-US}.json
 │   │
-│   ├── preset-standard/            五方异构预设（中文）
+│   ├── preset-standard/            Heterogeneous five-party preset (English)
 │   │   ├── .claude-plugin/plugin.json
 │   │   ├── .codex-plugin/plugin.json
 │   │   ├── preset.yml
-│   │   ├── agents/ × 5             五方角色身份
-│   │   ├── commands/ × 6           preset 自有阶段命令（planner/sa/dev/qa/evaluator/hotfix）
+│   │   ├── agents/ × 5             five-party role definitions
+│   │   ├── commands/ × 6           preset-owned phase commands (planner/sa/dev/qa/evaluator/hotfix）
 │   │   ├── skills/ × 4
-│   │   ├── docs/                   预设架构 / workflow / role-map
-│   │   ├── templates/              11 份中文模板
-│   │   └── hooks/hooks.json        hook 注册（实现脚本来自 core）
+│   │   ├── docs/                   preset architecture / workflow / role-map
+│   │   ├── templates/              11 localized templates
+│   │   └── hooks/hooks.json        hook registration (implementation scripts come from core)
 │   │
-│   └── preset-minimal/             3 角色通用预设（英文）
+│   └── preset-minimal/             3-role generic preset (English)
 │       ├── .claude-plugin/plugin.json
 │       ├── .codex-plugin/plugin.json
 │       ├── preset.yml
@@ -120,7 +117,7 @@ cc-nexs/
 │       └── hooks/hooks.json
 │
 ├── scripts/
-│   └── build.mjs                   build 脚本：core 物化进每个 preset
+│   └── build.mjs                   build script: materialize core into each preset
 │
 ├── .claude-plugin/                 Claude Code marketplace
 │   └── marketplace.json
@@ -128,30 +125,30 @@ cc-nexs/
 ├── .agents/plugins/                Codex marketplace
 │   └── marketplace.json
 │
-├── dist/                           build 产物（**commit 进 git** 让 GitHub / Codex marketplace 能直接装 plugin）
-│   ├── preset-standard/            扁平自包含 plugin
+├── dist/                           build artifacts (**committed to git** so GitHub / Codex marketplace can install the plugin directly)
+│   ├── preset-standard/            flat self-contained plugin
 │   │   ├── .claude-plugin/plugin.json
 │   │   ├── .codex-plugin/plugin.json
-│   │   ├── commands/ × 10          preset 6 + core 4 物化合并
+│   │   ├── commands/ × 10          preset 6 + core 4 materialized merge
 │   │   ├── agents/ × 5
-│   │   ├── skills/                 Claude Code 原 skills（不放 Codex mirror，避免污染 Claude 侧）
+│   │   ├── skills/                 Claude Code native skills (kept out of the Codex mirror to avoid polluting Claude)
 │   │   ├── codex-skills/           Codex command mirror skills
 │   │   ├── docs/
 │   │   ├── templates/
-│   │   ├── hooks/                  *.mjs（来自 core）+ hooks.json（来自 preset）
-│   │   ├── lib/                    core/lib 物化
-│   │   ├── schemas/                core/schemas 物化
-│   │   └── i18n/                   core + preset 合并
-│   └── preset-minimal/             同上结构
+│   │   ├── hooks/                  *.mjs（from core）+ hooks.json（from preset）
+│   │   ├── lib/                    materialized core/lib
+│   │   ├── schemas/                materialized core/schemas
+│   │   └── i18n/                   merged core + preset
+│   └── preset-minimal/             same structure
 │
 ├── examples/
-│   └── using-preset-standard/      演示项目
+│   └── using-preset-standard/      example project
 │
 ├── docs/
-│   ├── architecture.md             core × preset 关系
-│   ├── codex-plugin.md             Codex plugin 安装与复刻说明
-│   ├── pi-plugin.md                Pi P2 安装、模型隔离与支持边界
-│   └── extending-presets.md        写新预设指南
+│   ├── architecture.md             core × preset relationship
+│   ├── codex-plugin.md             Codex plugin installation and replication guide
+│   ├── pi-plugin.md                Pi P2 installation, model isolation, and support boundaries
+│   └── extending-presets.md        new preset guide
 ├── pi/
 │   ├── extensions/cc-nexs.ts       Pi slash command + child role guard
 │   ├── skills/                      lean + fast + full + hotfix P2 command mirrors
@@ -160,170 +157,152 @@ cc-nexs/
 ├── pnpm-workspace.yaml
 └── package.json
 ```
-
-## 构建
-
+## Build
 ```bash
-pnpm build             # 构建全部 preset
-pnpm build:codex       # 同 build；显式用于 Codex plugin 产物刷新
-pnpm build:standard    # 仅构建 preset-standard
-pnpm build:minimal     # 仅构建 preset-minimal
-pnpm validate:claude   # 校验 Claude Code marketplace / install 脚本入口 / skills 隔离
-pnpm validate:codex    # 校验 Codex manifest / marketplace / command mirror skills
-pnpm validate:pi       # 校验 Pi package / P2 skills / package agents / 无固定模型
-pnpm validate:sop      # 校验 lean / full / fast / hotfix 的关键文档落点和 mirror 契约
-pnpm smoke:claude-install # 用临时 HOME 烟测 Claude Code 本地安装形态，不碰真实 ~/.claude
-pnpm smoke:pi-install  # 用临时 PI_CODING_AGENT_DIR 验证本地 Pi package 注册
-pnpm validate:plugins  # 同时校验 Claude Code + Codex 两边 plugin 产物与安装形态
-pnpm clean             # 删 dist
+pnpm build             # build all presets
+pnpm build:codex       # same as build; explicitly refresh Codex plugin artifacts
+pnpm build:standard    # build preset-standard only
+pnpm build:minimal     # build preset-minimal only
+pnpm validate:claude   # validate Claude Code marketplace / install script entry points / skill isolation
+pnpm validate:codex    # validate Codex manifest / marketplace / command mirror skills
+pnpm validate:pi       # validate Pi package / P2 skills / package agents / no fixed models
+pnpm validate:sop      # validate key document anchors and mirror contracts for lean / full / fast / hotfix
+pnpm smoke:claude-install # smoke-test local Claude Code installation with a temporary HOME; do not touch the real ~/.claude
+pnpm smoke:pi-install  # verify local Pi package registration with a temporary PI_CODING_AGENT_DIR
+pnpm validate:plugins  # validate Claude Code + Codex plugin artifacts and installation shapes
+pnpm clean             # delete dist
 ```
+What build does:
 
-build 做什么：
+1. Copies the preset's own `commands / agents / skills / docs / templates / preset.yml / i18n` into `dist/<preset>/`
+2. Materializes `core/commands` and `core/hooks` into `dist/<preset>/`; **same-named preset files take precedence** (they are not overwritten)
+3. Copies `core/lib`, `core/schemas`, and `core/i18n` into `dist/<preset>/`
+4. Rewrites paths in text files: `core/lib/X` → `lib/X`, `_core/X` → `X`, `../core/X` → `X`
+5. Automatically generates `.claude-plugin/marketplace.json`, listing every preset as a Claude Code plugin
+6. Automatically generates `.agents/plugins/marketplace.json`, listing every preset as a Codex plugin
+7. Generates `codex-skills/` for Codex: each `commands/*.md` produces a `$cc-nexs-*` mirror skill that still points back to the original command document; the original `skills/` are not written into the Codex mirror, so the Claude Code plugin is not affected
+8. Generates lean + fast + full + hotfix command skills and package-qualified role agents for Pi; Fast/Full runs across multiple repos in the same wave are launched with a single `subagent({ tasks, concurrency, async: true, worktree: false, context: "fresh" })` call, then joined with `subagent_wait`
 
-1. preset 自有 `commands / agents / skills / docs / templates / preset.yml / i18n` 拷进 `dist/<preset>/`
-2. `core/commands` `core/hooks` 物化进 `dist/<preset>/`，**preset 同名文件优先**（不被覆盖）
-3. `core/lib` `core/schemas` `core/i18n` 拷进 `dist/<preset>/`
-4. 文本类文件做路径 rewrite：`core/lib/X` → `lib/X`、`_core/X` → `X`、`../core/X` → `X`
-5. `.claude-plugin/marketplace.json` 自动生成，列出所有 preset 作为 Claude Code plugin
-6. `.agents/plugins/marketplace.json` 自动生成，列出所有 preset 作为 Codex plugin
-7. 为 Codex 生成 `codex-skills/`：每个 `commands/*.md` 都会生成一个 `$cc-nexs-*` mirror skill，仍回指原 command 文档；原 `skills/` 不写入 Codex mirror，避免影响 Claude Code plugin
-8. 为 Pi 生成 lean + fast + full + hotfix command skills 和 package-qualified role agents；Fast/Full 同 wave 多仓通过一次 `subagent({ tasks, concurrency, async: true, worktree: false, context: "fresh" })` 启动，再用 `subagent_wait` 汇合
+`dist` is the actual plugin carrier. Claude Code reads `.claude-plugin/marketplace.json`; Codex reads `.agents/plugins/marketplace.json`. Both point to the same set of `dist/preset-*`. Entry points on all three platforms are explicit-trigger only: ordinary natural-language development requests will not automatically enable cc-nexs.
 
-dist 是真正的 plugin 载体。Claude Code 读取 `.claude-plugin/marketplace.json`；Codex 读取 `.agents/plugins/marketplace.json`。两者都指向同一批 `dist/preset-*`。三端入口均为仅显式触发：普通自然语言开发请求不会自动启用 cc-nexs。
+## Installation
 
-## 安装
-
-### Codex 本地安装
-
+### Local installation for Codex
 ```bash
 cd /path/to/cc-nexs
 pnpm install:local:codex
 ```
-
-这会执行：
+This runs:
 
 1. `pnpm build`
 2. `pnpm validate:plugins`
-3. 把 `dist/preset-*` 同步到 `~/.codex/plugins/cache/cc-nexs/`
+3. Sync `dist/preset-*` to `~/.codex/plugins/cache/cc-nexs/`
 4. `codex plugin marketplace add /path/to/cc-nexs`
-5. 在 `~/.codex/config.toml` 中默认启用 `cc-nexs@cc-nexs`，关闭 `cc-nexs-minimal@cc-nexs`，避免重复 skill 候选
+5. Enable `cc-nexs@cc-nexs` by default in `~/.codex/config.toml` and disable `cc-nexs-minimal@cc-nexs` to avoid duplicate skill candidates
 
-然后重启 Codex 或开新 thread。可以在 `/plugins` 中检查 `cc-nexs@cc-nexs` 是否已启用；hooks 第一次运行前需要在 `/hooks` 中 review + trust。
+Then restart Codex or open a new thread. You can check whether `cc-nexs@cc-nexs` is enabled in `/plugins`; before hooks run for the first time, you need to review + trust them in `/hooks`.
 
-Codex 使用显式 skill 入口；每个 mirror skill 的 `agents/openai.yaml` 都设置 `policy.allow_implicit_invocation: false`，因此不会进入默认模型上下文。`/cc-nexs:*` 仅作为兼容文本提示，不是可执行 shell/slash command：
-
+Codex uses an explicit skill entry point; each mirror skill's `agents/openai.yaml` sets `policy.allow_implicit_invocation: false`, so it does not enter the default model context. `/cc-nexs:*` serves only as a compatibility text hint, not an executable shell/slash command:
 ```text
-$cc-nexs-init "需求描述"             # 默认 lean
+$cc-nexs-init "requirement description"             # defaults to lean
 $cc-nexs-plan 01
 $cc-nexs-approve-plan 01
-$cc-nexs-init "复杂需求" --mode=full # 只有显式指定才走 full
+$cc-nexs-init "complex requirement" --mode=full # full only when explicitly selected
 $cc-nexs-run 01
 $cc-nexs-approve-release 01
 $cc-nexs-release-base 01
 $cc-nexs-release-test 01
 $cc-nexs-approve-deploy 01
-$cc-nexs-hotfix "现象描述" --repos=api  # 自动创建 hotfix 分支与 BUG 文档，不占需求号
+$cc-nexs-hotfix "symptom description" --repos=api  # automatically creates a Hotfix branch and BUG document without consuming a requirement number
 ```
+The Codex-side implementation approach is command mirror skills. `$cc-nexs-run` reads `commands/run.md` as the single source of truth, so the document write locations and state machine logic for lean / full / fast / hotfix do not diverge. The approval skill calls the deterministic `cc-nexs` controller and does not modify progress manually. See [docs/codex-plugin.md](./docs/codex-plugin.md) for details.
 
-Codex 侧实现方式是 command mirror skills。`$cc-nexs-run` 读取 `commands/run.md` 作为唯一事实来源，所以 lean / full / fast / hotfix 的文档写入位置和状态机逻辑不会分叉。审批 skill 会调用确定性的 `cc-nexs` 控制程序，不会手工修改 progress。详见 [docs/codex-plugin.md](./docs/codex-plugin.md)。
-
-### Claude Code 本地开发（一条命令）
-
+### Claude Code local development (one command)
 ```bash
 cd /path/to/cc-nexs
-pnpm install:local              # 等价于：build + 拷到 ~/.claude/plugins/cache/
+pnpm install:local              # equivalent to: build + copy to ~/.claude/plugins/cache/
 
-# 切换到 minimal preset
+# switch to the minimal preset
 pnpm install:local:minimal
 ```
+`install:local` does the following:
 
-`install:local` 做的事：
+1. Run `build` to produce `dist/preset-<name>/`
+2. **Actually copy** it to `~/.claude/plugins/cache/cc-nexs/cc-nexs/<version>/` (no symlink — Claude Code cleans up non-standard cache during startup)
+3. Sync `~/.claude/plugins/installed_plugins.json` metadata
+4. Verify that the plugin is enabled in `~/.claude/settings.json`
 
-1. 跑 `build` 产出 `dist/preset-<name>/`
-2. **真实拷贝**到 `~/.claude/plugins/cache/cc-nexs/cc-nexs/<version>/`（不软链——Claude Code 启动期会清理非标准 cache）
-3. 同步 `~/.claude/plugins/installed_plugins.json` 元数据
-4. 校验 `~/.claude/settings.json` 已启用 plugin
+Restart Claude Code after this and it takes effect. After changing source later, just run `pnpm install:local` once more. Claude Code's commands and native skills both set `disable-model-invocation: true`; they run only when the user types `/cc-nexs:*`, `/cc-nexs-minimal:*`, or an explicit skill command. The routing description for role agents is likewise limited to accepting dispatch only from an explicitly started cc-nexs parent flow.
 
-完成后重启 Claude Code 即可生效。后续改源码再跑一次 `pnpm install:local` 即可。Claude Code 的 commands 与原生 skills 都设置 `disable-model-invocation: true`；只会在用户输入 `/cc-nexs:*`、`/cc-nexs-minimal:*` 或显式 skill 命令时运行。角色 agent 的路由描述也限定为只接受已显式启动的 cc-nexs 父流程调度。
+### Pi P2 Installation
 
-### Pi P2 安装
-
-Pi 当前为实验性 P2 支持，承诺 `preset-standard` lean、fast、full 和 hotfix 流程。公开 GitHub 安装：
-
+Pi currently has experimental P2 support, with a commitment to the `preset-standard` lean, fast, full, and hotfix flows. Public GitHub installation:
 ```bash
 pi install npm:pi-subagents@0.35.1
-# macOS 首选 provider（安装后打开 ego lite 完成一次首次引导）
+# macOS preferred provider (open ego lite after installation for first-run setup)
 npx skills add citrolabs/ego-lite
-# Windows 或 ego lite 不可用时的 fallback
+# fallback when Windows or ego lite is unavailable
 pi install git:github.com/injaneity/pi-computer-use@v0.4.3
 pi install git:github.com/<github-owner>/cc-nexs
 ```
+The computer-use fallback must be enabled in the project's `.pi/computer-use.json` (or the global configuration) with `{"browser_use":true,"headless":true}`. Here, headless means no taking over foreground focus, physical keyboard/mouse, or cursor; Windows still requires an interactive desktop session and an already-open browser window.
 
-computer-use fallback 必须在项目 `.pi/computer-use.json`（或全局配置）启用 `{"browser_use":true,"headless":true}`。这里的 headless 表示禁止抢占前台焦点、物理键鼠和光标；Windows 仍需要可交互桌面会话与已打开的浏览器窗口。
-
-从本仓库开发或调试时使用本地安装：
-
+When developing or debugging from this repository, use the local installation:
 ```bash
 pnpm install
 pnpm install:local:pi
 ```
+Pi does not invoke the Codex CLI. The generated Pi skills set `disable-model-invocation: true`, are hidden from the system prompt, and can only be invoked explicitly via `/cc-nexs:*` or `/skill:cc-nexs-*`. Lean roles resolve `model`, `thinking`, and `fallback_models` from the cc-nexs profile; the parent agent encodes thinking in the `model` selector of the `subagent` task, and the Reviewer can use a different model, or the same model with higher thinking. When the primary model is unavailable, only failed tasks are retried in fallback order. `.pi/settings.json` retains only Pi authentication and the `enabledModels` scope. Pi selects a browser provider only after test merge/CI completes: it prefers ego lite, and when that is unavailable, selects the independent computer-use Verifier, requiring the effective configuration to be `browser_use: true` and `headless: true`. The same child never receives both providers; when neither is available or the login session is invalid, the deployed candidate remains unchanged and verification enters a recoverable `manual_required`. See [Pi P2 support](./docs/pi-plugin.md) for details.
 
-Pi 不调用 Codex CLI。生成的 Pi skills 设置 `disable-model-invocation: true`，从系统提示中隐藏，只能通过 `/cc-nexs:*` 或 `/skill:cc-nexs-*` 显式调用。Lean 各角色从 cc-nexs profile 解析 `model`、`thinking` 和 `fallback_models`；父代理在 `subagent` 任务的 `model` selector 中编码 thinking，Reviewer 可用不同模型，也可用相同模型但更高 thinking。主模型不可用时只按 fallback 顺序重试失败任务。`.pi/settings.json` 只保留 Pi 认证与 `enabledModels` 范围。Pi 在 test merge/CI 完成后才选择浏览器 provider：优先 ego lite，不可用时选择独立的 computer-use Verifier，并要求有效配置为 `browser_use: true`、`headless: true`。同一 child 不会同时获得两套 provider；两者都不可用或登录态失效时，已部署 candidate 保持不变，verification 进入可恢复的 `manual_required`。详见 [Pi P2 支持](./docs/pi-plugin.md)。
+Claude Code automated environment acceptance uses `chrome-devtools-mcp`; Codex reuses the currently logged-in in-app/Chrome session. All three runtimes access `release.test.allowed_hosts` only after deployment; a missing browser, login/MFA, or acceptance URL only produces `manual_required` and does not block test merge/CI. Plaintext account credentials must not be read from project memory, Markdown, or Git; necessary logins may only go through an opaque `credential_ref` to an external secret provider.
 
-Claude Code 自动环境验收使用 `chrome-devtools-mcp`；Codex 复用当前已登录的 in-app/Chrome 会话。三端都只在部署后访问 `release.test.allowed_hosts`，浏览器、登录/MFA 或验收 URL 缺失只会产生 `manual_required`，不会阻止 test merge/CI。不得从项目 memory、Markdown 或 Git 读取明文账号密码，必要登录只允许通过 opaque `credential_ref` 对接外部 secret provider。
-
-### Claude Code 从 GitHub 装（其他机器 / 协作者）
-
+### Install Claude Code from GitHub (other machines / collaborators)
 ```bash
 /plugin marketplace add <github-owner>/cc-nexs
-/plugin install cc-nexs@cc-nexs                 # 五方异构（preset-standard）
-/plugin install cc-nexs-minimal@cc-nexs         # 3 角色（preset-minimal）
+/plugin install cc-nexs@cc-nexs                 # five-party heterogeneous preset (preset-standard)
+/plugin install cc-nexs-minimal@cc-nexs         # 3 roles (preset-minimal)
 ```
+`/plugin marketplace add <github-owner>/cc-nexs` fetches the `.claude-plugin/marketplace.json` at the repository root; its `plugins[].source` points to `./dist/preset-*`—so the publishing repository must include a `dist/` that has passed reproducible-build verification.
 
-`/plugin marketplace add <github-owner>/cc-nexs` 会拉仓库根目录的 `.claude-plugin/marketplace.json`；它的 `plugins[].source` 指向 `./dist/preset-*`——所以发布仓库必须包含经过可重复构建校验的 `dist/`。
+## Daily Commands
 
-## 日常命令
+Claude Code, Codex, and Pi share the same command semantics but use each runtime's native entry points. All three treat `commands/*.md` as the source of truth for the workflow, and approval status is written consistently by the core `cc-nexs` commands; when the entry points in the table below are absent, none of the three may automatically enter cc-nexs based on natural language alone.
 
-Claude Code、Codex 和 Pi 共享同一命令语义，但使用各运行时的原生入口。三边都以 `commands/*.md` 为流程事实来源，审批状态统一由 `cc-nexs` 核心命令写入；未出现下表入口时，三端都不得仅凭自然语言自动进入 cc-nexs。
+“Explicit triggering only” applies only to the entry point and does not change automatic progression within the workflow: after `run` is explicitly invoked, the Orchestrator continues until it reaches an existing human gate, hits an explicit blocker, or lacks the capability to proceed, without requiring the user to call internal stage commands such as `execute`, `lean-review`, and `verify-local` step by step.
 
-“仅显式触发”只约束入口，不改变流程内部自动推进：显式执行 `run` 后，Orchestrator 会继续运行到既有人工门禁、明确阻塞或能力不足为止，不要求用户逐步调用 `execute`、`lean-review`、`verify-local` 等内部阶段命令。
-
-| 运行时 | 推荐入口 |
+| Runtime | Recommended entry points |
 | --- | --- |
-| Claude Code | `/cc-nexs:plan 01`、`/cc-nexs:run 01`、`/cc-nexs:approve-release 01` |
-| Codex Desktop / CLI | `$cc-nexs-plan 01`、`$cc-nexs-run 01`、`$cc-nexs-approve-release 01` |
-| Pi | `/cc-nexs:plan 01`、`/cc-nexs:run 01`、`/cc-nexs:approve-release 01` |
-| 普通终端 | `cc-nexs approve-plan 01`、`cc-nexs verify-local 01`、`cc-nexs approve-release 01` |
-
+| Claude Code | `/cc-nexs:plan 01`, `/cc-nexs:run 01`, `/cc-nexs:approve-release 01` |
+| Codex Desktop / CLI | `$cc-nexs-plan 01`, `$cc-nexs-run 01`, `$cc-nexs-approve-release 01` |
+| Pi | `/cc-nexs:plan 01`, `/cc-nexs:run 01`, `/cc-nexs:approve-release 01` |
+| Plain terminal | `cc-nexs approve-plan 01`, `cc-nexs verify-local 01`, `cc-nexs approve-release 01` |
 ```bash
-/cc-nexs:init "需求描述"          # 默认 lean；每仓独立 worktree + feature/<id>-<slug>
-/cc-nexs:plan [编号]               # 生成 requirements/plan 与临时 HTML，停 Gateway A
-/cc-nexs:approve-plan [编号]       # 批准 plan 哈希
-/cc-nexs:run [编号]                # 实现 → 能做的本地验证 → test/CI → 环境验收 → 一次集中 Review
-/cc-nexs:approve-release [编号]    # Gateway B，批准精确 tested fingerprint
-/cc-nexs:request-release-changes [编号] --type=... --feedback="..."  # Gateway B 提意见并安全回流
-/cc-nexs:release-base [编号]       # 批准后合并配置 base，docs 最后归档
-/cc-nexs:run [编号] --no-auto-test-release # 本次显式交给外部 test 发布；Lean/Hotfix 不可用 G2 代替 release attempt
-/cc-nexs:release-test [编号]      # 完整 candidate 确定性合入 test + 调 release driver
-/cc-nexs:approve-spec [编号]      # 人工放行 spec
-/cc-nexs:status [编号]            # 只读看状态
-/cc-nexs:build [--phase=...]      # 按 git diff 自动选 build/test 命令并跑
+/cc-nexs:init "requirement description"          # defaults to lean; each repo uses an independent worktree + feature/<id>-<slug>
+/cc-nexs:plan [id]               # generate requirements/plan and temporary HTML, then stop at Gateway A
+/cc-nexs:approve-plan [id]       # approve the plan hash
+/cc-nexs:run [id]                # implement → local verification where possible → test/CI → environment acceptance → one consolidated Review
+/cc-nexs:approve-release [id]    # Gateway B，approve the exact tested fingerprint
+/cc-nexs:request-release-changes [id] --type=... --feedback="..."  # submit Gateway B feedback and return safely
+/cc-nexs:release-base [id]       # merge into the configured base after approval; archive docs last
+/cc-nexs:run [id] --no-auto-test-release # explicitly hand this run to an external test release; Lean/Hotfix cannot use G2 as a substitute for a release attempt
+/cc-nexs:release-test [id]      # deterministically merge the complete candidate into test and call the release driver
+/cc-nexs:approve-spec [id]      # human approval for the spec
+/cc-nexs:status [id]            # read-only status view
+/cc-nexs:build [--phase=...]      # select and run build/test commands from git diff
 
-/cc-nexs:hotfix "现象描述" --repos=api  # hotfix/<key> + BUG 文档，不占需求号
-/cc-nexs:hotfix [bug-key]         # 恢复：本地验证、独立 Review、test、Gateway B
-/cc-nexs:revise-hotfix [bug-key] --reason "原因" --authorization-evidence "已有授权" # 原任务重绑
+/cc-nexs:hotfix "symptom description" --repos=api  # hotfix/<key> + BUG document without consuming a requirement number
+/cc-nexs:hotfix [bug-key]         # resume: local verification, independent Review, test, Gateway B
+/cc-nexs:revise-hotfix [bug-key] --reason "reason" --authorization-evidence "existing authorization" # rebind the original task
 ```
+G1/G2 are state-machine pause points, not global tool locks. While waiting for human confirmation, the parent session can still perform Git, SQL, SSH, deployment, diagnostics, and documentation operations authorized by the user; only the next cc-nexs role will not be dispatched.
 
-G1/G2 是状态机暂停点，不是全局工具锁。等待人工确认时，父会话仍可执行用户授权的 Git、SQL、SSH、部署、诊断和文档操作；只有 cc-nexs 的下一角色不会被派发。
+### Multi-module projects automatically select the build command by directory (since v0.3)
 
-### 多模块项目按目录自动选 build 命令（v0.3 起）
-
-混合栈仓库（如 backend Java + 前端 Next.js）经常一个仓库多套构建命令。`/cc-nexs:build` 会读 `cc-nexs.config.yml` 的 `paths_override.modules`，用 `git diff` 决定本次需求改了哪些 module，**只跑命中的 module 的命令**：
-
+Mixed-stack repositories (such as a Java backend plus a Next.js frontend) often contain multiple build commands in a single repository. `/cc-nexs:build` reads `paths_override.modules` from `cc-nexs.config.yml` and uses `git diff` to determine which modules the current requirement changed, **running only the commands of the modules that match**:
 ```yaml
 paths_override:
   diff_base: main
-  build_cmd: ""      # 顶层 fallback（doc-only 改动时跑）
+  build_cmd: ""      # top-level fallback (run for doc-only changes)
   test_cmd:  ""
 
   modules:
@@ -336,44 +315,45 @@ paths_override:
       build_cmd: "cd web && pnpm build"
       test_cmd:  "cd web && pnpm test"
 ```
+Running from any requirement worktree discovers the workspace root configuration upward, or you can pass `--config-root` explicitly. Cross-module changes (backend + web modified together) default to a maximum of 2 independent modules in parallel; declare ordering constraints with `depends_on`, and when a downstream module is hit, the dependency closure is filled in automatically. Successful results are bound to the full Git candidate fingerprint and cached outside the repository; any change to HEAD/base/diff/untracked/commands triggers re-execution. `workflow.local_verify.reuse_passed=true` also reuses local evidence for the same candidate; when Lean has no driver configured, you can bind directly to the command/exit/proof of a plan-approved command; Hotfix likewise supports binding command evidence within scope, must cover the frozen matrix, and is not allowed to defer to test. All Hotfix levels (including P3) require an independent Review.
 
-从任一需求 worktree 运行时会向上发现 workspace 根配置，也可显式传 `--config-root`。跨模块改动（同时改了 backend + web）默认最多并行 2 个独立模块；用 `depends_on` 声明顺序约束，命中下游模块时会自动补齐依赖闭包。成功结果绑定完整 Git candidate fingerprint 并缓存在仓库外，HEAD/base/diff/untracked/命令任一变化都会重新执行。`workflow.local_verify.reuse_passed=true` 还会复用同一 candidate 的本地证据；Lean 未配置 driver 时可直接绑定 plan-approved 命令的 command/exit/proof；Hotfix 同样支持绑定范围内的命令证据，必须覆盖冻结矩阵，且不允许延期到 test。所有 Hotfix 级别（包括 P3）均需独立 Review。
+### Multi-repo Worktree and Git Custodian (v0.4)
 
-### 多仓 Worktree 与 Git Custodian（v0.4）
-
-在 workspace 根目录配置 `.cc-nexs/workspace.yml`。普通 Lean/Fast/Full 的 `/cc-nexs:init` 首先向 docs 仓远端 base fast-forward push 一个只含 README 和 reservation marker 的最小占号提交，让未使用 cc-nexs 的开发者也能立即看到编号；并发冲突会重新 fetch、换号重试。占号成功后再以各仓最新 `origin/<base_branch>` 创建 `.worktrees/<id>-<slug>/<repo-id>/`；不会使用主 checkout 当前所在的 `test`/`master`，也不会把 feature 的 upstream 错绑到 base 分支。
-
+Configure `.cc-nexs/workspace.yml` in the workspace root. For ordinary Lean/Fast/Full, `/cc-nexs:init` first fast-forward pushes a minimal reservation commit containing only a README and a reservation marker to the docs repo's remote base, so developers who do not use cc-nexs can see the number immediately; concurrent conflicts trigger a re-fetch and a retry with a new number. After the number is successfully reserved, create `.worktrees/<id>-<slug>/<repo-id>/` from each repo's latest `origin/<base_branch>`; it will not use the `test`/`master` currently checked out in the main checkout, nor will it incorrectly bind the feature's upstream to the base branch.
 ```
-/cc-nexs:init "需求 A"     → 建 .worktrees/01-feat-a/{docs,api,web}/
-/cc-nexs:run 01            → 从 workspace 根或任一已分配 worktree 推进
+/cc-nexs:init "requirement A"     → create .worktrees/01-feat-a/{docs,api,web}/
+/cc-nexs:run 01            → continue from the workspace root or any assigned worktree
 
-# 同时另开一个需求
+# start another requirement in parallel
 cd <workspace-root>
-/cc-nexs:init "需求 B"     → 建另一组多仓 worktree
+/cc-nexs:init "requirement B"     → create another multi-repo worktree set
 ```
+A hotfix directly creates `hotfix/<key>` and `.worktrees/<key>/<repo>/`. When a related requirement exists, the BUG is written to its `doc/<id>.<slug>/bugs/BUG-<key>.md`; when none exists, it is written to `hotfix/<key>/BUG-001.md` in the docs repo. Machine state lives in the workspace under `.cc-nexs/hotfixes/<key>/`; the BUG is located through `progress.hotfix_document`, and no placeholder commits are published. Legacy `hotfix.md` tasks remain recoverable. For an authorized revision of the same failure, use `revise-hotfix` to rebind on the original branch; contract extensions add `--promote-lean`, creating a Lean document beside the original BUG and passing Gateway A.
 
-Hotfix 直接创建 `hotfix/<key>` 和 `.worktrees/<key>/<repo>/`。有关联需求时将 BUG 写入其 `doc/<id>.<slug>/bugs/BUG-<key>.md`；无关联时写入 docs 仓的 `hotfix/<key>/BUG-001.md`。机器状态在 workspace `.cc-nexs/hotfixes/<key>/`，通过 `progress.hotfix_document` 定位 BUG，不发布占位提交。旧 `hotfix.md` 任务仍可恢复。同一故障的授权修订用 `revise-hotfix` 在原分支重绑；契约扩展加 `--promote-lean`，在原 BUG 旁建立 Lean 文档并通过 Gateway A。
+When a deployment has actually reached test but environment capabilities block acceptance, the user may explicitly authorize `approve-release --test-exception` at the existing Gateway B. The controller requires the same candidate's local verification and Review to pass, along with authorization, environment, and rollback evidence; it preserves the fact that test did not pass, authorizes only configuring base integration, and does not authorize production deployment by default.
 
-已真实部署到 test 但环境能力阻塞验收时，用户可以在现有 Gateway B 明确授权 `approve-release --test-exception`。控制器要求同一 candidate 的本地验证和 Review 通过，以及授权、环境和回滚证据；保留 test 未通过的事实，仅授权配置 base 集成，不默认授权生产部署。
+Roles write only files within their remit and never perform Git mutations. The only direct docs-base write is the Custodian's phase-one number reservation for a normal requirement, and it may only create a requirement directory that did not previously exist. Ordinary commits do not run `git pull`. After the user explicitly authorizes merging to master, the Custodian fetches and merges the latest base into the feature; the code repo merges first, and the all-docs phase-two archive merges last; the same release task then fully deletes the remote feature, local feature, worktree, and candidate ref. The only exception is when the user explicitly asks to keep the remote branch.
 
-角色只写职责内文件，不执行 Git mutation。唯一的直接 docs-base 写入是普通需求的 Custodian 第一阶段占号，且只能新建一个此前不存在的需求目录。普通提交不执行 `git pull`。用户明确授权合并到 master 后，由 Custodian fetch 并把最新 base 合入 feature，代码仓先合并、all-docs 第二阶段归档最后合并；同一发布任务随后完整删除远端 feature、本地 feature、worktree 和 candidate ref。只有用户明确要求保留远端分支时才例外。
+The concrete phase commands (invoked one step at a time by a role) are determined by each preset; see each preset's README for details.
 
-具体阶段命令（角色单步调用）由各 preset 决定，详见各 preset 的 README。
+## Design Principles
 
-## 设计原则
+1. **Event state machine** — `progress.json` v2 is the authoritative event log with revisions; `progress.md` is only a human-readable view
+2. **Two gate types with distinct semantics** — Lean fixes Gateway A (plan) and Gateway B (tested candidate); if acceptance capability is insufficient after deployment, the task enters a recoverable `manual_required`, and browser issues are no longer treated as G2 before test delivery
+3. **Three-tier circuit breaker** — repeated review rejections, repeated repair failures, and repeated acceptance failures each escalate to a different state
+4. **Hard isolation of role boundaries** — hooks block out-of-scope operations via the `CC_NEXS_ROLE` environment variable
+5. **Pluggable presets** — new project stacks get a new preset without touching core
+6. **One source for multiple runtimes** — Claude Code, Codex, and Pi share the command SOP; runtimes only adapt role scheduling, model resolution, and permission interception
+7. **Source / distribution separation** — source is kept clear in a monorepo, while distribution uses a flat plugin compatible with the Claude Code and Codex loading mechanisms
 
-1. **事件状态机** —— `progress.json` v2 是带 revision 的权威事件记录，`progress.md` 仅作人类可读视图
-2. **两类门禁语义明确** —— Lean 固定 Gateway A（计划）与 Gateway B（tested candidate）；部署后验收能力不足进入可恢复 `manual_required`，不再把浏览器问题当成 test 交付前的 G2
-3. **三档熔断** —— review 反复打回、修复反复失败、验收反复未过分别升级到不同状态
-4. **角色边界硬隔离** —— hooks 通过 `CC_NEXS_ROLE` 环境变量拦截越权操作
-5. **预设可插拔** —— 新项目栈写新 preset，不动 core
-6. **多运行时同源** —— Claude Code、Codex、Pi 共享 command SOP；运行时只适配角色调度、模型解析和权限拦截
-7. **源码 / 分发分离** —— 源码用 monorepo 维护清晰，分发用扁平 plugin 兼容 Claude Code 与 Codex 加载机制
+## Status
 
-## 状态
-
-当前版本将开发 Sprint 与需求交付分离：Lean fast-track 在本地不可验证项留存 `deferred_to_test` 后，优先完成确定性 test merge/CI；跨端浏览器验证只发生在部署后，能力不足可人工恢复，不回滚已经完成的交付。
+The current version separates the development Sprint from requirement delivery: after the Lean fast-track records locally unverifiable items as `deferred_to_test`, it prioritizes completing the deterministic test merge/CI; cross-platform browser verification happens only after deployment, where insufficient capability can be recovered manually without rolling back delivery that has already completed.
 
 ## License
 
 MIT
+
+## Localization
+
+Runtime strings support `en-US`, `zh-CN`, and `zh-TW`. Set the project `language` to choose a locale; preset overrides live in `i18n/<locale>/strings.json`. Template overlays can be added under `templates/<locale>/` and selected with `CC_NEXS_LOCALE` (default `en-US`); missing files fall back to the default templates, preserving the workflow contract.

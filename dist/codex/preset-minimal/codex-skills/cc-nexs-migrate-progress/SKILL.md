@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-migrate-progress
-description: /cc-nexs:migrate-progress 的 Codex 镜像 skill。 显式调用 $cc-nexs-migrate-progress 时使用。 Migrate a legacy human-readable progress.md into authoritative progress.json v2 while preserving progress.md as a rendered view.
+description: /cc-nexs:migrate-progress Codex mirror skill. Use when $cc-nexs-migrate-progress is explicitly invoked. Migrate a legacy human-readable progress.md into authoritative progress.json v2 while preserving progress.md as a rendered view.
 ---
 
 # /cc-nexs:migrate-progress for Codex

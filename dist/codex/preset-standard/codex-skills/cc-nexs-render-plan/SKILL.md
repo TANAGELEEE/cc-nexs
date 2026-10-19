@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-render-plan
-description: /cc-nexs:render-plan 的 Codex 镜像 skill。 显式调用 $cc-nexs-render-plan 时使用。 Render the Lean plan Markdown as a human-friendly temporary HTML page.
+description: /cc-nexs:render-plan Codex mirror skill. Use when $cc-nexs-render-plan is explicitly invoked. Render the Lean plan Markdown as a human-friendly temporary HTML page.
 ---
 
 # /cc-nexs:render-plan for Codex

@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-request-release-changes
-description: /cc-nexs:request-release-changes 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:request-release-changes 或 /skill:cc-nexs-request-release-changes 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard lean（默认）、fast 与 full 模式，并通过 pi-subagents 运行隔离角色。 Record Gateway B feedback and route evidence-only, implementation, or scope changes safely.
+description: /cc-nexs:request-release-changes Pi P2 adapter skill. Invoke only through /cc-nexs:request-release-changes or /skill:cc-nexs-request-release-changes; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default), fast, and full modes with isolated roles through pi-subagents. Record Gateway B feedback and route evidence-only, implementation, or scope changes safely.
 disable-model-invocation: true
 ---
 

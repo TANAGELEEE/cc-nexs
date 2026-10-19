@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-brainstorm
-description: /cc-nexs:brainstorm 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:brainstorm 或 /skill:cc-nexs-brainstorm 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard lean（默认）、fast 与 full 模式，并通过 pi-subagents 运行隔离角色。 可选需求澄清入口：补全 requirements.md；需求完整时直接进入当前模式的规划步骤。
+description: /cc-nexs:brainstorm Pi P2 adapter skill. Invoke only through /cc-nexs:brainstorm or /skill:cc-nexs-brainstorm; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default), fast, and full modes with isolated roles through pi-subagents. Optional requirements clarification entry point: completes requirements.md; when requirements are complete, proceeds directly to the planning step of the current mode.
 disable-model-invocation: true
 ---
 

@@ -1,23 +1,22 @@
 ---
-description: "fast 模式 Verifier 入口。initial 在首次 test 发布后执行，regression 在修复重新发布后执行；两者都是黑盒环境验证。"
+description: "fast mode Verifier entry point. initial runs after the first test release, regression runs after a fix is re-released; both are black-box environment verifications."
 disable-model-invocation: true
 allowed-tools: "Read, Write, Edit, Bash, Glob, Task"
-argument-hint: "<mode: initial|regression> [需求编号]"
+argument-hint: "<mode: initial|regression> [requirement ID]"
 ---
 
 # /cc-nexs:verify
 
-通过 Task 工具调起 `verifier-codex` agent。fast 模式下取代 full 模式的 `/cc-nexs:qa cases` + `/cc-nexs:qa run` + `/cc-nexs:qa regression` 三阶段。
+Invoke the `verifier-codex` agent through the Task tool. In fast mode, it replaces the three stages of full mode: `/cc-nexs:qa cases` + `/cc-nexs:qa run` + `/cc-nexs:qa regression`.
 
-参数：
+Parameters:
 
 - `$1` = mode: `initial` / `regression`
-- `$2` = 需求编号
+- `$2` = requirement ID
 
-## 执行步骤
+## Execution steps
 
-### 1. 校验 mode + 参数
-
+### 1. Validate mode + parameters
 ```bash
 VMODE=$1
 REQ_NUM=$2
@@ -32,11 +31,9 @@ PMODE=$(grep -oE '"mode"\s*:\s*"[^"]*"' "${REQ_DIR}config.json" | head -1 | grep
   exit 1
 }
 ```
+### 2. Dispatch by mode
 
-### 2. 按 mode 分派
-
-#### mode=initial（首次 test release 后）
-
+#### mode=initial (after the first test release)
 ```
 调起 verifier-codex agent，按 agents/verifier-codex.md 的 mode=initial 执行。
 
@@ -55,9 +52,7 @@ PMODE=$(grep -oE '"mode"\s*:\s*"[^"]*"' "${REQ_DIR}config.json" | head -1 | grep
 只访问 allowed_hosts；禁从项目文件或 memory 读取明文账号密码。禁读 src/ 和 sa-*.md。禁修代码。
 末尾 ${REQ_DIR}test-report.md 必须 结论: 通过 或 阻塞。
 ```
-
-#### mode=regression（修复重新发布后）
-
+#### mode=regression (after fix and republish)
 ```
 调起 verifier-codex agent，按 agents/verifier-codex.md 的 mode=regression 执行。
 
@@ -73,9 +68,7 @@ PMODE=$(grep -oE '"mode"\s*:\s*"[^"]*"' "${REQ_DIR}config.json" | head -1 | grep
 append 到 ${REQ_DIR}test-report.md ## Sprint M1 回归 Round R。
 末尾 结论: 通过 或 阻塞 + 仍失败 BUG 清单。
 ```
-
-### 3. 解析结果
-
+### 3. Parsing Results
 ```bash
 RESULT=$(tail -20 ${REQ_DIR}test-report.md | grep -E '^结论:' | tail -1 | awk '{print $2}')
 OPEN=$(grep -l '状态.*OPEN' ${REQ_DIR}bugs/BUG-*.md 2>/dev/null | wc -l)
@@ -83,17 +76,15 @@ FIXED=$(grep -l '状态.*FIXED' ${REQ_DIR}bugs/BUG-*.md 2>/dev/null | wc -l)
 VERIFIED=$(grep -l '状态.*VERIFIED' ${REQ_DIR}bugs/BUG-*.md 2>/dev/null | wc -l)
 echo "RESULT:${RESULT} OPEN=${OPEN} FIXED=${FIXED} VERIFIED=${VERIFIED}"
 ```
+### 4. Not Advancing the State
 
-### 4. 不推进状态
+After reading the conclusion and BUG count, the orchestrator advances and records the verification evidence for the current release attempt:
+- initial passes → ACCEPTANCE
+- initial blocked (has OPEN BUG) → SPRINT_FIX
+- regression passes (all VERIFIED) → ACCEPTANCE
+- regression fails → fix_per_bug++ back to SPRINT_FIX
 
-orchestrator 读结论 + BUG 计数后推进，并记录当前 release attempt 的 verification evidence：
-- initial 通过 → ACCEPTANCE
-- initial 阻塞（有 OPEN BUG）→ SPRINT_FIX
-- regression 通过（全 VERIFIED）→ ACCEPTANCE
-- regression 失败 → fix_per_bug++ 回 SPRINT_FIX
-
-## 输出
-
+## Output
 ```
 ✅ Verifier 完成: mode=<mode>
    结论: 通过|阻塞

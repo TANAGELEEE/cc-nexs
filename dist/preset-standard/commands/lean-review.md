@@ -1,27 +1,25 @@
 ---
-description: "Lean 一次集中 Review 与最多一次 delta 闭环检查。"
+description: "Lean: one consolidated Review and at most one delta closure check."
 disable-model-invocation: true
 allowed-tools: "Read, Write, Edit, Bash, Task"
-argument-hint: "[需求编号] [--closure|--gateway-b-delta]"
+argument-hint: "[requirement ID] [--closure|--gateway-b-delta]"
 ---
 
 # /cc-nexs:lean-review
 
-先用 `assertPlanApprovalCurrent` 验证 Gateway A hash，再从绑定的 `risk_tier` 解析 `lean-reviewer`：`resolveRoleRuntime(..., {models: mergedModels, featureConfig, progress: progressV2, planText})`。`high|critical` 自动命中 `escalated`；feature 显式 profile 最终优先。打印风险来源、matched rule 和最终 profile/model/effort。Reviewer 可配置为不同模型，也可与 Developer 使用同一模型但更高 effort；无论配置如何都必须是独立 session。
+First use `assertPlanApprovalCurrent` to verify the Gateway A hash, then resolve `lean-reviewer` from the bound `risk_tier`: `resolveRoleRuntime(..., {models: mergedModels, featureConfig, progress: progressV2, planText})`. `high|critical` automatically hits `escalated`; an explicit feature profile ultimately takes precedence. Print the risk source, matched rule, and final profile/model/effort. The Reviewer can be configured as a different model, or use the same model as the Developer with higher effort; regardless of configuration, it must be an independent session.
 
-完整 Review 输入仅为批准 requirements、plan scope、全部仓库累计 diff、变更文件清单和同 candidate 的本地证据。一次性输出全部 P0/P1；P2/P3 非阻塞。写入 `plan.md` 后由父 Orchestrator执行：
+The complete Review input is only the approved requirements, plan scope, cumulative diff across the whole repository, list of changed files, and local evidence for the same candidate. Output all P0/P1 at once; P2/P3 are non-blocking. After writing to `plan.md`, the parent Orchestrator executes:
 
-`fast-track` 的完整 Review 在首次 test 验收后执行，并同时读取该 attempt/environment revision 的精简黑盒证据；`standard` 仍在 test 交付前执行。两者在 Gateway B 前都必须绑定同一 exact candidate。
+The complete Review for `fast-track` runs after the first test acceptance and simultaneously reads the condensed black-box evidence for that attempt/environment revision; `standard` still runs before test delivery. Both must bind to the same exact candidate before Gateway B.
 
-Reviewer 必须以批准时的 base...candidate 为唯一 diff，禁止把分支既有文件或路径外变更误报为本次 finding。明确记录为 `deferred_to_test` 且 test 矩阵可执行的环境检查缺口不是 P1；只有代码缺陷、AC 未覆盖或 candidate/证据不一致才可阻塞。不得为了“更完整”要求 AC 外架构加固或新增成批测试。
-
+The Reviewer must treat the base...candidate from approval time as the sole diff, and must not misreport pre-existing branch files or out-of-path changes as findings for this round. Environment check gaps explicitly recorded as `deferred_to_test` and executable by the test matrix are not P1; only code defects, uncovered ACs, or candidate/evidence inconsistency may block. Do not demand architecture hardening beyond the AC or batches of new tests in the name of being "more complete".
 ```text
 node <plugin-root>/lib/cc-nexs-cli.mjs record-review <id> --passed|--blocked [--finding "P0/P1 finding"]...
 ```
+`--closure` reviews only the issue numbers and the fix delta, then runs `record-review ... --closure`. If the closure fails again, go straight to `HUMAN_INTERVENTION`; do not start a third Review round.
 
-`--closure` 只审问题编号和修复 delta，并执行 `record-review ... --closure`。闭环再次失败直接 `HUMAN_INTERVENTION`，不得开始第三轮 Review。
-
-`--gateway-b-delta` 只审当前 Gateway B request、对应代码 delta、受影响调用面和同 candidate 的新本地证据，然后执行 `record-review ... --gateway-b-delta`。PASS 后必须重新发布 test 并回归；NEEDS_REVISION 直接人工介入，不开始新的自动 Review 循环。
+`--gateway-b-delta` reviews only the current Gateway B request, the corresponding code delta, the affected call sites, and new local evidence for the same candidate, then runs `record-review ... --gateway-b-delta`. After a PASS, the test must be republished and regression run; on NEEDS_REVISION, go straight to human intervention and do not start a new automatic Review loop.
 
 ## Model dispatch preview
 

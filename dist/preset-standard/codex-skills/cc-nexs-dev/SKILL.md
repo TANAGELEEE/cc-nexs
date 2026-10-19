@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-dev
-description: /cc-nexs:dev 的 Codex 镜像 skill。 显式调用 $cc-nexs-dev 时使用。 Tech Lead 编码入口。Sprint 实现可按已批准 repository assignment 并行；文档、评审修订与修复保持边界隔离。
+description: /cc-nexs:dev Codex mirror skill. Use when $cc-nexs-dev is explicitly invoked. Tech Lead coding entry point. Sprint implementation may run in parallel per approved repository assignment; documentation, review revisions, and fixes remain boundary-isolated.
 ---
 
 # /cc-nexs:dev for Codex

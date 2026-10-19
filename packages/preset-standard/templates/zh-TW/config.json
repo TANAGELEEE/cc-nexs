@@ -1,0 +1,29 @@
+{
+  "_comment": "cc-nexs 單需求配置。orchestrator 啟動時讀取本檔案決定流水線模式。",
+  "config_version": 2,
+  "mode": "lean",
+  "risk_tier": "auto",
+  "release": {
+    "test": "inherit"
+  },
+  "_release_test_options": ["inherit", "auto", "manual", "disabled"],
+  "_mode_options": {
+    "lean": "預設省 Token 流程；計劃門禁、並行實現、本地整合驗證、一次集中 Review、test 驗收和釋出門禁",
+    "full": "完整五方流程；開發可分多個 Sprint，全部開發完成後統一 integration review、test release、final QA 和 Evaluator 驗收",
+    "fast": "三角色單 Sprint；小型多端需求按 repository wave 並行實現，程式碼評審後統一 TEST_RELEASE",
+    "lite": "輕量流程（Tech Lead → 自測 → commit），跳過 spec 和 Evaluator，適合極小改動",
+    "hotfix": "Bug 修復流程，按 P0/P1/P2/P3 自動分檔"
+  },
+  "_mode_選擇建議": {
+    "用 full 當": "多 Sprint、含 DB schema/破壞性契約/合規風險，或複雜跨端依賴",
+    "用 fast 當": "單 Sprint、改動 ≤ 800 行；可包含契約已凍結且分屬不同 repository 的前後端並行實現"
+  },
+  "thresholds": {
+    "sa_code_revision": 3,
+    "qa_fix_per_bug": 3,
+    "evaluator_未透過": 2
+  },
+  "auto_squash_on_sprint_done": false,
+  "skip_human_gate": false,
+  "_skip_human_gate_warning": "true 時跳過 spec 評審後的人工 checkpoint。僅用於 demo 或緊急 hotfix，正常需求請保持 false。"
+}

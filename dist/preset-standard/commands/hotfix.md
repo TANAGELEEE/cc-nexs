@@ -1,47 +1,42 @@
 ---
-description: "Hotfix：独立修复分支与 BUG 文档、本地验证、独立 Review、test 验收和 Gateway B。"
+description: "Hotfix — independent fix branch and BUG document, local verification, independent Review, test acceptance, and Gateway B."
 disable-model-invocation: true
 allowed-tools: "Read, Write, Edit, Bash, Glob, Grep, Task, Skill"
-argument-hint: "<bug-key | bug 现象> [--level=P0|P1|P2|P3] [--related=<feature-id>] [--repos=a,b] [--bug-file=<docs-relative.md>]"
+argument-hint: "<bug-key | bug symptom> [--level=P0|P1|P2|P3] [--related=<feature-id>] [--repos=a,b] [--bug-file=<docs-relative.md>]"
 ---
 
 # /cc-nexs:hotfix
 
-Hotfix 使用独立的修复分支和 BUG 文档，不占共享需求编号，不发布占位目录。参数为已有 `mode=hotfix` 的 bug-key 或旧编号时恢复原任务；参数为 bug 描述时，先确定受影响仓库和 slug，再运行：
-
+Hotfix uses an independent fix branch and BUG document; it does not consume a shared requirement ID and does not publish a placeholder directory. When the argument is an existing bug-key with `mode=hotfix` or a legacy ID, resume the original task; when the argument is a bug description, first determine the affected repositories and slug, then run:
 ```text
 node <plugin-root>/lib/cc-nexs-cli.mjs init-hotfix <slug> --description "<bug 现象>" [--bug-key YYYYMMDD-slug] [--related <feature-id>] [--repos a,b] [--bug-file <docs-relative.md>]
 ```
+Git Custodian creates `hotfix/<key>` and `.worktrees/<key>/<repo>/` from each repository's latest `origin/<base_branch>`, without reusing the old requirement branch. The command does not call `publishDocsReservation()` and does not create or push README/reservation placeholder files.
 
-Git Custodian 从各仓最新 `origin/<base_branch>` 创建 `hotfix/<key>` 和 `.worktrees/<key>/<repo>/`，不复用旧需求分支。命令不调用 `publishDocsReservation()`，不创建或 push README/reservation 占位文件。
+- With `--related`, the BUG document is written by default to the related requirement's `doc/<id>.<slug>/bugs/BUG-<key>.md`; the relation does not change the old requirement's status.
+- Without a relation, the BUG document is written by default to `hotfix/<key>/BUG-001.md` in the docs repo.
+- `--bug-file` can specify a Markdown path inside the docs repo; it must pass path safety validation and must not overwrite existing unrelated documents.
+- Authoritative state and configuration live in the workspace's `.cc-nexs/hotfixes/<key>/`. Use `progress.hotfix_document` to locate the BUG file in the docs worktree; the machine state directory must not be treated as the document directory.
+- Existing tasks continue to resolve the original `doc/<id>.<slug>/hotfix.md` and the original machine state, and do not need to be re-initialized.
 
-- 有 `--related` 时，BUG 文档默认写入关联需求的 `doc/<id>.<slug>/bugs/BUG-<key>.md`；关联不改变旧需求状态。
-- 无关联时，BUG 文档默认写入 docs 仓的 `hotfix/<key>/BUG-001.md`。
-- `--bug-file` 可指定 docs 仓内的 Markdown 路径；必须通过路径安全校验，不覆盖已有无关文档。
-- 权威状态和配置在 workspace 的 `.cc-nexs/hotfixes/<key>/`。通过 `progress.hotfix_document` 定位 docs worktree 中的 BUG 文件，不能把机器状态目录当作文档目录。
-- 旧任务继续解析原 `doc/<id>.<slug>/hotfix.md` 和原机器状态，不要求重新初始化。
+## 1. Classification and Binding
 
-## 1. 分级与绑定
+Assign the level based on impact and urgency; P0 is an ongoing production incident, P1 is a critical flow or core data being affected, P2 is a behavioral defect with a bounded scope of impact, and P3 covers fixes such as copy or styling with no behavior change. A single file and 20 lines are only classification references; they cannot prove that there is no behavior change. P0/P1/P2/P3 all require an independent Review.
 
-按影响和紧急性判级；P0 为正在发生的生产事故，P1 为关键流程或核心数据受影响，P2 为影响面可界定的行为缺陷，P3 为无行为变化的文案、样式等修复。单文件、20 行仅作为分级参考，不能证明没有行为变化。P0/P1/P2/P3 全部需要独立 Review。
+Fill in the BUG document's `HOTFIX-SCOPE`:
 
-填写 BUG 文档的 `HOTFIX-SCOPE`：
+- `intended_paths` must list the actual fix paths; for multiple repos use `repo-id/path`, separated by commas; it must not remain `-`.
+- P0/P1 must fill in `affected_acs`, `rollback_owner`, and `rollback_steps`.
+- Fill in the local verification matrix inside the scope marker, with the first column as `Check` and the command column as `命令/Driver`. Record a unique check ID and the complete command that will actually be executed; descriptions such as "run the relevant tests" cannot replace the command.
+- Changes to ACs, APIs, database schema, permission models, or large-scale refactoring cannot continue as a Hotfix; use `--promote-lean` from Section 4.
 
-- `intended_paths` 必须列出实际修复路径，多仓使用 `repo-id/path`，逗号分隔；不能保留 `-`。
-- P0/P1 必须填写 `affected_acs`、`rollback_owner`、`rollback_steps`。
-- 在范围标记内填写本地验证矩阵，首列为 `Check`，命令列为 `命令/Driver`。记录唯一检查 ID 和将实际执行的完整命令；不能用「跑相关测试」等描述代替命令。
-- AC、API、数据库 schema、权限模型或大范围重构变化不能继续按 Hotfix 执行，使用第 4 节的 `--promote-lean`。
-
-然后绑定范围：
-
+Then bind the scope:
 ```text
 node <plugin-root>/lib/cc-nexs-cli.mjs start-hotfix <id> [--level P2] [--related <feature-id>]
 ```
+In this document and throughout, `<id>` refers to the bug-key and is also compatible with legacy Hotfix numbers. This command, together with the fix scope the user has already authorized, constitutes the Hotfix authorization; it does not add a new Gateway A. Once bound, the scope, grading, or verification matrix must not be changed silently; if an adjustment is genuinely necessary, use `revise-hotfix` to record the user authorization already granted.
 
-这里及后续 `<id>` 指 bug-key，也兼容旧 Hotfix 编号。本命令及用户已授权的修复范围构成 Hotfix 授权，不新增 Gateway A。绑定后不得静默改变范围、分级或验证矩阵；确需调整时使用 `revise-hotfix` 记录已有用户授权。
-
-## 2. 实现、本地验证与 Review
-
+## 2. Implementation, Local Verification, and Review
 ```text
 INIT -> HOTFIX_IMPLEMENTING -> HOTFIX_IMPLEMENTED -> HOTFIX_LOCAL_VERIFYING
 -> HOTFIX_REVIEWING -> PARSE_HOTFIX_REVIEW -> HOTFIX_CANDIDATE_READY
@@ -49,54 +44,45 @@ INIT -> HOTFIX_IMPLEMENTING -> HOTFIX_IMPLEMENTED -> HOTFIX_LOCAL_VERIFYING
 -> HOTFIX_TEST_VERIFIED -> HOTFIX_RELEASE_PENDING_HUMAN
 -> /approve-release -> HOTFIX_BASE_MERGING -> COMPLETE
 ```
-
-Orchestrator 按 `progress.json.mode=hotfix` 调用 `nextStep`。Developer、Reviewer、Verifier 分别使用专用角色，Review 和验证必须在独立 session 中执行。实现阶段仅修改绑定路径；Git Custodian 记录精确 candidate 后执行：
-
+The Orchestrator calls `nextStep` with `progress.json.mode=hotfix`. Developer, Reviewer, and Verifier each use a dedicated role; review and verification must be performed in independent sessions. During the implementation phase, only the bound paths are modified; Git Custodian records the exact candidate and then executes:
 ```text
 node <plugin-root>/lib/cc-nexs-cli.mjs verify-local <id>
 ```
+If `workflow.local_verify.driver` is present, use the driver; if there is no driver, run the commands in the binding matrix inside the exact candidate worktree, then record the real results with `verify-local <id> --passed|--failed --evidence-json <json>`. Each piece of evidence includes `check`, `command`, an integer `exit_code`, `proof`, and `result`; it must cover the binding matrix and the commands must match. Hotfixes do not allow `deferred_to_test`, and a real failure must not be recorded as a pass. Passed evidence for the same candidate and a valid scope may be reused.
 
-有 `workflow.local_verify.driver` 时使用 driver；无 driver 时在精确 candidate worktree 中执行绑定矩阵内的命令，再用 `verify-local <id> --passed|--failed --evidence-json <json>` 登记真实结果。每项证据包含 `check`、`command`、整数 `exit_code`、`proof` 和 `result`，必须覆盖绑定矩阵且命令一致。Hotfix 不允许 `deferred_to_test`，不得把真实失败写成通过。相同 candidate 和有效范围的已通过证据可以复用。
-
-所有级别本地通过后都进入独立集中 Review：
-
+Once all levels pass locally, the work enters an independent centralized Review:
 ```text
 node <plugin-root>/lib/cc-nexs-cli.mjs record-review <id> --passed|--blocked [--finding "P0/P1 ..."]
 ```
+Review checks the complete candidate and invocation surface in one pass; after fixes, enter `HOTFIX_DELTA_REVIEW` and check the corresponding delta with `--closure`. Follow the state machine's existing circuit breakers; for scope revisions already authorized by the user, rebind per Section 4, and do not evade state by hand-editing counters or reopening numbers. P3 has no Review-exempt path.
 
-Review 一次性检查完整候选和调用面，修复后进入 `HOTFIX_DELTA_REVIEW` 并用 `--closure` 检查对应 delta。遵循状态机已有熔断；遇到已获用户授权的范围修订，按第 4 节重绑，不通过手改计数或重开号规避状态。P3 没有免 Review 路径。
+Each dispatch uses `resolveRoleRuntime(preset, role, runtime, {models: mergedModels, featureConfig, progress: progressV2})`. By default, Developer=`balanced`, Reviewer=`review`, and Verifier=`balanced`; the Reviewer for P0/P1 is automatically routed to `escalated`. The same model with higher effort/thinking, or a different model, is allowed; the hard constraint is session isolation. Explicit overrides in the feature `models.roles` take final precedence, and public defaults do not pin model IDs.
 
-每次 dispatch 使用 `resolveRoleRuntime(preset, role, runtime, {models: mergedModels, featureConfig, progress: progressV2})`。默认 Developer=`balanced`、Reviewer=`review`、Verifier=`balanced`；P0/P1 的 Reviewer 自动路由到 `escalated`。允许同一模型但更高 effort/thinking，或使用不同模型；硬约束是 session 隔离。feature `models.roles` 显式覆盖最终优先，公开默认不固定模型 ID。
+## 3. Test, Gateway B, and Completion
 
-## 3. Test、Gateway B 与完成
-
-就绪后运行 `release-test <id> --hotfix`：
-
+Once ready, run `release-test <id> --hotfix`:
 ```text
 node <plugin-root>/lib/cc-nexs-cli.mjs release-test <id> --hotfix [--retry|--resume]
 ```
+Publish the exact candidate to the configured test only at `HOTFIX_TEST_RELEASE`. `pending` only resumes polling and does not re-trigger CI. The independent Verifier runs the BUG repro, the affected ACs, and smoke tests at the current `environment_revision`, appends the results to the BUG document, and binds the attempt with `record-test-verification`. Fixing a failure produces a new candidate, a new test attempt, and regression evidence; local passing cannot substitute for test acceptance.
 
-仅在 `HOTFIX_TEST_RELEASE` 发布精确 candidate 到配置的 test。`pending` 只恢复轮询，不重复触发 CI。独立 Verifier 在本次 `environment_revision` 运行 BUG repro、受影响 AC 和冒烟，将结果追加到 BUG 文档并用 `record-test-verification` 绑定 attempt。失败修复产生新 candidate、新 test attempt 和回归证据，本地通过不能替代 test 验收。
+Environment, browser, login, or URL limitations are recorded as `manual_required` only after a real test deployment. By default, keep the blocking fact and resume the same attempt; only when the user explicitly authorizes an environment exception may you call `approve-release --test-exception` on the existing Gateway B, providing the authorization record, reason, evidence of the environment limitation, and rollback evidence. An exception requires that the same candidate has already passed local verification and independent Review and that a real test deployment already exists; product test failures, no deployment, or missing evidence cannot use an exception. An exception does not mark the test as passed and does not by default authorize a production deployment.
 
-环境、浏览器、登录或 URL 限制只在真实 test 部署后记录为 `manual_required`。默认保留阻塞事实并恢复同一 attempt；用户明确授权环境例外时，才允许在现有 Gateway B 调用 `approve-release --test-exception`，提供授权记录、原因、环境限制证据和回滚证据。例外要求同一 candidate 已通过本地验证及独立 Review，且已有真实 test 部署；产品测试失败、未部署或证据缺失不能使用例外。例外不把 test 标成通过，也不默认授权生产部署。
+After normal acceptance, display the scope hash, candidate commits, local evidence, Review, test attempt/environment revision, rollback information, and base targets at `HOTFIX_RELEASE_PENDING_HUMAN`, and wait for `/cc-nexs:approve-release <id>`. An existing user authorization can be recorded by the deterministic controller without adding a redundant confirmation round.
 
-正常验收后在 `HOTFIX_RELEASE_PENDING_HUMAN` 展示 scope hash、candidate commits、本地证据、Review、test attempt/environment revision、回滚信息和 base targets，等待 `/cc-nexs:approve-release <id>`。已有用户授权可由确定性控制器记录，无需重复增加确认轮。
+Gateway B's `evidence` comments only append to the document; `implementation` comments invalidate the current evidence, and verification is repeated after the fix. After approval, merge only the same candidate into the configured base. `test -> base`, force push, or re-selecting a candidate from test is prohibited. When base only has updates to non-overlapping paths, keep the accepted candidate unchanged and let release-base integrate them, without re-running the test or approval. Overlapping paths or known cross-file contract dependencies must be handled and verified before release; the absence of textual conflicts cannot be treated as proof of semantic independence.
 
-Gateway B 的 `evidence` 意见只追加文档；`implementation` 意见失效当前证据，修复后重新验证。批准后只把同一 candidate 合入配置的 base。禁止 `test -> base`、force push 或从 test 重新选 candidate。base 仅有不重叠路径的更新时，保持已验收 candidate 不变，由 release-base 集成，不重跑 test 或审批。重叠路径或已知跨文件契约依赖需要处理和验证后再发布；不能把无文本冲突当作语义独立证明。
+It is complete only when `HOTFIX_BASE_MERGING -> COMPLETE` and the remote ancestry check passes. The final docs candidate of a new Hotfix contains only this BUG document, with machine state kept in `.cc-nexs/hotfixes/<key>/`; old tasks retain their original set of archived files. Docs are merged last, and the worktree/branch/ref are cleaned up safely. Production release still requires the explicit authorization specified by the organization.
 
-只有 `HOTFIX_BASE_MERGING -> COMPLETE` 且远端 ancestry 通过才完成。新 Hotfix 最终 docs candidate 只包含本次 BUG 文档，机器状态留在 `.cc-nexs/hotfixes/<key>/`；旧任务保留原归档文件集合。docs 最后合入并安全清理 worktree/分支/ref。生产发布仍需组织规定的明确授权。
+## 4. Same-Fault Revision and Lean Escalation
 
-## 4. 同一故障修订与升级 Lean
-
-同一故障的路径、分级或验证命令需要调整且用户已经授权时，更新 BUG 范围后运行：
-
+When the path, severity, or verification command of the same fault needs adjustment and the user has already authorized it, update the BUG scope and then run:
 ```text
 node <plugin-root>/lib/cc-nexs-cli.mjs revise-hotfix <id> --reason "<修订原因>" --authorization-evidence "<已有用户授权记录>"
 ```
+The controller rebinds scope on the original bug-key, original branch, and original worktree, retaining history while clearing current local/Review/test evidence and release approval. Do not hand-edit state or fabricate authorization, and do not claim a new requirement number because P3 is upgraded to P2.
 
-控制器在原 bug-key、原分支和原 worktree 上重绑范围，保留历史，清除当前本地/Review/test 证据和发布批准。不得手改状态或伪造授权，也不因 P3 升为 P2 重新占需求号。
-
-真实契约/schema/权限扩展使用同一命令加 `--promote-lean`。它在原 BUG 旁建立 `<BUGstem>.lean/requirements.md`、`plan.md` 和迁移后的状态，保留分支和 key；原本地状态保存为 `progress.hotfix-history.json`，避免同一个 key 被双重定位。继续 Lean 计划并通过 Gateway A 后才能实施扩展，不新增占号目录。
+Real contract/schema/permission extensions use the same command plus `--promote-lean`. It creates `<BUGstem>.lean/requirements.md`, `plan.md`, and the migrated state alongside the original BUG, retaining the branch and key; the original local state is saved as `progress.hotfix-history.json` to avoid the same key being resolved twice. The extension can be implemented only after continuing the Lean plan and passing Gateway A, and no new directory is added to claim a requirement number.
 
 ## Model dispatch preview
 

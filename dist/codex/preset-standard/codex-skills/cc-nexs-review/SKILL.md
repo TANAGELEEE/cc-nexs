@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-review
-description: /cc-nexs:review 的 Codex 镜像 skill。 显式调用 $cc-nexs-review 时使用。 fast 模式 Reviewer 入口。spec、每轮发布前代码评审、部署后最终契约验收三者保持独立调用。
+description: /cc-nexs:review Codex mirror skill. Use when $cc-nexs-review is explicitly invoked. fast mode Reviewer entry point. spec, per-round pre-release code review, and post-deployment final contract acceptance remain three independent invocations.
 ---
 
 # /cc-nexs:review for Codex

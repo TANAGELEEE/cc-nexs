@@ -143,7 +143,7 @@ test('historical approval cannot silently adopt a present ownership contract', (
 
 test('Full derives and binds one contiguous Sprint contract from AC ownership', () => {
   const fullSpec = `# Spec
-| AC-ID | Given | When | Then | 所属 Sprint |
+| AC-ID | Given | When | Then | 所屬 Sprint |
 |---|---|---|---|---|
 | AC-001 | a | b | c | M1 |
 | AC-002 | a | b | c | M2 |

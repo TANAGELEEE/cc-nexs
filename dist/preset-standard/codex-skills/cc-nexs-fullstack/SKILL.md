@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-fullstack
-description: /cc-nexs:fullstack 的 Codex 镜像 skill。 显式调用 $cc-nexs-fullstack 时使用。 fast 模式 Fullstack 入口。spec 后按批准的 repository assignment 并行实现，再由单一 owner 同步文档。
+description: /cc-nexs:fullstack Codex mirror skill. Use when $cc-nexs-fullstack is explicitly invoked. Fullstack entry point for fast mode. After spec, implement in parallel per the approved repository assignments, then have a single owner sync the docs.
 ---
 
 # /cc-nexs:fullstack for Codex

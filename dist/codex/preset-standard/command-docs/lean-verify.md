@@ -1,17 +1,17 @@
 ---
-description: "Lean test 环境黑盒验收，直接把 AC 证据汇总到 plan.md。"
+description: "Lean test environment black-box acceptance, aggregating AC evidence directly into plan.md."
 disable-model-invocation: true
 allowed-tools: "Read, Write, Edit, Bash, Task, mcp__chrome-devtools__*"
-argument-hint: "[需求编号]"
+argument-hint: "[requirement ID]"
 ---
 
 # /cc-nexs:lean-verify
 
-仅在成功 test release 后派发独立 `lean-verifier`，使用解析后的 runtime model profile。父 Orchestrator 从当前 exact-fingerprint 的本地验证 attempt 注入完整结构化 deferral 清单；按 `plan.md` Test 环境验收矩阵执行全部 P0/P1、跨端路径和所有 `deferred_to_test` 检查，只访问 `allowed_hosts`。每个 deferred 项必须以 `--evidence-json '{"check":"<exact-id>","result":"passed","proof":"<request/result/artifact>"}'` 精确闭环；自由文本命中、跳过或失败结果都不能通过控制器。
+Dispatch an independent `lean-verifier` only after a successful test release, using the resolved runtime model profile. The parent Orchestrator injects the complete structured deferral list from the local verification attempt at the current exact fingerprint; following the Test environment acceptance matrix in `plan.md`, it runs every P0/P1 check, all cross-platform paths, and all `deferred_to_test` checks, accessing only `allowed_hosts`. Each deferred item must be closed precisely with `--evidence-json '{"check":"<exact-id>","result":"passed","proof":"<request/result/artifact>"}'`; free-text matches, skipped results, and failed results cannot pass the controller.
 
-Test 交付拓扑标为 `local` 的 Web candidate 不需要 `test_branch`：从其精确 candidate worktree 按 plan 中的命令本地启动，把 API base 指向已经部署完成且 environment revision 已冻结的 test backend，再通过允许的 localhost 与 test host 做黑盒验收。不得把本地 Web 换成未绑定 candidate 的主 checkout。
+A Web candidate whose Test delivery topology is marked `local` does not need a `test_branch`: start it locally from its exact candidate worktree using the command in the plan, point the API base at the test backend that has already been deployed and whose environment revision is frozen, then perform black-box acceptance through the allowed localhost and test host. Do not replace the local Web with the main checkout that is not bound to the candidate.
 
-结果写入 `plan.md`，不得创建 test-cases/test-report/acceptance/BUG 文档。父 Orchestrator 调 `recordTestVerification()` 将结果绑定当前 attempt/environment revision：通过进入 `TEST_VERIFIED`，真实产品失败进入 `TEST_VERIFY_FAILED`。若部署已成功但浏览器、登录/MFA、人工环境配置或其他验收能力不可用，调用 `record-test-verification --manual-required` 进入可恢复的 `TEST_DEPLOYED_NEEDS_MANUAL_VERIFY`，不得当成代码失败，也不得回滚已完成的 test 交付。人工补证后可用同一 attempt 记录 passed 并继续。
+Write the results into `plan.md`; do not create test-cases/test-report/acceptance/BUG documents. The parent Orchestrator calls `recordTestVerification()` to bind the results to the current attempt/environment revision: a pass moves to `TEST_VERIFIED`, a genuine product failure moves to `TEST_VERIFY_FAILED`. If deployment has succeeded but the browser, login/MFA, manual environment configuration, or other acceptance capabilities are unavailable, call `record-test-verification --manual-required` to enter the recoverable `TEST_DEPLOYED_NEEDS_MANUAL_VERIFY`; do not treat this as a code failure, and do not roll back the completed test delivery. After manual evidence is supplied, the same attempt can record passed and continue.
 
 ## Human-input blockers
 

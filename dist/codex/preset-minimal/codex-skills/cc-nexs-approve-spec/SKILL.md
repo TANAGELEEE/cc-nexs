@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-approve-spec
-description: /cc-nexs:approve-spec 的 Codex 镜像 skill。 显式调用 $cc-nexs-approve-spec 时使用。 Approve the spec at the single human checkpoint, transitioning state from SPEC_PENDING_HUMAN to SPEC_APPROVED.
+description: /cc-nexs:approve-spec Codex mirror skill. Use when $cc-nexs-approve-spec is explicitly invoked. Approve the spec at the single human checkpoint, transitioning state from SPEC_PENDING_HUMAN to SPEC_APPROVED.
 ---
 
 # /cc-nexs:approve-spec for Codex

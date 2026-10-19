@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-fullstack
-description: /cc-nexs:fullstack 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:fullstack 或 /skill:cc-nexs-fullstack 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard lean（默认）、fast 与 full 模式，并通过 pi-subagents 运行隔离角色。 fast 模式 Fullstack 入口。spec 后按批准的 repository assignment 并行实现，再由单一 owner 同步文档。
+description: /cc-nexs:fullstack Pi P2 adapter skill. Invoke only through /cc-nexs:fullstack or /skill:cc-nexs-fullstack; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default), fast, and full modes with isolated roles through pi-subagents. Fullstack entry point for fast mode. After spec, implement in parallel per the approved repository assignments, then have a single owner sync the docs.
 disable-model-invocation: true
 ---
 

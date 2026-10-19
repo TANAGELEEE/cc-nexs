@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-recon
-description: /cc-nexs:recon 的 Codex 镜像 skill。 显式调用 $cc-nexs-recon 时使用。 Repo Scout 角色入口。读 src/ 把现存同类配置/Service/页面/API 归档成 repo-context.md，作为 Planner 的现状清单输入。在 /cc-nexs:brainstorm 之后、Planner 之前调用（编排器 RECON 阶段会自动跑）。
+description: /cc-nexs:recon Codex mirror skill. Use when $cc-nexs-recon is explicitly invoked. Repo Scout role entry point. Reads src/ and archives existing configs/Services/pages/APIs of the same kind into repo-context.md as the current-state inventory input for the Planner. Called after /cc-nexs:brainstorm and before the Planner (the orchestrator's RECON stage runs it automatically).
 ---
 
 # /cc-nexs:recon for Codex

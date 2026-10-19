@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-plan
-description: /cc-nexs:plan 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:plan 或 /skill:cc-nexs-plan 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard lean（默认）、fast 与 full 模式，并通过 pi-subagents 运行隔离角色。 Lean 默认模式计划入口。并行只读调研，生成唯一 requirements.md 与 plan.md，并停在 Gateway A。
+description: /cc-nexs:plan Pi P2 adapter skill. Invoke only through /cc-nexs:plan or /skill:cc-nexs-plan; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default), fast, and full modes with isolated roles through pi-subagents. Lean default-mode planning entry point. Parallel read-only research, producing a single requirements.md and plan.md, and stopping at Gateway A.
 disable-model-invocation: true
 ---
 

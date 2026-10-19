@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-lean-review
-description: /cc-nexs:lean-review 的 Codex 镜像 skill。 显式调用 $cc-nexs-lean-review 时使用。 Lean 一次集中 Review 与最多一次 delta 闭环检查。
+description: /cc-nexs:lean-review Codex mirror skill. Use when $cc-nexs-lean-review is explicitly invoked. Lean: one consolidated Review and at most one delta closure check.
 ---
 
 # /cc-nexs:lean-review for Codex

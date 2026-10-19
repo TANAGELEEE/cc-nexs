@@ -1,7 +1,6 @@
-# 架构
+# Architecture
 
-## 分层
-
+## Layering
 ```text
 packages/core/
   state-machine.mjs     纯状态路由
@@ -21,45 +20,39 @@ packages/preset-standard/
 dist/preset-standard/   Claude/Codex 可安装物化产物
 pi/                     Pi extension、skills、package agents
 ```
+Claude Code, Codex, and Pi share the command documentation and the core controllers. Runtime adaptation only changes role dispatch and the browser provider; it does not change state, artifacts, or Git semantics.
 
-Claude Code、Codex 和 Pi 共用 command 文档与 core 控制器。运行时适配只改变角色派发和浏览器 provider，不改变状态、产物或 Git 语义。
+## Authoritative State
 
-## 权威状态
+`progress.json` v2 stores:
 
-`progress.json` v2 保存：
+- `state`, `revision`, `events[]`;
+- role counters, Sprint status, G1/G2;
+- Lean plan/release gates, local verification, and centralized Review fingerprint;
+- repository worktree/candidate assignments;
+- `delivery.strategy`;
+- `delivery.test.policy/status/attempts[]`.
 
-- `state`、`revision`、`events[]`；
-- role counters、Sprint 状态、G1/G2；
-- Lean plan/release gates、本地验证与集中 Review fingerprint；
-- repository worktree/candidate assignments；
-- `delivery.strategy`；
-- `delivery.test.policy/status/attempts[]`。
+`progress.md` is a rendered mirror. Roles cannot edit either file directly; the Orchestrator appends events through a revision-aware helper.
 
-`progress.md` 是渲染镜像。角色不能直接编辑二者；Orchestrator 通过带 revision 的 helper 追加事件。
-
-旧 progress 没有 `delivery` 时运行时注入安全默认：
-
+When legacy progress has no `delivery`, the runtime injects safe defaults:
 ```json
 {"strategy":"per_sprint","test":{"policy":"manual","status":"idle","attempts":[]}}
 ```
+New progress defaults to `mode=lean + final_only + auto_if_ready`.
 
-新 progress 默认 `mode=lean + final_only + auto_if_ready`。
+## State Architecture
 
-## 状态架构
-
-Lean 默认链：
-
+Lean default chain:
 ```text
 INIT -> PLAN -> Gateway A -> IMPLEMENT
 -> LOCAL VERIFY -> one CONSOLIDATED REVIEW
 -> TEST RELEASE -> TEST VERIFY -> Gateway B
 -> BASE MERGE -> COMPLETE
 ```
+Each repository uses `.worktrees/<id>-<slug>/<repo-id>` and `feature/<id>-<slug>`. Gateway A binds the requirements/plan scope, while Gateway B binds the candidate fingerprint shared by local verification, centralized Review, and test acceptance.
 
-每仓使用 `.worktrees/<id>-<slug>/<repo-id>` 与 `feature/<id>-<slug>`。Gateway A 绑定 requirements/plan scope，Gateway B 绑定本地验证、集中 Review 与 test 验收共享的 candidate fingerprint。
-
-Full 开发与交付分为两个区域。每个 Sprint 的批准 ownership DAG 按 repository wave fanout；不同 worktree 并行、同 worktree 串行，并与 QA cases 的既有并行合并为同一首波：
-
+Full development and delivery is divided into two zones. Each Sprint's approved ownership DAG fans out by repository wave; different worktrees run in parallel while the same worktree runs serially, and this merges with the existing parallelism of QA cases into the same first wave:
 ```text
 Development zone
   SPRINT_N_KICKOFF -> DEV/CASES -> DOC_SYNC -> SA_CODE -> DEV_DONE
@@ -68,37 +61,33 @@ Development zone
 Delivery zone
   INTEGRATION_REVIEW -> TEST_RELEASE -> FINAL_QA -> FINAL_EVAL -> COMPLETE
 ```
+This boundary prevents publishing M1 when the frontend and backend are only half complete. A Sprint can still be reviewed independently and form a candidate, but only complete requirements enter the delivery zone.
 
-这个边界避免前后端只完成一半时发布 M1。Sprint 仍可独立评审和形成 candidate，但只有完整需求进入 delivery zone。
+Fast is a single-Sprint compressed version that likewise enters TEST_RELEASE after CODE_REVIEW. Multi-platform implementations run in parallel under the same ownership wave, and after the join a single docs owner synchronizes the shared documentation.
 
-Fast 是单 Sprint 压缩版，同样在 CODE_REVIEW 后进入 TEST_RELEASE。多端实现按相同 ownership wave 并行，join 后由唯一 docs owner 同步共享文档。
-
-Hotfix 用独立 `hotfix/<key>` 分支和 latest-base worktree，直接维护 docs 仓的 BUG 文件，不占需求编号、不发布占位提交。状态位于 workspace `.cc-nexs/hotfixes/<key>/`，文档通过 `progress.hotfix_document` 定位；旧 hotfix.md 仍可恢复。所有级别均需本地验证、独立 Review、精确 test 证据和 Gateway B，P3 行数仅作风险参考。授权范围修订用 `revise-hotfix` 原地重绑并保留历史，契约扩展用 `--promote-lean` 在 BUG 旁迁移为 Lean、返回 Gateway A，保留原分支与 key。真实部署后的环境验收限制可经明确授权的 Gateway B 例外处理，不能标记 test 通过或默认授权生产部署。
+Hotfix uses an independent `hotfix/<key>` branch and a latest-base worktree, directly maintaining the BUG file in the docs repo, without consuming a requirement number or publishing placeholder commits. State resides in the workspace `.cc-nexs/hotfixes/<key>/`, and the document is located via `progress.hotfix_document`; the legacy hotfix.md can still be restored. All levels require local verification, independent Review, precise test evidence, and Gateway B; P3 line counts serve only as a risk reference. Authorized-scope revisions use `revise-hotfix` to rebind in place while preserving history; contract extensions use `--promote-lean` to migrate alongside the BUG into Lean and return to Gateway A, preserving the original branch and key. Environment acceptance limitations after a real deployment may be handled through an explicitly authorized Gateway B exception, and must not be marked as test passed or authorized for production deployment by default.
 
 ## Git Custodian
 
-角色和 Orchestrator 不执行任意 Git mutation。Git Custodian 负责：
+Roles and the Orchestrator do not perform arbitrary Git mutations. The Git Custodian is responsible for:
 
-- 创建 workspace worktree；
-- 按角色声明的精确路径 stage/commit candidate；
-- 维护 `refs/cc-nexs/candidates/<feature>/<repo>`；
-- test integration；
-- 用户显式授权后的配置 base merge/finalize。
+- creating workspace worktrees;
+- staging/committing candidates at the exact paths declared by roles;
+- maintaining `refs/cc-nexs/candidates/<feature>/<repo>`;
+- test integration;
+- configured base merge/finalize after explicit user authorization.
 
-Test integration 不修改 feature worktree：
-
+Test integration does not modify the feature worktree:
 ```text
 candidate ref -> source SHA
 latest origin/test -> temp detached worktree
 merge --no-ff -> non-force push -> fresh fetch -> ancestry proof
 ```
-
-远端 test 并发推进导致 non-fast-forward 时停止并要求 retry；不会 force push。candidate 已在远端 ancestry 中时返回幂等成功。
+When a concurrent advance of the remote test branch causes a non-fast-forward, it stops and requires a retry; it does not force push. If the candidate is already in the remote ancestry, it returns an idempotent success.
 
 ## Release driver
 
-项目通过私有配置提供：
-
+The project provides this through private configuration:
 ```yaml
 release:
   test:
@@ -112,17 +101,13 @@ release:
       args: [.cc-nexs/release-driver.mjs]
       timeout_seconds: 1800
 ```
+The controller sends one JSON request via stdin. The driver's stdout must contain only one JSON object:
 
-controller 通过 stdin 发送一份 JSON request。driver stdout 必须只写一份 JSON object：
-
-异步 CI/CD 首次可立即返回：
-
+Async CI/CD can return immediately on the first run:
 ```json
 {"status":"pending","pipeline":{"id":"...","url":"..."}}
 ```
-
-此时状态为 `deploying`。`release-test --resume` 使用 `operation=release_test_status` 与既有 pipeline evidence 轮询，不会重复集成或触发流水线。部署完成才返回：
-
+At this point the status is `deploying`. `release-test --resume` polls using `operation=release_test_status` and the existing pipeline evidence; it will not re-integrate or trigger the pipeline again. It returns only after deployment is complete:
 ```json
 {
   "status": "succeeded",
@@ -131,13 +116,11 @@ controller 通过 stdin 发送一份 JSON request。driver stdout 必须只写�
   "environment_revision": {"api": "sha", "web": "sha"}
 }
 ```
+The other terminal states are `failed` or `deployed_needs_manual_verification`. `succeeded` and `deployed_needs_manual_verification` require a non-empty pipeline that cannot be rebound, an `environment=test` deployment, and an `environment_revision` that exactly matches every test integration commit; anything missing or inconsistent fails closed.
 
-其他终态为 `failed` 或 `deployed_needs_manual_verification`。`succeeded` 和 `deployed_needs_manual_verification` 要求非空且不可换绑的 pipeline、`environment=test` deployment，以及与每个 test integration commit 精确一致的 `environment_revision`；缺失或不一致都会失败关闭。
+## Lean local verification driver
 
-## Lean 本地验证 driver
-
-项目私有配置可以提供独立于 CI 的本地 driver；没有 driver 时，由父 Orchestrator 执行 Lean plan 批准的命令或 Hotfix scope 绑定的命令，再登记严格结构化证据。Lean 支持 `passed|failed|deferred_to_test`，Hotfix 只支持 `passed|failed`，不要求先新增项目脚本：
-
+Project-private configuration may provide a local driver independent of CI; when no driver exists, the parent Orchestrator executes the commands approved by the Lean plan or the commands bound to the Hotfix scope, then registers strictly structured evidence. Lean supports `passed|failed|deferred_to_test`, while Hotfix supports only `passed|failed`, and neither requires adding a new project script first:
 ```yaml
 workflow:
   local_verify:
@@ -146,72 +129,67 @@ workflow:
       args: [.cc-nexs/local-verify.mjs]
       timeout_seconds: 1200
 ```
-
-控制器通过 stdin 发送 `{operation, feature, source, repositories}` JSON；每仓包含精确 candidate SHA 和已分配 worktree。driver 按批准的 plan 或绑定的 Hotfix scope 矩阵执行 build、单元/集成测试、本地前后端启动、smoke/e2e，并只向 stdout 写一个 JSON object：
-
+The controller sends `{operation, feature, source, repositories}` JSON over stdin; each repo entry includes the exact candidate SHA and its assigned worktree. The driver runs the build, unit/integration tests, local frontend and backend startup, and smoke/e2e according to the approved plan or the bound Hotfix scope matrix, and writes only a single JSON object to stdout:
 ```json
 {"status":"passed","evidence":[{"check":"api-smoke","result":"passed","command":"./scripts/api-smoke.sh","exit_code":0,"proof":"smoke passed"}]}
 ```
+The command in the example above is illustrative only; the actual command must match the frozen matrix. The driver and direct registration use the same evidence validation, covering all required Checks; a string list, or a PASS without execution evidence, is invalid.
 
-上例命令仅示意；实际 command 必须与冻结矩阵一致。driver 与直接登记使用相同证据校验，覆盖全部必要 Check；字符串列表或没有执行证据的 PASS 无效。
-
-Lean 还允许 `deferred_to_test`：所有本地可执行检查必须通过，至少一个受本地基础设施限制的 start/smoke/E2E check 要提供 `{check,result,reason,test_action}`，且全部 evidence 的 result 只能是 `passed|deferred_to_test`，check 不得重复。compile/unit/lint 的真实失败不能延期。相同 fingerprint 会复用该结果，每个 deferred check 必须用精确对象 `{check,result:"passed",proof}` 在最终 test evidence 中闭环；自由文本 substring 不算。Hotfix 不允许延期。driver 必须负责 readiness、非冲突端口和成功/失败路径的进程清理。本地验证用于缩短反馈周期，但不能替代 immutable test release 和 test 环境验收。
+Lean also allows `deferred_to_test`: every locally executable check must pass, at least one start/smoke/E2E check constrained by local infrastructure must supply `{check,result,reason,test_action}`, and the result of all evidence may only be `passed|deferred_to_test`, with no duplicate checks. A genuine compile/unit/lint failure cannot be deferred. The same fingerprint reuses that result, and each deferred check must be closed out in the final test evidence with the exact object `{check,result:"passed",proof}`; a free-text substring does not count. Hotfixes may not be deferred. The driver must own readiness, non-conflicting ports, and process cleanup on both the success and failure paths. Local validation shortens the feedback loop but cannot replace the immutable test release and test environment acceptance.
 
 ## Browser capability
 
-Browser 只是在 test merge/CI 部署成功后的 QA 工具，不是 test release 前置能力：
+Browser is only a QA tool after a successful test merge/CI deployment; it is not a prerequisite capability for the test release:
 
-| Runtime | 能力 |
+| Runtime | Capability |
 |---|---|
 | Claude Code | `chrome-devtools-mcp` |
-| Codex | 当前登录的 in-app/Chrome session |
-| Pi | 优先 ego lite（隔离 task Space）；不可用时 `@injaneity/pi-computer-use@0.4.3`（`headless: true`） |
+| Codex | The currently logged-in in-app/Chrome session |
+| Pi | Prefer ego lite (isolated task Space); when unavailable, use `@injaneity/pi-computer-use@0.4.3` (`headless: true`) |
 
-URL 可以来自 versioned project config 或 private overlay。项目 memory/说明中的 URL 只能用于发现候选，自动流程必须先把 host 纳入 `allowed_hosts`。账号密码不能来自 memory、Markdown、Git 或普通 config；优先复用登录，必要时只传 opaque `credential_ref` 给外部 secret provider。
+URLs may come from the versioned project config or a private overlay. URLs in project memory/instructions may only be used to discover candidates; automated flows must first add the host to `allowed_hosts`. Account credentials must not come from memory, Markdown, Git, or ordinary config; prefer reusing an existing login, and when necessary pass only an opaque `credential_ref` to an external secret provider.
 
-MFA、CAPTCHA、过期登录、provider 不可用、URL 缺失或环境身份不清晰会在部署后记录 `manual_required`；已完成的 test delivery 保留不变，补证后可从同一 attempt 恢复。
+MFA, CAPTCHA, an expired login, an unavailable provider, a missing URL, or an unclear environment identity will be recorded as `manual_required` after deployment; a completed test delivery is preserved unchanged, and once the missing evidence is supplied, work can resume from the same attempt.
 
 ## Release attempt
 
-每次 attempt 使用排序后的 `{repository: sourceSHA}` 计算 fingerprint。事件顺序：
-
+Each attempt computes the fingerprint from the sorted `{repository: sourceSHA}`. Event order:
 ```text
 delivery.test.started
 delivery.test.repository_integrated (per repository)
 delivery.test.deploying | succeeded | failed | deployed_needs_manual_verification
 delivery.test.verification_passed | verification_blocked
 ```
+Repeated calls with the same successful fingerprint reuse the previous attempt. For a failed fingerprint, a new attempt is created only with an explicit `--retry`. A fix that changes the candidate SHA naturally starts the next round.
 
-相同成功 fingerprint 重复调用复用历史 attempt。失败 fingerprint 只有显式 `--retry` 才新建 attempt。修复 candidate SHA 变化自然形成下一轮。
+## Failure Consistency
 
-## 失败一致性
+- Some repositories have already been merged: the attempt retains evidence for each repository, and retry idempotently fills the gaps.
+- Driver failure/timeout/invalid JSON: the attempt is marked as failed and enters the release block.
+- Deployed but browser verification cannot be completed: a dedicated state waits for manual handling, without falsely reporting success.
+- QA failure: fix locally to FIXED, undergo an independent re-review, republish, and run a regression to VERIFIED after deployment.
+- Final acceptance failure: return to integration for revision, and do not directly change the status to pass.
 
-- 部分仓已合入：attempt 保留每仓证据，retry 幂等补齐。
-- driver 失败/超时/非法 JSON：attempt 标为 failed，进入 release block。
-- 已部署但 browser verification 不可完成：单独状态等待人工，不谎报成功。
-- QA 失败：本地修复到 FIXED，独立复审，重新发布，部署后回归到 VERIFIED。
-- 最终验收失败：回 integration 修订，不直接改状态通过。
+## Runtime Materialization
 
-## 运行时物化
+`scripts/build.mjs`:
 
-`scripts/build.mjs`：
+- Materialize core/preset into `dist/preset-*`;
+- Generate a mirror skill for each Codex command; approval/release-test includes a deterministic CLI block;
+- For Pi, generate restricted P2 command skills and provider-specific package agents; the ego Verifier gets only Bash/`ego-browser`, and the fallback Verifier gets only computer-use tools;
+- Keep Claude commands as the single source of truth.
 
-- 把 core/preset 物化到 `dist/preset-*`；
-- 为 Codex 每个 command 生成 mirror skill；approval/release-test 包含确定性 CLI block；
-- 为 Pi 生成受限 P2 command skills 和 provider-specific package agents；ego Verifier 只获得 Bash/`ego-browser`，fallback Verifier 只获得 computer-use 工具；
-- 保持 Claude commands 为同一份事实来源。
+The Pi base installation only requires `pi-subagents`. At runtime, probe for ego lite first; if it is unavailable, use the fallback Verifier only when computer-use is installed and its effective configuration is set to `browser_use: true` and `headless: true`. Only when neither option is available does it fall back to manual, without blocking capabilities such as init/status/build.
 
-Pi 基础安装只强制 `pi-subagents`。运行时先探测 ego lite；不可用时仅在 computer-use 已安装且有效配置为 `browser_use: true`、`headless: true` 时选用 fallback Verifier。两者都不可用才回退 manual，不阻断 init/status/build 等能力。
+## Security Boundaries
 
-## 安全边界
+- The automated controller accepts only `environment=test` and non-production-like allowlisted hosts.
+- Force push, production branches, and implicit main merges are prohibited.
+- Plaintext `password/passwd/credentials/secret_value` configuration fields are prohibited.
+- The browser may access only configured hosts.
+- Role sub-sessions cannot mutate Git or progress.
+- G1/G2 are state-machine stops, not global tool blocks.
 
-- 自动 controller 只接受 `environment=test` 和非 production-like allowlisted host。
-- 禁止 force push、生产 branch 和隐式 main merge。
-- 禁止明文 `password/passwd/credentials/secret_value` 配置字段。
-- Browser 只允许 configured hosts。
-- 角色子会话不能 mutation Git 或 progress。
-- G1/G2 是状态机 stop，不是全局工具阻断。
+## Completion and Production
 
-## 完成与生产
-
-`COMPLETE` 只证明 test 环境和契约闭环。生产合并、生产部署、远端分支删除和 worktree cleanup 都属于后续显式人工授权操作。
+`COMPLETE` only proves the test environment and contract closure. Production merges, production deployments, remote branch deletion, and worktree cleanup are all follow-up operations that require explicit human authorization.

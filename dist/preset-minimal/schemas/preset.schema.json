@@ -10,7 +10,7 @@
     "description": { "type": "string" },
     "language": {
       "type": "string",
-      "enum": ["zh-CN", "en-US"],
+      "enum": ["zh-CN", "zh-TW", "en-US"],
       "default": "en-US"
     },
     "roles": {

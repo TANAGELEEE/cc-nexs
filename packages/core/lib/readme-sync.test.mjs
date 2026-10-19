@@ -184,6 +184,39 @@ test('acceptance snapshot: parses Sprint M1 conclusion', () => {
   }
 });
 
+test('conclusionPass recognizes bold localized and English report conclusions', () => {
+  const { conclusionPass } = __test__;
+  for (const value of [
+    '**结论: 通过**',
+    '**結論: 透過**',
+    '**验收结果: 通过**',
+    '**驗收結果: 透過**',
+    '**Acceptance result: Pass**',
+    '**Conclusion: Pass**',
+    '**Conclusion: Passed**',
+  ]) assert.equal(conclusionPass(value), true, value);
+  for (const value of ['**结论: 阻塞**', '**結論: 阻塞**', '**Conclusion: Blocked**']) {
+    assert.equal(conclusionPass(value), false, value);
+  }
+});
+
+test('acceptance snapshot: parses English and Traditional conclusions', () => {
+  for (const [result, label] of [['**Acceptance Result: Pass**', 'Pass'], ['**驗收結果: 透過**', '透過']]) {
+    const dir = makeReqDir('SPRINT_1_DONE', {
+      'acceptance.md': `## Sprint M1\n\n${result}\n`,
+    });
+    writeFileSync(join(dir, 'README.md'), readmeWithAnchor());
+    try {
+      syncFeatureReadme({ reqDir: dir });
+      const after = readFileSync(join(dir, 'README.md'), 'utf8');
+      assert.match(after, new RegExp(`\\| M1 \\| ${label} \\|`));
+      assert.match(after, /\| acceptance\.md \| Evaluator \| 🟢 \|/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+});
+
 test('isAfterState: SPRINT_<N>_X normalized to >SPEC_APPROVED', () => {
   const { isAfterState } = __test__;
   assert.equal(isAfterState('SPRINT_1_DEV', 'SPEC_APPROVED'), true);

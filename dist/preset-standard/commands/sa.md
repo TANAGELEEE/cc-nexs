@@ -1,22 +1,21 @@
 ---
-description: "SA 评审入口。支持 spec、cases、单 Sprint code、跨 Sprint integration 和发布后 fix code 评审。"
+description: "SA review entry point. Supports spec, cases, single-Sprint code, cross-Sprint integration, and post-release fix code reviews."
 disable-model-invocation: true
 allowed-tools: "Read, Write, Edit, Bash, Task"
-argument-hint: "<target: spec|cases|code|integration> [需求编号] [--sprint=N | --scope=final-fix]"
+argument-hint: "<target: spec|cases|code|integration> [requirement ID] [--sprint=N | --scope=final-fix]"
 ---
 
 # /cc-nexs:sa
 
-参数：
+Parameters:
 - `$1` = target: `spec` / `cases` / `code` / `integration`
-- `$2` = 需求编号
-- `--sprint=N` = cases / Sprint code 必需
-- `--scope=final-fix` = 发布后修复代码评审，不传 sprint
+- `$2` = requirement ID
+- `--sprint=N` = required for cases / Sprint code
+- `--scope=final-fix` = post-release fix code review; do not pass sprint
 
-## 执行步骤
+## Execution Steps
 
-### 1. 解析参数 + 定位文件
-
+### 1. Parse parameters + locate files
 ```bash
 TARGET=$1
 REQ_NUM=$2
@@ -29,13 +28,11 @@ if [ "$TARGET" = "code" ] && [ -z "$SPRINT" ] && [ "$SCOPE" != "final-fix" ]; th
   exit 1
 fi
 ```
-
-### 2. 按 target 分派
+### 2. Dispatch by target
 
 #### target=spec
 
-调起 `sa-codex` agent，prompt：
-
+Launch the `sa-codex` agent, prompt:
 ```
 评审 spec：
 读 ${REQ_DIR}spec.md
@@ -54,11 +51,9 @@ append 到 ${REQ_DIR}sa-review.md（## Round N 分隔）
 append 到 ${REQ_DIR}sa-test-review.md（## Sprint M${SPRINT} Round N 分隔）
 末尾必须 结论: PASS 或 NEEDS_REVISION
 ```
-
 #### target=code
 
-先按 scope 准备 diff 文件：
-
+First prepare the diff file according to the scope:
 ```bash
 if [ "$SCOPE" = "final-fix" ]; then
   DIFF_FILE=/tmp/review-final-fix-${REQ_NUM}.diff
@@ -75,9 +70,7 @@ if [ "$LINES" -gt 1500 ]; then
   # 拆分逻辑：按 java package 分组，每组单独跑一次 codex
 fi
 ```
-
-调起 `sa-codex` agent，prompt：
-
+Invoke the `sa-codex` agent, prompt:
 ```
 评审 Sprint M${SPRINT} 代码：
 diff 已写到 ${DIFF_FILE}
@@ -86,11 +79,9 @@ diff 已写到 ${DIFF_FILE}
 append 到 ${REQ_DIR}sa-code-review.md（## Sprint M${SPRINT} - Round R - Group A 分隔）
 末尾必须 结论: PASS 或 NEEDS_REVISION
 ```
-
-`--scope=final-fix` 时只评当前 release 后 BUG 对应的新 candidate diff，章节使用 `## Final Fix Release R<N> - Round R`；仍须输出 PASS/NEEDS_REVISION，且不得把本地测试当成部署后回归。
+When `--scope=final-fix`, evaluate only the new candidate diff corresponding to the BUG found after the current release, and use `## Final Fix Release R<N> - Round R` for the section heading; you must still output PASS/NEEDS_REVISION, and you must not treat local tests as post-deployment regression.
 
 #### target=integration
-
 ```
 对所有 Sprint 累计 candidate 做一次需求级集成评审。
 输入：完整 spec AC、各仓 base...candidate diff、api-doc.md、deploy.md、test-cases.md、既有 Sprint 代码评审结论。
@@ -99,20 +90,16 @@ append 到 ${REQ_DIR}sa-code-review.md（## Sprint M${SPRINT} - Round R - Group 
 append 到 sa-code-review.md 的 ## Integration Review Round R 章节。
 末尾必须 结论: PASS 或 NEEDS_REVISION。
 ```
-
-### 3. 解析结论
-
+### 3. Parsing Conclusion
 ```bash
 RESULT=$(tail -20 ${REQ_DIR}sa-*.md | grep -E '^结论:' | tail -1 | awk '{print $2}')
 echo "RESULT:${RESULT}"
 ```
+### 4. Do not advance the state
 
-### 4. 不推进状态
+After reading the conclusion, `/cc-nexs:run` advances progress.md. `/cc-nexs:sa` only writes sa-*.md.
 
-由 `/cc-nexs:run` 读结论后推进 progress.md。`/cc-nexs:sa` 仅写 sa-*.md。
-
-## 输出
-
+## Output
 ```
 ✅ SA 评审完成: target=<target> sprint=<M<N>|final>
    结论: <PASS|NEEDS_REVISION>

@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-run
-description: /cc-nexs:run 的 Codex 镜像 skill。 显式调用 $cc-nexs-run 时使用。 Generic orchestrator. Develops across one or more sprints, then performs one test release and final acceptance unless explicitly opted out or prerequisites are unavailable.
+description: /cc-nexs:run Codex mirror skill. Use when $cc-nexs-run is explicitly invoked. Generic orchestrator. Develops across one or more sprints, then performs one test release and final acceptance unless explicitly opted out or prerequisites are unavailable.
 ---
 
 # /cc-nexs:run for Codex

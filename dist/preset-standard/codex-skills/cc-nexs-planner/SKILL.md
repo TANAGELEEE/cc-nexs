@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-planner
-description: /cc-nexs:planner 的 Codex 镜像 skill。 显式调用 $cc-nexs-planner 时使用。 Planner 角色入口。展开业务需求为 spec.md，含验收契约 AC 表 + Sprint 切片。可选 --revise 模式按 SA 反馈修订。
+description: /cc-nexs:planner Codex mirror skill. Use when $cc-nexs-planner is explicitly invoked. Planner role entry point. Expands a business requirement into spec.md, including an acceptance contract AC table + Sprint slices. Optional --revise mode revises per SA feedback.
 ---
 
 # /cc-nexs:planner for Codex

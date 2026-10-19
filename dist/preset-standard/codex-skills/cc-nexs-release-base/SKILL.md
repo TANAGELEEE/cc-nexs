@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-release-base
-description: /cc-nexs:release-base 的 Codex 镜像 skill。 显式调用 $cc-nexs-release-base 时使用。 Integrate exact approved candidates into configured base branches and clean worktrees after proof.
+description: /cc-nexs:release-base Codex mirror skill. Use when $cc-nexs-release-base is explicitly invoked. Integrate exact approved candidates into configured base branches and clean worktrees after proof.
 ---
 
 # /cc-nexs:release-base for Codex

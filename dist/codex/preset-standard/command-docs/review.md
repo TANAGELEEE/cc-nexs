@@ -1,23 +1,22 @@
 ---
-description: "fast 模式 Reviewer 入口。spec、每轮发布前代码评审、部署后最终契约验收三者保持独立调用。"
+description: "fast mode Reviewer entry point. spec, per-round pre-release code review, and post-deployment final contract acceptance remain three independent invocations."
 disable-model-invocation: true
 allowed-tools: "Read, Write, Edit, Bash, Task"
-argument-hint: "<target: spec|code|accept> [需求编号]"
+argument-hint: "<target: spec|code|accept> [requirement ID]"
 ---
 
 # /cc-nexs:review
 
-通过 Task 工具调起 `reviewer-codex` agent。fast 模式下取代 full 模式的 `/cc-nexs:sa` + `/cc-nexs:evaluator`。
+Invoke the `reviewer-codex` agent through the Task tool. In fast mode, it replaces the full mode's `/cc-nexs:sa` + `/cc-nexs:evaluator`.
 
-参数：
+Parameters:
 
 - `$1` = target: `spec` / `code` / `accept`
-- `$2` = 需求编号
+- `$2` = requirement ID
 
-## 执行步骤
+## Execution Steps
 
-### 1. 校验 mode + 参数
-
+### 1. Validate mode + parameters
 ```bash
 TARGET=$1
 REQ_NUM=$2
@@ -32,13 +31,11 @@ MODE=$(grep -oE '"mode"\s*:\s*"[^"]*"' "${REQ_DIR}config.json" | head -1 | grep 
   exit 1
 }
 ```
-
-### 2. 按 target 分派
+### 2. Dispatch by target
 
 #### target=spec
 
-调起 `reviewer-codex` agent，按 agents/reviewer-codex.md 的 target=spec 执行：
-
+Invoke the `reviewer-codex` agent and have it execute with target=spec as described in agents/reviewer-codex.md:
 ```
 你是本项目的 Reviewer（fast 模式，独立 codex session）。
 读 ${REQ_DIR}spec.md。
@@ -47,9 +44,7 @@ MODE=$(grep -oE '"mode"\s*:\s*"[^"]*"' "${REQ_DIR}config.json" | head -1 | grep 
 append 到 ${REQ_DIR}sa-review.md（## Round N 分隔）。
 末尾必须 结论: PASS 或 NEEDS_REVISION。
 ```
-
-#### target=code（仅代码评审，每次 test release 前调用）
-
+#### target=code (code review only, called before each test release)
 ```bash
 # 1. 准备 diff（base 取 config 或默认 origin/master）
 DIFF_FILE=/tmp/fast-code-review-${REQ_NUM}.diff
@@ -63,9 +58,7 @@ if [ "$LINES" -gt 1500 ]; then
   echo "   建议先把 diff 拆分（按文件分组），分批跑 review"
 fi
 ```
-
-调起 `reviewer-codex` agent，**仅产出 sa-code-review.md**（不产出 acceptance.md）：
-
+Invoke the `reviewer-codex` agent to **produce only sa-code-review.md** (not acceptance.md):
 ```
 你是本项目的 Reviewer（fast 模式）。
 diff: ${DIFF_FILE}
@@ -80,11 +73,9 @@ append 到 ${REQ_DIR}sa-code-review.md（## Sprint M1 - Round R - YYYY-MM-DD - �
 禁读 src/、禁读 dev-plan.md。
 禁产出 acceptance.md（那是 target=accept 的职责）。
 ```
+#### target=accept (contract acceptance only; called after TEST_PASSED)
 
-#### target=accept（仅契约验收，TEST_PASSED 后调用）
-
-test-report.md 此时已存在。**仅产出 acceptance.md**（不产出 sa-code-review.md）：
-
+`test-report.md` already exists at this point. **Produce only `acceptance.md`** (do not produce `sa-code-review.md`):
 ```
 你是本项目的 Reviewer（fast 模式）。
 本次只做契约验收（代码评审已在 test release 前完成）。
@@ -106,9 +97,7 @@ append 到 ${REQ_DIR}acceptance.md（## Sprint M1 + 最终验收 - YYYY-MM-DD �
 禁读 src/、禁读 dev-plan.md。
 禁产出 sa-code-review.md（那是 target=code 的职责）。
 ```
-
-### 3. 解析结论
-
+### 3. Analysis Conclusion
 ```bash
 if [ "$TARGET" = "spec" ]; then
   RESULT=$(tail -20 ${REQ_DIR}sa-review.md | grep -E '^结论:' | tail -1 | awk '{print $2}')
@@ -121,18 +110,16 @@ elif [ "$TARGET" = "accept" ]; then
   echo "RESULT:${ACCEPT}"
 fi
 ```
+### 4. Non-advancing states
 
-### 4. 不推进状态
-
-orchestrator 读结论后决定：
+After reading the conclusions, the orchestrator decides:
 - spec PASS → SPEC_PENDING_HUMAN
-- code PASS → TEST_RELEASE（auto_if_ready）；显式 opt-out/交付安全条件不足 → manual G2；浏览器/登录/验收 URL 只在部署后处理
-- 首次 code NEEDS_REVISION → CODE_REVIEW_NEEDS_REVISION；修复轮 → FIX_REVIEW_NEEDS_REVISION
-- accept 通过 → COMPLETE
-- accept 未通过 → ACCEPTANCE_REJECTED
+- code PASS → TEST_RELEASE (auto_if_ready); explicit opt-out / insufficient delivery safety conditions → manual G2; browser/login/acceptance URLs are handled only after deployment
+- first code NEEDS_REVISION → CODE_REVIEW_NEEDS_REVISION; fix round → FIX_REVIEW_NEEDS_REVISION
+- accept passes → COMPLETE
+- accept fails → ACCEPTANCE_REJECTED
 
-## 输出
-
+## Output
 ```
 ✅ Reviewer 完成: target=<target>
    <spec 模式>: 结论: PASS|NEEDS_REVISION

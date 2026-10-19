@@ -1,0 +1,29 @@
+{
+  "_comment": "cc-nexs per-requirement configuration. The orchestrator reads this file at startup to determine the pipeline mode.",
+  "config_version": 2,
+  "mode": "lean",
+  "risk_tier": "auto",
+  "release": {
+    "test": "inherit"
+  },
+  "_release_test_options": ["inherit", "auto", "manual", "disabled"],
+  "_mode_options": {
+    "lean": "Default token-saving flow; plan gate, parallel implementation, local integration verification, a single consolidated review, test acceptance, and release gate",
+    "full": "Full five-party flow; development may span multiple sprints, and once all development is complete, integration review, test release, final QA, and Evaluator acceptance are handled in one unified pass",
+    "fast": "Three-role single sprint; small multi-end requirements are implemented in parallel by repository wave, followed by code review and a unified TEST_RELEASE",
+    "lite": "Lightweight flow (Tech Lead → self-test → commit) that skips the spec and the Evaluator; suited to very small changes",
+    "hotfix": "Bug-fix flow, automatically tiered by P0/P1/P2/P3"
+  },
+  "_mode_selection_guidance": {
+    "Use full when": "Multiple sprints, DB schema / breaking contracts / compliance risk, or complex cross-end dependencies",
+    "Use fast when": "Single sprint, diff ≤ 800 lines; may include parallel frontend/backend implementation when contracts are frozen and the work spans different repositories"
+  },
+  "thresholds": {
+    "sa_code_revision": 3,
+    "qa_fix_per_bug": 3,
+    "evaluator_reject": 2
+  },
+  "auto_squash_on_sprint_done": false,
+  "skip_human_gate": false,
+  "_skip_human_gate_warning": "When true, skip the manual checkpoint after spec review. Use only for demos or urgent hotfixes; keep false for normal requirements."
+}

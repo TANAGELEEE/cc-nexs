@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-git-custodian
-description: /cc-nexs:git-custodian 的 Codex 镜像 skill。 显式调用 $cc-nexs-git-custodian 时使用。 Sole Git mutation boundary for multi-repository worktrees, candidate commits, merge verification, and safe cleanup.
+description: /cc-nexs:git-custodian Codex mirror skill. Use when $cc-nexs-git-custodian is explicitly invoked. Sole Git mutation boundary for multi-repository worktrees, candidate commits, merge verification, and safe cleanup.
 ---
 
 # /cc-nexs:git-custodian for Codex

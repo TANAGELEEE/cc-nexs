@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-lean-verify
-description: /cc-nexs:lean-verify 的 Codex 镜像 skill。 显式调用 $cc-nexs-lean-verify 时使用。 Lean test 环境黑盒验收，直接把 AC 证据汇总到 plan.md。
+description: /cc-nexs:lean-verify Codex mirror skill. Use when $cc-nexs-lean-verify is explicitly invoked. Lean test environment black-box acceptance, aggregating AC evidence directly into plan.md.
 ---
 
 # /cc-nexs:lean-verify for Codex

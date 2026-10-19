@@ -1,5 +1,5 @@
 {
-  "description": "cc-nexs preset-standard hooks: 角色边界、Git Custodian 边界与合并主干前置检查。人工 gate 由状态机暂停实现，不封锁通用工具。",
+  "description": "cc-nexs preset-standard hooks: role boundaries, Git Custodian boundaries, and pre-merge checks. Human gates pause through the state machine and do not block general tools.",
   "hooks": {
     "PreToolUse": [
       {

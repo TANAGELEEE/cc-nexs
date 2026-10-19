@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-build
-description: /cc-nexs:build 的 Codex 镜像 skill。 显式调用 $cc-nexs-build 时使用。 Run only changed modules with exact-candidate success caching and dependency-aware bounded parallelism.
+description: /cc-nexs:build Codex mirror skill. Use when $cc-nexs-build is explicitly invoked. Run only changed modules with exact-candidate success caching and dependency-aware bounded parallelism.
 ---
 
 # /cc-nexs:build for Codex

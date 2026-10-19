@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-approve-release
-description: /cc-nexs:approve-release 的 Codex 镜像 skill。 显式调用 $cc-nexs-approve-release 时使用。 Record Gateway B approval for an exact candidate and its test evidence or authorized environment exception.
+description: /cc-nexs:approve-release Codex mirror skill. Use when $cc-nexs-approve-release is explicitly invoked. Record Gateway B approval for an exact candidate and its test evidence or authorized environment exception.
 ---
 
 # /cc-nexs:approve-release for Codex

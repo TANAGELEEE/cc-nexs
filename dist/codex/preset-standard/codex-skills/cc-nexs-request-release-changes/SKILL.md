@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-request-release-changes
-description: /cc-nexs:request-release-changes 的 Codex 镜像 skill。 显式调用 $cc-nexs-request-release-changes 时使用。 Record Gateway B feedback and route evidence-only, implementation, or scope changes safely.
+description: /cc-nexs:request-release-changes Codex mirror skill. Use when $cc-nexs-request-release-changes is explicitly invoked. Record Gateway B feedback and route evidence-only, implementation, or scope changes safely.
 ---
 
 # /cc-nexs:request-release-changes for Codex

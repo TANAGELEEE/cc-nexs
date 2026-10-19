@@ -418,8 +418,8 @@ function generateCodexSkills(dst) {
 
     const commandBase = basename(fileName, '.md');
     const description = [
-      `${commandName} 的 Codex 镜像 skill。`,
-      `显式调用 $${skillName} 时使用。`,
+      `${commandName} Codex mirror skill.`,
+      `Use when $${skillName} is explicitly invoked.`,
       extractDescription(commandText, commandName),
     ].join(' ');
     const skillRoot = join(codexSkillsDir, skillName);
@@ -508,9 +508,13 @@ function adaptPiAgentBody(role, body) {
   if (role === 'sa') return PI_SA_DIRECT_BODY;
   if (role !== 'qa') return body;
 
-  const claudeBrowserInstruction = '3. 使用 chrome-devtools-mcp 打开配置的 `app_url` / `operations_url`，只访问 `allowed_hosts`，复用当前登录会话。';
+  const claudeBrowserInstructions = [
+    '3. 使用 chrome-devtools-mcp 打开配置的 `app_url` / `operations_url`，只访问 `allowed_hosts`，复用当前登录会话。',
+    '3. Use chrome-devtools-mcp to open the configured `app_url` / `operations_url`, access only `allowed_hosts`, and reuse the current login session.',
+  ];
   const piBrowserInstruction = '3. 使用本 agent 顶部冻结的唯一 Pi browser provider 打开配置的 `app_url` / `operations_url`，只访问 `allowed_hosts`，复用现有登录会话；不得自行选择、混用或切换 provider。';
-  if (!body.includes(claudeBrowserInstruction)) {
+  const claudeBrowserInstruction = claudeBrowserInstructions.find((instruction) => body.includes(instruction));
+  if (!claudeBrowserInstruction) {
     throw new Error('Pi QA adapter could not find the Claude-only browser instruction');
   }
   const adapted = body.replace(claudeBrowserInstruction, piBrowserInstruction);
@@ -604,11 +608,11 @@ function generatePiResources() {
     const supportsHotfix = ['hotfix', 'init-hotfix', 'revise-hotfix'].includes(commandBase);
     const controlBlock = deterministicControlBlock(commandBase, '../../../packages/core/lib/cc-nexs-cli.mjs');
     const description = [
-      `${commandName} 的 Pi P2 适配 skill。`,
-      `仅允许通过 /cc-nexs:${commandBase} 或 /skill:${skillName} 显式调用；不得因普通自然语言请求自动触发。`,
+      `${commandName} Pi P2 adapter skill.`,
+      `Invoke only through /cc-nexs:${commandBase} or /skill:${skillName}; never auto-trigger from ordinary natural-language requests.`,
       supportsHotfix
-        ? '支持 preset-standard 独立 Hotfix 分支与 BUG 文档，不占需求号，并通过 pi-subagents 运行隔离角色。'
-        : '支持 preset-standard lean（默认）、fast 与 full 模式，并通过 pi-subagents 运行隔离角色。',
+        ? 'Supports the preset-standard standalone Hotfix branch and BUG document without consuming a requirement number, with isolated roles through pi-subagents.'
+        : 'Supports preset-standard lean (default), fast, and full modes with isolated roles through pi-subagents.',
       extractDescription(commandText, commandName).replace(/codex CLI/gi, 'Pi subagent'),
     ].join(' ');
     const modelGuard = supportsHotfix

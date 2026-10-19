@@ -80,8 +80,8 @@ function isAfterState(currentState, threshold) {
 
 function conclusionPass(content) {
   if (!content) return false;
-  const tail = content.split('\n').slice(-30).join('\n');
-  return /^(?:结论:\s*PASS|结论:\s*通过|验收结果:\s*通过|Conclusion:\s*PASS)/m.test(tail);
+  const tail = content.split('\n').slice(-30).join('\n').replace(/\*\*/g, '');
+  return /^(?:结论|結論):\s*(?:PASS|通过|透過)|^(?:验收结果|驗收結果):\s*(?:通过|透過)|^Acceptance(?: Result| result):\s*Pass(?:ed)?|^Conclusion:\s*Pass(?:ed)?/im.test(tail);
 }
 
 // Per-artifact emoji rules. Order of evaluation per file:
@@ -212,19 +212,20 @@ function renderAcceptanceSnapshot(reqDir) {
     return [...header, '| - | acceptance.md 尚未产出 |'].join('\n');
   }
   const content = safeRead(fp);
-  const matches = [...content.matchAll(/^##\s+Sprint\s+(M\d+)/gm)];
+  const normalizedContent = content.replace(/\*\*/g, '');
+  const matches = [...normalizedContent.matchAll(/^##\s+Sprint\s+(M\d+)/gm)];
   const rows = [];
   for (let i = 0; i < matches.length; i += 1) {
     const sprint = matches[i][1];
     const fromIdx = matches[i].index;
     const toIdx = i + 1 < matches.length ? matches[i + 1].index : content.length;
-    const block = content.slice(fromIdx, toIdx);
-    const concl = block.match(/^验收结果:\s*(\S+)/m);
-    rows.push(`| ${sprint} | ${concl ? concl[1] : '进行中'} |`);
+    const block = normalizedContent.slice(fromIdx, toIdx);
+    const concl = block.match(/^(?:验收结果|驗收結果):\s*(\S+)|^Acceptance(?: Result| result):\s*(\S+)/im);
+    rows.push(`| ${sprint} | ${concl ? (concl[1] || concl[2]) : '进行中'} |`);
   }
   // Also pick up cross-sprint final verdict if present (FINAL_EVAL stage)
-  const finalConcl = content.match(/##\s+(?:最终验收|Final Acceptance)[\s\S]*?^验收结果:\s*(\S+)/m);
-  if (finalConcl) rows.push(`| FINAL | ${finalConcl[1]} |`);
+  const finalConcl = normalizedContent.match(/##\s+(?:最终验收|最終驗收|Final Acceptance)[\s\S]*?^(?:验收结果|驗收結果):\s*(\S+)|##\s+(?:最终验收|最終驗收|Final Acceptance)[\s\S]*?^Acceptance(?: Result| result):\s*(\S+)/im);
+  if (finalConcl) rows.push(`| FINAL | ${finalConcl[1] || finalConcl[2]} |`);
   if (rows.length === 0) rows.push('| - | acceptance.md 待填 |');
   return [...header, ...rows].join('\n');
 }

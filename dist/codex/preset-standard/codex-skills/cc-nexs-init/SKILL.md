@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-init
-description: /cc-nexs:init 的 Codex 镜像 skill。 显式调用 $cc-nexs-init 时使用。 用模板初始化新需求目录。自动按 all-docs/doc/ 下已有编号续号，自动从需求描述生成 slug。默认在 .worktrees/<id>-<slug>/ 创建独立 git worktree，多需求可并行。
+description: /cc-nexs:init Codex mirror skill. Use when $cc-nexs-init is explicitly invoked. Initialize a new requirement directory from a template. Automatically continues numbering from existing numbers under all-docs/doc/, and automatically generates a slug from the requirement description. By default, creates an independent git worktree in .worktrees/<id>-<slug>/, so multiple requirements can run in parallel.
 ---
 
 # /cc-nexs:init for Codex

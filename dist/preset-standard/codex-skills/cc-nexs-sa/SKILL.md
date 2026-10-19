@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-sa
-description: /cc-nexs:sa 的 Codex 镜像 skill。 显式调用 $cc-nexs-sa 时使用。 SA 评审入口。支持 spec、cases、单 Sprint code、跨 Sprint integration 和发布后 fix code 评审。
+description: /cc-nexs:sa Codex mirror skill. Use when $cc-nexs-sa is explicitly invoked. SA review entry point. Supports spec, cases, single-Sprint code, cross-Sprint integration, and post-release fix code reviews.
 ---
 
 # /cc-nexs:sa for Codex

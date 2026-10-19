@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-release-test
-description: /cc-nexs:release-test 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:release-test 或 /skill:cc-nexs-release-test 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard lean（默认）、fast 与 full 模式，并通过 pi-subagents 运行隔离角色。 Integrate final feature candidates into test, run the project release driver, then hand deployed evidence to the black-box Verifier.
+description: /cc-nexs:release-test Pi P2 adapter skill. Invoke only through /cc-nexs:release-test or /skill:cc-nexs-release-test; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default), fast, and full modes with isolated roles through pi-subagents. Integrate final feature candidates into test, run the project release driver, then hand deployed evidence to the black-box Verifier.
 disable-model-invocation: true
 ---
 

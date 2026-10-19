@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-switch-test-target
-description: /cc-nexs:switch-test-target 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:switch-test-target 或 /skill:cc-nexs-switch-test-target 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard lean（默认）、fast 与 full 模式，并通过 pi-subagents 运行隔离角色。 Switch one task to an explicitly authorized non-production test environment.
+description: /cc-nexs:switch-test-target Pi P2 adapter skill. Invoke only through /cc-nexs:switch-test-target or /skill:cc-nexs-switch-test-target; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default), fast, and full modes with isolated roles through pi-subagents. Switch one task to an explicitly authorized non-production test environment.
 disable-model-invocation: true
 ---
 

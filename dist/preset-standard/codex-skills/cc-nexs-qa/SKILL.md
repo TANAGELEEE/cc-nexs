@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-qa
-description: /cc-nexs:qa 的 Codex 镜像 skill。 显式调用 $cc-nexs-qa 时使用。 QA 黑盒测试入口。Sprint 阶段写/评用例；完整需求发布到 test 后执行 final 或 final-regression。禁读 src/。
+description: /cc-nexs:qa Codex mirror skill. Use when $cc-nexs-qa is explicitly invoked. QA black-box testing entry point. During the Sprint phase, write/review test cases; once the complete requirement is released to test, run final or final-regression. Reading src/ is prohibited.
 ---
 
 # /cc-nexs:qa for Codex

@@ -1,31 +1,30 @@
 ---
 name: "md-aggregation"
-description: "cc-nexs 文档聚合规则速查。避免文件泛滥（每轮一个 md 文件的反模式）。触发词：sa-review、sa-code-review、test-report、acceptance、append、文件命名、追加、文档泛滥。"
+description: "cc-nexs document aggregation rules quick reference. Avoid file proliferation (the anti-pattern of one md file per round). Trigger words: sa-review, sa-code-review, test-report, acceptance, append, file naming, appending, document proliferation."
 disable-model-invocation: true
 ---
 
-# md 文档聚合规则
+# md Document Aggregation Rules
 
-按当前模式聚合：Lean 将执行、Review 与验证证据写入 plan.md，Hotfix 写入 `progress.hotfix_document` 指定的 BUG 文档（旧任务为 hotfix.md）；只有 Fast/Full 使用下表的分角色文档。不要把历史模式的文件清单套到 Lean/Hotfix。
+Aggregate according to the current mode: Lean writes execution, Review, and verification evidence into plan.md, and Hotfix writes into the BUG document specified by `progress.hotfix_document` (hotfix.md for legacy tasks); only Fast/Full use the role-specific documents in the table below. Do not apply the file list from historical modes to Lean/Hotfix.
 
-Fast/Full 同类评审、测试和验收轮次追加到对应文件，用二级标题分隔。
+For Fast/Full, review, test, and acceptance rounds of the same kind are appended to the corresponding file, separated by level-2 headings.
 
-## 一需求一文件清单
+## One File List per Requirement
 
-| 文件 | 角色产出 | 章节切分维度 |
+| File | Role output | Section split dimension |
 |------|---------|-------------|
 | `sa-review.md` | SA | `## Round N - YYYY-MM-DD - 结论` |
 | `sa-test-review.md` | SA | `## Sprint M<N> Round N - YYYY-MM-DD - 结论` |
 | `sa-code-review.md` | SA | `## Sprint M<N> - Round R - Group A - YYYY-MM-DD - 结论` |
 | `test-cases.md` | QA | `## Sprint M<N>` |
-| `test-report.md` | QA | `## Sprint M<N> Round N` 和 `## Sprint M<N> 回归 Round N` |
-| `acceptance.md` | Evaluator | `## Sprint M<N> - YYYY-MM-DD` 和 `## 最终验收 - YYYY-MM-DD` |
+| `test-report.md` | QA | `## Sprint M<N> Round N` and `## Sprint M<N> 回归 Round N` |
+| `acceptance.md` | Evaluator | `## Sprint M<N> - YYYY-MM-DD` and `## 最终验收 - YYYY-MM-DD` |
 | `dev-plan.md` | PM/Tech Lead | `## Sprint M<N>` |
 | `api-doc.md` | Tech Lead | `## Sprint M<N>` |
-| `deploy.md` | Tech Lead | `## Sprint M<N>` 和 `## 生产回滚步骤 - BUG-<id>`（如适用） |
+| `deploy.md` | Tech Lead | `## Sprint M<N>` and `## 生产回滚步骤 - BUG-<id>` (if applicable) |
 
-## 反模式（禁止）
-
+## Anti-patterns (Prohibited)
 ```
 ❌ sa-code-review-m2-a.md
 ❌ sa-code-review-m2-a-r2.md
@@ -34,19 +33,15 @@ Fast/Full 同类评审、测试和验收轮次追加到对应文件，用二级�
 ❌ test-report-sprint1-round2.md
 ❌ acceptance-final.md
 ```
-
-正确：
-
+Correct:
 ```
 ✅ sa-code-review.md（单文件，多 sprint × 多 round × 多 group 都 append 进去）
 ✅ test-report.md（同上）
 ✅ acceptance.md（同上）
 ```
+## Status Table at the Top of the File
 
-## 文件顶部状态表
-
-`sa-code-review.md`、`test-report.md` 这种轮次多的文件，**必须**在文件顶部维护一张状态表（agent 每次 append 后更新）：
-
+For files that go through many rounds, such as `sa-code-review.md` and test-report.md, **you must** maintain a status table at the top of the file (updated after each append by the agent):
 ```markdown
 # {编号} {短名} SA 代码评审
 
@@ -66,25 +61,22 @@ Fast/Full 同类评审、测试和验收轮次追加到对应文件，用二级�
 ## Sprint M1 - Round 2 - Group A - 2026-05-18 - PASS
 （具体评审内容...）
 ```
+## append Does Not Overwrite
 
-## append 不覆盖
+- Content from previous rounds **must not be deleted or modified**
+- Revisions only append new sections at the end of the file
+- Just update the status table at the top; do not delete historical rows
+- For a Sprint × Group that has already PASSED, review only the newly added diff in the next round; do not re-review
 
-- 历史轮次内容**禁止删改**
-- 修订只在文件末尾追加新章节
-- 状态表顶部更新即可，不要删历史行
-- 已 PASS 的 Sprint × Group 下一轮只审新增 diff，不重复审
+## Historical Archive
 
-## 历史归档
-
-确实需要保留单独档案的（极少数特殊场景），归档到：
-
+In the rare special cases where a separate archive genuinely needs to be retained, archive it to:
 ```
 doc/<编号>/sa-review-archive/
 doc/<编号>/test-report-archive/
 ```
+`README.md` **does not reference** the archive directory. It is a cold archive and does not affect the current pipeline.
 
-`README.md` **不引用** archive 目录。这是冷存档，不影响当前流水线。
+## Interface with the orchestrator
 
-## 与 orchestrator 的接口
-
-保留当前命令和 active run rule 要求的章节与末尾结论行。仅由确定性控制器更新 progress.json；Markdown 是证据或镜像，不从通用 tail/grep 片段推断跨模式状态。修复后的结论必须绑定当前 candidate，不复用旧 PASS。
+Preserve the sections and trailing conclusion line required by the current command and the active run rule. Only the deterministic controller updates progress.json; Markdown is evidence or a mirror, and cross-mode state is not inferred from generic tail/grep fragments. A conclusion after a fix must be bound to the current candidate and must not reuse an old PASS.

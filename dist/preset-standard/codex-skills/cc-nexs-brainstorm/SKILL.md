@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-brainstorm
-description: /cc-nexs:brainstorm 的 Codex 镜像 skill。 显式调用 $cc-nexs-brainstorm 时使用。 可选需求澄清入口：补全 requirements.md；需求完整时直接进入当前模式的规划步骤。
+description: /cc-nexs:brainstorm Codex mirror skill. Use when $cc-nexs-brainstorm is explicitly invoked. Optional requirements clarification entry point: completes requirements.md; when requirements are complete, proceeds directly to the planning step of the current mode.
 ---
 
 # /cc-nexs:brainstorm for Codex

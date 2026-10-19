@@ -111,7 +111,7 @@ function acceptanceContract(specText) {
     const header = tableCells(lines[index]);
     const criterionIndex = header.findIndex((cell) => /^AC-ID$/i.test(cell));
     if (criterionIndex === -1) continue;
-    const sprintIndex = header.findIndex((cell) => /^(?:(?:所属|关联)\s*)?Sprint$/i.test(cell));
+    const sprintIndex = header.findIndex((cell) => /^(?:(?:所属|所屬|關聯|关联)\s*)?Sprint$/i.test(cell));
     index += 2;
     while (index < lines.length && lines[index].trim().startsWith('|')) {
       const cells = tableCells(lines[index]);
@@ -230,7 +230,7 @@ function sha256(value) {
 }
 
 function specApprovalScope(specText) {
-  const headings = [...specText.matchAll(/^##\s+变更记录\s*$/gm)];
+  const headings = [...specText.matchAll(/^##\s+(?:变更记录|變更記錄|Change Log)\s*$/gm)];
   if (headings.length === 0) return specText.trim();
   if (headings.length !== 1) throw new Error('[cc-nexs] spec.md requires at most one change-log section');
   const heading = headings[0];
@@ -239,13 +239,14 @@ function specApprovalScope(specText) {
   if (/^##\s+/m.test(after)) {
     throw new Error('[cc-nexs] spec.md change log must be the final H2 section');
   }
-  if (!after) return `${before}\n\n## 变更记录`;
+  if (!after) return `${before}\n\n${heading[0]}`;
   const lines = after.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (lines.length < 2 || lines.some((line) => !line.startsWith('|'))) {
     throw new Error('[cc-nexs] spec.md change log may contain only its Markdown table');
   }
   const header = tableCells(lines[0]);
-  if (!header.includes('日期') || !header.includes('变更内容') || !header.includes('操作人')) {
+  const hasAny = (...values) => values.some((value) => header.includes(value));
+  if (!hasAny('日期', 'Date') || !hasAny('变更内容', '變更內容', 'Change') || !hasAny('操作人', '操作人', 'Owner')) {
     throw new Error('[cc-nexs] spec.md change log has an invalid table header');
   }
   const separator = tableCells(lines[1]);
@@ -257,7 +258,7 @@ function specApprovalScope(specText) {
       throw new Error('[cc-nexs] spec.md change log row has the wrong number of columns');
     }
   }
-  return `${before}\n\n## 变更记录\n${lines[0]}\n${lines[1]}`;
+  return `${before}\n\n${heading[0]}\n${lines[0]}\n${lines[1]}`;
 }
 
 export function implementationApprovalBinding(specText, { repositories = null, mode = null } = {}) {

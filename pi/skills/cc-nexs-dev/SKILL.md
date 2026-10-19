@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-dev
-description: /cc-nexs:dev 的 Pi P2 适配 skill。 仅允许通过 /cc-nexs:dev 或 /skill:cc-nexs-dev 显式调用；不得因普通自然语言请求自动触发。 支持 preset-standard lean（默认）、fast 与 full 模式，并通过 pi-subagents 运行隔离角色。 Tech Lead 编码入口。Sprint 实现可按已批准 repository assignment 并行；文档、评审修订与修复保持边界隔离。
+description: /cc-nexs:dev Pi P2 adapter skill. Invoke only through /cc-nexs:dev or /skill:cc-nexs-dev; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default), fast, and full modes with isolated roles through pi-subagents. Tech Lead coding entry point. Sprint implementation may run in parallel per approved repository assignment; documentation, review revisions, and fixes remain boundary-isolated.
 disable-model-invocation: true
 ---
 

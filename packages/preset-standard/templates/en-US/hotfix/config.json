@@ -1,0 +1,6 @@
+{
+  "config_version": 2,
+  "mode": "hotfix",
+  "risk_tier": "auto",
+  "release": { "test": "inherit" }
+}

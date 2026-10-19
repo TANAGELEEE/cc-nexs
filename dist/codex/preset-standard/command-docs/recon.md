@@ -1,22 +1,21 @@
 ---
-description: "Repo Scout 角色入口。读 src/ 把现存同类配置/Service/页面/API 归档成 repo-context.md，作为 Planner 的现状清单输入。在 /cc-nexs:brainstorm 之后、Planner 之前调用（编排器 RECON 阶段会自动跑）。"
+description: "Repo Scout role entry point. Reads src/ and archives existing configs/Services/pages/APIs of the same kind into repo-context.md as the current-state inventory input for the Planner. Called after /cc-nexs:brainstorm and before the Planner (the orchestrator's RECON stage runs it automatically)."
 disable-model-invocation: true
 allowed-tools: "Read, Write, Edit, Glob, Grep, Bash, Task"
-argument-hint: "[需求编号]"
+argument-hint: "[requirement ID]"
 ---
 
 # /cc-nexs:recon
 
-启动 Repo Scout 子代理，扫描代码库现状，产出 `all-docs/doc/<编号>.<短名>/repo-context.md`，给 Planner 当 spec 的现状对照基础。
+Launches the Repo Scout subagent to scan the current state of the codebase and produce `all-docs/doc/<编号>.<短名>/repo-context.md`, which serves as the current-state reference baseline for the Planner's spec.
 
-参数：
+Parameters:
 
-- `$1` = 需求编号（必填，与 `/cc-nexs:init` 时给出的编号一致）
+- `$1` = requirement ID (required; must match the ID provided at `/cc-nexs:init`)
 
-## 执行步骤
+## Execution Steps
 
-### 1. 校验参数
-
+### 1. Validate Parameters
 ```bash
 ID="$1"
 if [ -z "$ID" ]; then
@@ -25,9 +24,7 @@ if [ -z "$ID" ]; then
   exit 1
 fi
 ```
-
-### 2. 定位需求目录
-
+### 2. Locate the Requirements Directory
 ```bash
 [ -n "$CC_NEXS_REQ_DIR" ] && REQ_DIR="$CC_NEXS_REQ_DIR" || REQ_DIR=$(ls -d all-docs/doc/${ID}.*/ 2>/dev/null | head -1)
 if [ -z "$REQ_DIR" ]; then
@@ -37,9 +34,7 @@ if [ -z "$REQ_DIR" ]; then
 fi
 echo "📂 目录: ${REQ_DIR}"
 ```
-
-### 3. 校验 requirements.md 存在且非空
-
+### 3. Verify that requirements.md exists and is non-empty
 ```bash
 REQ_FILE="${REQ_DIR}requirements.md"
 if [ ! -s "$REQ_FILE" ]; then
@@ -48,9 +43,7 @@ if [ ! -s "$REQ_FILE" ]; then
   exit 1
 fi
 ```
-
-### 4. 拷贝模板（如需要）
-
+### 4. Copy the template（if needed）
 ```bash
 CTX_FILE="${REQ_DIR}repo-context.md"
 if [ ! -f "$CTX_FILE" ]; then
@@ -66,11 +59,9 @@ if [ ! -f "$CTX_FILE" ]; then
   fi
 fi
 ```
+### 5. Start the Repo Scout Subagent
 
-### 5. 启动 Repo Scout 子代理
-
-通过 Task 工具调起 `repo-scout-claude`。Prompt 模板：
-
+Invoke `repo-scout-claude` through the Task tool. Prompt template:
 ```
 你是 Repo Scout（独立 session），现状勘察员。
 
@@ -91,9 +82,7 @@ fi
 
 完成后仅写入 repo-context.md，不输出额外摘要。
 ```
-
-### 6. 校验产出
-
+### 6. Verify the output
 ```bash
 if [ ! -s "$CTX_FILE" ]; then
   echo "❌ Repo Scout 未产出 ${CTX_FILE}"
@@ -126,13 +115,11 @@ if [ "$hits" -lt 1 ]; then
   echo "   可能是绿地需求（需在文件开头注明），也可能是 Repo Scout 没真正扫描"
 fi
 ```
+### 7. Does Not Advance the State Machine
 
-### 7. 不推进状态机
+The `/cc-nexs:recon` single-step command **does not modify progress.md**. State advancement is handled automatically by the `/cc-nexs:run` orchestrator at the `REQ_DRAFTED → RECON_DONE` stage.
 
-`/cc-nexs:recon` 单步命令**不修改 progress.md**。状态推进由 `/cc-nexs:run` 编排器在 `REQ_DRAFTED → RECON_DONE` 阶段自动完成。
-
-## 输出
-
+## Output
 ```
 ✅ Repo Scout 已产出 repo-context.md
    命中引用数: <N>
@@ -141,15 +128,13 @@ fi
    - 自动流程: /cc-nexs:run <编号>
    - 单独 Planner: /cc-nexs:planner <编号>
 ```
+## When Not to Use
 
-## 何时不该用
+- requirements.md not written yet → run `/cc-nexs:brainstorm` first
+- Greenfield repository (cc-nexs:init's first requirement) → can be skipped, but running it once is recommended to record the "no similar items" fact
+- Single-file typo / copy change → use `/cc-nexs:hotfix`, no RECON needed
 
-- requirements.md 还没写 → 先跑 `/cc-nexs:brainstorm`
-- 绿地仓库（cc-nexs:init 第一个需求） → 可跳过，但建议跑一次留档"无同类"事实
-- 单文件 typo / 文案 → 走 `/cc-nexs:hotfix`，不需要 RECON
-
-## 与其他命令的关系
-
+## Relationship with Other Commands
 ```
 /cc-nexs:init         ← 建目录 + 一句话诉求
 /cc-nexs:brainstorm   ← 展开 requirements.md

@@ -28,12 +28,18 @@ Bootstrap a feature directory under `all-docs/doc/`. By default creates an isola
    CC_NEXS_RESOLVED_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CODEX_PLUGIN_ROOT:-${CC_NEXS_PLUGIN_ROOT:-}}}}"
    [ -n "$CC_NEXS_RESOLVED_PLUGIN_ROOT" ] || { echo "❌ 找不到 plugin root（需 CLAUDE_PLUGIN_ROOT / PLUGIN_ROOT / CODEX_PLUGIN_ROOT / CC_NEXS_PLUGIN_ROOT）"; exit 1; }
    REQ_DIR="${DOC_WORKTREE}/doc/${feature_id}.${feature_slug}"
+   TEMPLATE_ROOT="${CC_NEXS_RESOLVED_PLUGIN_ROOT}/templates"
+   CC_NEXS_LOCALE="${CC_NEXS_LOCALE:-en-US}"
+   LOCALE_TEMPLATE_ROOT=""
+   if [ -n "${CC_NEXS_LOCALE:-}" ] && [ -d "${TEMPLATE_ROOT}/${CC_NEXS_LOCALE}" ]; then LOCALE_TEMPLATE_ROOT="${TEMPLATE_ROOT}/${CC_NEXS_LOCALE}"; fi
    mkdir -p "$REQ_DIR"
    if [ "$MODE" = "lean" ]; then
-     cp -r "${CC_NEXS_RESOLVED_PLUGIN_ROOT}/templates/${MODE}/"* "${REQ_DIR}/"
+     cp -r "${TEMPLATE_ROOT}/${MODE}/"* "${REQ_DIR}/"
+     [ -d "${LOCALE_TEMPLATE_ROOT}/${MODE}" ] && cp -r "${LOCALE_TEMPLATE_ROOT}/${MODE}/"* "${REQ_DIR}/"
      rm -f "${REQ_DIR}/README.md"
    else
-     find "${CC_NEXS_RESOLVED_PLUGIN_ROOT}/templates" -mindepth 1 -maxdepth 1 ! -name lean ! -name hotfix -exec cp -R {} "${REQ_DIR}/" \;
+     find "${TEMPLATE_ROOT}" -mindepth 1 -maxdepth 1 ! -name lean ! -name hotfix ! -name en-US ! -name zh-TW -exec cp -R {} "${REQ_DIR}/" \;
+     if [ -d "$LOCALE_TEMPLATE_ROOT" ]; then find "$LOCALE_TEMPLATE_ROOT" -mindepth 1 -maxdepth 1 ! -name lean ! -name hotfix ! -name en-US ! -name zh-TW -exec cp -R {} "${REQ_DIR}/" \; fi
    fi
    ```
 6. Edit progress.md (in `$REQ_DIR`):

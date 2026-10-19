@@ -1,7 +1,6 @@
-# cc-nexs 架构（monorepo + dist 双层）
+# cc-nexs Architecture（monorepo + dist dual-layer）
 
-## 顶层视角
-
+## Top-Level View
 ```
 cc-nexs/                    monorepo 根
 ├── packages/               源码层
@@ -15,23 +14,21 @@ cc-nexs/                    monorepo 根
 │   └── preset-*/           扁平自包含 plugin
 └── examples/               真实使用样板
 ```
+**Source vs. distribution**:
+- Source uses a monorepo because core is shared across multiple presets, keeping a single repo clean to maintain
+- Distribution uses a flat layout because the Claude Code plugin loading mechanism auto-discovers by plugin root directory, and cross-directory references aren't recognized
+- `pnpm build` materializes core content into `dist/<preset>/`, resolving the conflict between the two
 
-**源码 vs 分发**：
-- 源码用 monorepo 是因为 core 多 preset 共享，单仓维护清晰
-- 分发用扁平是因为 Claude Code plugin 加载机制按 plugin 根目录 auto-discovery，跨目录引用不被识别
-- `pnpm build` 把 core 内容物化进 `dist/<preset>/` 解决两者矛盾
+## Two-layer responsibility split
 
-## 双层职责划分
-
-| 层 | 职责 | 跨项目通用？ |
+| Layer | Responsibility | Shared across projects? |
 |----|------|-------------|
-| **core** | 状态机引擎、计数器、熔断、orchestrator commands、hooks 协议、i18n 框架、reviewer 工具适配 | ✅ |
-| **preset** | 启用哪些角色、用什么工具、做什么栈检查、加载什么模板、什么语言 | ❌（每项目特化）|
+| **core** | State machine engine, counters, circuit breaking, orchestrator commands, hooks protocol, i18n framework, reviewer tool adapters | ✅ |
+| **preset** | Which roles are enabled, which tools to use, what stack checks to run, which templates to load, what language | ❌（specialized per project）|
 
-core 不知道有多少种栈，也不知道角色叫什么名字。preset 通过 `preset.yml` 把这些项目特定知识声明出来。
+core doesn't know how many kinds of stacks exist, nor what the roles are called. The preset declares this project-specific knowledge through `preset.yml`.
 
-## Build 流程
-
+## Build flow
 ```
 源码 (packages/)              build.mjs 行为                  产物 (dist/<preset>/)
 ─────────────────────         ───────────────                 ────────────────────
@@ -57,18 +54,14 @@ standard commands/agents →  生成 Pi runtime adapter      → pi/skills/ + pi
   "_core/X"    → "X"
   "../core/X"  → "X"
 ```
+The root `.claude-plugin/marketplace.json` and `.agents/plugins/marketplace.json` automatically aggregate all presets; `dist/.claude-plugin/marketplace.json` is not a valid entry point.
 
-根目录 `.claude-plugin/marketplace.json` 与 `.agents/plugins/marketplace.json` 自动汇总所有 preset；`dist/.claude-plugin/marketplace.json` 不是有效入口。
-
-`packages/core/**` 与 `packages/preset-*/**` 是 command/agent 的 source of truth；`dist/**`、`pi/agents/**`、`pi/skills/**` 以及两个根 marketplace 都是 build 产物，禁止手工维护三份。`pi/extensions/cc-nexs.ts` 是手写的 Pi runtime 入口。提交前的生成物检查应覆盖全部这些路径：
-
+`packages/core/**` and `packages/preset-*/**` are the source of truth for commands/agents; `dist/**`, `pi/agents/**`, `pi/skills/**`, and the two root marketplaces are all build artifacts, and the three copies must not be maintained by hand. `pi/extensions/cc-nexs.ts` is the hand-written Pi runtime entry point. The generated-artifact check before committing should cover all of these paths:
 ```bash
 pnpm build
 git diff --exit-code -- dist pi/agents pi/skills .claude-plugin/marketplace.json .agents/plugins/marketplace.json package.json.pi
 ```
-
-## 启动时序
-
+## 启动顺序
 ```
 用户运行 /cc-nexs:run 01
    │
@@ -105,77 +98,73 @@ git diff --exit-code -- dist pi/agents pi/skills .claude-plugin/marketplace.json
    ▼
 8. 立即回到 step 4 自循环（除非 stop=true 或 next=COMPLETE）
 ```
-
-## 关键模块
+## Key Modules
 
 ### `core/lib/config-loader.mjs`
-
 ```js
 loadConfig({ projectRoot, presetRoot? })
   → { project, preset, overlay, locale, mergedThresholds, mergedStack, mergedWorkflow, mergedRelease, mergedModels }
 ```
-
-读两份 YAML / JSON：项目级（`cc-nexs.config.yml`）+ preset 级（`preset.yml`）。
-零依赖手写 YAML 解析器，支持 key:value、嵌套、数组、null/bool/int。
+Read two YAML / JSON files: project-level (`cc-nexs.config.yml`) + preset-level (`preset.yml`).
+Zero-dependency hand-written YAML parser, supporting key:value, nesting, arrays, null/bool/int.
 
 ### `core/lib/state-machine.mjs`
 
-纯函数。无 I/O，无副作用。给定 `(state, counters, thresholds, enabledRoles, sprint, humanGateApproved)`，决定下一步。
+Pure function. No I/O, no side effects. Given `(state, counters, thresholds, enabledRoles, sprint, humanGateApproved)`, decides the next step.
 
-特点：
-- `mode=lean` 为新需求默认；fast-track 顺序是 plan gate、本地可执行验证、test 交付/验收、一次集中 Review、release gate、base merge
-- 三档熔断（review_revision / fix_per_bug / evaluator_reject）
-- 角色弹性（缺 evaluator 时 reviewer 兼任，缺 qa 时 reviewer 兼任）
-- 默认 stop：`SPEC_PENDING_HUMAN`（G1）；manual/legacy G2、test release block、manual verification 和熔断
+Characteristics:
+- `mode=lean` is the default for new requirements; the fast-track order is plan gate, locally executable verification, test delivery/acceptance, a single consolidated Review, release gate, base merge
+- Three-tier circuit breaker (review_revision / fix_per_bug / evaluator_reject)
+- Role flexibility (when evaluator is absent, reviewer takes over; when qa is absent, reviewer takes over)
+- Default stop: `SPEC_PENDING_HUMAN` (G1); manual/legacy G2, test release block, manual verification, and circuit breaker
 
 ### `core/lib/test-release.mjs`
 
-把不可变 candidate ref 按仓库顺序合入最新 `origin/<test_branch>`，普通 non-force push 后调用结构化 test release driver，并把 integration/pipeline/deployment/environment_revision 写入 progress v2 attempt。controller 只允许 test，不处理生产。
+Merges the immutable candidate ref into the latest `origin/<test_branch>` in repository order, then after a normal non-force push calls the structured test release driver, and writes integration/pipeline/deployment/environment_revision into the progress v2 attempt. The controller permits test only and does not handle production.
 
 ### `core/lib/role-registry.mjs`
 
-从 preset.yml 解析角色定义，结合 core 默认值。提供 `get(name)` 拿到 `{agent, agentPath, tool, alias}`。
+Parses role definitions from preset.yml, combined with core defaults. Provides `get(name)` to retrieve `{agent, agentPath, tool, alias}`.
 
 ### `core/lib/model-routing.mjs`
 
-把三端共用的模型决策集中在确定性核心：校验 `risk_tier` / Hotfix severity / `models.routing`，从 Gateway A binding 或 Hotfix scope 取可信风险信号，按最高风险匹配规则，再把 feature `models.roles` 作为最终显式覆盖。`resolveFeatureModelRouting()` 和 `resolveRoleRuntime()` 同时返回 matched rules、全部信号、是否自动升档以及最终 profile/model/effort，避免 Claude Code、Codex、Pi 各自实现一套优先级。
+Concentrates the model decisions shared by the three runtimes into a deterministic core: validates `risk_tier` / Hotfix severity / `models.routing`, takes trusted risk signals from the Gateway A binding or Hotfix scope, matches rules by the highest risk, and then applies feature `models.roles` as the final explicit override. `resolveFeatureModelRouting()` and `resolveRoleRuntime()` both return the matched rules, all signals, whether auto-upgrade occurred, and the final profile/model/effort, avoiding Claude Code, Codex, and Pi each implementing their own priority scheme.
 
-Lean 只派一个 Planner；`risk_tier:auto` 的首稿由日常 profile 生成，high/critical 只升级后续 Reviewer 并在 Gateway A 建议 Full，不再冷启动第二个 Planner。Gateway A 将 concrete risk、delivery lane 与批准范围 hash 一起绑定；fast-track 只允许 low/medium。历史 binding 没有 risk 时，仅从 `plan_scope_sha256` 完全匹配的批准范围派生；无法验证或没有 concrete risk 时按 high 保守升档。旧计划没有 lane 时安全解释为 standard。可用 `migrate-feature-config --bind-plan-risk` 显式回填可证明的旧 binding，绝不从范围外文本或模型猜测。
+Lean dispatches only one Planner; the first draft for `risk_tier:auto` is generated by the daily profile, and high/critical only upgrades the subsequent Reviewer and recommends Full at Gateway A, without cold-starting a second Planner. Gateway A binds the concrete risk, delivery lane, and approved-scope hash together; fast-track only allows low/medium. When a historical binding has no risk, derive it only from the approved scope that exactly matches `plan_scope_sha256`; when it cannot be verified or there is no concrete risk, conservatively upgrade as high. When an old plan has no lane, safely interpret it as standard. `migrate-feature-config --bind-plan-risk` can be used to explicitly backfill provable old bindings, never guessing from out-of-scope text or models.
 
 ### `core/lib/reviewer-adapter.mjs`
 
-`planReviewerInvocation({tool, prompt, diffFile?, model?, effort?, fallbackModels?})` 返回结构化 argv 或原生子代理计划。Claude/Codex/Pi 的角色模型可由私有 project/feature config 覆盖；Reviewer 可与实现使用不同模型，也可使用相同模型和更高 effort/thinking。
+`planReviewerInvocation({tool, prompt, diffFile?, model?, effort?, fallbackModels?})` returns a structured argv or a native subagent plan. The role models for Claude/Codex/Pi can be overridden by private project/feature config; the Reviewer can use a different model from the implementation, or the same model with higher effort/thinking.
 
 ### `core/lib/progress-io.mjs`
 
-读 / 改 progress.md。原则：
-- 只改 yaml 块的字段（current_state / updated_at / approved_at / approver）
-- 历史轨迹只追加不重写
-- 文件其余 prose 部分原样保留
+Reads / modifies progress.md. Principles:
+- Only modify fields in the yaml block (current_state / updated_at / approved_at / approver)
+- The historical trail is append-only, never rewritten
+- The rest of the file's prose is preserved as-is
 
 ### `core/lib/docs-reservation.mjs`
 
-实现跨开发者可见的两阶段 docs 协议。init 阶段先从最新远端 docs base 竞争分配编号，只允许在 detached 临时 worktree 新建 `doc/<id>.<slug>/README.md` 和 reservation marker，然后普通 fast-forward push；不允许修改既有路径或 force push。自动编号遇到并发更新会重新 fetch、换号重试。最终代码合并后，完整需求文档作为第二阶段 candidate 合入 docs。
+Implements a two-phase docs protocol visible across developers. In the init phase, it first competitively allocates a number from the latest remote docs base, only allowing creation of `doc/<id>.<slug>/README.md` and the reservation marker in a detached temporary worktree, then does a normal fast-forward push; modifying existing paths or force push is not allowed. When automatic numbering encounters concurrent updates, it re-fetches and retries with a new number. After the final code merge, the complete requirements document is merged into docs as the second-phase candidate.
 
 ### `core/lib/i18n.mjs`
 
-`loadI18n({locale, presetRoot})` 返回 `{strings, t(path)}`。
-deep-merge core 的 zh-CN.json / en-US.json 与 preset 的 i18n/<locale>/strings.json，preset 覆盖 core。
+`loadI18n({locale, presetRoot})` returns `{strings, t(path)}`.
+Deep-merges core's zh-CN.json / zh-TW.json / en-US.json with the preset's i18n/<locale>/strings.json, with the preset overriding core.
 
 ### `core/hooks/*.mjs`
 
-跨平台 Node.js hook（取代 v0.1 的 bash hook）：
+Cross-platform Node.js hooks (replacing the v0.1 bash hooks):
 
-- `role-boundary-guard.mjs` 按 `CC_NEXS_ROLE` 拦截越权读 / 写 / 命令
-- Lean Gateway A/B 与 legacy G1/G2 由状态机返回 `stop: true` 暂停角色派发；不使用全局 PreToolUse 封锁。审批只能通过 `cc-nexs approve-*` 核心命令记录事件和推进状态
-- `pre-merge-check.mjs` 合并主干前跑 build_cmd + 检查 progress=COMPLETE
+- `role-boundary-guard.mjs` blocks unauthorized read / write / commands according to `CC_NEXS_ROLE`
+- Lean Gateway A/B and legacy G1/G2 return `stop: true` from the state machine to pause role dispatch; no global PreToolUse blocking is used. Approval can only record events and advance state through the `cc-nexs approve-*` core commands
+- `pre-merge-check.mjs` runs build_cmd + checks progress=COMPLETE before merging to the main branch
 
-通过 stdin JSON 协议接收工具调用入参，exit 0 放行 / 2 阻断。
+Receives tool-call arguments via the stdin JSON protocol; exit 0 allows / 2 blocks.
 
-## 状态机骨架
+## State machine skeleton
 
-Lean 默认：
-
+Lean default:
 ```text
 INIT → PLANNING → PLAN_PENDING_HUMAN
 → IMPLEMENTING → LOCAL_VERIFYING → TEST_RELEASE → TEST_VERIFYING
@@ -183,11 +172,9 @@ INIT → PLANNING → PLAN_PENDING_HUMAN
 → CONSOLIDATED_REVIEW → RELEASE_PENDING_HUMAN
 → BASE_MERGING → COMPLETE
 ```
+Lean maintains only two manually maintained documents, requirements.md and plan.md; after a Review block, at most one delta closure is allowed. Environment items that cannot be started locally are documented with `deferred_to_test` as evidence, and delivery continues. Browser, login/MFA, and acceptance URL checks are performed only after deployment; if any are missing, delivery enters the recoverable `TEST_DEPLOYED_NEEDS_MANUAL_VERIFY` state and does not roll back the test merge/CI.
 
-Lean 只维护 requirements.md 和 plan.md 两份人工文档；Review 阻塞后最多一次 delta closure。无法本地启动的环境项以 `deferred_to_test` 留证并继续交付。浏览器、登录/MFA 与验收 URL 只在部署后检查，缺失时进入可恢复的 `TEST_DEPLOYED_NEEDS_MANUAL_VERIFY`，不会回滚 test merge/CI。
-
-Legacy full：
-
+Legacy full:
 ```
 INIT → REQ_DRAFTED → RECON_DONE → SPEC_DRAFTED → SPEC_REVIEWING
      → SPEC_PENDING_HUMAN (G1) → SPEC_APPROVED
@@ -200,21 +187,20 @@ ALL_SPRINTS_DEV_DONE → INTEGRATION_REVIEW → TEST_RELEASE
 
 FINAL_QA_BLOCKED → FINAL_FIX → FINAL_FIX_REVIEW → TEST_RELEASE → FINAL_QA
 ```
+A Sprint is a development slice, not a deployment/acceptance slice. New requirements default to `final_only + auto_if_ready`; legacy progress without delivery stays on `per_sprint + manual`. An explicit exit, release driver, or test branch misconfiguration can block delivery before push; browser/login/MFA/verification URL issues only affect post-deployment acceptance and fall into recoverable manual verification. Production releases are always manual.
 
-Sprint 是开发切片，不是部署/验收切片。新需求默认 `final_only + auto_if_ready`；旧 progress 无 delivery 时保持 `per_sprint + manual`。显式退出、release driver 或 test branch 配置错误可以在 push 前阻止交付；browser/login/MFA/verification URL 只影响部署后验收并进入可恢复的 manual verification。生产发布始终人工。
+Circuit-breaker arrows (not in the main diagram):
+- review_revision >= 3 → SPEC_REVIEWING (forces a Planner re-review)
+- fix_per_bug >= 3 → TECH_LEAD_REVIEW (implementation path re-evaluation)
+- evaluator_reject >= 2 → integration/spec approach re-evaluation
 
-熔断箭头（不在主图）：
-- review_revision >= 3 → SPEC_REVIEWING（强制 Planner 重审）
-- fix_per_bug >= 3 → TECH_LEAD_REVIEW（实现路径重评）
-- evaluator_reject >= 2 → integration/spec 方案重评
+## Data Flow
 
-## 数据流
+Inputs entering cc-nexs:
+- `requirements.md` filled in by a human
+- Project `cc-nexs.config.yml` configured once by a human
 
-进入 cc-nexs 的输入：
-- `requirements.md` 由人填
-- 项目 `cc-nexs.config.yml` 由人配置一次
-
-流转产物（按角色）：
+Flow artifacts (by role):
 - Planner → spec.md
 - Reviewer → review.md / sa-review.md / sa-code-review.md / sa-test-review.md
 - Developer → src/* + dev-plan.md + api-doc.md + deploy.md
@@ -222,21 +208,21 @@ Sprint 是开发切片，不是部署/验收切片。新需求默认 `final_only
 - Evaluator → acceptance.md
 - Orchestrator/core controls → progress.json v2 + progress.md mirror
 
-不变量：
-- spec.md 只能 Planner 改
-- progress 只能 orchestrator + deterministic approve/release controls 改
-- 各 review/test/acceptance md 只能 append，不能 overwrite
+Invariants:
+- spec.md can only be changed by the Planner
+- progress can only be changed by the orchestrator + deterministic approve/release controls
+- Review/test/acceptance md files are append-only and cannot be overwritten
 
-## 与上一版（v0.1 monolith）对比
+## Comparison with the Previous Version (v0.1 monolith)
 
-| 维度 | v0.1（preset-standard 单体）| v0.2 monorepo |
+| Dimension | v0.1 (preset-standard monolith) | v0.2 monorepo |
 |------|------|------|
-| 工程结构 | 单 plugin | core + 多 preset |
-| 配置 | 硬编码项目规则 | preset.yml 声明，core 读取 |
-| Hook | bash | Node.js 跨平台 |
-| 角色 | 写死五方 | preset 声明启用哪些 |
-| 工具 | 写死 codex | reviewer-adapter 抽象多种 |
-| i18n | 中文写死 | core + preset 双层覆盖 |
-| 添加新栈 | 改源码 | 写新 preset，core 不动 |
+| Engineering structure | Single plugin | core + multiple presets |
+| Configuration | Hardcoded project rules | Declared in preset.yml, read by core |
+| Hook | bash | Node.js cross-platform |
+| Roles | Five roles hardcoded | preset declares which ones are enabled |
+| Tools | codex hardcoded | reviewer-adapter abstracts multiple tools |
+| i18n | Chinese hardcoded | Two-layer override: core + preset |
+| Adding a new stack | Modify source code | Write a new preset, core untouched |
 
-v0.1 的所有 SOP 行为在 v0.2 里通过 `preset-standard` 完整保留。用户视角零变化。
+All v0.1 SOP behavior is fully preserved in v0.2 through `preset-standard`. Zero change from the user's perspective.

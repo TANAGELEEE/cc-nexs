@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-execute
-description: /cc-nexs:execute 的 Codex 镜像 skill。 显式调用 $cc-nexs-execute 时使用。 Lean 实现入口。按 plan 任务和路径所有权并行实现，不负责 Git mutation。
+description: /cc-nexs:execute Codex mirror skill. Use when $cc-nexs-execute is explicitly invoked. Lean implementation entry point. Implements in parallel by plan task and path ownership; not responsible for Git mutation.
 ---
 
 # /cc-nexs:execute for Codex

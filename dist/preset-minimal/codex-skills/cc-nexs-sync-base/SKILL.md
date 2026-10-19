@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-sync-base
-description: /cc-nexs:sync-base 的 Codex 镜像 skill。 显式调用 $cc-nexs-sync-base 时使用。 Synchronize changed base into assigned development worktrees and resume verification.
+description: /cc-nexs:sync-base Codex mirror skill. Use when $cc-nexs-sync-base is explicitly invoked. Synchronize changed base into assigned development worktrees and resume verification.
 ---
 
 # /cc-nexs:sync-base for Codex

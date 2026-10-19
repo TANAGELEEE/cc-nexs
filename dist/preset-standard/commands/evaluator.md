@@ -1,23 +1,22 @@
 ---
-description: "Evaluator 契约验收入口。新流程默认 final，仅在完整需求发布并通过最终 QA 后全量验收；sprint 仅供 legacy per_sprint。"
+description: "Evaluator contract acceptance entry point. The new flow defaults to final, with full acceptance only after the complete requirement is published and passes final QA; sprint is only for legacy per_sprint."
 disable-model-invocation: true
 allowed-tools: "Read, Write, Edit, Bash, Task"
-argument-hint: "[需求编号] [--scope=sprint|final] [--sprint=N]"
+argument-hint: "[requirement ID] [--scope=sprint|final] [--sprint=N]"
 ---
 
 # /cc-nexs:evaluator
 
-执行人 ≠ 验收人。本命令是流水线最终的契约打分守门员。
+Executor ≠ acceptor. This command is the pipeline's final contract-scoring gatekeeper.
 
-参数：
-- `$1` = 需求编号
-- `--scope=final`（默认）/ `sprint`（仅 legacy per_sprint）
-- `--sprint=N` （scope=sprint 必需）
+Parameters:
+- `$1` = requirement ID
+- `--scope=final` (default) / `sprint` (legacy per_sprint only)
+- `--sprint=N` (required when scope=sprint)
 
-## 执行步骤
+## Execution steps
 
-### 1. 解析参数
-
+### 1. Parse parameters
 ```bash
 REQ_NUM=$1
 SCOPE=$(echo "$@" | grep -oE 'scope=[a-z]+' | cut -d= -f2)
@@ -25,26 +24,24 @@ SCOPE=${SCOPE:-final}
 SPRINT=$(echo "$@" | grep -oE 'sprint=[0-9]+' | cut -d= -f2)
 [ -n "$CC_NEXS_REQ_DIR" ] && REQ_DIR="$CC_NEXS_REQ_DIR" || REQ_DIR=$(ls -d all-docs/doc/${REQ_NUM}*/ | head -1)
 ```
+### 2. Validate Prerequisites
 
-### 2. 校验前置
+scope=sprint mode:
+- The ## Sprint M${SPRINT} section must exist in ${REQ_DIR}test-report.md
+- The ## Sprint M${SPRINT} Regression section must exist in ${REQ_DIR}test-report.md (indicating QA has completed regression)
+- No OPEN or FIXED BUGs may exist under ${REQ_DIR}bugs/ (all must be VERIFIED)
 
-scope=sprint 模式：
-- ${REQ_DIR}test-report.md 的 ## Sprint M${SPRINT} 章节必须存在
-- ${REQ_DIR}test-report.md 的 ## Sprint M${SPRINT} 回归 章节必须存在（说明 QA 已回归）
-- ${REQ_DIR}bugs/ 下不能有 OPEN 或 FIXED 的 BUG（必须全部 VERIFIED）
+scope=final mode:
+- The current delivery.test attempt must succeed, and environment_revision must exist
+- The end of ${REQ_DIR}test-report.md must be `结论: 通过` for Final Release / Final Regression
+- No OPEN or FIXED BUGs may exist under ${REQ_DIR}bugs/
+- Each Sprint is not required to produce acceptance first; a Sprint is a development slice, not a delivery/acceptance slice
 
-scope=final 模式：
-- 当前 delivery.test attempt 必须成功，且存在 environment_revision
-- ${REQ_DIR}test-report.md 末尾必须是 Final Release / Final Regression 的 `结论: 通过`
-- ${REQ_DIR}bugs/ 下不能有 OPEN 或 FIXED BUG
-- 不要求每个 Sprint 先产 acceptance；Sprint 是开发切片，不是交付/验收切片
+If any prerequisite is not met → error + prompt to run the corresponding stage first.
 
-任一前置不满足 → 报错 + 提示先跑相应阶段。
-
-### 3. 调起 evaluator-codex agent
+### 3. Invoke the evaluator-codex agent
 
 #### scope=sprint
-
 ```
 你是 Evaluator（独立 session，禁与 QA 同 session）。
 按 agents/evaluator-codex.md 的 scope=sprint 执行。
@@ -85,24 +82,20 @@ append 到 ${REQ_DIR}acceptance.md ## 最终验收 - YYYY-MM-DD。
 禁读 src/、禁读 sa-*.md、禁妥协。
 末尾必须 验收结果: 通过 或 未通过。
 ```
-
-### 4. 解析结论
-
+### 4. Parsing Conclusion
 ```bash
 RESULT=$(tail -30 ${REQ_DIR}acceptance.md | grep -E '^验收结果:' | tail -1 | awk '{print $2}')
 echo "RESULT:${RESULT}"
 ```
+### 5. States That Do Not Advance
 
-### 5. 不推进状态
+`/cc-nexs:run` reads the conclusion, then advances the state.
+- scope=sprint + pass → SPRINT_<N>_DONE
+- scope=sprint + fail → roll back as recommended by acceptance.md
+- scope=final + pass → COMPLETE
+- scope=final + fail → FINAL_ACCEPTANCE_REJECTED → integration revision, re-review, re-release, and final regression
 
-由 `/cc-nexs:run` 读结论后推进。
-- scope=sprint + 通过 → SPRINT_<N>_DONE
-- scope=sprint + 未通过 → 按 acceptance.md 建议回退
-- scope=final + 通过 → COMPLETE
-- scope=final + 未通过 → FINAL_ACCEPTANCE_REJECTED → 集成修订、复审、重新发布和最终回归
-
-## 输出
-
+## Output
 ```
 ✅ Evaluator 完成: scope=<scope> sprint=M<N>
    验收结果: <通过|未通过>
