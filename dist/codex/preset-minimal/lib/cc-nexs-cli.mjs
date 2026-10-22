@@ -515,6 +515,13 @@ function printResult(result) {
     console.log(`Feature: ${result.feature.id} ${result.feature.slug}`);
     return;
   }
+  if (result.kind === 'test-conflict-resolved') {
+    console.log('cc-nexs test conflict resolved and pushed');
+    console.log(`Attempt: ${result.attempt.id}`);
+    console.log('Next: release-test --resume (add --hotfix in Hotfix mode) continues this exact attempt');
+    console.log(`Progress: ${result.progressFile}`);
+    return;
+  }
   if (result.kind === 'test-release') {
     const status = result.dryRun ? 'preflight passed' : result.attempt?.status || 'unknown';
     console.log(`cc-nexs test release ${status}`);
@@ -531,6 +538,7 @@ function printResult(result) {
     console.log(`Progress: ${result.progressFile}`);
     return;
   }
+  if (typeof result.gate !== 'string') { console.log(JSON.stringify(result, null, 2)); return; }
   const gate = result.gate.toUpperCase();
   const sprint = result.sprint === null ? '' : ` M${result.sprint}`;
   const status = result.alreadyApproved ? 'already approved' : 'approved';
@@ -571,11 +579,17 @@ function printUsage() {
 
 const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (invokedDirectly) {
+  let result;
   try {
-    printResult(runCcNexsCommand(process.argv.slice(2)));
+    result = runCcNexsCommand(process.argv.slice(2));
   } catch (error) {
-    printUsage();
+    // Controller errors may follow durable side effects; usage text would imply a syntax mistake.
+    if (!error.message.startsWith('[cc-nexs]')) printUsage();
     console.error(`Error: ${error.message}`);
     process.exitCode = 1;
+  }
+  if (result) {
+    try { printResult(result); }
+    catch (error) { console.error(`Warning: command completed; output rendering failed: ${error.message}`); console.log(JSON.stringify({ kind: result.kind, progressFile: result.progressFile }, null, 2)); }
   }
 }
