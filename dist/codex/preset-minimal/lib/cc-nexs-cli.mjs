@@ -25,6 +25,7 @@ import { assertImplementationApprovalCurrent, parseImplementationOwnership } fro
 import { syncImplementationWorktrees } from './implementation-worktrees.mjs';
 import { readProgressV2 } from './progress-v2.mjs';
 import { modelGateway } from './model-gateway.mjs';
+import { formatInventory, reclaimWorktrees } from './worktree-reclaim.mjs';
 
 export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   const [command, ...args] = argv;
@@ -35,6 +36,16 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   if (command === 'model-gateway') {
     if (args.length !== 3 || args[1] !== '--request') throw new Error('model-gateway <inspect|prepare|view|start|feedback|result> --request <json-file>');
     return modelGateway(args[0], JSON.parse(readFileSync(args[2], 'utf8')), { cwd });
+  }
+  if (command === 'reclaim-worktrees') {
+    const options = { sizes: false, confirm: null };
+    for (let index = 0; index < args.length; index += 1) {
+      if (args[index] === '--sizes') options.sizes = true;
+      else if (args[index] === '--confirm') options.confirm = requireValue(args, ++index, '--confirm');
+      else if (args[index].startsWith('--confirm=')) options.confirm = args[index].slice('--confirm='.length);
+      else throw new Error(`unknown option: ${args[index]}`);
+    }
+    return reclaimWorktrees({ cwd, ...options });
   }
   if (command === 'init-hotfix') return initializeHotfix({ cwd, ...parseHotfixLifecycleOptions(args, true) });
   if (command === 'revise-hotfix') return reviseHotfix({ cwd, ...parseHotfixLifecycleOptions(args, false) });
@@ -515,6 +526,14 @@ function printResult(result) {
     console.log(`Feature: ${result.feature.id} ${result.feature.slug}`);
     return;
   }
+  if (result.kind === 'worktree-reclaim') {
+    if (!result.applied) { for (const line of formatInventory(result)) console.log(line); return; }
+    console.log(`cc-nexs reclaimed ${result.removed.length} worktree(s)`);
+    for (const entry of result.removed) console.log(`  removed ${entry.display}`);
+    for (const entry of result.failed) console.log(`  failed  ${entry.display}: ${entry.error}`);
+    if (result.failed.length) process.exitCode = 1;
+    return;
+  }
   if (result.kind === 'test-conflict-resolved') {
     console.log('cc-nexs test conflict resolved and pushed');
     console.log(`Attempt: ${result.attempt.id}`);
@@ -560,6 +579,7 @@ function printResult(result) {
 function printUsage() {
   console.error('Usage:');
   console.error('  cc-nexs resolve-test-conflict <feature-id> [--progress <path>]');
+  console.error('  cc-nexs reclaim-worktrees [--sizes] [--confirm <token>]');
   console.error('  cc-nexs switch-test-target --request <json-file>');
   console.error('  cc-nexs revise-hotfix <bug-key> --reason <text> --authorization-evidence <text> [--promote-lean] [--progress <path>]');
   console.error('  cc-nexs approve-spec <feature-id> [--approver <name>] [--progress <path>]');
