@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import {
+  cleanupMergedWorktree,
   commitCandidate,
   createWorkspaceWorktrees,
   finalizeMergedWorktree,
@@ -195,6 +196,45 @@ test('worktree registration matches Windows Git paths without weakening exact id
   const posix = { platform: 'linux', realpath: identity };
   assert.equal(isWorktreeRegistered('worktree /w/.worktrees/07-x/code\n', '/w/.worktrees/07-x/code', posix), true);
   assert.equal(isWorktreeRegistered('worktree /w/.worktrees/07-x/code\n', '/w/.worktrees/07-X/code', posix), false);
+});
+
+test('finalize removes a merged candidate ref after base release already removed the worktree', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-finalize-ref-'));
+  const origin = join(root, 'origin.git');
+  const repo = join(root, 'code');
+  const worktree = join(root, '.worktrees', '07-x', 'code');
+  mkdirSync(origin);
+  git(origin, ['init', '--bare']);
+  git(root, ['clone', origin, repo]);
+  configure(repo);
+  git(repo, ['checkout', '-b', 'master']);
+  writeFileSync(join(repo, 'base.txt'), 'base\n');
+  git(repo, ['add', 'base.txt']);
+  git(repo, ['commit', '-m', 'base']);
+  git(repo, ['push', '-u', 'origin', 'master']);
+  try {
+    git(repo, ['worktree', 'add', '-b', 'feature/07-x', worktree, 'origin/master']);
+    writeFileSync(join(worktree, 'feature.txt'), 'feature\n');
+    git(worktree, ['add', 'feature.txt']);
+    git(worktree, ['commit', '-m', 'feature']);
+    const candidateRef = 'refs/cc-nexs/candidates/07-x/code';
+    git(repo, ['update-ref', candidateRef, git(worktree, ['rev-parse', 'HEAD'])]);
+    git(worktree, ['push', 'origin', 'HEAD:master']);
+    // base release keeps the ref so a resumed release can still resolve the candidate.
+    cleanupMergedWorktree({ repo, worktree, branch: 'feature/07-x', baseBranch: 'master', candidateRef: null });
+    assert.equal(git(repo, ['rev-parse', candidateRef]).length, 40);
+
+    const unmergedRef = 'refs/cc-nexs/candidates/08-y/code';
+    git(repo, ['update-ref', unmergedRef, git(repo, ['commit-tree', '-p', 'origin/master', '-m', 'unmerged', 'origin/master^{tree}'])]);
+    assert.throws(() => finalizeMergedWorktree({ repo, worktree: join(root, '.worktrees', '08-y', 'code'), branch: 'feature/08-y', baseBranch: 'master', candidateRef: unmergedRef }), /not merged into master/);
+    assert.equal(git(repo, ['rev-parse', unmergedRef]).length, 40);
+
+    const finalized = finalizeMergedWorktree({ repo, worktree, branch: 'feature/07-x', baseBranch: 'master', candidateRef });
+    assert.equal(finalized.alreadyClean, true);
+    assert.throws(() => git(repo, ['show-ref', '--verify', candidateRef]));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('createWorkspaceWorktrees rejects when no reservation exists', () => {

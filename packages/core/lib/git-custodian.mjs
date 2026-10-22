@@ -413,7 +413,14 @@ function isAncestor(repo, ancestor, descendant) {
 }
 
 export function cleanupMergedWorktree({ repo, worktree, branch, baseBranch, candidateRef = null, deleteRemote = false }) {
-  if (!existsSync(worktree) && !refExists(repo, `refs/heads/${branch}`)) return { removed: worktree, branchDeleted: branch, alreadyClean: true };
+  if (!existsSync(worktree) && !refExists(repo, `refs/heads/${branch}`)) {
+    // base release already removed the worktree; finalize still owns the merged candidate ref.
+    if (candidateRef && refExists(repo, candidateRef)) {
+      if (!isAncestor(repo, candidateRef, fetchBase(repo, baseBranch))) throw new Error(`[cc-nexs] candidate ref is not merged into ${baseBranch}`);
+      git(repo, ['update-ref', '-d', candidateRef]);
+    }
+    return { removed: worktree, branchDeleted: branch, alreadyClean: true };
+  }
   const realWorktree = realpathSync(worktree);
   const registered = git(repo, ['worktree', 'list', '--porcelain']);
   if (!isWorktreeRegistered(registered, realWorktree)) throw new Error('[cc-nexs] refusing cleanup of unregistered worktree');
