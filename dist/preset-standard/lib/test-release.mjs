@@ -233,7 +233,11 @@ export function runTestRelease({
       reopenTestRelease(context.progressFile, { expectedRevision: context.progress.revision });
       context = preflightTestRelease({ cwd, featureId, progressPath, hotfix });
     }
-    if (context.progress.delivery.test.attempts.at(-1)?.status === 'merge_conflict') throw new Error('[cc-nexs] resolve-test-conflict must finish the current integration before retry');
+    const latest = context.progress.delivery.test.attempts.at(-1);
+    // An invalidated or superseded conflict no longer describes the current candidate.
+    if (latest?.status === 'merge_conflict' && latest.invalidated_at == null && latest.fingerprint === releaseFingerprint(context.source)) {
+      throw new Error('[cc-nexs] resolve-test-conflict must finish the current integration before retry');
+    }
     if (resume) return resumeTestRelease(context);
     const started = beginTestRelease(context.progressFile, {
       source: context.source,

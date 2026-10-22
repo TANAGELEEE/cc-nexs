@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import test from 'node:test';
 
 import {
@@ -352,7 +352,7 @@ test('test release integrates candidates, invokes structured driver, records evi
   }
 });
 
-for (const scenario of ['running', 'failed', 'conflict', 'receipt-error']) test(`resume recovers the same attempt: ${scenario}`, () => {
+for (const scenario of ['running', 'failed', 'conflict', 'conflict-invalidated', 'conflict-superseded', 'receipt-error']) test(`resume recovers the same attempt: ${scenario}`, () => {
   const root = mkdtempSync(join(tmpdir(), 'cc-nexs-release-resume-running-'));
   const origin = join(root, 'origin.git');
   const code = join(root, 'code');
@@ -465,6 +465,64 @@ for (const scenario of ['running', 'failed', 'conflict', 'receipt-error']) test(
       assert.equal(git(code, ['rev-parse', candidateRef]), sourceCommit);
       const requests = readFileSync(join(root, 'recovery-driver.log'), 'utf8').trim().split('\n').map(JSON.parse);
       assert.deepEqual(requests.map(request => request.operation), ['release_test']);
+      return;
+    }
+    if (scenario.startsWith('conflict-')) {
+      const cli = join(dirname(new URL(import.meta.url).pathname), 'cc-nexs-cli.mjs');
+      const runCli = (args) => spawnSync(process.execPath, [cli, ...args], { cwd: root, encoding: 'utf8' });
+      const remoteContains = (commit) => { git(code, ['fetch', 'origin']); try { git(code, ['merge-base', '--is-ancestor', commit, 'origin/test']); return true; } catch { return false; } };
+      const conflictRoot = join(root, '.cc-nexs', 'runtime', 'test-conflicts', '06');
+      writeFileSync(join(code, 'feature.txt'), 'test-only version\n');
+      git(code, ['add', '.']); git(code, ['commit', '-m', 'test concurrent change']); git(code, ['push', 'origin', 'test']);
+      const conflict = runTestRelease({ cwd: root, featureId: '06', progressPath: progressFile });
+      assert.equal(conflict.status, 'conflicts');
+      writeFileSync(join(conflict.worktree, 'feature.txt'), 'feature and test-only version\n');
+      git(conflict.worktree, ['add', 'feature.txt']);
+      let current = sourceCommit;
+      if (scenario === 'conflict-invalidated') {
+        // revise-hotfix / switch-test-target invalidate the attempt without changing this candidate.
+        const invalidated = readProgressV2(progressFile);
+        invalidated.delivery.test.attempts.at(-1).invalidated_at = new Date().toISOString();
+        invalidated.delivery.test.status = 'idle';
+        invalidated.state = 'TEST_RELEASE';
+        writeProgressV2(progressFile, invalidated);
+        const refused = runCli(['resolve-test-conflict', '06', '--progress', progressFile]);
+        assert.equal(refused.status, 1);
+        assert.match(refused.stderr, /invalidated/);
+        assert.doesNotMatch(refused.stderr, /Usage:/);
+      }
+      if (scenario === 'conflict-superseded') {
+        writeFileSync(join(featureWorktree, 'feature.txt'), 'feature v2\n');
+        git(featureWorktree, ['commit', '-am', 'feature v2']);
+        current = git(featureWorktree, ['rev-parse', 'HEAD']);
+        git(code, ['update-ref', candidateRef, current]);
+        const superseded = readProgressV2(progressFile);
+        const next = { code: current };
+        Object.assign(superseded.local_verification, { candidate_fingerprint: candidateFingerprint(next) });
+        Object.assign(superseded.local_verification.attempts[0], { fingerprint: candidateFingerprint(next), source: next });
+        // The repaired candidate returns through the fix flow, which does not invalidate attempts.
+        superseded.state = 'TEST_RELEASE';
+        writeProgressV2(progressFile, superseded);
+        assert.throws(() => resolveTestConflict({ cwd: root, featureId: '06', progressPath: progressFile }), /previous candidate/);
+      }
+      // No stale resolution reached the shared test branch.
+      assert.equal(remoteContains(sourceCommit), false);
+
+      const retried = runTestRelease({ cwd: root, featureId: '06', progressPath: progressFile });
+      assert.equal(retried.status, 'conflicts');
+      assert.equal(retried.attempt.id, 'test-release-2');
+      assert.ok(readProgressV2(progressFile).delivery.test.attempts[0].invalidated_at);
+      assert.equal(existsSync(join(conflictRoot, 'test-release-1')), false);
+      assert.doesNotMatch(git(code, ['worktree', 'list', '--porcelain']), /test-release-1/);
+      writeFileSync(join(retried.worktree, 'feature.txt'), 'feature and test-only version\n');
+      git(retried.worktree, ['add', 'feature.txt']);
+      const resolved = runCli(['resolve-test-conflict', '06', '--progress', progressFile]);
+      assert.equal(resolved.status, 0, resolved.stderr);
+      assert.match(resolved.stdout, /resolved and pushed/);
+      assert.equal(existsSync(conflictRoot), false);
+      const resumed = runTestRelease({ cwd: root, featureId: '06', progressPath: progressFile, resume: true });
+      assert.equal(resumed.attempt.status, 'succeeded');
+      assert.equal(remoteContains(current), true);
       return;
     }
     const started = beginTestRelease(progressFile, { source });

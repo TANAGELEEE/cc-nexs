@@ -195,6 +195,10 @@ export function beginTestRelease(file, {
       return { progress, attempt: previous, reused: true };
     }
   }
+  if (previous?.status === 'merge_conflict' && previous.invalidated_at == null) {
+    previous.invalidated_at = new Date().toISOString();
+    previous.invalidation_reason = 'superseded by a new test release attempt';
+  }
   const round = testDelivery.attempts.length + 1;
   const attempt = {
     id: `test-release-${round}`,
