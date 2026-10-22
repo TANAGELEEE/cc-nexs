@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { dirname, join, relative, resolve, sep, win32 } from 'node:path';
 
 import { gitIdentityEnv, resolveGitIdentity } from './git-identity.mjs';
 import { recordRepositoryCandidatePrepared } from './progress-v2.mjs';
@@ -25,6 +25,18 @@ function assertWithin(root, target) {
     throw new Error(`[cc-nexs] unsafe worktree path: ${target}`);
   }
   return target;
+}
+
+// Git prints forward-slash paths on Windows while realpath returns backslashes,
+// and NTFS paths compare case-insensitively.
+export function isWorktreeRegistered(porcelain, worktree, { platform = process.platform, realpath = realpathSync } = {}) {
+  const key = (value) => {
+    let resolved = value;
+    try { resolved = realpath(value); } catch {}
+    return platform === 'win32' ? win32.normalize(resolved).toLowerCase() : resolved;
+  };
+  const expected = key(worktree);
+  return porcelain.split(/\r?\n/).some((line) => line.startsWith('worktree ') && key(line.slice('worktree '.length)) === expected);
 }
 
 function refExists(repo, ref) {
@@ -75,7 +87,7 @@ function recoverExistingWorkspaceWorktree({ workspace, repo, featureRoot, branch
   const realWorktree = realpathSync(worktree);
   assertWithin(realpathSync(workspace.worktree_root), realWorktree);
   const registered = git(repo.absolute_path, ['worktree', 'list', '--porcelain']);
-  if (!registered.split('\n').includes(`worktree ${realWorktree}`)) {
+  if (!isWorktreeRegistered(registered, realWorktree)) {
     throw new Error(`[cc-nexs] existing worktree is not registered for ${repo.id}`);
   }
   if (git(worktree, ['branch', '--show-current']) !== branch) {
@@ -163,7 +175,7 @@ export function commitCandidate({ repositoryId, repo, worktree, branch, featureK
   if (!Array.isArray(paths) || paths.length === 0) throw new Error('[cc-nexs] candidate paths are required');
   const registered = git(repo, ['worktree', 'list', '--porcelain']);
   const realWorktree = realpathSync(worktree);
-  if (!registered.split('\n').includes(`worktree ${realWorktree}`)) throw new Error('[cc-nexs] unregistered worktree');
+  if (!isWorktreeRegistered(registered, realWorktree)) throw new Error('[cc-nexs] unregistered worktree');
   if (git(worktree, ['branch', '--show-current']) !== branch) throw new Error(`[cc-nexs] worktree branch mismatch: expected ${branch}`);
   const identity = resolveGitIdentity(repo);
   if (git(worktree, ['diff', '--cached', '--name-only'])) {
@@ -214,7 +226,7 @@ export function commitCandidate({ repositoryId, repo, worktree, branch, featureK
 export function prepareFeatureForMerge({ repo, worktree, branch, baseBranch, candidateRef = null, preserveConflicts = false }) {
   const realWorktree = realpathSync(worktree);
   const registered = git(repo, ['worktree', 'list', '--porcelain']);
-  if (!registered.split('\n').includes(`worktree ${realWorktree}`)) throw new Error('[cc-nexs] unregistered worktree');
+  if (!isWorktreeRegistered(registered, realWorktree)) throw new Error('[cc-nexs] unregistered worktree');
   if (git(worktree, ['branch', '--show-current']) !== branch) throw new Error(`[cc-nexs] worktree branch mismatch: expected ${branch}`);
   if (git(worktree, ['status', '--porcelain'])) throw new Error('[cc-nexs] refusing base synchronization for dirty worktree');
   const base = fetchBase(repo, baseBranch);
@@ -404,7 +416,7 @@ export function cleanupMergedWorktree({ repo, worktree, branch, baseBranch, cand
   if (!existsSync(worktree) && !refExists(repo, `refs/heads/${branch}`)) return { removed: worktree, branchDeleted: branch, alreadyClean: true };
   const realWorktree = realpathSync(worktree);
   const registered = git(repo, ['worktree', 'list', '--porcelain']);
-  if (!registered.split('\n').includes(`worktree ${realWorktree}`)) throw new Error('[cc-nexs] refusing cleanup of unregistered worktree');
+  if (!isWorktreeRegistered(registered, realWorktree)) throw new Error('[cc-nexs] refusing cleanup of unregistered worktree');
   if (git(worktree, ['status', '--porcelain'])) throw new Error('[cc-nexs] refusing cleanup of dirty worktree');
   const base = fetchBase(repo, baseBranch);
   try { git(repo, ['merge-base', '--is-ancestor', `refs/heads/${branch}`, base]); }

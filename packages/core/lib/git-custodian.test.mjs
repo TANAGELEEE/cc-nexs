@@ -11,6 +11,7 @@ import {
   finalizeMergedWorktree,
   integrateCandidateToTest,
   isSensitiveBasePath,
+  isWorktreeRegistered,
   prepareFeatureForMerge,
 } from './git-custodian.mjs';
 import { createProgressV2, readProgressV2, recordRepositoryAssignments, writeProgressV2 } from './progress-v2.mjs';
@@ -180,6 +181,20 @@ test('custodian starts from latest remote base, avoids false upstream arrows, re
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('worktree registration matches Windows Git paths without weakening exact identity', () => {
+  const identity = (value) => value;
+  const porcelain = 'worktree D:/workspaces/code\r\nHEAD abc\r\n\r\nworktree D:/workspaces/.worktrees/07-x/code\r\nbranch refs/heads/feature/07-x\r\n';
+  const win32 = { platform: 'win32', realpath: identity };
+  assert.equal(isWorktreeRegistered(porcelain, 'D:\\Workspaces\\.worktrees\\07-x\\code', win32), true);
+  assert.equal(isWorktreeRegistered(porcelain, 'D:\\workspaces\\.worktrees\\07-x\\code2', win32), false);
+  assert.equal(isWorktreeRegistered(porcelain, 'D:\\workspaces\\.worktrees\\07-x', win32), false);
+  const unc = 'worktree //server/share/中文 路径/code\n';
+  assert.equal(isWorktreeRegistered(unc, '\\\\server\\share\\中文 路径\\code', win32), true);
+  const posix = { platform: 'linux', realpath: identity };
+  assert.equal(isWorktreeRegistered('worktree /w/.worktrees/07-x/code\n', '/w/.worktrees/07-x/code', posix), true);
+  assert.equal(isWorktreeRegistered('worktree /w/.worktrees/07-x/code\n', '/w/.worktrees/07-X/code', posix), false);
 });
 
 test('createWorkspaceWorktrees rejects when no reservation exists', () => {
