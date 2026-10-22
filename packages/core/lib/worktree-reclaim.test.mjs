@@ -109,10 +109,12 @@ test('inventory reclaims only completed merged clean worktrees and stale copies'
     assert.equal(byPath(inventory, 'test-release-1/code').action, 'reclaim');
     assert.match(byPath(inventory, 'test-release-2/code').reason, /active conflict/);
 
-    // The CLI dry run prints the plan without touching anything.
+    // The CLI dry run prints the plan; doctor shows the same inventory read-only.
     const cli = spawnSync(process.execPath, [join(lib, 'cc-nexs-cli.mjs'), 'reclaim-worktrees'], { cwd: root, encoding: 'utf8' });
     assert.equal(cli.status, 0, cli.stderr);
     assert.match(cli.stdout, new RegExp(`--confirm ${inventory.token}`));
+    const doctor = spawnSync(process.execPath, [join(lib, 'doctor.mjs'), root, '--worktrees'], { encoding: 'utf8' });
+    assert.match(doctor.stdout, /Worktree inventory: 3 reclaimable/);
     assert.ok(existsSync(done.worktree));
 
     assert.throws(() => reclaimWorktrees({ cwd: root, confirm: 'deadbeef0000' }), /plan changed/);

@@ -14,9 +14,11 @@ import {
 } from './pi-browser-provider.mjs';
 import { readProgressV2 } from './progress-v2.mjs';
 import { resolveHotfixDocument } from './hotfix-contract.mjs';
+import { discoverProgressFiles, formatInventory, inventoryWorktrees } from './worktree-reclaim.mjs';
 
 const args = process.argv.slice(2);
 const strictRelease = args.includes('--release-test');
+const worktreeInventory = args.includes('--worktrees');
 const featureFilter = optionValue(args, '--feature');
 const positional = [];
 for (let index = 0; index < args.length; index += 1) {
@@ -55,25 +57,7 @@ else {
 
 if (config) validateReleaseReadiness({ config, workspace, strictRelease, errors, warnings, projectRoot: root });
 
-function findProgressFiles(dir, depth = 0) {
-  if (!existsSync(dir) || depth > 8) return [];
-  const files = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name.startsWith('.') && depth > 0) continue;
-    const target = join(dir, entry.name);
-    if (entry.isDirectory()) files.push(...findProgressFiles(target, depth + 1));
-    else if (entry.isFile() && entry.name === 'progress.json') files.push(target);
-  }
-  return files;
-}
-
-const docsSource = workspace?.repositories.find((repo) => repo.id === workspace.docs_repository)?.absolute_path || join(root, 'all-docs');
-const progressFiles = new Set([
-  ...findProgressFiles(join(docsSource, 'doc')),
-  ...findProgressFiles(join(docsSource, 'hotfix')),
-  ...findProgressFiles(join(root, '.cc-nexs', 'hotfixes')),
-  ...(workspace ? findProgressFiles(workspace.worktree_root) : []),
-]);
+const progressFiles = discoverProgressFiles(root, workspace);
 const selectedProgressFiles = featureFilter
   ? [...progressFiles].filter((file) => matchesFeature(dirname(file), featureFilter))
   : [...progressFiles];
@@ -170,6 +154,12 @@ function matchesFeature(featureDir, requested) {
     return Number(actualId) === Number(requested);
   }
   return actualId === requested || name === requested;
+}
+
+if (worktreeInventory && workspace) {
+  try {
+    for (const line of formatInventory(inventoryWorktrees({ cwd: root, sizes: args.includes('--sizes') }))) console.log(line);
+  } catch (error) { warnings.push(`worktree inventory failed: ${error.message}`); }
 }
 
 for (const warning of warnings) console.warn(`WARN ${warning}`);
