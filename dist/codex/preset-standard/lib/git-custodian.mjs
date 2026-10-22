@@ -318,7 +318,8 @@ export function integrateCandidateToTest({
     registered = true;
     const identity = resolveGitIdentity(repo);
     try {
-      git(integrationWorktree, ['merge', '--no-ff', '--no-edit', sourceCommit], { env: gitIdentityEnv(identity) });
+      // rerere replays a recorded resolution if the target advances and the merge is retried.
+      git(integrationWorktree, [...(preserveConflicts ? ['-c', 'rerere.enabled=true'] : []), 'merge', '--no-ff', '--no-edit', sourceCommit], { env: gitIdentityEnv(identity) });
     } catch {
       const conflicts = git(integrationWorktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
       if (preserveConflicts && conflicts.length) {
@@ -395,13 +396,23 @@ export function resolveTestIntegrationConflict({ repo, worktree, targetBranch, s
     if (unresolved.length) throw new Error(`[cc-nexs] unresolved test integration files remain: ${unresolved.join(', ')}`);
     // The Developer stages only resolved paths; never sweep unrelated files into the merge.
     const identity = resolveGitIdentity(repo);
-    git(worktree, ['commit', '--no-edit'], { env: gitIdentityEnv(identity) });
+    git(worktree, ['-c', 'rerere.enabled=true', 'commit', '--no-edit'], { env: gitIdentityEnv(identity) });
   }
   const integrationCommit = git(worktree, ['rev-parse', 'HEAD']);
   const parents = git(worktree, ['show', '-s', '--format=%P', 'HEAD']).split(' ');
   if (parents.length !== 2 || parents[0] !== targetBefore || parents[1] !== sourceCommit) throw new Error('[cc-nexs] resolved test integration must preserve both recorded parents');
   if (git(worktree, ['status', '--porcelain'])) throw new Error('[cc-nexs] conflict worktree must be clean before push');
-  git(worktree, ['push', 'origin', `${integrationCommit}:refs/heads/${targetBranch}`]);
+  try {
+    git(worktree, ['push', 'origin', `${integrationCommit}:refs/heads/${targetBranch}`]);
+  } catch (error) {
+    const detail = error.stderr?.toString().trim() || error.message;
+    if (git(repo, ['rev-parse', fetchBase(repo, targetBranch)]) !== targetBefore) {
+      const advanced = new Error(`[cc-nexs] TARGET_ADVANCED: origin/${targetBranch} moved during conflict resolution; the resolution is recorded for the next integration: ${detail}`);
+      advanced.code = 'TARGET_ADVANCED';
+      throw advanced;
+    }
+    throw error;
+  }
   const remote = fetchBase(repo, targetBranch);
   const remoteCommit = git(repo, ['rev-parse', remote]);
   if (!isAncestor(repo, integrationCommit, remoteCommit)) throw new Error('[cc-nexs] resolved test integration remote proof failed');

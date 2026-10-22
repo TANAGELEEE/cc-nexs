@@ -522,6 +522,13 @@ function printResult(result) {
     console.log(`Progress: ${result.progressFile}`);
     return;
   }
+  if (result.kind === 'test-conflict-target-advanced') {
+    console.log(`cc-nexs test target advanced during conflict resolution (${result.repository}); nothing was pushed`);
+    console.log(`Retired attempt: ${result.attempt.id}`);
+    console.log('Next: release-test (add --hotfix in Hotfix mode) integrates the new tip; recorded resolutions are replayed for confirmation');
+    console.log(`Progress: ${result.progressFile}`);
+    return;
+  }
   if (result.kind === 'test-release') {
     const status = result.dryRun ? 'preflight passed' : result.attempt?.status || 'unknown';
     console.log(`cc-nexs test release ${status}`);

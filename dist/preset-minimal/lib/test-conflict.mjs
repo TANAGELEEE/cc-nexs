@@ -23,7 +23,13 @@ export function resolveTestConflict({ cwd = process.cwd(), featureId, progressPa
       if (!repository || repository.sourceCommit !== integration.sourceCommit) {
         throw new Error(`[cc-nexs] test merge conflict for ${id} no longer matches the current candidate`);
       }
-      const result = resolveTestIntegrationConflict({ repo: repository.repo, worktree: integration.worktree, targetBranch: integration.targetBranch, sourceCommit: integration.sourceCommit, targetBefore: integration.targetBefore });
+      let result;
+      try {
+        result = resolveTestIntegrationConflict({ repo: repository.repo, worktree: integration.worktree, targetBranch: integration.targetBranch, sourceCommit: integration.sourceCommit, targetBefore: integration.targetBefore });
+      } catch (error) {
+        if (error.code !== 'TARGET_ADVANCED') throw error;
+        return retireAdvancedAttempt(context, progressFile, attempt.id, id, error.message, releaseState);
+      }
       recordTestIntegration(progressFile, { attemptId: attempt.id, repository: id, sourceCommit: integration.sourceCommit, targetBranch: integration.targetBranch, targetBefore: integration.targetBefore, integrationCommit: result.integrationCommit, remoteCommit: result.remoteCommit, status: 'resolved' });
     }
     const updated = readProgressV2(progressFile);
@@ -42,3 +48,16 @@ function testReleaseState(mode) {
   return mode === 'hotfix' ? 'HOTFIX_TEST_RELEASE' : 'TEST_RELEASE';
 }
 
+// The target moved before the resolved merge could land. Retire the attempt so release-test
+// integrates the new tip; rerere replays the recorded resolution for the developer to confirm.
+function retireAdvancedAttempt(context, progressFile, attemptId, repository, reason, releaseState) {
+  const progress = readProgressV2(progressFile);
+  const attempt = progress.delivery.test.attempts.at(-1);
+  attempt.invalidated_at = new Date().toISOString();
+  attempt.invalidation_reason = `test target advanced during conflict resolution (${repository})`;
+  progress.delivery.test.status = 'idle';
+  writeProgressV2(progressFile, progress);
+  appendProgressEvent(progressFile, { type: 'delivery.test.target_advanced', from: progress.state, to: releaseState, reason, data: { attempt: attemptId, repository } });
+  reclaimTestConflictWorktrees(context);
+  return { kind: 'test-conflict-target-advanced', attempt: readProgressV2(progressFile).delivery.test.attempts.at(-1), repository, progressFile };
+}

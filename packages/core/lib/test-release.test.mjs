@@ -352,7 +352,7 @@ test('test release integrates candidates, invokes structured driver, records evi
   }
 });
 
-for (const scenario of ['running', 'failed', 'conflict', 'conflict-invalidated', 'conflict-superseded', 'receipt-error']) test(`resume recovers the same attempt: ${scenario}`, () => {
+for (const scenario of ['running', 'failed', 'conflict', 'conflict-invalidated', 'conflict-superseded', 'conflict-target-advanced', 'receipt-error']) test(`resume recovers the same attempt: ${scenario}`, () => {
   const root = mkdtempSync(join(tmpdir(), 'cc-nexs-release-resume-running-'));
   const origin = join(root, 'origin.git');
   const code = join(root, 'code');
@@ -505,7 +505,18 @@ for (const scenario of ['running', 'failed', 'conflict', 'conflict-invalidated',
         writeProgressV2(progressFile, superseded);
         assert.throws(() => resolveTestConflict({ cwd: root, featureId: '06', progressPath: progressFile }), /previous candidate/);
       }
-      // No stale resolution reached the shared test branch.
+      if (scenario === 'conflict-target-advanced') {
+        writeFileSync(join(code, 'other.txt'), 'another test change\n');
+        git(code, ['add', 'other.txt']); git(code, ['commit', '-m', 'test advances again']); git(code, ['push', 'origin', 'test']);
+        const advanced = runCli(['resolve-test-conflict', '06', '--progress', progressFile]);
+        assert.equal(advanced.status, 0, advanced.stderr);
+        assert.match(advanced.stdout, /target advanced/);
+        const retired = readProgressV2(progressFile);
+        assert.ok(retired.delivery.test.attempts[0].invalidated_at);
+        assert.equal(retired.state, 'TEST_RELEASE');
+        assert.equal(existsSync(conflict.worktree), false);
+      }
+      // No stale or rejected resolution reached the shared test branch.
       assert.equal(remoteContains(sourceCommit), false);
 
       const retried = runTestRelease({ cwd: root, featureId: '06', progressPath: progressFile });
@@ -514,7 +525,13 @@ for (const scenario of ['running', 'failed', 'conflict', 'conflict-invalidated',
       assert.ok(readProgressV2(progressFile).delivery.test.attempts[0].invalidated_at);
       assert.equal(existsSync(join(conflictRoot, 'test-release-1')), false);
       assert.doesNotMatch(git(code, ['worktree', 'list', '--porcelain']), /test-release-1/);
-      writeFileSync(join(retried.worktree, 'feature.txt'), 'feature and test-only version\n');
+      if (scenario === 'conflict-target-advanced') {
+        // rerere replays the earlier resolution but still requires the developer to stage it.
+        assert.equal(readFileSync(join(retried.worktree, 'feature.txt'), 'utf8'), 'feature and test-only version\n');
+        assert.throws(() => resolveTestConflict({ cwd: root, featureId: '06', progressPath: progressFile }), /unresolved/);
+      } else {
+        writeFileSync(join(retried.worktree, 'feature.txt'), 'feature and test-only version\n');
+      }
       git(retried.worktree, ['add', 'feature.txt']);
       const resolved = runCli(['resolve-test-conflict', '06', '--progress', progressFile]);
       assert.equal(resolved.status, 0, resolved.stderr);
