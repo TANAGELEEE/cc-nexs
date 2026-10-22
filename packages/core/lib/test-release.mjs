@@ -1,7 +1,7 @@
 import { validateTestTarget } from './test-target.mjs';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 
@@ -9,7 +9,7 @@ import { loadConfig, loadWorkspaceConfig } from './config-loader.mjs';
 import { jsonValuesEqual } from './canonical-json.mjs';
 import { assertLocalCandidateWorktree } from './candidate-context.mjs';
 import { assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
-import { integrateCandidateToTest, resolveCandidateCommit } from './git-custodian.mjs';
+import { integrateCandidateToTest, removeIntegrationWorktree, resolveCandidateCommit } from './git-custodian.mjs';
 import { approvedPlanDeliveryContract, extractApprovalScope } from './plan-contract.mjs';
 import { assertRecordedLocalVerification, extractLocalVerificationChecks } from './local-evidence.mjs';
 import {
@@ -255,6 +255,7 @@ export function runTestRelease({
       throw new Error(`[cc-nexs] previous test release requires explicit handling: ${started.attempt.status}`);
     }
     const attemptId = started.attempt.id;
+    reclaimTestConflictWorktrees(context, { keepAttemptId: attemptId });
     try {
       const integration = integratePendingRepositories(context, attemptId);
       if (integration?.status === 'conflicts') return { kind: 'test-release', reused: false, attempt: readProgressV2(context.progressFile).delivery.test.attempts.find((item) => item.id === attemptId), ...integration, ...summary(context) };
@@ -374,6 +375,34 @@ function integratePendingRepositories(context, attemptId) {
     progress = readProgressV2(context.progressFile);
   }
   return null;
+}
+
+// Conflict worktrees are full checkouts (often with build output); only the active attempt keeps one.
+// Reclaim is best effort: a copy locked by another process (common on Windows) is retried next time
+// instead of blocking delivery.
+export function reclaimTestConflictWorktrees(context, { keepAttemptId = null } = {}) {
+  const root = resolve(context.workspaceRoot, '.cc-nexs', 'runtime', 'test-conflicts');
+  const featureRoot = join(root, context.progress.feature.id);
+  if (!existsSync(featureRoot)) return { removed: [], retained: [] };
+  const removed = [];
+  const retained = [];
+  for (const attemptId of readdirSync(featureRoot)) {
+    if (attemptId === keepAttemptId) continue;
+    const attemptRoot = join(featureRoot, attemptId);
+    try {
+      for (const repositoryId of readdirSync(attemptRoot)) {
+        const repository = context.workspace.repositories.find((item) => item.id === repositoryId);
+        const worktree = join(attemptRoot, repositoryId);
+        if (repository) removeIntegrationWorktree({ repo: repository.absolute_path, worktree, root });
+        removed.push(worktree);
+      }
+      rmSync(attemptRoot, { recursive: true, force: true });
+    } catch {
+      retained.push(attemptRoot);
+    }
+  }
+  if (readdirSync(featureRoot).length === 0) rmSync(featureRoot, { recursive: true, force: true });
+  return { removed, retained };
 }
 
 function persistDriverResult(progressFile, attempt, driverResult) {

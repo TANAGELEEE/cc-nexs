@@ -1,6 +1,6 @@
 import { releaseScope } from './release-scope.mjs';
 import { execFileSync } from 'node:child_process';
-import { acquireTestReleaseLock } from './test-release.mjs';
+import { acquireTestReleaseLock, reclaimTestConflictWorktrees } from './test-release.mjs';
 import { dirname, join, resolve } from 'node:path';
 
 import { resolveCandidateContext } from './candidate-context.mjs';
@@ -134,6 +134,7 @@ function executeBaseRelease(context) {
     for (const item of context.repositories) {
       cleanupMergedWorktree({ repo: item.repository.absolute_path, worktree: resolve(context.workspaceRoot, item.assignment.worktree), branch: item.assignment.branch, baseBranch: baseTargets[item.id], candidateRef: null, deleteRemote: true });
     }
+    reclaimTestConflictWorktrees(context);
     completeBaseRelease(context.progressFile, { attemptId: attempt.id, status: 'succeeded' });
   } catch (error) {
     completeBaseRelease(context.progressFile, { attemptId: attempt.id, status: 'failed', reason: error.message });

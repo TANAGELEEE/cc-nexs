@@ -412,6 +412,16 @@ function isAncestor(repo, ancestor, descendant) {
   try { git(repo, ['merge-base', '--is-ancestor', ancestor, descendant]); return true; } catch { return false; }
 }
 
+// Removes a preserved test-conflict worktree that no active attempt still needs.
+export function removeIntegrationWorktree({ repo, worktree, root }) {
+  assertWithin(root, worktree);
+  if (existsSync(worktree)) {
+    try { git(repo, ['worktree', 'remove', '--force', worktree]); } catch {}
+    rmSync(worktree, { recursive: true, force: true });
+  }
+  try { git(repo, ['worktree', 'prune']); } catch {}
+}
+
 export function cleanupMergedWorktree({ repo, worktree, branch, baseBranch, candidateRef = null, deleteRemote = false }) {
   if (!existsSync(worktree) && !refExists(repo, `refs/heads/${branch}`)) {
     // base release already removed the worktree; finalize still owns the merged candidate ref.

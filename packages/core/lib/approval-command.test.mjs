@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -742,7 +742,12 @@ test('explicit test-environment exception reaches base release without claiming 
     assert.equal(approved.gates.release.binding.test_exception.authorization_evidence, testException.authorizationEvidence);
     approved.state = mode === 'hotfix' ? 'HOTFIX_BASE_MERGING' : 'BASE_MERGING';
     writeProgressV2(fixture.progressFile, approved);
+    const leftoverConflict = join(fixture.root, '.cc-nexs', 'runtime', 'test-conflicts', approved.feature.id, 'test-release-1', 'api');
+    mkdirSync(dirname(leftoverConflict), { recursive: true });
+    fixture.git(fixture.repo, ['worktree', 'add', '--detach', leftoverConflict, 'origin/main']);
     assert.equal(runBaseRelease({ cwd: fixture.root, featureId: id }).status, 'succeeded');
+    assert.equal(existsSync(join(fixture.root, '.cc-nexs', 'runtime', 'test-conflicts', approved.feature.id)), false);
+    assert.doesNotMatch(fixture.git(fixture.repo, ['worktree', 'list', '--porcelain']), /test-conflicts/);
     const released = readProgressV2(fixture.progressFile);
     assert.equal(released.delivery.test.status, 'deployed_needs_manual_verification');
     assert.deepEqual(released.delivery.test.attempts.at(-1), initialAttempt);

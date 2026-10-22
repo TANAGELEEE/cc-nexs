@@ -1,6 +1,6 @@
 import { readProgressV2, appendProgressEvent, recordTestIntegration, writeProgressV2 } from './progress-v2.mjs';
 import { resolveTestIntegrationConflict } from './git-custodian.mjs';
-import { preflightTestRelease, acquireTestReleaseLock } from './test-release.mjs';
+import { preflightTestRelease, acquireTestReleaseLock, reclaimTestConflictWorktrees } from './test-release.mjs';
 import { resolveFeatureProgress } from './approval-command.mjs';
 
 export function resolveTestConflict({ cwd = process.cwd(), featureId, progressPath = null } = {}) {
@@ -24,6 +24,7 @@ export function resolveTestConflict({ cwd = process.cwd(), featureId, progressPa
     updated.delivery.test.attempts.at(-1).conflict_resolved = true;
     writeProgressV2(progressFile, updated);
     appendProgressEvent(progressFile, { type: 'delivery.test.merge_conflict_resolved', from: updated.state, to: updated.mode === 'hotfix' ? 'HOTFIX_TEST_RELEASE' : 'TEST_RELEASE', reason: 'developer resolved test integration conflict' });
+    reclaimTestConflictWorktrees(context);
     return { kind: 'test-conflict-resolved', attempt: readProgressV2(progressFile).delivery.test.attempts.at(-1), progressFile };
   } finally { release(); }
 }
