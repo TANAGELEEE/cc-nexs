@@ -27,7 +27,6 @@ const CODEX_CONFIG = join(CODEX_HOME, 'config.toml');
 const CODEX_CACHE = join(CODEX_HOME, 'plugins', 'cache', 'cc-nexs');
 const PLUGINS = [
   { key: 'cc-nexs@cc-nexs', preset: 'preset-standard' },
-  { key: 'cc-nexs-minimal@cc-nexs', preset: 'preset-minimal' },
 ];
 
 const SELECTED = resolveSelectedPlugins(INSTALL_ARGS);

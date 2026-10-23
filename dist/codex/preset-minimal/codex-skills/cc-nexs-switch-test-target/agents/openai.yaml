@@ -1,6 +1,0 @@
-interface:
-  display_name: "/cc-nexs:switch-test-target"
-  short_description: "Run /cc-nexs:switch-test-target explicitly"
-  default_prompt: "Use $cc-nexs-switch-test-target to run /cc-nexs:switch-test-target."
-policy:
-  allow_implicit_invocation: false

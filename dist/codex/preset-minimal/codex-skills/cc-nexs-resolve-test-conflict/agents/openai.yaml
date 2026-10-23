@@ -1,6 +1,0 @@
-interface:
-  display_name: "/cc-nexs:resolve-test-conflict"
-  short_description: "Run /cc-nexs:resolve-test-conflict explicitly"
-  default_prompt: "Use $cc-nexs-resolve-test-conflict to run /cc-nexs:resolve-test-conflict."
-policy:
-  allow_implicit_invocation: false

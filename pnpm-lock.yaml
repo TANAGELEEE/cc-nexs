@@ -10,6 +10,4 @@ importers:
 
   packages/core: {}
 
-  packages/preset-minimal: {}
-
   packages/preset-standard: {}

@@ -10,14 +10,9 @@ const rootVersion = readJson(join(root, 'package.json')).version;
 test('package, plugin, dist, and Claude marketplace versions match the root version', () => {
   const versionedFiles = [
     'packages/core/package.json',
-    'packages/preset-minimal/package.json',
     'packages/preset-standard/package.json',
-    'packages/preset-minimal/.claude-plugin/plugin.json',
-    'packages/preset-minimal/.codex-plugin/plugin.json',
     'packages/preset-standard/.claude-plugin/plugin.json',
     'packages/preset-standard/.codex-plugin/plugin.json',
-    'dist/preset-minimal/.claude-plugin/plugin.json',
-    'dist/preset-minimal/.codex-plugin/plugin.json',
     'dist/preset-standard/.claude-plugin/plugin.json',
     'dist/preset-standard/.codex-plugin/plugin.json',
   ];
@@ -25,9 +20,7 @@ test('package, plugin, dist, and Claude marketplace versions match the root vers
     assert.equal(readJson(join(root, relativePath)).version, rootVersion, relativePath);
   }
   for (const relativePath of [
-    'packages/preset-minimal/preset.yml',
     'packages/preset-standard/preset.yml',
-    'dist/preset-minimal/preset.yml',
     'dist/preset-standard/preset.yml',
   ]) {
     const version = readFileSync(join(root, relativePath), 'utf8').match(/^version:\s*(\S+)/m)?.[1];

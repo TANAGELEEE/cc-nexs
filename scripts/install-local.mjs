@@ -11,7 +11,6 @@
 //
 // 用法：
 //   node scripts/install-local.mjs                  # 默认 preset-standard
-//   node scripts/install-local.mjs preset-minimal   # 切换到 minimal preset
 //   node scripts/install-local.mjs preset-standard --home <isolated-home>
 
 import {
@@ -73,7 +72,7 @@ const MARKETPLACE_LINK = join(CLAUDE_HOME, 'plugins', 'marketplaces', MARKETPLAC
 const KNOWN_MARKETPLACES = join(CLAUDE_HOME, 'plugins', 'known_marketplaces.json');
 const INSTALLED = join(CLAUDE_HOME, 'plugins', 'installed_plugins.json');
 const SETTINGS = join(CLAUDE_HOME, 'settings.json');
-const PRESET_PLUGIN_KEYS = ['preset-standard', 'preset-minimal'].map((preset) => {
+const PRESET_PLUGIN_KEYS = ['preset-standard'].map((preset) => {
   const manifest = join(ROOT, 'packages', preset, '.claude-plugin', 'plugin.json');
   const name = JSON.parse(readFileSync(manifest, 'utf8')).name;
   return `${name}@${MARKETPLACE_NAME}`;

@@ -146,10 +146,8 @@ test('git mutation hook leaves the parent session in control and restricts role 
 });
 
 test('human checkpoints do not install a global tool-blocking hook', () => {
-  for (const preset of ['preset-standard', 'preset-minimal']) {
-    const hooks = readFileSync(join(REPO_ROOT, 'packages', preset, 'hooks', 'hooks.json'), 'utf8');
-    assert.doesNotMatch(hooks, /approval-gate-guard/);
-  }
+  const hooks = readFileSync(join(REPO_ROOT, 'packages', 'preset-standard', 'hooks', 'hooks.json'), 'utf8');
+  assert.doesNotMatch(hooks, /approval-gate-guard/);
 });
 
 test('plugin hook launchers resolve roots through Node on every host shell', () => {

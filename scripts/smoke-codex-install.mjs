@@ -34,7 +34,7 @@ function runInstall(preset) {
 function assertSelected(selectedKey) {
   const configPath = join(installHome, '.codex', 'config.toml');
   const config = readFileSync(configPath, 'utf8');
-  for (const key of ['cc-nexs@cc-nexs', 'cc-nexs-minimal@cc-nexs']) {
+  for (const key of ['cc-nexs@cc-nexs']) {
     const section = config.match(new RegExp(`\\[plugins\\."${key}"\\]\\r?\\n([^\\[]*)`))?.[1] || '';
     const expected = key === selectedKey ? 'true' : 'false';
     if (!new RegExp(`^enabled\\s*=\\s*${expected}$`, 'm').test(section)) {
@@ -82,18 +82,15 @@ try {
 
   runInstall('preset-standard');
   assertSelected('cc-nexs@cc-nexs');
-  runInstall('preset-minimal');
-  assertSelected('cc-nexs-minimal@cc-nexs');
-  runInstall('preset-minimal');
-  assertSelected('cc-nexs-minimal@cc-nexs');
+  runInstall('preset-standard');
+  assertSelected('cc-nexs@cc-nexs');
   assertCachedPlugin('cc-nexs');
-  assertCachedPlugin('cc-nexs-minimal');
 
   const isolatedConfig = readFileSync(join(isolatedCodexHome, 'config.toml'), 'utf8');
   if (!isolatedConfig.includes('[unrelated]\r\npreserve = true')) {
     throw new Error('Codex installer did not preserve unrelated CRLF TOML content');
   }
-  for (const key of ['cc-nexs@cc-nexs', 'cc-nexs-minimal@cc-nexs']) {
+  for (const key of ['cc-nexs@cc-nexs']) {
     const matches = isolatedConfig.match(new RegExp(`\\[plugins\\."${key}"\\]`, 'g')) || [];
     if (matches.length !== 1) throw new Error(`Codex installer duplicated ${key} TOML section`);
   }
@@ -102,7 +99,7 @@ try {
   if (realConfigAfter !== realConfigBefore) {
     throw new Error(`isolated Codex smoke modified real config: ${realConfig}`);
   }
-  console.log('Codex install smoke passed: isolated home, preset switching, cache, and hooks verified.');
+  console.log('Codex install smoke passed: isolated home, idempotent reinstall, cache, and hooks verified.');
 } finally {
   rmSync(installHome, { recursive: true, force: true });
 }

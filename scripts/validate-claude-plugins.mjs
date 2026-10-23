@@ -83,9 +83,6 @@ function validatePackageScripts() {
   if (pkg.scripts?.['install:local'] !== 'node scripts/install-local.mjs') {
     fail(`${PACKAGE_JSON}: install:local must keep using scripts/install-local.mjs`);
   }
-  if (pkg.scripts?.['install:local:minimal'] !== 'node scripts/install-local.mjs preset-minimal') {
-    fail(`${PACKAGE_JSON}: install:local:minimal must keep using scripts/install-local.mjs preset-minimal`);
-  }
 }
 
 function validateClaudeMarketplace(presets) {

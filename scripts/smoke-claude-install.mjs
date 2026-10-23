@@ -85,7 +85,7 @@ function validateMarketplaceAndSettings(selectedKey) {
   }
 
   const settings = readJson(join(tmpHome, '.claude', 'settings.json'));
-  for (const key of ['cc-nexs@cc-nexs', 'cc-nexs-minimal@cc-nexs']) {
+  for (const key of ['cc-nexs@cc-nexs']) {
     const expected = key === selectedKey;
     if (settings.enabledPlugins?.[key] !== expected) {
       fail(`settings.json: enabledPlugins.${key} must be ${expected}`);
@@ -101,10 +101,7 @@ try {
 
   runInstall('preset-standard');
   validateMarketplaceAndSettings('cc-nexs@cc-nexs');
-  runInstall('preset-minimal');
   validateInstalledPlugin('cc-nexs');
-  validateInstalledPlugin('cc-nexs-minimal');
-  validateMarketplaceAndSettings('cc-nexs-minimal@cc-nexs');
 
   if (errors.length > 0) {
     console.error('Claude Code install smoke failed:');

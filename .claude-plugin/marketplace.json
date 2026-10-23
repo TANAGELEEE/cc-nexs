@@ -9,15 +9,6 @@
   },
   "plugins": [
     {
-      "name": "cc-nexs-minimal",
-      "description": "cc-nexs minimal preset: 3 roles (Planner / Developer / Reviewer), Claude-only with subagent isolation, English by default, no language stack assumption.",
-      "version": "0.6.0",
-      "author": {
-        "name": "cc-nexs"
-      },
-      "source": "./dist/preset-minimal"
-    },
-    {
       "name": "cc-nexs",
       "description": "Lean-default low-token development pipeline: plan gate, local verification, one consolidated Review, test acceptance, and release gate; fast/full remain available.",
       "version": "0.6.0",
