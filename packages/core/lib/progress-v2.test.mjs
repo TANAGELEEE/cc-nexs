@@ -74,6 +74,7 @@ test('Gateway B evidence feedback stays at the gate while scope feedback invalid
     const progress = createProgressV2({ featureId: '03e', featureSlug: 'gateway-kinds', preset: 'preset-standard' });
     progress.state = 'RELEASE_PENDING_HUMAN';
     progress.gates.plan = { approved: true, binding: { combined_sha256: 'approved' } };
+    progress.plan_review = { status: 'passed', plan_sha256: 'a'.repeat(64), rounds: 2, blocking_findings: [] };
     writeProgressV2(file, progress);
     recordReleaseChangeRequest(file, { kind: 'evidence', feedback: '补充截图', actor: 'owner' });
     let saved = readProgressV2(file);
@@ -84,6 +85,7 @@ test('Gateway B evidence feedback stays at the gate while scope feedback invalid
     saved = readProgressV2(file);
     assert.equal(saved.state, 'SCOPE_CHANGE_REQUESTED');
     assert.equal(saved.gates.plan.approved, false);
+    assert.equal(saved.plan_review, null);
     assert.equal(saved.change_requests.current, 'gateway-b-2');
   } finally {
     rmSync(root, { recursive: true, force: true });

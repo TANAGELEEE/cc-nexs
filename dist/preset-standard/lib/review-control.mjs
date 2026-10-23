@@ -4,9 +4,10 @@ import { dirname, join } from 'node:path';
 
 import { resolveCandidateContext } from './candidate-context.mjs';
 import { assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
-import { approvedPlanDeliveryLane, assertPlanApprovalCurrent, extractApprovalScope } from './plan-contract.mjs';
+import { approvedPlanDeliveryLane, assertPlanApprovalCurrent, extractApprovalScope, planApprovalBinding } from './plan-contract.mjs';
 import { assertRecordedLocalVerification, extractLocalVerificationChecks } from './local-evidence.mjs';
-import { assertTestAttemptNotInvalidated, candidateFingerprint, recordConsolidatedReview } from './progress-v2.mjs';
+import { assertTestAttemptNotInvalidated, candidateFingerprint, readProgressV2, recordConsolidatedReview, recordPlanReview } from './progress-v2.mjs';
+import { resolveFeatureProgress } from './approval-command.mjs';
 
 export function recordLeanReview({
   cwd = process.cwd(),
@@ -64,4 +65,14 @@ export function recordLeanReview({
     gatewayBDelta: context.progress.mode === 'hotfix' ? false : gatewayBDelta,
     expectedRevision: context.progress.revision,
   });
+}
+
+export function recordLeanPlanReview({ cwd = process.cwd(), featureId, progressPath = null, status, blockingFindings = [] } = {}) {
+  const progressFile = resolveFeatureProgress({ cwd, featureId, progressPath });
+  const progress = readProgressV2(progressFile);
+  const binding = planApprovalBinding(dirname(progressFile), { requireRiskTier: true, requireDeliveryLane: true });
+  const after = recordPlanReview(progressFile, {
+    planSha256: binding.combined_sha256, status, blockingFindings, expectedRevision: progress.revision,
+  });
+  return { kind: 'plan-review', feature: after.feature, status, rounds: after.plan_review.rounds, state: after.state, progressFile };
 }

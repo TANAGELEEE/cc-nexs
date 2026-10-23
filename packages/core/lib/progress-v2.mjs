@@ -682,6 +682,7 @@ export function recordReleaseChangeRequest(file, {
     invalidateLeanCandidateEvidence(progress);
     requireDelivery(progress).test.status = 'idle';
     progress.gates.plan = { approved: false, binding: null, invalidated_at: timestamp, reason: request.id };
+    progress.plan_review = null;
     progress.state = 'SCOPE_CHANGE_REQUESTED';
   }
 
@@ -778,6 +779,41 @@ export function recordHotfixBoundaryEvidence(file, {
   const evidence = { type: 'p3_boundary', ...boundary, recorded_at: new Date().toISOString() };
   attempt.evidence = [...(attempt.evidence || []).filter((item) => item?.type !== 'p3_boundary'), evidence];
   appendMutationEvent(progress, { type: 'hotfix.p3_boundary_passed', actor, data: { fingerprint, boundary } });
+  writeProgressV2(file, progress);
+  return progress;
+}
+
+// Gateway A requires an independent plan review bound to the exact plan hash being approved.
+// Only a blocked first round returns to the Planner; every later result goes to Gateway A,
+// so a plan edited at the gate can be re-reviewed without reopening the revision loop.
+export function recordPlanReview(file, {
+  planSha256,
+  status,
+  blockingFindings = [],
+  actor = 'lean-plan-reviewer',
+  expectedRevision = null,
+} = {}) {
+  if (!['passed', 'blocked'].includes(status)) throw new Error(`[cc-nexs] invalid plan review status: ${status}`);
+  if (!/^[a-f0-9]{64}$/.test(planSha256 || '')) throw new Error('[cc-nexs] plan review requires the current plan hash');
+  if (!Array.isArray(blockingFindings) || blockingFindings.some((item) => typeof item !== 'string' || !/^P[01]\b/.test(item))) {
+    throw new Error('[cc-nexs] blocking plan review findings must be P0/P1 strings');
+  }
+  if (status === 'blocked' && blockingFindings.length === 0) throw new Error('[cc-nexs] a blocked plan review requires at least one P0/P1 finding');
+  if (status === 'passed' && blockingFindings.length > 0) throw new Error('[cc-nexs] a passing plan review cannot contain blocking findings');
+  const progress = readProgressV2(file);
+  if (expectedRevision !== null && progress.revision !== expectedRevision) {
+    throw new Error(`[cc-nexs] stale progress revision: expected ${expectedRevision}, found ${progress.revision}`);
+  }
+  if (progress.mode !== 'lean') throw new Error('[cc-nexs] plan review applies to Lean only');
+  if (!['PLANNING', 'PLAN_REVIEWING', 'PLAN_PENDING_HUMAN'].includes(progress.state)) {
+    throw new Error(`[cc-nexs] plan review requires PLANNING, PLAN_REVIEWING, or PLAN_PENDING_HUMAN, found ${progress.state}`);
+  }
+  const rounds = (progress.plan_review?.rounds || 0) + 1;
+  const from = progress.state;
+  const to = status === 'blocked' && rounds === 1 ? 'PLAN_REVIEW_BLOCKED' : 'PLAN_PENDING_HUMAN';
+  progress.plan_review = { status, plan_sha256: planSha256, rounds, blocking_findings: blockingFindings, reviewed_at: new Date().toISOString() };
+  progress.state = to;
+  appendMutationEvent(progress, { type: 'plan.reviewed', actor, data: { status, plan_sha256: planSha256, rounds, blocking_findings: blockingFindings, from, to } });
   writeProgressV2(file, progress);
   return progress;
 }

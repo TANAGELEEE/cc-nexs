@@ -54,6 +54,13 @@ Each code repository must keep one machine-parseable policy line; `deploy` must 
 - Basis for judgment:
 <!-- APPROVAL-SCOPE END -->
 
+## Plan Review
+
+- Review round:
+- P0/P1 blocking items:
+- Non-blocking notes:
+- 计划审核结论: pending
+
 ## Execution Status
 
 | Task | Status | Modified Path | Candidate | Notes |

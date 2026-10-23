@@ -82,6 +82,7 @@ function createFeature({ id = '01', mode = 'lean', state, worktree = false } = {
       '## Evidence',
       '',
     ].join('\n'));
+    markPlanReviewed({ docs, progressFile });
   }
   if (mode === 'hotfix') {
     writeFileSync(join(docs, 'hotfix.md'), [
@@ -125,6 +126,17 @@ function progressMarkdown(state) {
     '- (尚无)',
     '',
   ].join('\n');
+}
+
+function markPlanReviewed({ docs, progressFile }, status = 'passed') {
+  const progress = readProgressV2(progressFile);
+  progress.plan_review = {
+    status,
+    plan_sha256: planApprovalBinding(docs, { requireRiskTier: true, requireDeliveryLane: true }).combined_sha256,
+    rounds: 1,
+    blocking_findings: status === 'blocked' ? ['P1: missing rollback'] : [],
+  };
+  writeProgressV2(progressFile, progress);
 }
 
 function writeLeanPlan(docs, scopeLines) {
@@ -210,16 +222,53 @@ test('Lean Gateway A hashes requirements and plan scope before advancing', () =>
   assert.deepEqual(progress.events.map((event) => event.type), ['gate.approved', 'state.transition']);
 });
 
-test('Lean Gateway A requires every acceptance criterion to trace to a task, a local check, and a test check', () => {
-  const fixture = createFeature({ id: '20t', mode: 'lean', state: 'PLAN_PENDING_HUMAN' });
-  const approve = () => approveFeatureGate({ cwd: fixture.root, featureId: '20t', gate: 'plan', approver: 'Plan Owner' });
-  const delivery = ['- risk_tier: medium', '- delivery_lane: fast-track', '- test_delivery.api: deploy'];
-  writeFileSync(join(fixture.docs, 'requirements.md'), '| AC-ID | Then |\n|---|---|\n| AC-001 | works |\n| AC-002 | audited |\n');
-  writeLeanPlan(fixture.docs, ['| T-001 | AC-001 |', '| LV-001 | AC-001 |', '| TV-001 | AC-001, AC-003 |', ...delivery]);
-  assert.throws(approve, /does not trace every requirement \(task: AC-002; local check: AC-002; test check: AC-002; not in requirements.md: AC-003\)/);
+test('Lean Gateway A requires a plan review bound to the exact plan and full requirement traceability', () => {
+  const fixture = createFeature({ id: '20r', mode: 'lean', state: 'PLAN_PENDING_HUMAN' });
+  const approve = () => approveFeatureGate({ cwd: fixture.root, featureId: '20r', gate: 'plan', approver: 'Plan Owner' });
+  const scope = ['| T-001 | AC-001 |', '| LV-001 | AC-001 |', '| TV-001 | AC-001 |', '- risk_tier: medium', '- delivery_lane: fast-track', '- test_delivery.api: deploy'];
 
-  writeLeanPlan(fixture.docs, ['| T-001 | AC-001, AC-002 |', '| LV-001 | AC-001, AC-002 |', '| TV-001 | AC-001 |', '| TV-002 | AC-002 |', ...delivery]);
-  assert.equal(approve().state, 'PLAN_APPROVED');
+  writeLeanPlan(fixture.docs, [...scope, '- note: changed after review']);
+  assert.throws(approve, /independent plan review of the current plan/);
+
+  writeFileSync(join(fixture.docs, 'requirements.md'), '| AC-ID | Then |\n|---|---|\n| AC-001 | works |\n| AC-002 | audited |\n');
+  writeLeanPlan(fixture.docs, scope);
+  markPlanReviewed(fixture);
+  assert.throws(approve, /does not trace every requirement \(task: AC-002; local check: AC-002; test check: AC-002\)/);
+
+  writeLeanPlan(fixture.docs, ['| T-001 | AC-001, AC-002 |', '| LV-001 | AC-001, AC-002 |', '| TV-001 | AC-001 |', '| TV-002 | AC-002 |', ...scope.slice(3)]);
+  markPlanReviewed(fixture, 'blocked');
+  const approved = approveFeatureGate({ cwd: fixture.root, featureId: '20r', gate: 'plan', approver: 'Plan Owner' });
+  assert.equal(approved.state, 'PLAN_APPROVED');
+  assert.deepEqual(readProgressV2(fixture.progressFile).gates.plan.binding.plan_review, { status: 'blocked', rounds: 1, blocking_findings: ['P1: missing rollback'] });
+});
+
+test('plan review sends only a blocked first round back to the Planner', () => {
+  const fixture = createFeature({ id: '20s', mode: 'lean', state: 'PLAN_REVIEWING' });
+  const reset = readProgressV2(fixture.progressFile);
+  reset.plan_review = null;
+  writeProgressV2(fixture.progressFile, reset);
+  const cli = join(dirname(fileURLToPath(import.meta.url)), 'cc-nexs-cli.mjs');
+  const record = (...flags) => spawnSync(process.execPath, [cli, 'record-plan-review', '20s', '--progress', fixture.progressFile, ...flags], { cwd: fixture.root, encoding: 'utf8' });
+  const setState = (state) => { const p = readProgressV2(fixture.progressFile); p.state = state; writeProgressV2(fixture.progressFile, p); };
+
+  const first = record('--blocked', '--finding', 'P1: AC-001 has no rollback check');
+  assert.equal(first.status, 0, first.stderr);
+  assert.match(first.stdout, /plan review blocked \(round 1\)/);
+  assert.equal(readProgressV2(fixture.progressFile).state, 'PLAN_REVIEW_BLOCKED');
+
+  setState('PLAN_REVIEWING');
+  assert.equal(record('--blocked', '--finding', 'P1: still no rollback check').status, 0);
+  assert.equal(readProgressV2(fixture.progressFile).state, 'PLAN_PENDING_HUMAN');
+
+  // A plan edited at Gateway A can be reviewed again without reopening the revision loop.
+  const third = record('--passed');
+  assert.equal(third.status, 0, third.stderr);
+  const saved = readProgressV2(fixture.progressFile);
+  assert.equal(saved.state, 'PLAN_PENDING_HUMAN');
+  assert.equal(saved.plan_review.rounds, 3);
+
+  setState('IMPLEMENTING');
+  assert.match(record('--passed').stderr, /plan review requires PLANNING, PLAN_REVIEWING, or PLAN_PENDING_HUMAN/);
 });
 
 test('Lean Gateway A rejects incomplete or mistyped test delivery topology before approval', () => {

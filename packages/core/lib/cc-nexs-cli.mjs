@@ -13,7 +13,7 @@ import { assertHotfixCandidate, startHotfix } from './hotfix-control.mjs';
 import { initializeHotfix } from './hotfix-init.mjs';
 import { reviseHotfix } from './hotfix-revision.mjs';
 import { runLocalVerification } from './local-verify.mjs';
-import { recordLeanReview } from './review-control.mjs';
+import { recordLeanPlanReview, recordLeanReview } from './review-control.mjs';
 import { requestReleaseChanges } from './release-change-command.mjs';
 import { renderLeanPlan } from './plan-render.mjs';
 import { runTestRelease } from './test-release.mjs';
@@ -57,6 +57,11 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   }
   if (command === 'record-review') {
     return recordLeanReview({ cwd, ...parseReviewOptions(args) });
+  }
+  if (command === 'record-plan-review') {
+    const options = parseReviewOptions(args);
+    if (options.closure || options.gatewayBDelta) throw new Error('record-plan-review does not accept delta review flags');
+    return recordLeanPlanReview({ cwd, featureId: options.featureId, progressPath: options.progressPath, status: options.status, blockingFindings: options.blockingFindings });
   }
   if (command === 'start-hotfix') {
     return startHotfix({ cwd, ...parseStartHotfixOptions(args) });
@@ -407,6 +412,13 @@ function printResult(result) {
     console.log(`Feature: ${result.feature.id} ${result.feature.slug}`);
     return;
   }
+  if (result.kind === 'plan-review') {
+    console.log(`cc-nexs plan review ${result.status} (round ${result.rounds})`);
+    console.log(`State: ${result.state}`);
+    console.log(`Feature: ${result.feature.id} ${result.feature.slug}`);
+    console.log(`Progress: ${result.progressFile}`);
+    return;
+  }
   if (result.kind === 'worktree-reclaim') {
     if (!result.applied) { for (const line of formatInventory(result)) console.log(line); return; }
     console.log(`cc-nexs reclaimed ${result.removed.length} worktree(s)`);
@@ -468,6 +480,7 @@ function printUsage() {
   console.error('  cc-nexs release-test <feature-id> [--resume | --retry] [--dry-run] [--hotfix] [--progress <path>]');
   console.error('  cc-nexs verify-local <feature-id> [--passed|--failed|--deferred-to-test --evidence-json <json>] [--progress <path>]');
   console.error('  cc-nexs record-review <feature-id> <--passed|--blocked> [--finding <P0/P1 text>] [--closure|--gateway-b-delta] [--progress <path>]');
+  console.error('  cc-nexs record-plan-review <feature-id> <--passed|--blocked> [--finding <P0/P1 text>] [--progress <path>]');
   console.error('  cc-nexs start-hotfix <feature-id> [--level <P0|P1|P2|P3>] [--related <feature-id>] [--progress <path>]');
   console.error('  cc-nexs assert-hotfix-candidate <feature-id> [--progress <path>]');
   console.error('  cc-nexs record-test-verification <feature-id> <--passed|--blocked|--manual-required> --evidence <text> [--attempt <id>] [--progress <path>]');

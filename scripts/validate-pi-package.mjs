@@ -34,6 +34,7 @@ const expectedCommands = [
 ];
 const expectedRoles = [
   'lean-planner',
+  'lean-plan-reviewer',
   'lean-developer',
   'lean-reviewer',
   'lean-verifier',
@@ -249,7 +250,7 @@ if (existsSync(releaseSkillPath)) {
 
 const roleBoundaryPath = join(root, 'packages/core/lib/role-boundary.mjs');
 const roleBoundary = readFileSync(roleBoundaryPath, 'utf8');
-for (const marker of ["'lean-reviewer': {", 'isProgressMutation', 'progress\\.(?:md|json)']) {
+for (const marker of ["'lean-plan-reviewer': {", "'lean-reviewer': {", 'isProgressMutation', 'progress\\.(?:md|json)']) {
   if (!roleBoundary.includes(marker)) fail(`role-boundary.mjs: missing Pi child guard marker ${marker}`);
 }
 

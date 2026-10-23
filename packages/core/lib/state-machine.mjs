@@ -11,10 +11,12 @@ const TERMINAL = new Set(['COMPLETE']);
  *     Eligible fast-track work reaches test before the consolidated Review;
  *     standard work keeps Review before test. Both require Review + verified test
  *     evidence for the exact candidate before Gateway B:
- *     INIT → PLANNING → PLAN_PENDING_HUMAN → PLAN_APPROVED → IMPLEMENTING
+ *     INIT → PLANNING → PLAN_REVIEWING → PLAN_PENDING_HUMAN → PLAN_APPROVED → IMPLEMENTING
  *       → LOCAL_VERIFYING → [CONSOLIDATED_REVIEW] → CANDIDATE_READY
  *       → TEST_RELEASE → TEST_VERIFYING → [CONSOLIDATED_REVIEW] → RELEASE_PENDING_HUMAN
  *       → BASE_MERGING → COMPLETE
+ *     An independent plan review precedes Gateway A; a blocked plan gets one revision and
+ *     re-review, after which open findings go to Gateway A for the human to decide.
  *     Consolidated blockers take one bounded fix + delta-review closure. Gateway B
  *     implementation feedback takes one bounded local reverify + delta Review and
  *     a new test attempt; scope feedback invalidates Gateway A and returns to planning.
@@ -177,6 +179,7 @@ function nextHotfixTestReleaseStep({ workflow, verifier }) {
 function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateApproved, workflow = {} }) {
   const has = (role) => enabledRoles.includes(role);
   const planner = has('lean-planner') ? 'lean-planner' : null;
+  const planReviewer = has('lean-plan-reviewer') ? 'lean-plan-reviewer' : null;
   const developer = has('lean-developer') ? 'lean-developer' : null;
   const reviewer = has('lean-reviewer') ? 'lean-reviewer' : null;
   const verifier = has('lean-verifier') ? 'lean-verifier' : reviewer;
@@ -206,7 +209,11 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
     case 'INIT':
       return { next: 'PLANNING', role: planner, action: 'draft_plan' };
     case 'PLANNING':
-      return { next: 'PLAN_PENDING_HUMAN', role: null, action: 'await_plan_approval', stop: true };
+      return { next: 'PLAN_REVIEWING', role: planReviewer, action: 'review_plan' };
+    case 'PLAN_REVIEWING':
+      return { next: 'PARSE_PLAN_REVIEW', role: null, action: 'parse_plan_review_conclusion' };
+    case 'PLAN_REVIEW_BLOCKED':
+      return { next: 'PLANNING', role: planner, action: 'revise_plan' };
     case 'PLAN_PENDING_HUMAN':
       if (planApproved) return { next: 'PLAN_APPROVED', role: null, action: 'continue' };
       return { next: state, role: null, action: 'await_plan_approval', stop: true };

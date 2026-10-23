@@ -8,6 +8,7 @@ language: en-US
 roles:
   enabled:
     - lean-planner
+    - lean-plan-reviewer
     - lean-developer
     - lean-reviewer
     - lean-verifier
@@ -35,6 +36,13 @@ roles:
       alias: Lean Developer
       session_isolation: independent
       model_profile: balanced
+
+    lean-plan-reviewer:
+      agent: agents/lean-plan-reviewer.md
+      tool: codex
+      alias: Plan Reviewer
+      session_isolation: independent
+      model_profile: review
 
     lean-reviewer:
       agent: agents/lean-reviewer.md
@@ -81,6 +89,9 @@ runtimes:
     # Lean and Hotfix stay native to the host runtime: the Reviewer/Verifier use the
     # same Claude model at higher effort or a different Claude model.
     roles:
+      lean-plan-reviewer:
+        tool: claude-subagent
+        session_isolation: independent
       lean-reviewer:
         tool: claude-subagent
         session_isolation: independent
@@ -151,6 +162,7 @@ models:
   roles:
     lean-planner: balanced
     lean-developer: balanced
+    lean-plan-reviewer: review
     lean-reviewer: review
     lean-verifier: balanced
     hotfix-developer: balanced
@@ -169,6 +181,7 @@ models:
             - critical
         roles:
           lean-planner: escalated
+          lean-plan-reviewer: escalated
           lean-reviewer: escalated
       - id: hotfix-p0-p1
         when:
@@ -184,9 +197,10 @@ models:
 # orchestrator 启动时读需求目录的 config.json.mode 选择对应分支；lean 为新需求默认。
 modes:
   lean:
-    description: Plan-first with two human gates; qualifying small requirements default to fast test delivery followed by one consolidated Review, while environment-only local checks can be structured as mandatory test verification.
+    description: Plan-first with an independent plan review and two human gates; qualifying small requirements default to fast test delivery followed by one consolidated Review, while environment-only local checks can be structured as mandatory test verification.
     enabled:
       - lean-planner
+      - lean-plan-reviewer
       - lean-developer
       - lean-reviewer
       - lean-verifier

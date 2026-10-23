@@ -68,6 +68,7 @@
       }
     },
     "review": { "type": "object" },
+    "plan_review": { "type": ["object", "null"] },
     "change_requests": {
       "type": "object",
       "additionalProperties": false,

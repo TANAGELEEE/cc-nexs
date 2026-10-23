@@ -4,7 +4,7 @@ Read this file only when resolved mode is `lean`. Common identity, safety, model
 
 ## Lifecycle and delivery lane
 
-`/cc-nexs:plan` owns `INIT -> PLANNING -> PLAN_PENDING_HUMAN`; run normally starts after `/cc-nexs:approve-plan` and must validate the current plan approval binding before dispatch.
+`/cc-nexs:plan` owns `INIT -> PLANNING -> PLAN_REVIEWING -> PLAN_PENDING_HUMAN`, including the one independent plan review and at most one revision; run normally starts after `/cc-nexs:approve-plan` and must validate the current plan approval binding before dispatch.
 
 Run implements the approved plan, records exact candidates, and invokes deterministic local verification. The approved `delivery_lane` selects ordering:
 
@@ -17,7 +17,8 @@ High/critical plans may not use fast-track. In either lane `/cc-nexs:approve-rel
 
 | role/action | command |
 |---|---|
-| `lean-planner / draft_plan, revise_plan_for_gateway_b` | `/cc-nexs:plan <id>` (normally completed before run; scope feedback revision is the exception) |
+| `lean-planner / draft_plan, revise_plan, revise_plan_for_gateway_b` | `/cc-nexs:plan <id>` (normally completed before run; scope feedback revision is the exception) |
+| `lean-plan-reviewer / review_plan` | independent `agents/lean-plan-reviewer.md`, then `record-plan-review` |
 | `lean-developer / execute_plan` | `/cc-nexs:execute <id> --phase=implement` |
 | `lean-developer / fix_review` | `/cc-nexs:execute <id> --phase=review-fix` |
 | `lean-developer / fix_test` | `/cc-nexs:execute <id> --phase=test-fix` |
@@ -90,6 +91,7 @@ Read only the final relevant conclusion line in `plan.md`, using `^结论:\s*(\S
 
 | Parse action | PASS / 通过 | FAIL / 阻塞 |
 |---|---|---|
+| `PARSE_PLAN_REVIEW` (`^计划审核结论:\s*(\S+)`) | `PLAN_PENDING_HUMAN` | first round `PLAN_REVIEW_BLOCKED`; later rounds `PLAN_PENDING_HUMAN` with open findings (`record-plan-review` persists this state) |
 | `PARSE_CONSOLIDATED_REVIEW` | `CANDIDATE_READY` | `CONSOLIDATED_REVIEW_BLOCKED` |
 | `PARSE_REVIEW_CLOSURE` | `CANDIDATE_READY` | `REVIEW_CLOSURE_BLOCKED -> HUMAN_INTERVENTION` |
 | `PARSE_GATEWAY_B_DELTA_REVIEW` | `CANDIDATE_READY` then new test attempt | `GATEWAY_B_DELTA_REVIEW_BLOCKED -> HUMAN_INTERVENTION` |
@@ -101,7 +103,7 @@ Fast-track specifically routes a locally ready candidate directly through `CANDI
 
 ## Human gateways and change requests
 
-At `PLAN_PENDING_HUMAN`, print requirements scope, affected repositories, task waves, local/test validation matrices, risk/lane/release summary, model profiles, and temporary HTML from `/cc-nexs:render-plan`; then stop for `/cc-nexs:approve-plan <id>`.
+At `PLAN_PENDING_HUMAN`, print requirements scope, affected repositories, task waves, local/test validation matrices, risk/lane/release summary, the plan review result with any open P0/P1 findings, model profiles, and temporary HTML from `/cc-nexs:render-plan`; then stop for `/cc-nexs:approve-plan <id>`.
 
 At `RELEASE_PENDING_HUMAN`, print candidate commits, consolidated Review result, local fingerprint, test attempt/environment revision, deferred-check closure, AC coverage, and base targets; then stop for `/cc-nexs:approve-release <id>`. Approval authorizes the exact next base integration, non-force only.
 
@@ -109,7 +111,7 @@ Changes at Gateway B must use `/cc-nexs:request-release-changes <id> --type=... 
 
 - `evidence`: update only plan execution/evidence, rerender, remain at Gateway B.
 - `implementation`: `GATEWAY_B_CHANGE_REQUESTED -> GATEWAY_B_FIXING -> GATEWAY_B_LOCAL_REVERIFYING -> GATEWAY_B_DELTA_REVIEW`; PASS creates a new test attempt and regression evidence. A blocked delta goes to `HUMAN_INTERVENTION`.
-- `scope`: `SCOPE_CHANGE_REQUESTED -> PLANNING -> PLAN_PENDING_HUMAN`; Planner updates requirements plus plan approval scope and a new Gateway A hash is mandatory.
+- `scope`: `SCOPE_CHANGE_REQUESTED -> PLANNING -> PLAN_REVIEWING -> PLAN_PENDING_HUMAN`; Planner updates requirements plus plan approval scope, a fresh plan review is recorded for the new plan, and a new Gateway A hash is mandatory.
 
 Keep each request row synchronized with progress. A newer request marks the prior open row `addressed`; release approval marks the current row `approved` before archive.
 

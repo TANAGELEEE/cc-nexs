@@ -98,6 +98,7 @@ const PI_P2_COMMANDS = new Set([
 ]);
 const PI_ROLE_SOURCES = {
   'lean-planner': 'lean-planner.md',
+  'lean-plan-reviewer': 'lean-plan-reviewer.md',
   'lean-developer': 'lean-developer.md',
   'lean-reviewer': 'lean-reviewer.md',
   'lean-verifier': 'lean-verifier.md',

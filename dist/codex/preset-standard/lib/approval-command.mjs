@@ -72,6 +72,10 @@ export function approveFeatureGate({
     binding.test_targets = assertLeanTestDeliveryContract({ binding, progress: before, progressFile });
     binding.delivery_contract_version = 2;
     assertRequirementTraceability(dirname(progressFile));
+    if (before.plan_review?.plan_sha256 !== binding.combined_sha256) {
+      throw new Error('[cc-nexs] Gateway A requires an independent plan review of the current plan; run /cc-nexs:plan <id> to review it');
+    }
+    binding.plan_review = { status: before.plan_review.status, rounds: before.plan_review.rounds, blocking_findings: before.plan_review.blocking_findings };
     if (!existing?.approved
       || existing?.binding?.combined_sha256 !== binding.combined_sha256
       || existing?.binding?.delivery_contract_version !== binding.delivery_contract_version

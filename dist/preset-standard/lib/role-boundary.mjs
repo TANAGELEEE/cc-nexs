@@ -13,6 +13,12 @@ const DEFAULT_RULES = {
     forbidCommands: [CODEX_COMMAND, /\bgit\s+(?:add|commit|push|merge|rebase|checkout|switch|branch)\b/],
     message: 'Lean Planner: may write requirements/plan only, never code, progress, or Git state',
   },
+  'lean-plan-reviewer': {
+    allowWritePaths: [/(^|\/)plan\.md$/],
+    forbidWritePaths: [/(^|\/)src\//, /(^|\/)requirements\.md$/, /(^|\/)progress\.(?:md|json)$/],
+    forbidCommands: [CODEX_COMMAND, /\bgit\s+(?:add|commit|push|merge|rebase|checkout|switch|branch)\b/],
+    message: 'Lean Plan Reviewer: read requirements, plan, and source; write only the plan review section',
+  },
   'lean-developer': {
     forbidWritePaths: [/(^|\/)requirements\.md$/, /(^|\/)progress\.(?:md|json)$/],
     message: 'Lean Developer: cannot edit requirements or progress',

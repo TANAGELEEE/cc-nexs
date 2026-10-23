@@ -5,12 +5,21 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { nextStep } from './state-machine.mjs';
 
-const leanRoles = ['lean-planner', 'lean-developer', 'lean-reviewer', 'lean-verifier'];
+const leanRoles = ['lean-planner', 'lean-plan-reviewer', 'lean-developer', 'lean-reviewer', 'lean-verifier'];
 
-test('lean mode: plan is the first role call and pauses at the plan gate', () => {
+test('lean mode: plan is the first role call, then an independent plan review, then the plan gate', () => {
   const planning = nextStep({ state: 'INIT', enabledRoles: leanRoles, mode: 'lean' });
   assert.deepEqual(planning, { next: 'PLANNING', role: 'lean-planner', action: 'draft_plan' });
-  const gate = nextStep({ state: 'PLANNING', enabledRoles: leanRoles, mode: 'lean' });
+  assert.deepEqual(nextStep({ state: 'PLANNING', enabledRoles: leanRoles, mode: 'lean' }), {
+    next: 'PLAN_REVIEWING', role: 'lean-plan-reviewer', action: 'review_plan',
+  });
+  assert.deepEqual(nextStep({ state: 'PLAN_REVIEWING', enabledRoles: leanRoles, mode: 'lean' }), {
+    next: 'PARSE_PLAN_REVIEW', role: null, action: 'parse_plan_review_conclusion',
+  });
+  assert.deepEqual(nextStep({ state: 'PLAN_REVIEW_BLOCKED', enabledRoles: leanRoles, mode: 'lean' }), {
+    next: 'PLANNING', role: 'lean-planner', action: 'revise_plan',
+  });
+  const gate = nextStep({ state: 'PLAN_PENDING_HUMAN', enabledRoles: leanRoles, mode: 'lean' });
   assert.equal(gate.next, 'PLAN_PENDING_HUMAN');
   assert.equal(gate.stop, true);
 });
@@ -221,8 +230,7 @@ test('lean mode: Gateway B scope feedback returns to Planner and Gateway A', () 
   assert.deepEqual(nextStep({ state: 'SCOPE_CHANGE_REQUESTED', enabledRoles: leanRoles, mode: 'lean' }), {
     next: 'PLANNING', role: 'lean-planner', action: 'revise_plan_for_gateway_b',
   });
-  const gate = nextStep({ state: 'PLANNING', enabledRoles: leanRoles, mode: 'lean' });
-  assert.equal(gate.next, 'PLAN_PENDING_HUMAN');
+  assert.equal(nextStep({ state: 'PLANNING', enabledRoles: leanRoles, mode: 'lean' }).next, 'PLAN_REVIEWING');
 });
 
 const hotfixRoles = ['hotfix-developer', 'hotfix-reviewer', 'hotfix-verifier'];

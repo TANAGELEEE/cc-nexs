@@ -56,6 +56,7 @@ function validatePresetModes() {
     'state_machine: lean',
     'state_machine: hotfix',
     '- lean-planner',
+    '- lean-plan-reviewer',
     '- lean-developer',
     '- lean-reviewer',
     '- lean-verifier',
@@ -144,6 +145,15 @@ function validateRunCommand() {
     'progress.hotfix_document',
     '--test-exception',
   ]);
+}
+
+function validatePlanReview() {
+  const planPath = join(SRC_NEXS, 'commands', 'plan.md');
+  mustContain(planPath, read(planPath), ['PLAN_REVIEWING', 'lean-plan-reviewer', 'record-plan-review', '计划审核结论:', 'PLAN_REVIEW_BLOCKED']);
+  const rulePath = join(ROOT, 'packages', 'core', 'rules', 'run-lean.md');
+  mustContain(rulePath, read(rulePath), ['PARSE_PLAN_REVIEW', 'lean-plan-reviewer / review_plan', 'record-plan-review']);
+  const agentPath = join(SRC_NEXS, 'agents', 'lean-plan-reviewer.md');
+  mustContain(agentPath, read(agentPath), ['计划审核结论: PASS', '计划审核结论: NEEDS_REVISION', 'P0/P1']);
 }
 
 function validateHotfixCommand() {
@@ -245,6 +255,7 @@ function validateAllGeneratedMirrors() {
 validatePresetModes();
 validateInitCommand();
 validateRunCommand();
+validatePlanReview();
 validateHotfixCommand();
 validateMirrorSkill('cc-nexs-init', 'init.md');
 validateMirrorSkill('cc-nexs-run', 'run.md');
@@ -267,4 +278,4 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log('SOP parity validation passed: lean, hotfix, document paths, Codex mirrors');
+console.log('SOP parity validation passed: lean, plan review, hotfix, document paths, Codex mirrors');

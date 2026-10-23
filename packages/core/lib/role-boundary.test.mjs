@@ -95,3 +95,11 @@ test('Hotfix evidence roles and Claude hook write only the current assigned BUG 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('lean plan reviewer reads source but writes only plan.md', () => {
+  assert.equal(roleBoundaryViolation({ role: 'cc-nexs.lean-plan-reviewer', toolName: 'read', filePath: 'api/src/main.ts' }), null);
+  assert.equal(roleBoundaryViolation({ role: 'cc-nexs.lean-plan-reviewer', toolName: 'edit', filePath: 'all-docs/doc/01/plan.md' }), null);
+  assert.match(roleBoundaryViolation({ role: 'cc-nexs.lean-plan-reviewer', toolName: 'write', filePath: 'all-docs/doc/01/requirements.md' }), /Plan Reviewer/);
+  assert.match(roleBoundaryViolation({ role: 'cc-nexs.lean-plan-reviewer', toolName: 'edit', filePath: 'api/src/main.ts' }), /Plan Reviewer/);
+  assert.match(roleBoundaryViolation({ role: 'cc-nexs.lean-plan-reviewer', toolName: 'write', filePath: 'all-docs/doc/01/progress.json' }), /Plan Reviewer/);
+});
