@@ -13,7 +13,7 @@ test('hotfix scope binds severity/association and rejects contract expansion', (
   const scope = extractHotfixScope(valid);
   assert.equal(scope.severity, 'P2');
   assert.equal(scope.relatedFeature, '42');
-  assert.throws(() => extractHotfixScope(valid.replace('api_contract_change: no', 'api_contract_change: yes')), /lean\/full/);
+  assert.throws(() => extractHotfixScope(valid.replace('api_contract_change: no', 'api_contract_change: yes')), /new lean change|use lean instead/);
 });
 
 test('hotfix scope mutation after binding fails closed', () => {

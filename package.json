@@ -46,7 +46,6 @@
     "audit:public": "node scripts/public-audit.mjs",
     "audit:public:history": "node scripts/public-audit.mjs --history",
     "doctor": "node packages/core/lib/doctor.mjs",
-    "migrate:progress": "node packages/core/lib/migrate-progress-cli.mjs",
     "cc-nexs": "node packages/core/lib/cc-nexs-cli.mjs",
     "verify:reproducible": "node scripts/verify-reproducible-build.mjs",
     "test:security": "node --test scripts/security.test.mjs scripts/version-consistency.test.mjs",

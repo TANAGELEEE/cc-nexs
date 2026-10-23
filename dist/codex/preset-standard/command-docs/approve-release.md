@@ -7,7 +7,7 @@ argument-hint: "<id> [--test-exception --authorization-evidence <text> --reason 
 
 # /cc-nexs:approve-release
 
-Human release Gateway B for Lean, Hotfix, Fast and Full. Resolve the packaged CLI and record the user's authorization:
+Human release Gateway B for Lean and Hotfix. Resolve the packaged CLI and record the user's authorization:
 
 ```text
 node <plugin-root>/lib/cc-nexs-cli.mjs approve-release <feature-id-or-bug-key>

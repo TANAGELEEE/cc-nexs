@@ -5,7 +5,7 @@ description: Roles write artifacts; only the Orchestrator-owned Git Custodian ma
 
 # Git Custodian Boundary
 
-Implementation, planning, review, QA, and evaluator roles may inspect Git state but must not mutate repository topology or history.
+Implementation, planning, review, and verification roles may inspect Git state but must not mutate repository topology or history.
 
 Roles must not run `git add`, `git commit`, `git push`, `git merge`, `git rebase`, branch creation/deletion, or worktree creation/removal. They return an exact list of changed paths to the Orchestrator.
 

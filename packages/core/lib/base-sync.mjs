@@ -23,8 +23,7 @@ export function syncReleaseBase(options) {
     const conflicts = results.some(item => item.status === 'conflicts');
     const state = progress.mode === 'hotfix'
       ? (conflicts ? 'HOTFIX_FIXING' : 'HOTFIX_LOCAL_VERIFYING')
-      : progress.mode === 'lean' ? (conflicts ? 'IMPLEMENTING' : 'LOCAL_VERIFYING')
-        : progress.mode === 'full' ? 'FINAL_FIX' : 'BUILD';
+      : (conflicts ? 'IMPLEMENTING' : 'LOCAL_VERIFYING');
     appendProgressEvent(context.progressFile, { type: 'base.synced', from: progress.state, to: state, data: { results } });
     return { kind: 'base-sync', state, conflicts, results, progressFile: context.progressFile };
   } finally { unlock(); }

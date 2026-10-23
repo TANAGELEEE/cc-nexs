@@ -1,6 +1,0 @@
-interface:
-  display_name: "/cc-nexs:migrate-progress"
-  short_description: "Run /cc-nexs:migrate-progress explicitly"
-  default_prompt: "Use $cc-nexs-migrate-progress to run /cc-nexs:migrate-progress."
-policy:
-  allow_implicit_invocation: false

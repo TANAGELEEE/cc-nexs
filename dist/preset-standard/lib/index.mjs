@@ -5,8 +5,8 @@ export { loadConfig, loadWorkspaceConfig, mergeModelConfigs } from './config-loa
 export { loadI18n } from './i18n.mjs';
 export { RoleRegistry } from './role-registry.mjs';
 export { planReviewerInvocation } from './reviewer-adapter.mjs';
-export { readProgress, transitionState, approveDeployGate, approveHumanGate } from './progress-io.mjs';
-export { approveFeatureGate, normalizeSprint, resolveFeatureProgress } from './approval-command.mjs';
+export { readProgress, transitionState } from './progress-io.mjs';
+export { approveFeatureGate, resolveFeatureProgress } from './approval-command.mjs';
 export {
   PROGRESS_SCHEMA_VERSION,
   appendProgressEvent,
@@ -18,7 +18,6 @@ export {
   createProgressV2,
   readProgressV2,
   recordRepositoryAssignments,
-  recoverApprovedImplementationSprint,
   recordRepositoryCandidate,
   recordRepositoryCandidatePrepared,
   recordLocalVerification,
@@ -61,8 +60,6 @@ export { nextFeatureId, recordPublishedFeatureReservation, releaseFeatureReserva
 export { publishDocsReservation } from './docs-reservation.mjs';
 export { detectRuntime, resolveRoleRuntime, runtimeContract } from './runtime-resolver.mjs';
 export { migrateFeatureConfig } from './feature-config.mjs';
-export { syncImplementationWorktrees } from './implementation-worktrees.mjs';
-export { beginImplementationDelta, endImplementationDelta, implementationPathAllowed } from './implementation-delta.mjs';
 export {
   LEGACY_TEMPLATE_ROLE_MAPS,
   applyModelRouting,

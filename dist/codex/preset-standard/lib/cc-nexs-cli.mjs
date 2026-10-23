@@ -5,10 +5,9 @@ import { syncReleaseBase } from './base-sync.mjs';
 import { switchTestTarget } from './test-target.mjs';
 
 import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { approveFeatureGate, resolveAssignedCodeRepositories, resolveFeatureProgress } from './approval-command.mjs';
+import { approveFeatureGate } from './approval-command.mjs';
 import { runBaseRelease } from './base-release.mjs';
 import { assertHotfixCandidate, startHotfix } from './hotfix-control.mjs';
 import { initializeHotfix } from './hotfix-init.mjs';
@@ -20,10 +19,6 @@ import { renderLeanPlan } from './plan-render.mjs';
 import { runTestRelease } from './test-release.mjs';
 import { recordEnvironmentVerification } from './test-verification-control.mjs';
 import { migrateFeatureConfig } from './feature-config.mjs';
-import { beginImplementationDelta, endImplementationDelta } from './implementation-delta.mjs';
-import { assertImplementationApprovalCurrent, parseImplementationOwnership } from './implementation-plan.mjs';
-import { syncImplementationWorktrees } from './implementation-worktrees.mjs';
-import { readProgressV2 } from './progress-v2.mjs';
 import { modelGateway } from './model-gateway.mjs';
 import { formatInventory, reclaimWorktrees } from './worktree-reclaim.mjs';
 
@@ -81,46 +76,8 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   if (command === 'migrate-feature-config') {
     return migrateFeatureConfig({ cwd, ...parseFeatureMigrationOptions(args) });
   }
-  if (command === 'sync-implementation-worktrees') {
-    return syncImplementationWorktrees({ cwd, ...parseFeatureOptions(args) });
-  }
-  if (command === 'implementation-delta') {
-    const options = parseImplementationDeltaOptions(args);
-    return options.operation === 'begin'
-      ? beginImplementationDelta({ cwd, ...options })
-      : endImplementationDelta({ cwd, ...options });
-  }
-  if (command === 'validate-implementation-plan') {
-    const options = parseFeatureOptions(args);
-    const progressFile = resolveFeatureProgress({ cwd, ...options });
-    const progress = readProgressV2(progressFile);
-    const specText = readFileSync(join(dirname(progressFile), 'spec.md'), 'utf8');
-    const repositories = resolveAssignedCodeRepositories({ progressFile, progress });
-    const parsed = progress.gates?.g1?.approved
-      ? assertImplementationApprovalCurrent(progress, specText, { repositories, mode: progress.mode })
-      : parseImplementationOwnership(specText, { repositories, mode: progress.mode });
-    const legacySprintTotal = progress.mode === 'full'
-      && Number.isInteger(progress.gates?.g1?.binding?.sprint_total || progress.sprint?.total)
-      && (progress.gates?.g1?.binding?.sprint_total || progress.sprint?.total) > 0
-      ? (progress.gates?.g1?.binding?.sprint_total || progress.sprint.total)
-      : 1;
-    const effectiveSprints = parsed.contractVersion === 0
-      ? Array.from({ length: legacySprintTotal }, (_, index) => `M${index + 1}`)
-      : parsed.sprints;
-    return {
-      kind: 'implementation-plan', progressFile,
-      contractVersion: parsed.contractVersion,
-      legacy: parsed.legacy === true,
-      sprints: effectiveSprints,
-      sprintTotal: parsed.contractVersion === 0 ? legacySprintTotal : parsed.sprintTotal,
-      assignments: parsed.assignments,
-    };
-  }
-  const gate = command === 'approve-spec'
-    ? 'g1'
-    : command === 'approve-deploy' ? 'g2'
-      : command === 'approve-plan' ? 'plan'
-        : command === 'approve-release' ? 'release' : null;
+  const gate = command === 'approve-plan' ? 'plan'
+    : command === 'approve-release' ? 'release' : null;
   if (!gate) throw new Error(`unsupported command: ${command || '(missing)'}`);
 
   const options = parseApprovalOptions(args);
@@ -247,47 +204,6 @@ function parseFeatureOptions(args) {
   return options;
 }
 
-function parseImplementationDeltaOptions(args) {
-  const positional = [];
-  const options = {
-    operation: null,
-    featureId: null,
-    progressPath: null,
-    assignmentIds: [],
-    allowedDocPaths: [],
-    token: null,
-  };
-  for (let index = 0; index < args.length; index += 1) {
-    const value = args[index];
-    if (value === '--assignment') options.assignmentIds.push(requireValue(args, ++index, value));
-    else if (value.startsWith('--assignment=')) options.assignmentIds.push(value.slice('--assignment='.length));
-    else if (value === '--allow-doc-path') options.allowedDocPaths.push(requireValue(args, ++index, value));
-    else if (value.startsWith('--allow-doc-path=')) options.allowedDocPaths.push(value.slice('--allow-doc-path='.length));
-    else if (value === '--token') options.token = requireValue(args, ++index, value);
-    else if (value.startsWith('--token=')) options.token = value.slice('--token='.length);
-    else if (value === '--progress') options.progressPath = requireValue(args, ++index, value);
-    else if (value.startsWith('--progress=')) options.progressPath = value.slice('--progress='.length);
-    else if (value.startsWith('-')) throw new Error(`unknown option: ${value}`);
-    else positional.push(value);
-  }
-  options.operation = positional[0] || null;
-  options.featureId = positional[1] || null;
-  if (!['begin', 'end'].includes(options.operation)) {
-    throw new Error('implementation-delta requires begin or end');
-  }
-  if (!options.featureId) throw new Error('implementation-delta requires a feature id');
-  if (positional.length > 2) throw new Error(`unexpected arguments: ${positional.slice(2).join(' ')}`);
-  if (options.operation === 'begin') {
-    if (options.assignmentIds.length === 0) throw new Error('implementation-delta begin requires --assignment');
-    if (options.token) throw new Error('implementation-delta begin does not accept --token');
-  } else {
-    if (!options.token) throw new Error('implementation-delta end requires --token');
-    if (options.assignmentIds.length > 0) throw new Error('implementation-delta end does not accept --assignment');
-    if (options.allowedDocPaths.length > 0) throw new Error('implementation-delta end does not accept --allow-doc-path');
-  }
-  return options;
-}
-
 function parseFeatureMigrationOptions(args) {
   const positional = [];
   const options = { featureId: null, progressPath: null, dryRun: false, bindPlanRisk: false };
@@ -395,7 +311,7 @@ export function splitCommandArguments(text = '') {
 
 function parseApprovalOptions(args) {
   const positional = [];
-  const options = { featureId: null, sprint: null, approver: null, progressPath: null };
+  const options = { featureId: null, approver: null, progressPath: null };
   const exceptionFields = { '--authorization-evidence': 'authorizationEvidence', '--reason': 'reason', '--environment-evidence': 'environmentEvidence', '--rollback-evidence': 'rollbackEvidence' };
   const exception = {};
   let exceptionRequested = false;
@@ -408,14 +324,11 @@ function parseApprovalOptions(args) {
     else if (token.startsWith('--approver=')) options.approver = token.slice('--approver='.length);
     else if (token === '--progress') options.progressPath = requireValue(args, ++index, token);
     else if (token.startsWith('--progress=')) options.progressPath = token.slice('--progress='.length);
-    else if (token === '--sprint') options.sprint = requireValue(args, ++index, token);
-    else if (token.startsWith('--sprint=')) options.sprint = token.slice('--sprint='.length);
     else if (token.startsWith('-')) throw new Error(`unknown option: ${token}`);
     else positional.push(token);
   }
   options.featureId = positional[0] || null;
-  if (positional[1] && options.sprint === null) options.sprint = positional[1];
-  if (positional.length > 2) throw new Error(`unexpected arguments: ${positional.slice(2).join(' ')}`);
+  if (positional.length > 1) throw new Error(`unexpected arguments: ${positional.slice(1).join(' ')}`);
   if (Object.keys(exception).length && !exceptionRequested) throw new Error('exception evidence requires --test-exception');
   if (exceptionRequested) options.testException = exception;
   return options;
@@ -433,38 +346,6 @@ function printResult(result) {
     console.log(`BUG: ${result.document}`);
     console.log(`Progress: ${result.progressFile}`);
     if (result.state) console.log(`State: ${result.state}`);
-    return;
-  }
-  if (result.kind === 'implementation-delta-begin') {
-    console.log(`cc-nexs implementation delta baseline ready (${result.sprint} wave ${result.wave})`);
-    console.log(`Assignments: ${result.assignments.join(', ')}`);
-    console.log(`Token: ${result.token}`);
-    console.log(`Progress: ${result.progressFile}`);
-    return;
-  }
-  if (result.kind === 'implementation-delta-end') {
-    console.log(`cc-nexs implementation delta valid (${result.sprint} wave ${result.wave})`);
-    console.log(`Assignments: ${result.assignments.join(', ')}`);
-    for (const [repository, paths] of Object.entries(result.changed)) {
-      console.log(`${repository}: ${paths.length > 0 ? paths.join(', ') : '(no changes)'}`);
-    }
-    console.log(`Progress: ${result.progressFile}`);
-    return;
-  }
-  if (result.kind === 'implementation-worktree-sync') {
-    console.log(`cc-nexs implementation worktrees ${result.changed ? 'synced' : 'already current'}`);
-    console.log(`Repositories: ${result.repositories.join(', ') || '(legacy single worker)'}`);
-    if (result.created.length > 0) console.log(`Created: ${result.created.join(', ')}`);
-    if (result.recovered.length > 0) console.log(`Recovered: ${result.recovered.join(', ')}`);
-    console.log(`Progress: ${result.progressFile}`);
-    return;
-  }
-  if (result.kind === 'implementation-plan') {
-    console.log(`cc-nexs implementation plan valid (contract v${result.contractVersion})`);
-    console.log(`Assignments: ${result.assignments.length}`);
-    console.log(`Sprints: ${result.sprints.join(', ')} (total ${result.sprintTotal})`);
-    console.log(`Legacy single worker: ${result.legacy ? 'yes' : 'no'}`);
-    console.log(`Progress: ${result.progressFile}`);
     return;
   }
   if (result.kind === 'feature-config-migration') {
@@ -566,9 +447,8 @@ function printResult(result) {
   }
   if (typeof result.gate !== 'string') { console.log(JSON.stringify(result, null, 2)); return; }
   const gate = result.gate.toUpperCase();
-  const sprint = result.sprint === null ? '' : ` M${result.sprint}`;
   const status = result.alreadyApproved ? 'already approved' : 'approved';
-  console.log(`cc-nexs ${gate}${sprint} ${status}`);
+  console.log(`cc-nexs ${gate} ${status}`);
   console.log(`Feature: ${result.feature.id} ${result.feature.slug}`);
   console.log(`State: ${result.state}`);
   console.log(`Approver: ${result.approver}`);
@@ -582,8 +462,6 @@ function printUsage() {
   console.error('  cc-nexs reclaim-worktrees [--sizes] [--confirm <token>]');
   console.error('  cc-nexs switch-test-target --request <json-file>');
   console.error('  cc-nexs revise-hotfix <bug-key> --reason <text> --authorization-evidence <text> [--promote-lean] [--progress <path>]');
-  console.error('  cc-nexs approve-spec <feature-id> [--approver <name>] [--progress <path>]');
-  console.error('  cc-nexs approve-deploy <feature-id> [M<N>] [--approver <name>] [--progress <path>]');
   console.error('  cc-nexs approve-plan <feature-id> [--approver <name>] [--progress <path>]');
   console.error('  cc-nexs approve-release <feature-id> [--approver <name>] [--progress <path>]');
   console.error('    [--test-exception --authorization-evidence <text> --reason <text> --environment-evidence <text> --rollback-evidence <text>]');
@@ -597,10 +475,6 @@ function printUsage() {
   console.error('  cc-nexs release-base <feature-id> [--progress <path>]');
   console.error('  cc-nexs render-plan <feature-id> [--progress <path>]');
   console.error('  cc-nexs migrate-feature-config <feature-id> [--dry-run] [--bind-plan-risk] [--progress <path>]');
-  console.error('  cc-nexs sync-implementation-worktrees <feature-id> [--progress <path>]');
-  console.error('  cc-nexs implementation-delta begin <feature-id> --assignment <IMP-id> [--assignment <IMP-id> ...] [--allow-doc-path <test-cases.md|qa-scripts/**>] [--progress <path>]');
-  console.error('  cc-nexs implementation-delta end <feature-id> --token <token> [--progress <path>]');
-  console.error('  cc-nexs validate-implementation-plan <feature-id> [--progress <path>]');
   console.error('  cc-nexs model-gateway <inspect|prepare|view|start|feedback|result> --request <json-file>');
 }
 

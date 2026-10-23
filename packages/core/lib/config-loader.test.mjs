@@ -19,7 +19,6 @@ test('private overlay overrides public preset without mutating unrelated default
     '  src_paths:',
     '    - "src/**"',
     'workflow:',
-    '  sprint_delivery: final_only',
     '  test_release:',
     '    policy: auto_if_ready',
     '  thresholds:',
@@ -56,7 +55,6 @@ test('private overlay overrides public preset without mutating unrelated default
     assert.equal(config.mergedStack.build_cmd, 'tool build');
     assert.deepEqual(config.mergedStack.src_paths, ['service/**']);
     assert.equal(config.mergedThresholds.review_revision, 3);
-    assert.equal(config.mergedWorkflow.sprint_delivery, 'final_only');
     assert.equal(config.mergedWorkflow.test_release.policy, 'auto_if_ready');
     assert.equal(config.mergedRelease.test.app_url, 'https://test.example.com');
     assert.equal(config.mergedModels.profiles.review.codex.effort, 'high');

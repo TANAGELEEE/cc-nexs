@@ -11,10 +11,6 @@ import { assertRecordedLocalVerification, validateLocalEvidence } from './local-
 export const PROGRESS_SCHEMA_VERSION = 2;
 
 const TEST_RELEASE_INVALIDATION_STATES = new Set([
-  'TEST_BLOCKED',
-  'FINAL_QA_BLOCKED',
-  'ACCEPTANCE_REJECTED',
-  'FINAL_ACCEPTANCE_REJECTED',
   'HOTFIX_TEST_FAILED',
   'HOTFIX_CHANGE_REQUESTED',
 ]);
@@ -39,12 +35,9 @@ export function createProgressV2({
     revision: 0,
     created_at: now,
     updated_at: now,
-    counters: { review_revision: 0, fix_per_bug: {}, evaluator_reject: 0 },
-    sprint: { enabled: mode === 'full', current: 0, total: 0, status: {} },
+    counters: { review_revision: 0, fix_per_bug: {} },
     hotfix: null,
     gates: {
-      g1: { approved: false },
-      g2: { approved: false, sprints: {} },
       plan: { approved: false, binding: null },
       release: { approved: false, binding: null },
     },
@@ -67,7 +60,7 @@ export function validateProgressV2(progress) {
   if (progress?.schema_version !== PROGRESS_SCHEMA_VERSION) errors.push('schema_version must be 2');
   if (progress?.runtime && (typeof progress.runtime.version !== 'string' || progress.runtime.name !== 'cc-nexs')) errors.push('runtime binding is invalid');
   if (!progress?.feature?.id || !progress?.feature?.slug) errors.push('feature.id and feature.slug are required');
-  if (!['lean', 'fast', 'full', 'hotfix', 'lite'].includes(progress?.mode)) errors.push('mode is invalid');
+  if (!['lean', 'hotfix'].includes(progress?.mode)) errors.push('mode is invalid');
   if (typeof progress?.state !== 'string' || !progress.state) errors.push('state is required');
   if (!Number.isInteger(progress?.revision) || progress.revision < 0) errors.push('revision must be a non-negative integer');
   if (!Array.isArray(progress?.events)) errors.push('events must be an array');
@@ -89,7 +82,7 @@ export function validateProgressV2(progress) {
     }
   }
   if (progress?.delivery !== undefined) {
-    if (!['final_only', 'per_sprint'].includes(progress.delivery?.strategy)) errors.push('delivery.strategy is invalid');
+    if (progress.delivery?.strategy !== 'final_only') errors.push('delivery.strategy is invalid');
     if (!['auto_if_ready', 'manual', 'disabled'].includes(progress.delivery?.test?.policy)) errors.push('delivery.test.policy is invalid');
     if (!Array.isArray(progress.delivery?.test?.attempts)) errors.push('delivery.test.attempts must be an array');
     if (progress.delivery?.base !== undefined && !Array.isArray(progress.delivery.base?.attempts)) errors.push('delivery.base.attempts must be an array');
@@ -130,7 +123,7 @@ function releaseFingerprint(source) {
 function requireDelivery(progress) {
   if (!progress.delivery) {
     progress.delivery = {
-      strategy: 'per_sprint',
+      strategy: 'final_only',
       test: { policy: 'manual', status: 'idle', attempts: [] },
     };
   }
@@ -443,22 +436,8 @@ export function appendProgressEvent(file, {
   }
   if (to === 'COMPLETE' && progress.delivery?.base?.attempts?.length && progress.delivery.base.status !== 'succeeded') throw new Error('[cc-nexs] COMPLETE requires successful base release and cleanup');
   if (to !== null) progress.state = to;
-  const sprintState = String(to || '').match(/^SPRINT_(\d+)_/);
-  if (sprintState && progress.mode === 'full') {
-    const current = Number(sprintState[1]);
-    if (progress.sprint.total > 0 && current > progress.sprint.total) {
-      throw new Error(`[cc-nexs] refusing transition beyond approved Sprint total ${progress.sprint.total}: ${to}`);
-    }
-    progress.sprint.current = current;
-  }
   if (to !== null && TEST_RELEASE_INVALIDATION_STATES.has(to)) {
-    const delivery = requireDelivery(progress);
-    delivery.test.status = 'idle';
-    progress.gates.g2 = {
-      ...progress.gates.g2,
-      approved: false,
-      invalidated_at: timestamp,
-    };
+    requireDelivery(progress).test.status = 'idle';
   }
   progress.revision += 1;
   progress.updated_at = timestamp;
@@ -494,23 +473,14 @@ export function reopenTestRelease(file, { expectedRevision = null, actor = 'rele
   });
 }
 
-export function approveProgressGate(file, { gate, approver, sprint = null, binding = null, expectedRevision = null }) {
+export function approveProgressGate(file, { gate, approver, binding = null, expectedRevision = null }) {
   const progress = readProgressV2(file);
   if (expectedRevision !== null && progress.revision !== expectedRevision) {
     throw new Error(`[cc-nexs] stale progress revision: expected ${expectedRevision}, found ${progress.revision}`);
   }
-  if (!['g1', 'g2', 'plan', 'release'].includes(gate)) throw new Error(`[cc-nexs] unknown gate: ${gate}`);
+  if (!['plan', 'release'].includes(gate)) throw new Error(`[cc-nexs] unknown gate: ${gate}`);
   const timestamp = new Date().toISOString();
-  if (gate === 'g2' && sprint !== null) {
-    progress.gates.g2.sprints[String(sprint)] = { approved: true, approver, approved_at: timestamp };
-  } else {
-    progress.gates[gate] = { ...progress.gates[gate], approved: true, approver, approved_at: timestamp, ...(binding && { binding }) };
-  }
-  if (gate === 'g1' && Number.isInteger(binding?.sprint_total) && binding.sprint_total > 0) {
-    progress.sprint.enabled = progress.mode === 'full';
-    progress.sprint.current = 1;
-    progress.sprint.total = binding.sprint_total;
-  }
+  progress.gates[gate] = { ...progress.gates[gate], approved: true, approver, approved_at: timestamp, ...(binding && { binding }) };
   if (gate === 'release' && progress.change_requests?.current) {
     const current = progress.change_requests.items.find((item) => item.id === progress.change_requests.current);
     if (current) {
@@ -523,39 +493,7 @@ export function approveProgressGate(file, { gate, approver, sprint = null, bindi
   progress.updated_at = timestamp;
   progress.events.push({
     id: randomUUID(), sequence: progress.revision, timestamp, type: 'gate.approved', actor: approver,
-    data: { gate, ...(sprint !== null && { sprint }), ...(binding && { binding }) },
-  });
-  writeProgressV2(file, progress);
-  return progress;
-}
-
-export function recoverApprovedImplementationSprint(file, {
-  expectedRevision = null,
-  actor = 'orchestrator',
-} = {}) {
-  const progress = readProgressV2(file);
-  if (expectedRevision !== null && progress.revision !== expectedRevision) {
-    throw new Error(`[cc-nexs] stale progress revision: expected ${expectedRevision}, found ${progress.revision}`);
-  }
-  const total = progress.gates?.g1?.binding?.sprint_total;
-  if (progress.state !== 'SPEC_PENDING_HUMAN' || progress.gates?.g1?.approved !== true) {
-    throw new Error(`[cc-nexs] G1 Sprint recovery requires approved SPEC_PENDING_HUMAN, found ${progress.state}`);
-  }
-  if (!Number.isInteger(total) || total < 1) {
-    throw new Error('[cc-nexs] approved G1 binding has no recoverable Sprint contract');
-  }
-  if (progress.sprint?.current === 1 && progress.sprint?.total === total
-    && progress.sprint?.enabled === (progress.mode === 'full')) return progress;
-  progress.sprint.enabled = progress.mode === 'full';
-  progress.sprint.current = 1;
-  progress.sprint.total = total;
-  const timestamp = new Date().toISOString();
-  progress.revision += 1;
-  progress.updated_at = timestamp;
-  progress.events.push({
-    id: randomUUID(), sequence: progress.revision, timestamp,
-    type: 'g1.sprint_contract_recovered', actor,
-    data: { current: 1, total },
+    data: { gate, ...(binding && { binding }) },
   });
   writeProgressV2(file, progress);
   return progress;
@@ -709,7 +647,7 @@ export function recordReleaseChangeRequest(file, {
     throw new Error(`[cc-nexs] release-gate changes require ${pendingState}, found ${progress.state}`);
   }
   if (progress.mode === 'hotfix' && kind === 'scope') {
-    throw new Error('[cc-nexs] hotfix scope/contract feedback cannot expand the bound patch; initialize a new lean/full change');
+    throw new Error('[cc-nexs] hotfix scope/contract feedback cannot expand the bound patch; initialize a new lean change');
   }
   if (expectedRevision !== null && progress.revision !== expectedRevision) {
     throw new Error(`[cc-nexs] stale progress revision: expected ${expectedRevision}, found ${progress.revision}`);

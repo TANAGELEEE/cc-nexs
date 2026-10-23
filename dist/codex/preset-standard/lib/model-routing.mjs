@@ -73,7 +73,7 @@ export function resolveRiskContext({
     throw new Error(`[cc-nexs] model routing mode mismatch: progress=${progress.mode}, config=${featureConfig.mode}`);
   }
   const mode = progress.mode || featureConfig.mode || 'lean';
-  if (!['lean', 'hotfix', 'fast', 'full', 'lite'].includes(mode)) {
+  if (!['lean', 'hotfix'].includes(mode)) {
     throw new Error(`[cc-nexs] invalid mode for model routing: ${mode}`);
   }
   const severity = mode === 'hotfix'
@@ -260,7 +260,7 @@ export function validateModelRoutingConfig(routing, { profiles = null } = {}) {
     if (typeof when !== 'object' || Array.isArray(when)) throw new Error(`[cc-nexs] models.routing rule ${rule.id} when must be an object`);
     assertAllowedKeys(when, ['modes', 'risk_tiers', 'severities'], `${rule.id}.when`);
     validateStringList(when.modes, `${rule.id}.when.modes`, (value) => {
-      if (!['lean', 'hotfix', 'fast', 'full', 'lite'].includes(value)) {
+      if (!['lean', 'hotfix'].includes(value)) {
         throw new Error(`[cc-nexs] invalid mode in ${rule.id}.when.modes: ${value}`);
       }
     });

@@ -71,28 +71,18 @@ const LEAN_ONLY_CORE_COMMANDS = new Set([
   'revise-hotfix.md',
 ]);
 const PI_P2_COMMANDS = new Set([
-  'approve-deploy',
   'approve-plan',
   'approve-release',
-  'approve-spec',
   'brainstorm',
   'build',
   'doctor',
-  'fullstack',
-  'planner',
-  'dev',
-  'sa',
-  'qa',
-  'evaluator',
   'git-custodian',
   'hotfix',
   'revise-hotfix',
   'init',
   'lean-review',
   'lean-verify',
-  'migrate-progress',
   'migrate-feature-config',
-  'recon',
   'sync-base',
   'switch-test-target',
   'release-test',
@@ -100,24 +90,13 @@ const PI_P2_COMMANDS = new Set([
   'release-base',
   'render-plan',
   'request-release-changes',
-  'review',
   'run',
   'status',
-  'verify',
   'verify-local',
   'plan',
   'execute',
 ]);
 const PI_ROLE_SOURCES = {
-  'repo-scout': 'repo-scout-claude.md',
-  planner: 'planner-claude.md',
-  'tech-lead': 'tech-lead-claude.md',
-  sa: 'sa-codex.md',
-  qa: 'qa-claude.md',
-  evaluator: 'evaluator-codex.md',
-  fullstack: 'fullstack-claude.md',
-  reviewer: 'reviewer-codex.md',
-  verifier: 'verifier-codex.md',
   'lean-planner': 'lean-planner.md',
   'lean-developer': 'lean-developer.md',
   'lean-reviewer': 'lean-reviewer.md',
@@ -126,7 +105,7 @@ const PI_ROLE_SOURCES = {
   'hotfix-reviewer': 'hotfix-reviewer.md',
   'hotfix-verifier': 'hotfix-verifier.md',
 };
-const PI_VERIFIER_ROLES = new Set(['verifier', 'qa', 'lean-verifier', 'hotfix-verifier']);
+const PI_VERIFIER_ROLES = new Set(['lean-verifier', 'hotfix-verifier']);
 const PI_COMPUTER_USE_TOOLS = [
   'find_roots',
   'observe_ui',
@@ -154,32 +133,6 @@ const PI_COMPUTER_USE_VERIFIER_ADDENDUM = `## Pi Headless Computer Use Browser C
 - Follow the immutable-state loop: find the exact browser root, observe it, query the saved state, act against the same \`stateId\`, and consume the successor state. Prefer semantic targets; do not guess coordinates when headless policy makes an action unavailable.
 - Navigate only to configured \`allowed_hosts\`, verify the resulting URL and test-environment identity after navigation, and never target production.
 - Reuse an existing authenticated browser session and never request or expose plaintext credentials. Missing tools, an interactive desktop session, browser/login state, MFA/CAPTCHA handling, or a headless-safe semantic action makes post-deployment verification \`manual_required\`. Preserve the deployed candidate and evidence so verification can resume; these limitations never block test merge/CI delivery.
-`;
-const PI_SA_DIRECT_BODY = `
-# SA
-
-## Pi SA Direct Review Contract
-
-You are the isolated SA reviewer itself. Review the exact artifacts or candidate diff supplied by the parent directly in this session. Do not invoke another agent, reviewer, CLI, command skill, or nested process to perform the review.
-
-The parent must supply the review target (\`spec\`, \`cases\`, \`code\`, or \`integration\`; normalize \`code --scope=final-fix\` as \`final-fix\`), the absolute feature-document directory, round/sprint identifiers when applicable, and exact diff files or injected diff content for code targets. If any required input is missing or stale, return a blocking input error instead of discovering implementation source or broadening scope.
-
-## Isolation and write boundary
-
-- Review only the supplied \`spec.md\`, acceptance/API/deploy/test-case artifacts, immutable candidate metadata, and exact diff material appropriate to the target. Never read \`src/\` or \`dev-plan.md\`.
-- Write only \`sa-review.md\`, \`sa-test-review.md\`, or \`sa-code-review.md\` in the supplied feature-document directory. Append a clearly labelled target/sprint/round section and preserve earlier evidence.
-- Do not write \`progress.md\` or \`progress.json\`, do not mutate Git, and do not create candidates. The parent parses your final conclusion and owns all state transitions.
-- The parent owns diff-size checks and deterministic splitting. Review only the assigned group; do not merge groups or rerun successful sibling reviews.
-
-## Target contract
-
-- \`spec\`: check required sections, Given/When/Then acceptance coverage, technical/operational risk, repository ownership/DAG, sprint size, rollback, and cross-end contract clarity. Append to \`sa-review.md\`.
-- \`cases\`: compare the assigned Sprint AC subset with its test cases; require P0/P1 coverage plus relevant normal, boundary, failure, permission, concurrency, and timeout cases. Append to \`sa-test-review.md\`.
-- \`code\`: review the assigned exact candidate diff for correctness, security, concurrency/transaction behavior, contract compatibility, tests, rollback, and scope. Append to \`sa-code-review.md\`.
-- \`integration\`: review all supplied repository candidate diffs and cumulative API/deploy/test evidence for cross-repository compatibility, release order, configuration/database compatibility, integrated AC paths, and rollback. Append to \`sa-code-review.md\`.
-- \`final-fix\`: review only the supplied repair diff against the blocking findings and regression scope. Append to \`sa-code-review.md\`.
-
-Each review section must identify the target and evidence, list concise actionable findings with severity and artifact/diff location, and end with exactly \`结论: PASS\` or \`结论: NEEDS_REVISION\`. The final response must end with exactly \`RESULT:PASS\` or \`RESULT:NEEDS_REVISION\` so the parent can parse it without modifying progress from this child.
 `;
 const EXPLICIT_AGENT_TRIGGER_PREFIX = 'Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests.';
 
@@ -379,9 +332,8 @@ Never replace this control with model-generated progress edits or ad hoc Git com
 
 `;
   }
-  if (!['approve-deploy', 'approve-spec', 'approve-plan', 'approve-release'].includes(commandBase)) return '';
-  const approvalArgs = commandBase === 'approve-deploy' ? ' [M<N>]'
-    : commandBase === 'approve-release' ? ' [--test-exception --authorization-evidence <text> --reason <text> --environment-evidence <text> --rollback-evidence <text>]' : '';
+  if (!['approve-plan', 'approve-release'].includes(commandBase)) return '';
+  const approvalArgs = commandBase === 'approve-release' ? ' [--test-exception --authorization-evidence <text> --reason <text> --environment-evidence <text> --rollback-evidence <text>]' : '';
   return `## Deterministic Approval Control
 
 Resolve \`${cliPath}\` relative to this SKILL.md and execute the packaged control program:
@@ -444,18 +396,18 @@ ${controlBlock}## Codex Runtime Delta
 
 Before role dispatch, read \`../../rules/model-discovery.md\` and use \`modelGateway\` inspect/prepare/start/result. Reuse the current host's cached choices before discovery. Show the non-blocking preview on first use or changes; never wait for a reply. Use the current native spawn tool catalog when discovery is needed; retain explicit overrides.
 
-- Dispatch every requested role as an independent native subagent using \`../../agents/\`; keep implementation, Review, and verification in fresh isolated sessions. For Fast/Full implementation fanout, spawn every same-wave worker with its progress-assigned worktree and frozen role runtime before awaiting any of them, then join the whole wave; never serialize spawn/await or create extra agent worktrees. Never invoke Claude Code, a Claude subagent tool, or a nested \`codex\` CLI process.
+- Dispatch every requested role as an independent native subagent using \`../../agents/\`; keep implementation, Review, and verification in fresh isolated sessions. Never invoke Claude Code, a Claude subagent tool, or a nested \`codex\` CLI process.
 - ${supportsLean ? 'Resolve automatic risk routing once from progress/config/approved-plan: Explicit Lean high/critical can upgrade the first Planner dispatch; discovered plan risk upgrades subsequent Reviewer dispatch without starting a second Planner; Hotfix P0/P1 upgrades Reviewer; an explicit feature role profile remains final. A Reviewer may use a different model or the same model with higher reasoning effort. ' : ''}Provider-specific IDs are allowed only in private project/feature config; public defaults remain portable.
 - Translate \`$CLAUDE_PLUGIN_ROOT\` to this installed Codex plugin root and preserve the authoritative command's state transitions, gates, counters, validation, and stop behavior.
 - Browser tooling, login/MFA state, and verification-page URL availability are checked only after the exact candidate reaches test and CI delivery completes. They never block delivery. If post-deployment verification cannot run, record \`manual_required\` / \`deployed_needs_manual_verification\` with evidence and leave it recoverable; never claim a pass.
 
 ## Document Write Map
 
-Preserve exactly the paths declared by the authoritative command: ordinary features use \`all-docs/doc/{id}.{slug}/\` and \`progress.md\`; new Hotfix tasks use the BUG identified by \`progress.hotfix_document\` with machine state in workspace \`.cc-nexs/hotfixes/<key>/\`. A related BUG uses \`doc/<id>.<slug>/bugs/BUG-<key>.md\`; otherwise use docs \`hotfix/<key>/BUG-001.md\`. Keep legacy \`hotfix.md\`, command-declared \`bugs/\` / \`qa-scripts/\`, and \`docs/solutions/\` compatible. Hotfix does not reserve a feature number or publish placeholders. Pass \`CC_NEXS_PROGRESS_FILE\` and the resolved \`BUG_FILE\` to Hotfix children; never infer the BUG from a private-state directory. Do not invent Codex-specific alternatives.
+Preserve exactly the paths declared by the authoritative command: ordinary features use \`all-docs/doc/{id}.{slug}/\` and \`progress.md\`; new Hotfix tasks use the BUG identified by \`progress.hotfix_document\` with machine state in workspace \`.cc-nexs/hotfixes/<key>/\`. A related BUG uses \`doc/<id>.<slug>/bugs/BUG-<key>.md\`; otherwise use docs \`hotfix/<key>/BUG-001.md\`. Keep legacy \`hotfix.md\`, command-declared \`bugs/\`, and \`docs/solutions/\` compatible. Hotfix does not reserve a feature number or publish placeholders. Pass \`CC_NEXS_PROGRESS_FILE\` and the resolved \`BUG_FILE\` to Hotfix children; never infer the BUG from a private-state directory. Do not invent Codex-specific alternatives.
 
-## Full / Fast / Hotfix Mode Locks
+## Lean / Hotfix Mode Locks
 
-The authoritative command alone defines \`${supportsLean ? 'lean, ' : ''}full, fast, and hotfix\` semantics. This adapter changes only Codex dispatch and runtime mechanics; it must not restate, reorder, or weaken a mode.
+The authoritative command alone defines \`${supportsLean ? 'lean and ' : ''}hotfix\` semantics. This adapter changes only Codex dispatch and runtime mechanics; it must not restate, reorder, or weaken a mode.
 
 ## Completion Rule
 
@@ -504,26 +456,6 @@ function parseAgentSource(text, file) {
   return { description, tools, body };
 }
 
-function adaptPiAgentBody(role, body) {
-  if (role === 'sa') return PI_SA_DIRECT_BODY;
-  if (role !== 'qa') return body;
-
-  const claudeBrowserInstructions = [
-    '3. 使用 chrome-devtools-mcp 打开配置的 `app_url` / `operations_url`，只访问 `allowed_hosts`，复用当前登录会话。',
-    '3. Use chrome-devtools-mcp to open the configured `app_url` / `operations_url`, access only `allowed_hosts`, and reuse the current login session.',
-  ];
-  const piBrowserInstruction = '3. 使用本 agent 顶部冻结的唯一 Pi browser provider 打开配置的 `app_url` / `operations_url`，只访问 `allowed_hosts`，复用现有登录会话；不得自行选择、混用或切换 provider。';
-  const claudeBrowserInstruction = claudeBrowserInstructions.find((instruction) => body.includes(instruction));
-  if (!claudeBrowserInstruction) {
-    throw new Error('Pi QA adapter could not find the Claude-only browser instruction');
-  }
-  const adapted = body.replace(claudeBrowserInstruction, piBrowserInstruction);
-  return adapted.replace(
-    '# QA\n',
-    '# QA\n\n## Pi QA Provider-Neutral Contract\n\n本角色正文只描述黑盒验收语义；具体浏览器能力由顶部唯一 provider contract 决定。不要调用其他运行时的浏览器工具，也不要在 child 内切换 provider。\n',
-  );
-}
-
 function generatePiResources() {
   const standardSource = join(PACKAGES, 'preset-standard');
   const standardDist = join(DIST, 'preset-standard');
@@ -540,11 +472,10 @@ function generatePiResources() {
   for (const [role, sourceFile] of Object.entries(PI_ROLE_SOURCES)) {
     const sourcePath = join(standardSource, 'agents', sourceFile);
     const { description, tools, body } = parseAgentSource(readFileSync(sourcePath, 'utf8'), sourceFile);
-    const roleBody = adaptPiAgentBody(role, body);
-    const roleTools = role === 'sa' ? tools.filter((tool) => tool !== 'bash') : tools;
+    const roleBody = body;
     const variants = [{
       name: role,
-      tools: roleTools,
+      tools,
       addendum: PI_VERIFIER_ROLES.has(role) ? PI_EGO_LITE_VERIFIER_ADDENDUM : '',
       skills: PI_VERIFIER_ROLES.has(role) ? ['ego-browser'] : [],
       descriptionSuffix: PI_VERIFIER_ROLES.has(role) ? ' Preferred ego lite provider.' : '',
@@ -612,7 +543,7 @@ function generatePiResources() {
       `Invoke only through /cc-nexs:${commandBase} or /skill:${skillName}; never auto-trigger from ordinary natural-language requests.`,
       supportsHotfix
         ? 'Supports the preset-standard standalone Hotfix branch and BUG document without consuming a requirement number, with isolated roles through pi-subagents.'
-        : 'Supports preset-standard lean (default), fast, and full modes with isolated roles through pi-subagents.',
+        : 'Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents.',
       extractDescription(commandText, commandName).replace(/codex CLI/gi, 'Pi subagent'),
     ].join(' ');
     const modelGuard = supportsHotfix
@@ -634,8 +565,8 @@ ${controlBlock}## P2 Runtime Contract
 
 Before role dispatch, read \`../../../dist/preset-standard/rules/model-discovery.md\` and use \`cc_nexs_model_gateway\` inspect/prepare/start/result. Call \`cc_nexs_models\` only for missing or invalidated catalogs. Show the non-blocking preview on first use or changes; never wait for a reply. Retain explicit overrides.
 
-1. Pi supports \`preset-standard\` lean (default), standalone hotfix, fast, and full; unsupported compound flows fail closed rather than downgrade.
-2. Call \`cc_nexs_dispatch({})\` once to detect the installed API. Dispatch a bounded wave using \`cc_nexs_dispatch({ tasks: [{ agent: "cc-nexs.tech-lead", task: "<assignment>", cwd: "<assigned absolute worktree>", model: "<frozen provider/model>", effort: "<frozen thinking>" }], concurrency: 1 })\`. Include Full QA cases in the first wave. Start every sibling before waiting; never create child worktrees or nested children.
+1. Pi supports \`preset-standard\` lean (default) and standalone hotfix; unsupported compound flows fail closed rather than downgrade.
+2. Call \`cc_nexs_dispatch({})\` once to detect the installed API. Dispatch a bounded wave using \`cc_nexs_dispatch({ tasks: [{ agent: "cc-nexs.lean-developer", task: "<assignment>", cwd: "<assigned absolute worktree>", model: "<frozen provider/model>", effort: "<frozen thinking>" }], concurrency: 1 })\`. Start every sibling before waiting; never create child worktrees or nested children.
 
 The adapter preserves both APIs:
 - \`pi-subagents@0.35.1\`: one \`subagent({ tasks, concurrency, async: true, worktree: false, context: "fresh" })\`, then \`subagent_wait({ id })\`.

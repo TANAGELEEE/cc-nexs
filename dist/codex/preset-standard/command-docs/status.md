@@ -12,7 +12,7 @@ argument-hint: "[feature_id]"
 1. Resolve authoritative progress.json v2 plus its progress.md mirror, including workspace `.cc-nexs/hotfixes/<key>/` and legacy docs state; resolve the BUG separately through `progress.hotfix_document`
 2. Read mode/state/revision/gates/counters/delivery from progress.json; require config.json.mode to agree and report config_version/risk_tier migration status, including `plan_binding_status=bound|derived|unknown` for approved Lean work
 3. Use `readProgressV2()` (or `readProgress(progress.md)` compatibility delegation)
-4. Print (Lean 显示 plan/local review/test/base；Hotfix 显示 scope/severity/local/review/test/base；fast 显示 BUILD/TEST/ACCEPT)：
+4. Print (Lean 显示 plan/local review/test/base；Hotfix 显示 scope/severity/local/review/test/base)：
 
 ```
 ═══════════════════════════════════════════════════════════════
@@ -22,30 +22,26 @@ argument-hint: "[feature_id]"
 Feature:    <id> <slug>
 Branch:     <git branch --show-current>
 Repositories: <repo id → branch/worktree/candidate>
-Mode:       <lean | hotfix | full | fast>
+Mode:       <lean | hotfix>
 Revision:   <event revision>
 Updated at: <updated_at>
-Delivery:   <final_only|per_sprint> / test <auto_if_ready|manual|disabled>
+Delivery:   test <auto_if_ready|manual|disabled>
 Risk:       <effective tier / source / all signals>
 Models:     <next role → matched rule / profile / model / effort / feature override>
 
 🚦 Current state: <state> — <i18n description>
 
 📈 Progress
-   full: Sprint <current>/<total>  + 列出 M1, M2, ... 状态
-   fast: 阶段 BUILD / TEST / ACCEPT 各自 done/in_progress/pending
    lean: PLAN / IMPLEMENT / LOCAL VERIFY / REVIEW / TEST / BASE MERGE
    hotfix: SCOPE / IMPLEMENT / LOCAL VERIFY / REVIEW / TEST / GATEWAY B / BASE MERGE
 
 🔢 Counters
    Review revisions:  <n>/<threshold>
    Fix per bug:       <map>
-   Evaluator rejects: <n>/<threshold>
 
 ⏸️ Human gate
    Plan:    <approved + binding | not yet>
    Release: <approved + tested fingerprint | not yet>
-   Legacy G1/G2: <approval summary>
 
 📜 Recent history (last 5)
    <history tail>
@@ -70,13 +66,6 @@ Models:     <next role → matched rule / profile / model / effort / feature ove
    requirements.md:   <exist? lines>
    plan.md:           <approval scope / latest Review + Test conclusions>
    BUG document:      <progress.hotfix_document or legacy hotfix.md; scope / Review / test / rollback>
-   spec.md:           <exist? lines>
-   sa-review.md:      <last conclusion>
-   sa-code-review.md: <last conclusion>
-   test-cases.md:     <AC coverage>
-   test-report.md:    <last conclusion>
-   acceptance.md:     <last result>
-   bugs/:             <OPEN x / FIXED y / VERIFIED z>
 
 💡 Suggested next step
    <derived from current_state + mode>

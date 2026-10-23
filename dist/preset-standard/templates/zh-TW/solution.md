@@ -1,6 +1,6 @@
 ---
 slug: <kebab-case-topic>            # 全域性唯一；與檔名一致；≤ 5 個英文單詞
-keywords:                            # ≥ 3 個；Repo Scout grep 目標，命中即接入下次需求
+keywords:                            # ≥ 3 個；Lean Planner grep 目標，命中即接入下次需求
   - <關鍵詞1>
   - <關鍵詞2>
   - <關鍵詞3>

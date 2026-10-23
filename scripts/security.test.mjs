@@ -140,8 +140,8 @@ test('git mutation hook leaves the parent session in control and restricts role 
   });
   assert.equal(run('git status --short').status, 0);
   assert.equal(run('git commit -m user-authorized').status, 0);
-  assert.equal(run('git commit -m test', 'tech-lead').status, 2);
-  assert.equal(run('git worktree remove /tmp/example', 'reviewer').status, 2);
+  assert.equal(run('git commit -m test', 'lean-developer').status, 2);
+  assert.equal(run('git worktree remove /tmp/example', 'lean-reviewer').status, 2);
   assert.equal(run('git commit -m candidate', 'git-custodian').status, 0);
 });
 
@@ -189,10 +189,10 @@ test('plugin hook launchers resolve roots through Node on every host shell', () 
       shell: true,
       input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'git commit -m blocked' } }),
       encoding: 'utf8',
-      env: { ...process.env, PLUGIN_ROOT: pluginRoot, CC_NEXS_ROLE: 'reviewer' },
+      env: { ...process.env, PLUGIN_ROOT: pluginRoot, CC_NEXS_ROLE: 'lean-reviewer' },
     });
     assert.equal(denied.status, 2);
-    assert.match(denied.stderr, /BLOCKED: role reviewer cannot mutate Git/);
+    assert.match(denied.stderr, /BLOCKED: role lean-reviewer cannot mutate Git/);
 
     const missingRootEnv = { ...process.env };
     delete missingRootEnv.PLUGIN_ROOT;

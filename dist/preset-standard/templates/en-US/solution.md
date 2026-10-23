@@ -1,6 +1,6 @@
 ---
 slug: <kebab-case-topic>            # Globally unique; matches the filename; ≤ 5 English words
-keywords:                            # ≥ 3; Repo Scout grep targets, a hit pulls it into the next requirement
+keywords:                            # ≥ 3; Lean Planner grep targets, a hit pulls it into the next requirement
   - <keyword1>
   - <Keyword2>
   - <关键词3>

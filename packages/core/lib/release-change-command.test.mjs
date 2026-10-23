@@ -116,7 +116,7 @@ test('Hotfix Gateway B distinguishes evidence, implementation, and forbidden sco
       kind: 'scope',
       feedback: '新增公开接口',
       actor: 'release-owner',
-    }), /lean\/full/);
+    }), /new lean change|use lean instead/);
   } finally {
     rmSync(current.root, { recursive: true, force: true });
   }

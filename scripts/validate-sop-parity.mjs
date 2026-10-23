@@ -53,21 +53,8 @@ function validatePresetModes() {
     'modes:',
     'lean:',
     'hotfix:',
-    'full:',
-    'fast:',
     'state_machine: lean',
     'state_machine: hotfix',
-    'state_machine: full',
-    'state_machine: fast',
-    '- repo-scout',
-    '- planner',
-    '- tech-lead',
-    '- sa',
-    '- qa',
-    '- evaluator',
-    '- fullstack',
-    '- reviewer',
-    '- verifier',
     '- lean-planner',
     '- lean-developer',
     '- lean-reviewer',
@@ -82,13 +69,10 @@ function validatePresetModes() {
     'hotfix-p0-p1',
     'escalated:',
     'local_verify:',
-    'review_revision: 2',
     'fix_per_bug: 2',
-    'evaluator_reject: 2',
     'doc_dir: "all-docs/doc/{id}.{slug}/"',
     'doc_repo: "all-docs/"',
     'bugs_dir: "bugs/"',
-    'sprint_delivery: final_only',
     'policy: auto_if_ready',
     'claude_provider: chrome-devtools-mcp',
     'codex_provider: current-browser-session',
@@ -102,7 +86,7 @@ function validateInitCommand() {
   const path = join(SRC_NEXS, 'commands', 'init.md');
   const text = read(path);
   mustContain(path, text, [
-    '--mode=lean|hotfix|fast|full',
+    '--mode=lean|hotfix',
     '--risk-tier=auto|low|medium|high|critical',
     /(?:默认 `lean`|new requirements default to `lean`)/,
     'createWorkspaceWorktrees',
@@ -132,32 +116,15 @@ function validateRunCommand() {
     'CONSOLIDATED_REVIEW',
     'RELEASE_PENDING_HUMAN',
     'BASE_MERGING',
-    'SPEC_PENDING_HUMAN',
-    'DEPLOY_GATE',
     'MODE=$(grep -oE',
-    'lean|full|fast|lite|hotfix',
+    'lean|hotfix',
     'Role → command dispatch table',
-    '/cc-nexs:recon',
-    '/cc-nexs:planner',
-    '/cc-nexs:dev <id> --mode=feat --sprint=N',
-    '/cc-nexs:qa cases',
-    '/cc-nexs:evaluator',
-    '/cc-nexs:fullstack <id> --phase=spec',
-    '/cc-nexs:review accept <id>',
-    '/cc-nexs:verify regression <id>',
-    'fast 模式解析',
-    'Artifact completeness gate',
-    'deploy.md api-doc.md test-report.md',
     'Git Custodian',
     'candidate commit',
     'progress.json',
     'HOTFIX_RELEASE_PENDING_HUMAN',
-    'syncFeatureReadme',
     '--no-auto-test-release',
-    'ALL_SPRINTS_DEV_DONE',
-    'INTEGRATION_REVIEW',
     'TEST_RELEASE',
-    'FINAL_QA_BLOCKED',
     '/cc-nexs:release-test',
     '/cc-nexs:plan <id>',
     '/cc-nexs:execute <id>',
@@ -173,54 +140,9 @@ function validateRunCommand() {
     "modelGateway('start'",
     'featureConfig',
     'matched_rules',
-    'fanout: implementation_repositories',
-    'sync-implementation-worktrees',
-    'implementation-delta begin',
-    'implementation-delta end',
-    'validate-implementation-plan',
-    'exactly one candidate refresh per changed repository',
     'CC_NEXS_PROGRESS_FILE',
     'progress.hotfix_document',
     '--test-exception',
-  ]);
-}
-
-function validateParallelImplementationRules() {
-  const fastPath = join(ROOT, 'packages', 'core', 'rules', 'run-fast.md');
-  const fullPath = join(ROOT, 'packages', 'core', 'rules', 'run-full.md');
-  const plannerPath = join(ROOT, 'packages', 'preset-standard', 'commands', 'planner.md');
-  const fullstackPath = join(ROOT, 'packages', 'preset-standard', 'commands', 'fullstack.md');
-  mustContain(fastPath, read(fastPath), [
-    'Multi-end implementation fanout',
-    '--assignment=<IMP-id>',
-    '--phase=build-sync',
-    'launch all batch members together',
-    'implementation-delta begin <id>',
-    'implementation-delta end <id> --token <token>',
-    'subagent({ tasks, concurrency, async: true, worktree: false, context: "fresh" })',
-    'subagent_wait({ id })',
-    'exactly one candidate per changed repository',
-  ]);
-  mustContain(fullPath, read(fullPath), [
-    'Multi-end implementation fanout',
-    '--assignment=<IMP-id>',
-    'QA `write_cases` and all first-wave Tech Lead workers together',
-    'implementation-delta begin <id>',
-    '--allow-doc-path test-cases.md --allow-doc-path qa-scripts/**',
-    'implementation-delta end <id> --token <token>',
-    'subagent({ tasks, concurrency, async: true, worktree: false, context: "fresh" })',
-    'subagent_wait({ id })',
-    'exactly one candidate per changed repository',
-  ]);
-  mustContain(plannerPath, read(plannerPath), [
-    'sync-implementation-worktrees',
-    'validate-implementation-plan',
-    /(?:G1 前|before G1)/,
-  ]);
-  mustContain(fullstackPath, read(fullstackPath), [
-    'sync-implementation-worktrees',
-    'validate-implementation-plan',
-    /(?:G1 前|before G1)/,
   ]);
 }
 
@@ -280,16 +202,14 @@ function validateMirrorSkill(commandName, commandFile) {
     `../../commands/${commandFile}`,
     'single source of truth',
     'Document Write Map',
-    'Full / Fast / Hotfix Mode Locks',
+    'Lean / Hotfix Mode Locks',
     'all-docs/doc/{id}.{slug}/',
     'hotfix.md',
     '.cc-nexs/hotfixes/<key>/',
     'progress.hotfix_document',
     'docs/solutions/',
     'progress.md',
-    'full',
     'lean',
-    'fast',
     'hotfix',
   ]);
 }
@@ -311,7 +231,7 @@ function validateAllGeneratedMirrors() {
       `../../commands/${fileName}`,
       'single source of truth',
       'Document Write Map',
-      'Full / Fast / Hotfix Mode Locks',
+      'Lean / Hotfix Mode Locks',
       'all-docs/doc/{id}.{slug}/',
       'hotfix.md',
       '.cc-nexs/hotfixes/<key>/',
@@ -325,7 +245,6 @@ function validateAllGeneratedMirrors() {
 validatePresetModes();
 validateInitCommand();
 validateRunCommand();
-validateParallelImplementationRules();
 validateHotfixCommand();
 validateMirrorSkill('cc-nexs-init', 'init.md');
 validateMirrorSkill('cc-nexs-run', 'run.md');
@@ -348,4 +267,4 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log('SOP parity validation passed: lean-default, full, fast, hotfix, document paths, Codex mirrors');
+console.log('SOP parity validation passed: lean, hotfix, document paths, Codex mirrors');

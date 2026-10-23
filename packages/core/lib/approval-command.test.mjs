@@ -10,7 +10,6 @@ import { approveFeatureGate, resolveFeatureProgress } from './approval-command.m
 import { runCcNexsCommand } from './cc-nexs-cli.mjs';
 import { runBaseRelease } from './base-release.mjs';
 import { hotfixScopeBinding } from './hotfix-contract.mjs';
-import { implementationApprovalBinding } from './implementation-plan.mjs';
 import { planApprovalBinding } from './plan-contract.mjs';
 import {
   beginTestRelease,
@@ -29,7 +28,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-function createFeature({ id = '01', mode = 'fast', state, worktree = false } = {}) {
+function createFeature({ id = '01', mode = 'lean', state, worktree = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'cc-nexs-approval-'));
   roots.push(root);
   mkdirSync(join(root, '.cc-nexs'), { recursive: true });
@@ -67,9 +66,6 @@ function createFeature({ id = '01', mode = 'fast', state, worktree = false } = {
   const progressFile = join(docs, 'progress.json');
   writeProgressV2(progressFile, progress);
   writeFileSync(join(docs, 'progress.md'), progressMarkdown(state));
-  if (['fast', 'full', 'lite'].includes(mode)) {
-    writeFileSync(join(docs, 'spec.md'), '# Spec\n\n## 业务背景\n\nLegacy single-worker spec.\n\n## 变更记录\n');
-  }
   if (mode === 'lean') {
     writeFileSync(join(docs, 'requirements.md'), '# Requirements\n\n- AC-001\n');
     writeFileSync(join(docs, 'plan.md'), [
@@ -122,23 +118,6 @@ function progressMarkdown(state) {
     'updated_at: null',
     '```',
     '',
-    '## 人工 gate',
-    '',
-    '### G1: Spec 审批',
-    '',
-    '```yaml',
-    'human_approved_at: null',
-    'human_approver: null',
-    '```',
-    '',
-    '### G2: 部署测试环境确认',
-    '',
-    '```yaml',
-    'g2_approved: false',
-    'g2_approved_at: null',
-    'g2_approver: null',
-    '```',
-    '',
     '## 历史轨迹',
     '',
     '- (尚无)',
@@ -184,191 +163,23 @@ function bindCandidate(fixture, repository = 'api', content = 'candidate\n') {
   return commit;
 }
 
-test('G1 approval records an event and advances only the workflow state', () => {
-  const fixture = createFeature({ state: 'SPEC_PENDING_HUMAN' });
-  const result = approveFeatureGate({ cwd: fixture.root, featureId: '01', gate: 'g1', approver: 'Local User' });
-  const progress = readProgressV2(fixture.progressFile);
-  const markdown = readFileSync(join(fixture.docs, 'progress.md'), 'utf8');
-
-  assert.equal(result.state, 'SPEC_APPROVED');
-  assert.equal(progress.gates.g1.approved, true);
-  assert.equal(progress.gates.g1.approver, 'Local User');
-  assert.equal(progress.gates.g1.binding.contract_version, 0);
-  assert.equal(progress.gates.g1.binding.sprint_total, 1);
-  assert.deepEqual(progress.sprint, { enabled: false, current: 1, total: 1, status: {} });
-  assert.equal(progress.state, 'SPEC_APPROVED');
-  assert.deepEqual(progress.events.map((event) => event.type), ['gate.approved', 'state.transition']);
-  assert.match(markdown, /human_approver: Local User/);
-  assert.match(markdown, /current_state: SPEC_APPROVED/);
-});
-
-test('G1 binds Fast/Full implementation ownership and runtime rejects later drift', () => {
-  const fixture = createFeature({ id: '01b', state: 'SPEC_PENDING_HUMAN' });
-  const progress = readProgressV2(fixture.progressFile);
-  progress.repositories.api = { branch: 'feature/01b', worktree: 'api', candidate: null };
-  writeProgressV2(fixture.progressFile, progress);
-  const specFile = join(fixture.docs, 'spec.md');
-  writeFileSync(specFile, [
-    '# Spec',
-    '| AC-ID | Given | When | Then | 关联 Sprint |',
-    '|---|---|---|---|---|',
-    '| AC-001 | a | b | c | M1 |',
-    '<!-- IMPLEMENTATION-OWNERSHIP:START -->',
-    '| Assignment | Sprint | Surface | AC | Repository | Allowed paths | Depends on | Validation | Wave |',
-    '|---|---|---|---|---|---|---|---|---|',
-    '| IMP-api | M1 | backend | AC-001 | api | src/upload/** | - | unit | 1 |',
-    '<!-- IMPLEMENTATION-OWNERSHIP:END -->',
-    '## 变更记录',
-  ].join('\n'));
-
-  approveFeatureGate({ cwd: fixture.root, featureId: '01b', gate: 'g1', approver: 'Local User' });
-  const approved = readProgressV2(fixture.progressFile);
-  assert.equal(approved.gates.g1.binding.contract_version, 1);
-  assert.equal(approved.gates.g1.binding.sprint_total, 1);
-  assert.equal(approved.sprint.current, 1);
-  assert.equal(approved.sprint.total, 1);
-  assert.equal(runCcNexsCommand(['validate-implementation-plan', '01b'], { cwd: fixture.root }).assignments.length, 1);
-
-  writeFileSync(specFile, readFileSync(specFile, 'utf8').replace('src/upload/**', 'src/other/**'));
-  assert.throws(() => runCcNexsCommand(['validate-implementation-plan', '01b'], { cwd: fixture.root }), /changed after G1/);
-});
-
-test('G1 crash recovery rechecks the exact approved implementation binding before transition', () => {
-  const fixture = createFeature({ id: '01c', state: 'SPEC_PENDING_HUMAN' });
-  const progress = readProgressV2(fixture.progressFile);
-  progress.repositories.api = { branch: 'feature/01c', worktree: 'api', candidate: null };
-  const specFile = join(fixture.docs, 'spec.md');
-  const specText = [
-    '# Spec',
-    '| AC-ID | Given | When | Then | 所属 Sprint |',
-    '|---|---|---|---|---|',
-    '| AC-001 | a | b | c | M1 |',
-    '<!-- IMPLEMENTATION-OWNERSHIP:START -->',
-    '| Assignment | Sprint | Surface | AC | Repository | Allowed paths | Depends on | Validation | Wave |',
-    '|---|---|---|---|---|---|---|---|---|',
-    '| IMP-api | M1 | backend | AC-001 | api | src/upload/** | - | unit | 1 |',
-    '<!-- IMPLEMENTATION-OWNERSHIP:END -->',
-    '## 变更记录',
-  ].join('\n');
-  writeFileSync(specFile, specText);
-  progress.gates.g1 = {
-    approved: true,
-    approver: 'Local User',
-    approved_at: new Date().toISOString(),
-    binding: implementationApprovalBinding(specText, { repositories: ['api'], mode: 'fast' }),
-  };
-  writeProgressV2(fixture.progressFile, structuredClone(progress));
-
-  writeFileSync(specFile, specText.replace('src/upload/**', 'src/other/**'));
-  assert.throws(() => approveFeatureGate({
-    cwd: fixture.root, featureId: '01c', gate: 'g1', approver: 'Local User',
-  }), /changed after G1/);
-  assert.equal(readProgressV2(fixture.progressFile).state, 'SPEC_PENDING_HUMAN');
-
-  writeFileSync(specFile, specText);
-  assert.equal(approveFeatureGate({
-    cwd: fixture.root, featureId: '01c', gate: 'g1', approver: 'Local User',
-  }).state, 'SPEC_APPROVED');
-  const recovered = readProgressV2(fixture.progressFile);
-  assert.equal(recovered.sprint.current, 1);
-  assert.equal(recovered.sprint.total, 1);
-  assert.equal(recovered.events.some((event) => event.type === 'g1.sprint_contract_recovered'), true);
-});
-
-test('Full G1 freezes and persists the exact contiguous Sprint total for CLI/runtime', () => {
-  const fixture = createFeature({ id: '01d', mode: 'full', state: 'SPEC_PENDING_HUMAN' });
-  const progress = readProgressV2(fixture.progressFile);
-  progress.repositories.api = { branch: 'feature/01d', worktree: 'api', candidate: null };
-  writeProgressV2(fixture.progressFile, progress);
-  writeFileSync(join(fixture.docs, 'spec.md'), [
-    '# Spec',
-    '| AC-ID | Given | When | Then | 所属 Sprint |',
-    '|---|---|---|---|---|',
-    '| AC-001 | a | b | c | M1 |',
-    '| AC-002 | a | b | c | M2 |',
-    '<!-- IMPLEMENTATION-OWNERSHIP:START -->',
-    '| Assignment | Sprint | Surface | AC | Repository | Allowed paths | Depends on | Validation | Wave |',
-    '|---|---|---|---|---|---|---|---|---|',
-    '| IMP-api-1 | M1 | backend | AC-001 | api | src/one/** | - | unit | 1 |',
-    '| IMP-api-2 | M2 | backend | AC-002 | api | src/two/** | - | unit | 1 |',
-    '<!-- IMPLEMENTATION-OWNERSHIP:END -->',
-    '## 变更记录',
-  ].join('\n'));
-
-  approveFeatureGate({ cwd: fixture.root, featureId: '01d', gate: 'g1', approver: 'Local User' });
-  let approved = readProgressV2(fixture.progressFile);
-  assert.deepEqual(approved.gates.g1.binding.sprints, ['M1', 'M2']);
-  assert.equal(approved.gates.g1.binding.sprint_total, 2);
-  assert.deepEqual(approved.sprint, { enabled: true, current: 1, total: 2, status: {} });
-  const validated = runCcNexsCommand(['validate-implementation-plan', '01d'], { cwd: fixture.root });
-  assert.deepEqual(validated.sprints, ['M1', 'M2']);
-  assert.equal(validated.sprintTotal, 2);
-
-  approved.sprint.total = 3;
-  writeProgressV2(fixture.progressFile, approved);
-  assert.throws(() => runCcNexsCommand(['validate-implementation-plan', '01d'], {
-    cwd: fixture.root,
-  }), /Sprint state drifted/);
-});
-
-test('fast G2 approval records the gate but leaves transition ownership to run', () => {
-  const fixture = createFeature({ id: '02', state: 'DEPLOY_GATE' });
-  const result = approveFeatureGate({ cwd: fixture.root, featureId: '02', gate: 'g2', sprint: 'M1', approver: 'Local User' });
-  const progress = readProgressV2(fixture.progressFile);
-  const markdown = readFileSync(join(fixture.docs, 'progress.md'), 'utf8');
-
-  assert.equal(result.sprint, null);
-  assert.equal(progress.state, 'DEPLOY_GATE');
-  assert.equal(progress.gates.g2.approved, true);
-  assert.deepEqual(progress.events.map((event) => event.type), ['gate.approved']);
-  assert.match(markdown, /g2_approved: true/);
-  assert.match(markdown, /g2_approver: Local User/);
-});
-
-test('final-only G2 approval supports manual fallback from TEST_RELEASE', () => {
-  const fixture = createFeature({ id: '16', mode: 'full', state: 'TEST_RELEASE' });
-  const result = approveFeatureGate({
-    cwd: fixture.root,
-    featureId: '16',
-    gate: 'g2',
-    approver: 'manual-release-owner',
-  });
-  assert.equal(result.state, 'TEST_RELEASE');
-  assert.equal(result.sprint, null);
-  assert.equal(readProgressV2(fixture.progressFile).gates.g2.approved, true);
-});
-
-test('full G2 approval is scoped to the sprint encoded in the state', () => {
-  const fixture = createFeature({ id: '03', mode: 'full', state: 'SPRINT_2_DEPLOY_GATE' });
-  const result = approveFeatureGate({ cwd: fixture.root, featureId: '03', gate: 'g2', approver: 'Local User' });
-  const progress = readProgressV2(fixture.progressFile);
-
-  assert.equal(result.sprint, 2);
-  assert.equal(progress.gates.g2.sprints['2'].approved, true);
-  assert.equal(progress.gates.g2.sprints['1'], undefined);
-  assert.throws(
-    () => approveFeatureGate({ cwd: fixture.root, featureId: '03', gate: 'g2', sprint: 'M1', approver: 'Local User' }),
-    /sprint mismatch/,
-  );
-});
-
 test('feature resolution prefers the matching worktree and never another feature gate', () => {
-  const fixture = createFeature({ id: '04', state: 'DEPLOY_GATE', worktree: true });
+  const fixture = createFeature({ id: '04', state: 'PLAN_PENDING_HUMAN', worktree: true });
   const other = join(fixture.root, 'all-docs', 'doc', '99.other');
   mkdirSync(other, { recursive: true });
   const otherProgress = createProgressV2({ featureId: '99', featureSlug: 'other', preset: 'preset-standard' });
-  otherProgress.state = 'SPEC_PENDING_HUMAN';
+  otherProgress.state = 'PLAN_PENDING_HUMAN';
   writeProgressV2(join(other, 'progress.json'), otherProgress);
 
   assert.equal(resolveFeatureProgress({ cwd: fixture.root, featureId: '04' }), fixture.progressFile);
 });
 
 test('terminal CLI executes the same deterministic approval path', () => {
-  const fixture = createFeature({ id: '05', state: 'DEPLOY_GATE' });
+  const fixture = createFeature({ id: '05', state: 'PLAN_PENDING_HUMAN' });
   const cli = join(dirname(fileURLToPath(import.meta.url)), 'cc-nexs-cli.mjs');
   const result = spawnSync(process.execPath, [
     cli,
-    'approve-deploy',
+    'approve-plan',
     '05',
     '--progress',
     fixture.progressFile,
@@ -377,8 +188,8 @@ test('terminal CLI executes the same deterministic approval path', () => {
   ], { cwd: fixture.root, encoding: 'utf8' });
 
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /cc-nexs G2 approved/);
-  assert.equal(readProgressV2(fixture.progressFile).gates.g2.approver, 'CLI User');
+  assert.match(result.stdout, /cc-nexs PLAN approved/);
+  assert.equal(readProgressV2(fixture.progressFile).gates.plan.approver, 'CLI User');
 });
 
 test('Lean Gateway A hashes requirements and plan scope before advancing', () => {
@@ -857,7 +668,7 @@ test('feature discovery follows configured docs and external worktrees after Hot
 });
 
 test('explicit progress paths reject a different task while keeping numeric ID aliases', () => {
-  const fixture = createFeature({ id: '04', state: 'DEPLOY_GATE' });
+  const fixture = createFeature({ id: '04', state: 'PLAN_PENDING_HUMAN' });
   assert.equal(resolveFeatureProgress({ cwd: fixture.root, featureId: '4', progressPath: fixture.progressFile }), fixture.progressFile);
   assert.throws(() => runCcNexsCommand(['revise-hotfix', 'BUG-other', '--progress', fixture.progressFile, '--reason', 'same failure', '--authorization-evidence', 'user requested repair'], { cwd: fixture.root }), /feature mismatch: requested BUG-other, found 04/);
   assert.equal(readProgressV2(fixture.progressFile).revision, 0);
@@ -901,26 +712,6 @@ test('protected MR pending is resumed and remote merge reconciles ledger and cle
     assert.equal(readProgressV2(fixture.progressFile).delivery.base.attempts.length, 1);
     assert.equal(runBaseRelease({ cwd: fixture.root, featureId: 'mr-resume' }).status, 'succeeded');
   });
-});
-
-test('Fast and Full use G1-bound exact evidence for base release, not a Lean-only gate', () => {
-  for (const mode of ['fast', 'full']) {
-    const fixture = createEnvironmentBlockedCandidate('lean', `release-${mode}`);
-    withPresetEnv(fixture, () => {
-      const p = readProgressV2(fixture.progressFile);
-      p.mode = mode;
-      p.state = 'RELEASE_PENDING_HUMAN';
-      p.gates.g1 = { approved: true };
-      writeFileSync(join(fixture.docs, 'spec.md'), '# Spec\nLegacy single worker.\n');
-      const attempt = p.delivery.test.attempts.at(-1);
-      attempt.status = 'verified'; attempt.verification = { result: 'passed', evidence: ['smoke'] };
-      p.delivery.test.status = 'verified';
-      writeProgressV2(fixture.progressFile, p);
-      approveFeatureGate({ cwd: fixture.root, featureId: p.feature.id, gate: 'release', approver: 'Owner' });
-      const approved = readProgressV2(fixture.progressFile); approved.state = 'BASE_MERGING'; writeProgressV2(fixture.progressFile, approved);
-      assert.equal(runBaseRelease({ cwd: fixture.root, featureId: p.feature.id }).status, 'succeeded');
-    });
-  }
 });
 
 test('environment exception accepts CI-closed local deferrals but never unclosed checks', () => {

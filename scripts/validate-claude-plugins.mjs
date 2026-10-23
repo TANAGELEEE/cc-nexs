@@ -141,7 +141,7 @@ function validateClaudeSkillsAreUnchanged(pluginRoot) {
     if (!existsSync(codexMirrorPath)) {
       fail(`${codexMirrorPath}: Codex command mirror missing from codex-skills/`);
     }
-    if (['approve-deploy.md', 'approve-spec.md', 'approve-plan.md', 'approve-release.md', 'release-test.md', 'verify-local.md', 'release-base.md', 'render-plan.md', 'migrate-feature-config.md'].includes(fileName)
+    if (['approve-plan.md', 'approve-release.md', 'release-test.md', 'verify-local.md', 'release-base.md', 'render-plan.md', 'migrate-feature-config.md'].includes(fileName)
       && !commandText.includes('lib/cc-nexs-cli.mjs')) {
       fail(`${join(commandsRoot, fileName)}: control command must invoke the deterministic CLI`);
     }

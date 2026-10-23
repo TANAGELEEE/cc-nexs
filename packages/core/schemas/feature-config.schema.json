@@ -6,7 +6,7 @@
   "additionalProperties": true,
   "properties": {
     "config_version": { "const": 2 },
-    "mode": { "enum": ["lean", "hotfix", "fast", "full", "lite"] },
+    "mode": { "enum": ["lean", "hotfix"] },
     "risk_tier": { "enum": ["auto", "low", "medium", "high", "critical"] },
     "models": {
       "type": "object",
@@ -31,7 +31,7 @@
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
-                      "modes": { "type": "array", "items": { "enum": ["lean", "hotfix", "fast", "full", "lite"] } },
+                      "modes": { "type": "array", "items": { "enum": ["lean", "hotfix"] } },
                       "risk_tiers": { "type": "array", "items": { "enum": ["low", "medium", "high", "critical"] } },
                       "severities": { "type": "array", "items": { "enum": ["P0", "P1", "P2", "P3"] } }
                     }

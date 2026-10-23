@@ -3,7 +3,7 @@
   "title": "cc-nexs progress.json v2",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "feature", "preset", "mode", "state", "revision", "counters", "sprint", "gates", "repositories", "events"],
+  "required": ["schema_version", "feature", "preset", "mode", "state", "revision", "counters", "gates", "repositories", "events"],
   "properties": {
     "schema_version": { "const": 2 },
     "feature": {
@@ -14,21 +14,19 @@
     },
     "preset": { "type": "string" },
     "runtime": { "type": "object", "additionalProperties": false, "required": ["name", "version"], "properties": { "name": { "const": "cc-nexs" }, "version": { "type": "string" } } },
-    "mode": { "enum": ["lean", "fast", "full", "hotfix", "lite"] },
+    "mode": { "enum": ["lean", "hotfix"] },
     "state": { "type": "string", "minLength": 1 },
     "revision": { "type": "integer", "minimum": 0 },
     "created_at": { "type": ["string", "null"] },
     "updated_at": { "type": ["string", "null"] },
     "counters": {
       "type": "object",
-      "required": ["review_revision", "fix_per_bug", "evaluator_reject"],
+      "required": ["review_revision", "fix_per_bug"],
       "properties": {
         "review_revision": { "type": "integer", "minimum": 0 },
-        "fix_per_bug": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } },
-        "evaluator_reject": { "type": "integer", "minimum": 0 }
+        "fix_per_bug": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } }
       }
     },
-    "sprint": { "type": "object" },
     "hotfix_document": {
       "type": "object",
       "additionalProperties": false,
@@ -99,11 +97,11 @@
     },
     "delivery": {
       "type": "object",
-      "description": "Optional only for legacy progress.json compatibility. New v2 progress files include delivery; release mutations inject the safe per_sprint + manual default when it is absent.",
+      "description": "Optional only for legacy progress.json compatibility. New v2 progress files include delivery; release mutations inject a manual test policy when it is absent.",
       "additionalProperties": false,
       "required": ["strategy", "test"],
       "properties": {
-        "strategy": { "enum": ["final_only", "per_sprint"] },
+        "strategy": { "enum": ["final_only"] },
         "base": { "type": "object" },
         "test": {
           "type": "object",

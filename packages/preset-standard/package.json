@@ -2,7 +2,7 @@
   "name": "@cc-nexs/preset-standard",
   "version": "0.6.0",
   "private": true,
-  "description": "Generic multi-role SOP preset for cc-nexs, with fast default and explicit full mode.",
+  "description": "Generic multi-role SOP preset for cc-nexs with Lean requirements and Hotfix repairs.",
   "main": "preset.yml",
   "scripts": {
     "build": "node ../../scripts/build.mjs preset-standard",

@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-run
-description: /cc-nexs:run Pi P2 adapter skill. Invoke only through /cc-nexs:run or /skill:cc-nexs-run; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default), fast, and full modes with isolated roles through pi-subagents. Generic orchestrator. Develops across one or more sprints, then performs one test release and final acceptance unless explicitly opted out or prerequisites are unavailable.
+description: /cc-nexs:run Pi P2 adapter skill. Invoke only through /cc-nexs:run or /skill:cc-nexs-run; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Lean/Hotfix orchestrator. Runs the active mode through local verification, Review, one exact-candidate test release, and the release gate unless explicitly opted out or prerequisites are unavailable.
 disable-model-invocation: true
 ---
 
@@ -12,8 +12,8 @@ Read and follow `../../../dist/preset-standard/commands/run.md` as the authorita
 
 Before role dispatch, read `../../../dist/preset-standard/rules/model-discovery.md` and use `cc_nexs_model_gateway` inspect/prepare/start/result. Call `cc_nexs_models` only for missing or invalidated catalogs. Show the non-blocking preview on first use or changes; never wait for a reply. Retain explicit overrides.
 
-1. Pi supports `preset-standard` lean (default), standalone hotfix, fast, and full; unsupported compound flows fail closed rather than downgrade.
-2. Call `cc_nexs_dispatch({})` once to detect the installed API. Dispatch a bounded wave using `cc_nexs_dispatch({ tasks: [{ agent: "cc-nexs.tech-lead", task: "<assignment>", cwd: "<assigned absolute worktree>", model: "<frozen provider/model>", effort: "<frozen thinking>" }], concurrency: 1 })`. Include Full QA cases in the first wave. Start every sibling before waiting; never create child worktrees or nested children.
+1. Pi supports `preset-standard` lean (default) and standalone hotfix; unsupported compound flows fail closed rather than downgrade.
+2. Call `cc_nexs_dispatch({})` once to detect the installed API. Dispatch a bounded wave using `cc_nexs_dispatch({ tasks: [{ agent: "cc-nexs.lean-developer", task: "<assignment>", cwd: "<assigned absolute worktree>", model: "<frozen provider/model>", effort: "<frozen thinking>" }], concurrency: 1 })`. Start every sibling before waiting; never create child worktrees or nested children.
 
 The adapter preserves both APIs:
 - `pi-subagents@0.35.1`: one `subagent({ tasks, concurrency, async: true, worktree: false, context: "fresh" })`, then `subagent_wait({ id })`.

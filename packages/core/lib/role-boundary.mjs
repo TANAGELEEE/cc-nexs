@@ -7,41 +7,6 @@ import { readProgressV2 } from './progress-v2.mjs';
 const CODEX_COMMAND = /(?:^|[;&|]\s*)(?:env\s+)?(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*codex(?:\s|$)/;
 
 const DEFAULT_RULES = {
-  planner: {
-    forbidWritePaths: [/(^|\/)src\//, /(^|\/)progress\.md$/],
-    forbidCommands: [/\bmvn\b/, CODEX_COMMAND, /\bgit\s+commit\b/],
-    message: 'Planner role: cannot write code or run build/review commands',
-  },
-  'tech-lead': {
-    forbidWritePaths: [/\/(spec|acceptance|sa-review|sa-code-review|sa-test-review|test-report)\.md$/, /(^|\/)progress\.(?:md|json)$/],
-    message: 'Tech Lead role: cannot edit spec / acceptance / review / test-report / progress',
-  },
-  sa: {
-    allowWritePaths: [/(^|\/)(?:sa-review|sa-test-review|sa-code-review)\.md$/],
-    forbidReadPaths: [/(^|\/)src\//, /(^|\/)dev-plan\.md$/],
-    forbidWritePaths: [/(^|\/)progress\.(?:md|json)$/],
-    message: 'SA role: review supplied artifacts/diffs and write only sa-*.md; never mutate progress',
-  },
-  qa: {
-    forbidReadPaths: [/(^|\/)src\/(main|test)\//, /\/sa-review\.md$/, /\/sa-code-review\.md$/],
-    message: 'QA role: black-box; cannot read src/ or sa-*.md',
-  },
-  evaluator: {
-    forbidReadPaths: [/(^|\/)src\//, /\/sa-.*\.md$/, /\/dev-plan\.md$/],
-    message: 'Evaluator role: cannot read src/, sa-*, dev-plan.md',
-  },
-  reviewer: {
-    forbidReadPaths: [/(^|\/)src\//, /\/dev-plan\.md$/],
-    message: 'Reviewer role (fast): cannot read src/ or dev-plan.md',
-  },
-  verifier: {
-    forbidReadPaths: [/(^|\/)src\/(main|test)\//, /\/sa-review\.md$/, /\/sa-code-review\.md$/, /\/sa-test-review\.md$/],
-    message: 'Verifier role (fast): black-box; cannot read src/ or sa-*.md',
-  },
-  fullstack: {
-    forbidWritePaths: [/(^|\/)progress\.(?:md|json)$/, /\/acceptance\.md$/, /\/sa-.*\.md$/, /\/test-report\.md$/],
-    message: 'Fullstack role (fast): cannot edit progress / acceptance / sa-* / test-report',
-  },
   'lean-planner': {
     allowWritePaths: [/(^|\/)(?:requirements|plan)\.md$/],
     forbidWritePaths: [/(^|\/)src\//, /(^|\/)progress\.(?:md|json)$/],
@@ -84,11 +49,6 @@ const DEFAULT_RULES = {
 };
 
 const ROLE_ALIASES = {
-  pm: 'planner',
-  developer: 'tech-lead',
-  dev: 'tech-lead',
-  'verifier-computer-use': 'verifier',
-  'qa-computer-use': 'qa',
   'lean-verifier-computer-use': 'lean-verifier',
   'hotfix-verifier-computer-use': 'hotfix-verifier',
 };

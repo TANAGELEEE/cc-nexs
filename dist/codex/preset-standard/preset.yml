@@ -1,10 +1,10 @@
 name: preset-standard
 version: 0.6.0
-description: General multi-role development SOP. New requirements default to lean, with explicit fast/full modes; no language, framework, repository, or organization conventions are bound.
+description: General multi-role development SOP with Lean requirements and Hotfix repairs; no language, framework, repository, or organization conventions are bound.
 language: en-US
 
-# 默认 enabled 列表（向后兼容）。orchestrator 会按 all-docs/doc/<id>/config.json 的 mode 字段
-# 选用 modes.<mode>.enabled 覆盖；未声明 mode 时回退到 modes.fast.enabled。
+# 默认 enabled 列表。orchestrator 会按 all-docs/doc/<id>/config.json 的 mode 字段
+# 选用 modes.<mode>.enabled 覆盖。
 roles:
   enabled:
     - lean-planner
@@ -13,41 +13,6 @@ roles:
     - lean-verifier
 
   definitions:
-    # ===== full 模式角色 =====
-    repo-scout:
-      agent: agents/repo-scout-claude.md
-      tool: claude-subagent
-      alias: RepoScout
-      session_isolation: independent
-
-    planner:
-      agent: agents/planner-claude.md
-      tool: claude-subagent
-      alias: Planner
-      session_isolation: independent
-
-    tech-lead:
-      agent: agents/tech-lead-claude.md
-      tool: claude-subagent
-      alias: Tech Lead
-      session_isolation: independent
-
-    sa:
-      agent: agents/sa-codex.md
-      tool: codex
-      alias: SA
-
-    qa:
-      agent: agents/qa-claude.md
-      tool: claude-subagent
-      alias: QA
-      session_isolation: independent
-
-    evaluator:
-      agent: agents/evaluator-codex.md
-      tool: codex
-      alias: Evaluator
-
     # ===== 旁路角色（不进状态机循环，由独立命令触发）=====
     compound:
       agent: agents/compound-claude.md
@@ -55,23 +20,6 @@ roles:
       alias: Compound
       session_isolation: independent
       # 旁路角色：仅在 /cc-nexs:compound 命令被显式调用时启动，状态机的 modes.*.enabled 不应包含 compound
-
-    # ===== fast 模式角色（合并版）=====
-    fullstack:
-      agent: agents/fullstack-claude.md
-      tool: claude-subagent
-      alias: Fullstack
-      session_isolation: independent
-
-    reviewer:
-      agent: agents/reviewer-codex.md
-      tool: codex
-      alias: Reviewer
-
-    verifier:
-      agent: agents/verifier-codex.md
-      tool: codex
-      alias: Verifier
 
     # ===== lean 默认模式角色 =====
     lean-planner:
@@ -125,15 +73,13 @@ roles:
       model_profile: balanced
 
 # Runtime adaptation is capability-based, never tied to a literal model id.
-# Claude Code keeps all Lean roles in isolated Claude subagents; legacy full/fast
-# review roles retain their declared Codex CLI tools.
+# Claude Code keeps all Lean and Hotfix roles in isolated Claude subagents.
 # Codex maps every role to an independent native agent and never invokes Claude Code or nested Codex CLI.
 runtimes:
   claude:
     model_policy: inherit
-    # Lean stays native to the host runtime. Legacy full/fast Codex review roles
-    # remain unchanged, but Lean Reviewer/Verifier can now use the same Claude
-    # model at higher effort or a different Claude model without a Codex dependency.
+    # Lean and Hotfix stay native to the host runtime: the Reviewer/Verifier use the
+    # same Claude model at higher effort or a different Claude model.
     roles:
       lean-reviewer:
         tool: claude-subagent
@@ -245,12 +191,9 @@ modes:
       - lean-reviewer
       - lean-verifier
     state_machine: lean
-    sprint_enabled: false
-    g2_enabled: true
     thresholds_override:
       review_revision: 1
       fix_per_bug: 2
-      evaluator_reject: 1
 
   hotfix:
     description: Standalone latest-base Hotfix worktree and BUG document without consuming a requirement number; local verification, independent Review at every severity, black-box test acceptance, and a human base gate.
@@ -259,39 +202,9 @@ modes:
       - hotfix-reviewer
       - hotfix-verifier
     state_machine: hotfix
-    sprint_enabled: false
-    g2_enabled: true
     thresholds_override:
       review_revision: 1
       fix_per_bug: 1
-      evaluator_reject: 1
-
-  full:
-    description: Full five-party heterogeneous workflow with repository reconnaissance first. Multi-end Tech Lead implementation runs in approved repository waves while Planner / SA / QA / Evaluator remain isolated.
-    enabled:
-      - repo-scout
-      - planner
-      - tech-lead
-      - sa
-      - qa
-      - evaluator
-    state_machine: full
-    sprint_enabled: true
-    g2_enabled: true            # final_only 默认自动 test release；G2 仅作显式退出/前置不足 fallback
-
-  fast:
-    description: Single-sprint three-role workflow; multi-end Fullstack code workers run in approved repository waves, followed by one document owner after join. Reviewer and Verifier remain isolated.
-    enabled:
-      - fullstack
-      - reviewer
-      - verifier
-    state_machine: fast
-    g2_enabled: true            # final_only 默认自动 test release；G2 仅作显式退出/前置不足 fallback
-    sprint_enabled: false      # fast 模式强制单 sprint，无需 sprint 切片
-    thresholds_override:
-      review_revision: 2       # 比 full 更严：2 轮即熔断
-      fix_per_bug: 2
-      evaluator_reject: 2
 
 stack:
   type: generic
@@ -322,10 +235,6 @@ paths:
 
 workflow:
   default_mode: lean
-  sprint_enabled: true
-  implementation_max_parallel: 4
-  human_gate_after: spec_reviewing_pass
-  sprint_delivery: final_only
   test_release:
     policy: auto_if_ready
     on_prerequisite_failure: manual_gate
@@ -335,7 +244,6 @@ workflow:
   thresholds:
     review_revision: 3
     fix_per_bug: 3
-    evaluator_reject: 2
 
 release:
   test:
@@ -358,7 +266,5 @@ i18n:
   locale_dir: "i18n/"
   conclusion_pass: "PASS"
   conclusion_fail: "NEEDS_REVISION"
-  acceptance_pass: "PASSED"
-  acceptance_fail: "FAILED"
   test_pass: "PASS"
   test_fail: "BLOCKED"

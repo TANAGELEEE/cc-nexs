@@ -325,7 +325,6 @@ export function loadConfig({ projectRoot = process.cwd(), presetRoot = null } = 
   const mergedThresholds = {
     review_revision: projectThresholds.review_revision ?? presetThresholds.review_revision ?? 3,
     fix_per_bug: projectThresholds.fix_per_bug ?? presetThresholds.fix_per_bug ?? 3,
-    evaluator_reject: projectThresholds.evaluator_reject ?? presetThresholds.evaluator_reject ?? 2,
   };
   const mergedWorkflow = deepMerge(preset?.workflow || {}, project.workflow || {});
   const mergedRelease = deepMerge(preset?.release || {}, project.release || {});

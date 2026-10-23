@@ -3,8 +3,6 @@ import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep, isAbsolute } from 'node:path';
 
-import { implementationPathAllowed } from './implementation-delta.mjs';
-
 export const HOTFIX_SCOPE_MARKERS = {
   start: '<!-- HOTFIX-SCOPE START -->',
   end: '<!-- HOTFIX-SCOPE END -->',
@@ -29,7 +27,7 @@ export function extractHotfixScope(text) {
   if (!SEVERITIES.has(severity)) throw new Error('[cc-nexs] hotfix scope severity must be P0, P1, P2, or P3');
   for (const field of ESCAPE_FIELDS) {
     if (!['no', 'false'].includes(String(fields[field] || '').toLowerCase())) {
-      throw new Error(`[cc-nexs] ${field} must be no; this change must use lean/full instead of hotfix`);
+      throw new Error(`[cc-nexs] ${field} must be no; this change must use lean instead of hotfix`);
     }
   }
   const nonBehavioral = ['yes', 'true'].includes(String(fields.non_behavioral_change || '').toLowerCase());
@@ -156,4 +154,39 @@ export function assertP3CandidateBoundary(context) {
     throw new Error(`[cc-nexs] P3 requires exactly one changed file and at most 20 changed lines; found ${files} files / ${lines} lines`);
   }
   return { files, lines, details };
+}
+
+function globExpression(pattern) {
+  let expression = '';
+  for (let index = 0; index < pattern.length; index += 1) {
+    const character = pattern[index];
+    if (character === '*') {
+      if (pattern[index + 1] === '*') {
+        index += 1;
+        if (pattern[index + 1] === '/') {
+          index += 1;
+          expression += '(?:.*/)?';
+        } else {
+          expression += '.*';
+        }
+      } else {
+        expression += '[^/]*';
+      }
+    } else if (character === '?') {
+      expression += '[^/]';
+    } else {
+      expression += character.replace(/[|\\{}()[\]^$+?.]/g, '\\$&');
+    }
+  }
+  return new RegExp(`^${expression}$`);
+}
+
+function implementationPathAllowed(path, allowedPaths) {
+  const normalized = path.replace(/\\/g, '/').replace(/^\.\//, '');
+  return allowedPaths.some((allowedPath) => {
+    const pattern = allowedPath.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
+    if (pattern === '.') return true;
+    if (!/[*?]/.test(pattern)) return normalized === pattern || normalized.startsWith(`${pattern}/`);
+    return globExpression(pattern).test(normalized);
+  });
 }

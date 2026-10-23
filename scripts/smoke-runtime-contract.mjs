@@ -2,7 +2,7 @@
 // Deterministic runtime contract smoke for cc-nexs document locations and mode semantics.
 //
 // This does not invoke an LLM. It proves the packaged templates, state-machine module,
-// Lean/full/fast state and hotfix document locations line up with the shared SOP.
+// Lean state and hotfix document locations line up with the shared SOP.
 
 import {
   copyFileSync,
@@ -71,17 +71,6 @@ function rewritePlaceholders(dir, id, slug) {
   }
 }
 
-function initFeature({ id, slug, mode }) {
-  const reqDir = join(allDocs, 'doc', `${id}.${slug}`);
-  copyDir(TEMPLATES, reqDir);
-  rewritePlaceholders(reqDir, id, slug);
-  const configPath = join(reqDir, 'config.json');
-  const config = JSON.parse(readFileSync(configPath, 'utf-8'));
-  config.mode = mode;
-  writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
-  return reqDir;
-}
-
 function initLeanFeature({ id, slug }) {
   const reqDir = join(allDocs, 'doc', `${id}.${slug}`);
   copyDir(join(TEMPLATES, 'lean'), reqDir);
@@ -128,34 +117,6 @@ function assertLeanDocs(reqDir) {
   assert(JSON.parse(readFileSync(join(reqDir, 'progress.json'), 'utf8')).mode === 'lean', 'Lean progress mode must be lean');
 }
 
-function assertFeatureDocs(reqDir, mode) {
-  const required = [
-    'README.md',
-    'requirements.md',
-    'repo-context.md',
-    'spec.md',
-    'dev-plan.md',
-    'api-doc.md',
-    'deploy.md',
-    'test-cases.md',
-    'test-report.md',
-    'acceptance.md',
-    'progress.md',
-    'config.json',
-    'bugs/BUG-template.md',
-  ];
-  for (const rel of required) {
-    assert(existsSync(join(reqDir, rel)), `${reqDir}: missing ${rel}`);
-  }
-  const config = JSON.parse(readFileSync(join(reqDir, 'config.json'), 'utf-8'));
-  assert(config.mode === mode, `${reqDir}/config.json: expected mode ${mode}, got ${config.mode}`);
-  assert(config.config_version === 2, `${reqDir}/config.json: config_version must be 2`);
-  assert(config.risk_tier === 'auto', `${reqDir}/config.json: risk_tier must default to auto`);
-  assert(!config.models?.roles, `${reqDir}/config.json: template must not shadow project models.roles`);
-  const progress = readFileSync(join(reqDir, 'progress.md'), 'utf-8');
-  assert(progress.includes('current_state: INIT'), `${reqDir}/progress.md: initial state must be INIT`);
-}
-
 function assertNoWrongLocations(id, slug) {
   const wrong = [
     join(repo, 'doc', `${id}.${slug}`),
@@ -178,8 +139,6 @@ function expectStep(actual, expected, label) {
 
 async function assertStateMachine() {
   const mod = await import(pathToFileURL(join(DIST, 'lib', 'state-machine.mjs')).href);
-  const fullRoles = ['repo-scout', 'planner', 'tech-lead', 'sa', 'qa', 'evaluator'];
-  const fastRoles = ['fullstack', 'reviewer', 'verifier'];
   const leanRoles = ['lean-planner', 'lean-developer', 'lean-reviewer', 'lean-verifier'];
   const hotfixRoles = ['hotfix-developer', 'hotfix-reviewer', 'hotfix-verifier'];
 
@@ -216,81 +175,11 @@ async function assertStateMachine() {
   expectStep(hotfixGate, { next: 'HOTFIX_RELEASE_PENDING_HUMAN', action: 'await_release_approval' }, 'hotfix Gateway B');
   assert(hotfixGate.stop === true, 'Hotfix release gate must stop for human approval');
 
-  expectStep(
-    mod.nextStep({ state: 'REQ_DRAFTED', enabledRoles: fullRoles, mode: 'full' }),
-    { next: 'RECON_DONE', role: 'repo-scout', action: 'recon' },
-    'full REQ_DRAFTED',
-  );
-  expectStep(
-    mod.nextStep({ state: 'RECON_DONE', enabledRoles: fullRoles, mode: 'full' }),
-    { next: 'SPEC_DRAFTED', role: 'planner', action: 'draft_spec' },
-    'full RECON_DONE',
-  );
-  const fullKickoff = mod.nextStep({
-    state: 'SPRINT_1_KICKOFF',
-    enabledRoles: fullRoles,
-    mode: 'full',
-    sprint: { current: 1, total: 1 },
-  });
-  expectStep(fullKickoff, { next: 'SPRINT_1_DEV', role: 'tech-lead', action: 'implement' }, 'full sprint kickoff');
-  assert(fullKickoff.parallel?.role === 'qa' && fullKickoff.parallel?.action === 'write_cases', 'full sprint kickoff must dispatch QA cases in parallel');
-  assert(fullKickoff.fanout === 'implementation_repositories', 'full sprint kickoff must fan out multi-repository implementation');
-  expectStep(
-    mod.nextStep({ state: 'ALL_SPRINTS_DONE', enabledRoles: fullRoles, mode: 'full' }),
-    { next: 'FINAL_EVAL', role: 'evaluator', action: 'final_acceptance' },
-    'full final eval',
-  );
-
-  expectStep(
-    mod.nextStep({ state: 'REQ_DRAFTED', enabledRoles: fastRoles, mode: 'fast' }),
-    { next: 'SPEC_DRAFTED', role: 'fullstack', action: 'draft_spec' },
-    'fast REQ_DRAFTED',
-  );
-  const fastBuild = mod.nextStep({ state: 'SPEC_APPROVED', enabledRoles: fastRoles, mode: 'fast' });
-  expectStep(
-    fastBuild,
-    { next: 'BUILD', role: 'fullstack', action: 'implement' },
-    'fast SPEC_APPROVED',
-  );
-  assert(fastBuild.fanout === 'implementation_repositories', 'fast implementation must fan out multi-repository workers');
-  expectStep(
-    mod.nextStep({ state: 'BUILD', enabledRoles: fastRoles, mode: 'fast' }),
-    { next: 'CODE_REVIEW', role: 'reviewer', action: 'review_code' },
-    'fast BUILD → CODE_REVIEW',
-  );
-  expectStep(
-    mod.nextStep({ state: 'DEPLOY_GATE', enabledRoles: fastRoles, mode: 'fast', workflow: { g2_enabled: true } }),
-    { next: 'DEPLOY_GATE', role: null, action: 'await_deploy_approval' },
-    'fast DEPLOY_GATE unapproved stops',
-  );
-  assert(
-    mod.nextStep({ state: 'DEPLOY_GATE', enabledRoles: fastRoles, mode: 'fast', workflow: { g2_enabled: true } }).stop === true,
-    'fast DEPLOY_GATE must stop when g2 not approved',
-  );
-  expectStep(
-    mod.nextStep({ state: 'DEPLOY_GATE', enabledRoles: fastRoles, mode: 'fast', workflow: { g2_enabled: true, g2_approved: true } }),
-    { next: 'TEST', role: 'verifier', action: 'verify_initial' },
-    'fast DEPLOY_GATE approved → TEST',
-  );
-  expectStep(
-    mod.nextStep({ state: 'DEPLOY_GATE', enabledRoles: fastRoles, mode: 'fast', workflow: { g2_enabled: false } }),
-    { next: 'TEST', role: 'verifier', action: 'verify_initial' },
-    'fast DEPLOY_GATE disabled → skip to TEST',
-  );
-  expectStep(
-    mod.nextStep({ state: 'TEST_PASSED', enabledRoles: fastRoles, mode: 'fast' }),
-    { next: 'ACCEPTANCE', role: 'reviewer', action: 'accept' },
-    'fast TEST_PASSED → ACCEPTANCE',
-  );
-  const fastBreaker = mod.nextStep({
-    state: 'FIX',
-    enabledRoles: fastRoles,
-    mode: 'fast',
-    counters: { review_revision: 0, evaluator_reject: 0, fix_per_bug: { 'BUG-001': 2 } },
-    thresholds: { review_revision: 2, evaluator_reject: 2, fix_per_bug: 2 },
-  });
-  expectStep(fastBreaker, { next: 'HUMAN_INTERVENTION', action: 'await_human' }, 'fast fix breaker');
-  assert(fastBreaker.stop === true, 'fast fix breaker must stop for human intervention');
+  for (const mode of ['fast', 'full']) {
+    let rejected = false;
+    try { mod.nextStep({ state: 'INIT', enabledRoles: leanRoles, mode }); } catch { rejected = true; }
+    assert(rejected, `removed ${mode} mode must be rejected`);
+  }
 }
 
 async function assertModelRouting() {
@@ -337,57 +226,6 @@ async function assertModelRouting() {
   assert(unknownLegacyReviewer.model_profile === 'escalated', 'unknown legacy Gateway A risk must escalate Reviewer');
 }
 
-function writeHotfixArtifacts(reqDir) {
-  const bugPath = join(reqDir, 'bugs', 'BUG-001.md');
-  let bug = readFileSync(join(reqDir, 'bugs', 'BUG-template.md'), 'utf-8')
-    .replaceAll('BUG-{序号}', 'BUG-001')
-    .replaceAll('{短描述}', 'payment callback timeout');
-  bug += '\n\n### Round 2 — 2026-06-03 — 结论: PASS\n\nSA light review appended in BUG file.\n';
-  writeFileSync(bugPath, bug, 'utf-8');
-
-  const qaDir = join(reqDir, 'qa-scripts');
-  mkdirSync(qaDir, { recursive: true });
-  writeFileSync(join(qaDir, 'BUG-001-repro.sh'), '#!/usr/bin/env bash\nexit 0\n', 'utf-8');
-
-  writeFileSync(
-    join(reqDir, 'acceptance.md'),
-    readFileSync(join(reqDir, 'acceptance.md'), 'utf-8') +
-      '\n\n## 线上缺陷修复 - BUG-001\n\n| AC-ID | 打分 |\n|---|---|\n| AC-001 | ✅ |\n\n**验收结果: 通过**\n',
-    'utf-8',
-  );
-  writeFileSync(
-    join(reqDir, 'test-cases.md'),
-    readFileSync(join(reqDir, 'test-cases.md'), 'utf-8') +
-      '\n\n## Hotfix Regression - BUG-001\n\n- 关联BUG: BUG-001\n- 关联契约: AC-001\n',
-    'utf-8',
-  );
-  writeFileSync(
-    join(reqDir, 'deploy.md'),
-    readFileSync(join(reqDir, 'deploy.md'), 'utf-8') +
-      '\n\n## 生产回滚步骤 - BUG-001\n\n1. rollback service\n2. verify callback\n',
-    'utf-8',
-  );
-}
-
-function assertHotfixLocations(reqDir) {
-  const required = [
-    'bugs/BUG-001.md',
-    'qa-scripts/BUG-001-repro.sh',
-    'acceptance.md',
-    'test-cases.md',
-    'deploy.md',
-  ];
-  for (const rel of required) {
-    assert(existsSync(join(reqDir, rel)), `${reqDir}: missing hotfix artifact ${rel}`);
-  }
-  const bug = readFileSync(join(reqDir, 'bugs', 'BUG-001.md'), 'utf-8');
-  assert(bug.includes('结论: PASS'), 'hotfix BUG file must contain appended SA light-review conclusion');
-  assert(readFileSync(join(reqDir, 'acceptance.md'), 'utf-8').includes('线上缺陷修复 - BUG-001'), 'P0/P1 hotfix acceptance section missing');
-  assert(readFileSync(join(reqDir, 'test-cases.md'), 'utf-8').includes('关联BUG: BUG-001'), 'P0/P1 hotfix regression case missing');
-  assert(readFileSync(join(reqDir, 'deploy.md'), 'utf-8').includes('生产回滚步骤 - BUG-001'), 'P0/P1 hotfix rollback section missing');
-  assert(!existsSync(join(repo, 'BUG-001.md')), 'hotfix BUG file must not be written at repo root');
-}
-
 function assertAllDocsGitAddOnlyFeatureDir(id, slug) {
   run('git', ['-C', allDocs, 'add', `doc/${id}.${slug}/`]);
   const names = run('git', ['-C', allDocs, 'diff', '--cached', '--name-only'])
@@ -408,14 +246,6 @@ try {
   mkdirSync(allDocs, { recursive: true });
   run('git', ['init', '-q'], { cwd: allDocs });
 
-  const fullReq = initFeature({ id: '01', slug: 'runtime-full', mode: 'full' });
-  assertFeatureDocs(fullReq, 'full');
-  assertNoWrongLocations('01', 'runtime-full');
-
-  const fastReq = initFeature({ id: '02', slug: 'runtime-fast', mode: 'fast' });
-  assertFeatureDocs(fastReq, 'fast');
-  assertNoWrongLocations('02', 'runtime-fast');
-
   const leanReq = initLeanFeature({ id: '03', slug: 'runtime-lean' });
   assertLeanDocs(leanReq);
   assertNoWrongLocations('03', 'runtime-lean');
@@ -427,7 +257,7 @@ try {
   await assertStateMachine();
   await assertModelRouting();
 
-  assertAllDocsGitAddOnlyFeatureDir('01', 'runtime-full');
+  assertAllDocsGitAddOnlyFeatureDir('03', 'runtime-lean');
 
   const solutionDir = join(repo, 'docs', 'solutions');
   mkdirSync(solutionDir, { recursive: true });
@@ -440,7 +270,7 @@ try {
     for (const error of errors) console.error(`- ${error}`);
     process.exitCode = 1;
   } else {
-    console.log('Runtime contract smoke passed: lean-default, standalone hotfix, full, and fast document/state semantics');
+    console.log('Runtime contract smoke passed: lean-default and standalone hotfix document/state semantics');
   }
 } finally {
   rmSync(tmp, { recursive: true, force: true });

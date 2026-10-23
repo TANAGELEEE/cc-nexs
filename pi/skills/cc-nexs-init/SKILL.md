@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-init
-description: /cc-nexs:init Pi P2 adapter skill. Invoke only through /cc-nexs:init or /skill:cc-nexs-init; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default), fast, and full modes with isolated roles through pi-subagents. Initialize a new requirement directory from a template. Automatically continues numbering from existing numbers under all-docs/doc/, and automatically generates a slug from the requirement description. By default, creates an independent git worktree in .worktrees/<id>-<slug>/, so multiple requirements can run in parallel.
+description: /cc-nexs:init Pi P2 adapter skill. Invoke only through /cc-nexs:init or /skill:cc-nexs-init; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Initialize a new requirement directory from a template. Automatically continues numbering from existing numbers under all-docs/doc/, and automatically generates a slug from the requirement description. By default, creates an independent git worktree in .worktrees/<id>-<slug>/, so multiple requirements can run in parallel.
 disable-model-invocation: true
 ---
 
@@ -12,8 +12,8 @@ Read and follow `../../../dist/preset-standard/commands/init.md` as the authorit
 
 Before role dispatch, read `../../../dist/preset-standard/rules/model-discovery.md` and use `cc_nexs_model_gateway` inspect/prepare/start/result. Call `cc_nexs_models` only for missing or invalidated catalogs. Show the non-blocking preview on first use or changes; never wait for a reply. Retain explicit overrides.
 
-1. Pi supports `preset-standard` lean (default), standalone hotfix, fast, and full; unsupported compound flows fail closed rather than downgrade.
-2. Call `cc_nexs_dispatch({})` once to detect the installed API. Dispatch a bounded wave using `cc_nexs_dispatch({ tasks: [{ agent: "cc-nexs.tech-lead", task: "<assignment>", cwd: "<assigned absolute worktree>", model: "<frozen provider/model>", effort: "<frozen thinking>" }], concurrency: 1 })`. Include Full QA cases in the first wave. Start every sibling before waiting; never create child worktrees or nested children.
+1. Pi supports `preset-standard` lean (default) and standalone hotfix; unsupported compound flows fail closed rather than downgrade.
+2. Call `cc_nexs_dispatch({})` once to detect the installed API. Dispatch a bounded wave using `cc_nexs_dispatch({ tasks: [{ agent: "cc-nexs.lean-developer", task: "<assignment>", cwd: "<assigned absolute worktree>", model: "<frozen provider/model>", effort: "<frozen thinking>" }], concurrency: 1 })`. Start every sibling before waiting; never create child worktrees or nested children.
 
 The adapter preserves both APIs:
 - `pi-subagents@0.35.1`: one `subagent({ tasks, concurrency, async: true, worktree: false, context: "fresh" })`, then `subagent_wait({ id })`.

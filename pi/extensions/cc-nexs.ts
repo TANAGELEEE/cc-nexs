@@ -20,28 +20,18 @@ import {
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const P2_COMMANDS = [
-  "approve-deploy",
   "approve-plan",
   "approve-release",
-  "approve-spec",
   "brainstorm",
   "build",
   "doctor",
-  "fullstack",
-  "planner",
-  "dev",
-  "sa",
-  "qa",
-  "evaluator",
   "git-custodian",
   "hotfix",
   "init",
   "revise-hotfix",
   "lean-review",
   "lean-verify",
-  "migrate-progress",
   "migrate-feature-config",
-  "recon",
   "sync-base",
   "switch-test-target",
   "release-test",
@@ -49,18 +39,16 @@ const P2_COMMANDS = [
   "release-base",
   "render-plan",
   "request-release-changes",
-  "review",
   "run",
   "status",
-  "verify",
   "verify-local",
   "plan",
   "execute",
 ] as const;
 
 function commandDescription(name: string): string {
-  if (name === "run") return "Run cc-nexs Lean, Fast, Full, or Hotfix through isolated Pi subagents to test delivery and verification";
-  if (name === "init") return "Initialize a cc-nexs lean-default feature";
+  if (name === "run") return "Run cc-nexs Lean or Hotfix through isolated Pi subagents to test delivery and verification";
+  if (name === "init") return "Initialize a cc-nexs Lean feature";
   if (name === "hotfix") return "Run the cc-nexs P0/P1/P2/P3 hotfix workflow through isolated Pi subagents";
   if (name === "doctor") return "Validate cc-nexs workspace and Pi subagent prerequisites";
   if (name === "release-test") return "Deliver exact candidates to test/CI first; verify after deployment or record recoverable manual verification";
@@ -114,17 +102,6 @@ export default function ccNexsPiExtension(pi: ExtensionAPI) {
         return {
           block: true,
           reason: "cc-nexs Pi role sessions cannot mutate progress.md or progress.json; the parent orchestrator owns state transitions.",
-        };
-      }
-
-      if (
-        childRole === "repo-scout"
-        && ["edit", "write"].includes(event.toolName.toLowerCase())
-        && !/(^|\/)repo-context\.md$/.test(filePath)
-      ) {
-        return {
-          block: true,
-          reason: "[cc-nexs role-boundary] Repo Scout may only write repo-context.md.",
         };
       }
 
@@ -241,12 +218,11 @@ export default function ccNexsPiExtension(pi: ExtensionAPI) {
           ctx.ui.notify("cc-nexs commands must start while the Pi agent is idle.", "warning");
           return;
         }
-        if (["approve-deploy", "approve-spec", "approve-plan", "approve-release"].includes(name)) {
+        if (["approve-plan", "approve-release"].includes(name)) {
           try {
             const result = runCcNexsCommand([name, ...splitCommandArguments(args)], { cwd: process.cwd() });
-            const sprint = result.sprint === null ? "" : ` M${result.sprint}`;
             const status = result.alreadyApproved ? "already approved" : "approved";
-            ctx.ui.notify(`cc-nexs ${result.gate.toUpperCase()}${sprint} ${status} for ${result.feature.id}`, "info");
+            ctx.ui.notify(`cc-nexs ${result.gate.toUpperCase()} ${status} for ${result.feature.id}`, "info");
             pi.sendUserMessage(`/skill:cc-nexs-run ${result.feature.id}`);
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);

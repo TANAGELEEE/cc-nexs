@@ -55,6 +55,6 @@ Only after deployment success does the parent check URLs, allowed hosts, browser
 
 ## Explicit opt-out
 
-Legacy fast/full workflows may retain their manual G2 semantics. Lean/Hotfix Gateway B requires an immutable release attempt and therefore does not treat G2 alone as deployed evidence; configure the test release driver and return to `auto_if_ready` to resume. Production release always remains a separate explicit human action.
+Lean/Hotfix Gateway B requires an immutable release attempt; a manually handled release is not deployed evidence. Configure the test release driver and return to `auto_if_ready` to resume. Production release always remains a separate explicit human action.
 
 Once all repository integrations are recorded, a driver process/receipt-validation error is an unknown delivery outcome, not proof of product failure. The attempt remains `awaiting_receipt`; fix the driver/receipt and use `--resume` on that attempt, never `--retry` to manufacture another ledger entry. An explicit structured driver `failed` result remains a real failure. Release drivers should return pending receipts promptly, consume the candidate and integration identities from the validated request, and avoid blocking for minutes waiting for a parent-produced file.

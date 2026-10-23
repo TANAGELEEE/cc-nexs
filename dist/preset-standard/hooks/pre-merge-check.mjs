@@ -50,7 +50,7 @@ function isGhPrMerge(c) {
 }
 
 // Only block pushes to trunk (master/main) and GH PR merges (which target default branch).
-// Plain `git merge <branch>` is allowed — feature → test merges happen during G2 deploy phase.
+// Plain `git merge <branch>` is allowed — feature → test merges happen during test release.
 const isMerge = isPushToTrunk(cmd) || isGhPrMerge(cmd);
 if (!isMerge) process.exit(0);
 
@@ -164,7 +164,7 @@ if (stack.build_cmd) {
 
 // Base ref = the remote state this push would land on top of. Diffing against
 // it (not just "every progress.md in the repo") means an unrelated in-flight
-// requirement (still SPRINT_M1 elsewhere) never blocks a push that doesn't
+// requirement (still IMPLEMENTING elsewhere) never blocks a push that doesn't
 // touch it.
 function resolveBaseRef() {
   try {

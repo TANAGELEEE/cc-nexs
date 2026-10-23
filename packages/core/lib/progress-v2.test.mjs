@@ -39,29 +39,6 @@ test('progress v2 appends idempotent events and rejects stale writers', () => {
   }
 });
 
-test('Full state transitions track current Sprint and refuse states beyond bound total', () => {
-  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-progress-sprint-'));
-  const file = join(root, 'progress.json');
-  try {
-    const progress = createProgressV2({
-      featureId: '01s', featureSlug: 'sprints', preset: 'preset-standard', mode: 'full',
-    });
-    progress.state = 'SPEC_APPROVED';
-    progress.sprint = { enabled: true, current: 1, total: 2, status: {} };
-    writeProgressV2(file, progress);
-    appendProgressEvent(file, {
-      type: 'state.transition', from: 'SPEC_APPROVED', to: 'SPRINT_2_KICKOFF',
-    });
-    assert.equal(readProgressV2(file).sprint.current, 2);
-    assert.throws(() => appendProgressEvent(file, {
-      type: 'state.transition', from: 'SPRINT_2_KICKOFF', to: 'SPRINT_3_KICKOFF',
-    }), /beyond approved Sprint total 2/);
-    assert.equal(readProgressV2(file).state, 'SPRINT_2_KICKOFF');
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
 test('Gateway B implementation feedback invalidates current evidence and returns to a bounded delta loop', () => {
   const root = mkdtempSync(join(tmpdir(), 'cc-nexs-gateway-b-change-'));
   const file = join(root, 'progress.json');
@@ -129,7 +106,7 @@ test('Hotfix Gateway B implementation feedback enters one bounded repair path an
     assert.equal(saved.state, 'HOTFIX_CHANGE_REQUESTED');
     saved.state = 'HOTFIX_RELEASE_PENDING_HUMAN';
     writeProgressV2(file, saved);
-    assert.throws(() => recordReleaseChangeRequest(file, { kind: 'scope', feedback: '新增接口', actor: 'owner' }), /lean\/full/);
+    assert.throws(() => recordReleaseChangeRequest(file, { kind: 'scope', feedback: '新增接口', actor: 'owner' }), /new lean change|use lean instead/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -540,39 +517,6 @@ test('deploying freezes candidates and a failed blocked release can reopen only 
     rmSync(root, { recursive: true, force: true });
   }
 });
-
-test('deployed failures and rejected acceptance invalidate stale release and G2 state', () => {
-  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-progress-release-invalidate-'));
-  const file = join(root, 'progress.json');
-  try {
-    const progress = createProgressV2({ featureId: '06', featureSlug: 'invalidate', preset: 'preset-standard' });
-    progress.state = 'ACCEPTANCE';
-    progress.gates.g2 = { approved: true, approver: 'release-owner', sprints: {} };
-    writeProgressV2(file, progress);
-    const started = beginTestRelease(file, { source: { api: 'abc123' } });
-    completeTestRelease(file, {
-      attemptId: started.attempt.id,
-      status: 'succeeded',
-      pipeline: { id: 'p1' },
-      deployment: { id: 'd1', environment: 'test' },
-      environmentRevision: { api: 'merge123' },
-    });
-    recordTestVerification(file, { attemptId: started.attempt.id, result: 'passed' });
-    appendProgressEvent(file, {
-      type: 'state.transition',
-      from: 'ACCEPTANCE',
-      to: 'ACCEPTANCE_REJECTED',
-    });
-
-    const saved = readProgressV2(file);
-    assert.equal(saved.delivery.test.status, 'idle');
-    assert.equal(saved.gates.g2.approved, false);
-    assert.equal(saved.delivery.test.attempts[0].status, 'verified');
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
 
 test('local verification mutation rejects unstructured and contradictory results before saving', () => {
   const root = mkdtempSync(join(tmpdir(), 'cc-nexs-progress-invalid-evidence-'));

@@ -1,5 +1,5 @@
 // cc-nexs core: reviewer-adapter.
-// Abstracts the "external reviewer" tool used for SA / QA / Evaluator-style roles.
+// Abstracts the "external reviewer" tool used for independent review and verification roles.
 // Supported tools (declared in preset.roles.definitions[<role>].tool):
 //   - "codex"           : Codex CLI in non-interactive exec mode; optional file content is passed on stdin
 //   - "claude-subagent" : invoke Claude as a subagent within the same plugin session (handled by orchestrator command, not this lib)

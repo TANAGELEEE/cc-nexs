@@ -2,7 +2,7 @@
 description: "Initialize a new requirement directory from a template. Automatically continues numbering from existing numbers under all-docs/doc/, and automatically generates a slug from the requirement description. By default, creates an independent git worktree in .worktrees/<id>-<slug>/, so multiple requirements can run in parallel."
 disable-model-invocation: true
 allowed-tools: "Read, Write, Edit, Bash, Glob, Skill"
-argument-hint: "<requirement description> [--mode=lean|hotfix|fast|full] [--risk-tier=auto|low|medium|high|critical] [--id=<number>] [--slug=<short-name>] [--repos=a,b] [--brainstorm]"
+argument-hint: "<requirement description> [--mode=lean|hotfix] [--risk-tier=auto|low|medium|high|critical] [--id=<number>] [--slug=<short-name>] [--repos=a,b] [--brainstorm]"
 ---
 
 # /cc-nexs:init
@@ -12,16 +12,14 @@ A one-line requirement description: automatically continue numbering + automatic
 Parameters:
 
 - `$1` = requirement description (required; Chinese or English both work)
-- `--mode=lean|hotfix|fast|full` pipeline mode (new requirements default to `lean`)
+- `--mode=lean|hotfix` pipeline mode (new requirements default to `lean`)
   - `lean`: planning gate, parallel implementation, local verification, one consolidated Review, test acceptance, release gate
   - `hotfix`: directly create the fix branch and BUG document; does not consume a requirement number
-  - `full`: five-party heterogeneous setup (Planner/Tech Lead/SA/QA/Evaluator)
-  - `fast`: three roles consolidated (Fullstack/Reviewer/Verifier), single sprint, ~50% fewer calls than full
 - `--id=<number>` force the specified number (overrides automatic numbering)
 - `--risk-tier=auto|low|medium|high|critical` Feature risk floor (default `auto`). Explicitly setting high/critical lets the first Lean Planner escalate directly; automatic values are still determined by the plan or the Hotfix severity.
 - `--slug=<short-name>` force the specified slug (overrides automatic generation)
-- `--repos=a,b` code repository worktrees to also create at initialization; the docs repository is always included. When not specified, only docs is created first; after RECON/Planner confirms the affected repositories, the Custodian expands it.
-- `--brainstorm` applies only to Lean/Fast/Full, and fills in requirements.md as needed; Hotfix directly fills in the BUG scope and does not enter requirements brainstorming
+- `--repos=a,b` code repository worktrees to also create at initialization; the docs repository is always included. When not specified, only docs is created first; after the Planner confirms the affected repositories, the Custodian expands it.
+- `--brainstorm` applies only to Lean, and fills in requirements.md as needed; Hotfix directly fills in the BUG scope and does not enter requirements brainstorming
 - Workspace mode always has the Git Custodian create an independent worktree for each repository matched in the workspace; there is no `--no-worktree` fallback that would pollute the current branch.
 
 ## Execution Steps
@@ -30,9 +28,9 @@ Parameters:
 ```bash
 DESC="$1"
 if [ -z "$DESC" ]; then
-  echo "❌ 用法：/cc-nexs:init <需求描述> [--mode=lean|hotfix|fast|full]"
+  echo "❌ 用法：/cc-nexs:init <需求描述> [--mode=lean|hotfix]"
   echo "   示例：/cc-nexs:init '添加 /api/health 健康检查接口'"
-  echo "   示例：/cc-nexs:init '修支付偶现 500' --mode=fast"
+  echo "   示例：/cc-nexs:init '修支付偶现 500' --mode=hotfix"
   echo "   示例：/cc-nexs:init '用户注册接入邮箱验证' --id=14.2"
   exit 1
 fi
@@ -41,9 +39,9 @@ fi
 MODE=$(echo "$@" | grep -oE -- '--mode=[a-z]+' | cut -d= -f2)
 [ -z "$MODE" ] && MODE="${CC_NEXS_DEFAULT_MODE:-lean}"
 case "$MODE" in
-  lean|hotfix|full|fast) ;;
+  lean|hotfix) ;;
   *)
-    echo "❌ --mode 必须是 lean、hotfix、fast 或 full，当前值: $MODE"
+    echo "❌ --mode 必须是 lean 或 hotfix，当前值: $MODE"
     exit 1
     ;;
 esac
@@ -79,7 +77,7 @@ node <plugin-root>/lib/cc-nexs-cli.mjs init-hotfix <slug> --description "<原始
 ```
 When you need to link an existing requirement or a custom BUG path, pass `--related`, `--bug-key`, and `--bug-file` directly to `/cc-nexs:hotfix`. `--id` is a requirement-number parameter and cannot be used to reserve a number for a Hotfix. Initialization and scope binding are handled by `/cc-nexs:hotfix <key-or-description>`; the subsequent numbering, placeholder commit, requirement template, or `--brainstorm` steps do not run.
 
-The following steps apply only to Lean/Fast/Full.
+The following steps apply only to Lean.
 
 ### 2. Decide the number
 
@@ -163,17 +161,11 @@ TEMPLATE_ROOT="${CC_NEXS_RESOLVED_PLUGIN_ROOT}/templates"
 CC_NEXS_LOCALE="${CC_NEXS_LOCALE:-en-US}"
 LOCALE_TEMPLATE_ROOT=""
 if [ -n "${CC_NEXS_LOCALE:-}" ] && [ -d "${TEMPLATE_ROOT}/${CC_NEXS_LOCALE}" ]; then LOCALE_TEMPLATE_ROOT="${TEMPLATE_ROOT}/${CC_NEXS_LOCALE}"; fi
-# Lean copies the smallest document set; Fast/Full keep the existing complete template set.
-if [ "$MODE" = "lean" ]; then
-  cp -r "${TEMPLATE_ROOT}/${MODE}/"* "${REQ_DIR}/"
-  [ -d "${LOCALE_TEMPLATE_ROOT}/${MODE}" ] && cp -r "${LOCALE_TEMPLATE_ROOT}/${MODE}/"* "${REQ_DIR}/"
-  rm -f "${REQ_DIR}/README.md"
-else
-  find "${TEMPLATE_ROOT}" -mindepth 1 -maxdepth 1 ! -name lean ! -name hotfix ! -name en-US ! -name zh-TW -exec cp -R {} "${REQ_DIR}/" \;
-  if [ -d "$LOCALE_TEMPLATE_ROOT" ]; then find "$LOCALE_TEMPLATE_ROOT" -mindepth 1 -maxdepth 1 ! -name lean ! -name hotfix ! -name en-US ! -name zh-TW -exec cp -R {} "${REQ_DIR}/" \; fi
-fi
+cp -r "${TEMPLATE_ROOT}/${MODE}/"* "${REQ_DIR}/"
+[ -d "${LOCALE_TEMPLATE_ROOT}/${MODE}" ] && cp -r "${LOCALE_TEMPLATE_ROOT}/${MODE}/"* "${REQ_DIR}/"
+rm -f "${REQ_DIR}/README.md"
 ```
-Lean 包含 requirements.md、plan.md 以及 progress.json、progress.md、config.json。Fast 和 Full 保留原有模板集合。Hotfix 已在步骤 1.5 中使用独立的 BUG 文档和本地机器状态。
+Lean 包含 requirements.md、plan.md 以及 progress.json、progress.md、config.json。Hotfix 已在步骤 1.5 中使用独立的 BUG 文档和本地机器状态。
 
 ### 6. 占位符替换
 ```bash
@@ -200,9 +192,6 @@ sed "${SED_INPLACE[@]}" -E 's/("risk_tier"[[:space:]]*:[[:space:]]*)"[^"]*"/\1"'
 # progress.json v2 是权威状态；progress.md 仅作为人类可读视图。
 PROGRESS_JSON="${REQ_DIR}/progress.json"
 sed "${SED_INPLACE[@]}" -E 's/("mode"[[:space:]]*:[[:space:]]*)"[^"]*"/\1"'"$MODE"'"/' "$PROGRESS_JSON"
-if [ "$MODE" = "full" ]; then
-  sed "${SED_INPLACE[@]}" -E 's/("enabled"[[:space:]]*:[[:space:]]*)false/\1true/' "$PROGRESS_JSON"
-fi
 ```
 > Validation: `grep -E '"mode"[[:space:]]*:[[:space:]]*"'"$MODE"'"' "$CFG"` should match; otherwise it errors out and falls back.
 
@@ -235,7 +224,7 @@ First output the fixed header:
    编号:    ${ID}
    短名:    ${SLUG}
    描述:    ${DESC}
-   模式:    ${MODE}              ← lean | fast | full
+   模式:    ${MODE}              ← lean
    目录:    ${REQ_DIR}/
    分支:    ${BRANCH}
    工作树:  ${WORK_DIR}           ← 走 worktree 时是 .worktrees/<id>-<slug>/
@@ -246,10 +235,10 @@ Then, depending on the `BRAINSTORM` flag, there are two different endings:
 ```
 👉 下一步（任选其一）:
    可留在 workspace 根目录运行，Orchestrator 会按 progress.json 分派到各仓 worktree
-   A. 自己手填 requirements.md；lean 运行 /cc-nexs:plan ${ID}，fast/full 运行 /cc-nexs:run ${ID}
+   A. 自己手填 requirements.md，然后运行 /cc-nexs:plan ${ID}
    B. /cc-nexs:brainstorm ${ID}
       补全 requirements.md 中影响范围或验收的关键缺口，
-      然后 lean 进入 /cc-nexs:plan ${ID}，fast/full 进入 /cc-nexs:run ${ID}
+      然后进入 /cc-nexs:plan ${ID}
    提示：下次可直接 /cc-nexs:init "<描述>" --brainstorm 一条命令到位
 ```
 **b) `BRAINSTORM=1` (matches `--brainstorm`)**——Skip "pick one" and go straight into the conversation:
@@ -265,7 +254,7 @@ Then **immediately read and follow the `brainstorming` skill file** (`packages/p
 
 Do not call the `/cc-nexs:brainstorm` slash command—just follow the process checklist in the skill file (this avoids re-validating the directory and re-loading the skill).
 
-After brainstorming is complete, Lean enters `/cc-nexs:plan ${ID}`, and Fast/Full enter `/cc-nexs:run ${ID}`. If authorization to continue already exists and there are no key gaps, continue; do not turn brainstorming into an additional approval point.
+After brainstorming is complete, enter `/cc-nexs:plan ${ID}`. If authorization to continue already exists and there are no key gaps, continue; do not turn brainstorming into an additional approval point.
 
 ## Usage example
 ```bash
@@ -273,17 +262,13 @@ After brainstorming is complete, Lean enters `/cc-nexs:plan ${ID}`, and Fast/Ful
 /cc-nexs:init 添加 /api/health 健康检查接口
 # → all-docs/doc/01.api-health-check/  mode=lean
 
-# fast 模式：单 Sprint 小改动，也可包含独立仓库的前后端并行实现
-/cc-nexs:init 修支付偶现 500 --mode=fast
-# → all-docs/doc/02.payment-500-fix/  mode=fast
+# 强制 slug
+/cc-nexs:init '订单导出' --slug=order-export
+# → all-docs/doc/02.order-export/  mode=lean
 
-# fast 模式 + 强制 slug
-/cc-nexs:init '修支付偶现 500' --mode=fast --slug=payment-500-fix
-# → all-docs/doc/03.payment-500-fix/  mode=fast
-
-# full 模式 + 带版本号（必须显式指定）
-/cc-nexs:init 重做注册流程 --id=14.2 --mode=full
-# → all-docs/doc/14.2.user-register-revamp/  mode=full
+# 带版本号
+/cc-nexs:init 重做注册流程 --id=14.2
+# → all-docs/doc/14.2.user-register-revamp/  mode=lean
 
 # 一条命令到位：init + 自动进入 brainstorming 对话
 /cc-nexs:init "做个订单导出后台" --brainstorm
@@ -314,18 +299,9 @@ Constraints:
 - **Safe cleanup after merge**: only the Git Custodian deletes the worktree, local branch, and candidate ref after verifying that the worktree is clean and the branch has been merged into the configured base.
 - **No in-place degradation**: if creation fails, roll back and stop; do not pollute the caller's current branch.
 
-## When to override the default lean
-
-| Explicitly use full | Explicitly use fast |
-|---|---|
-| Multiple Sprints, includes DB schema changes | Single Sprint, changes ≤ 800 lines of diff |
-| Breaking external contracts, compliance risk | May include contract freeze, frontend/backend parallelism across different repositories |
-| Sprint slices ≥ 2 | No concurrency/transaction complexity |
-| Requires strict five-party heterogeneous discipline | Accepts the risk of spec/code in the same session in exchange for efficiency |
-
 ## Differences from the original
 
 Before: `/cc-nexs:init 01 health-check` (positional arguments + must manually come up with a slug)
-Now: `/cc-nexs:init "添加 /api/health 健康检查接口" [--mode=lean|hotfix|fast|full]` (automatic number continuation + automatic slug + mode in one step; defaults to lean)
+Now: `/cc-nexs:init "添加 /api/health 健康检查接口" [--mode=lean|hotfix]` (automatic number continuation + automatic slug + mode in one step; defaults to lean)
 
 Old usage remains compatible: if `$1` is in pure numeric format (such as `01`, `14.2`) and `$2` is kebab-case, handle it as the old usage.

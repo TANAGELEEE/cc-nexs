@@ -1,7 +1,7 @@
 {
   "name": "cc-nexs",
   "version": "0.6.0",
-  "description": "Lean-default low-token development pipeline: plan gate, local verification, one consolidated Review, test acceptance, and release gate; fast/full remain available.",
+  "description": "Lean low-token development pipeline: independent plan review and plan gate, local verification, one consolidated Review, test acceptance, release gate, and Hotfix repairs.",
   "author": {
     "name": "cc-nexs"
   },
@@ -18,7 +18,7 @@
   "interface": {
     "displayName": "cc-nexs",
     "shortDescription": "Run cc-nexs SOP workflows in Codex",
-    "longDescription": "cc-nexs defaults to a low-token Lean workflow with two human gates, per-repository worktrees, deterministic local verification, one consolidated Review, test verification, configurable per-role models, and approved base integration. Legacy full, fast, and hotfix workflows remain available.",
+    "longDescription": "cc-nexs runs a low-token Lean workflow with an independent plan review, two human gates, per-repository worktrees, deterministic local verification, one consolidated Review, test verification, configurable per-role models, and approved base integration. Standalone hotfix repairs share the same delivery controls.",
     "developerName": "cc-nexs",
     "category": "Engineering",
     "capabilities": [

@@ -82,7 +82,7 @@ Unavailable browser, endpoint, login, MFA/CAPTCHA, or another verification capab
 
 Missing test URLs/browser/login/bucket/CORS/IAM evidence cannot block the merge. A production-like URL, unsafe candidate, credential leak, missing deploy branch, or absent `release.test.driver` remains a delivery blocker; an absent `workflow.local_verify.driver` is handled by the direct-evidence fallback above.
 
-`configure_auto_test_release` stops with exact fields needed to configure `release.test.driver`, restore `auto_if_ready`, and rerun. Legacy G2 approval cannot impersonate an immutable Lean release attempt or unlock Gateway B. `--no-auto-test-release` is an external handoff, not a resumable evidence shortcut.
+`configure_auto_test_release` stops with exact fields needed to configure `release.test.driver`, restore `auto_if_ready`, and rerun. `--no-auto-test-release` is an external handoff, not a resumable evidence shortcut.
 
 ## Conclusion parsing and transitions
 

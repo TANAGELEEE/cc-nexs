@@ -1,5 +1,5 @@
 ---
-description: "Compound role entry point. Read all-docs/doc/<id>/* for the completed requirement and distill \"non-obvious lessons\" into docs/solutions/<topic>.md, so the next similar requirement is automatically picked up by Repo Scout. Bypass command; does not enter the state machine."
+description: "Compound role entry point. Read all-docs/doc/<id>/* for the completed requirement and distill \"non-obvious lessons\" into docs/solutions/<topic>.md, so the Lean Planner picks it up for the next similar requirement. Bypass command; does not enter the state machine."
 disable-model-invocation: true
 allowed-tools: "Read, Write, Edit, Glob, Grep, Bash, Task"
 argument-hint: "[Requirement ID] [optional: --force]"
@@ -7,7 +7,7 @@ argument-hint: "[Requirement ID] [optional: --force]"
 
 # /cc-nexs:compound
 
-For a completed requirement, run this command to distill lessons into the repository-level `docs/solutions/`. The next similar requirement will be automatically matched by grep during the RECON phase and pulled into repo-context.md.
+For a completed requirement, run this command to distill lessons into the repository-level `docs/solutions/`. The Lean Planner greps it while surveying the current state for the next similar requirement.
 
 Parameters:
 
@@ -69,22 +69,18 @@ Use the Task tool to invoke `compound-claude`. Prompt template:
 你是 Compound（独立 session），经验沉淀员。
 
 读 ${REQ_DIR} 下所有文档：
-- spec.md（看变更记录有几轮返工）
-- sa-review.md / sa-code-review.md（找反复出现的同类反馈）
-- bugs/*.md（找修了 ≥ 2 次的 BUG）
-- test-report.md（找根因复杂的阻塞）
-- acceptance.md（看是否被驳回）
-- repo-context.md（看 RECON 阶段的现状假设是否在编码阶段被推翻）
-- progress.md 计数器（review_revision / fix_per_bug / evaluator_reject 是事后判断强信号的硬依据）
+- requirements.md / plan.md（现状假设、范围变更记录、Review 与 Test 结论）
+- bugs/*.md 或 Hotfix BUG 文档（找修了 ≥ 2 次的 BUG）
+- progress.json（counters.review_revision / fix_per_bug、test attempts、Review closure、Gateway B change requests 是事后判断强信号的硬依据）
 
 按 templates/solution.md 的格式产出 docs/solutions/<topic-slug>.md。
 
 强信号过滤（必须命中任一才允许写一条 solution，否则跳过）：
 1. 同 BUG 修 ≥ 2 次
-2. 同类 SA 反馈跨 ≥ 2 个 sprint
-3. RECON 现状假设被推翻（"复用 X" 改成 "新建" 或反之）
-4. 验收 ≥ 1 次未通过
-5. spec.md 变更记录 ≥ 3 行（含初稿）
+2. 集中 Review 被阻塞并进入 delta closure，或 Gateway B 提出 implementation 修改
+3. plan 的现状假设被推翻（"复用 X" 改成 "新建" 或反之）
+4. test 验收 ≥ 1 次阻塞
+5. 范围变更（SCOPE_CHANGE_REQUESTED）重新经过 Gateway A
 
 dedupe：先 glob ${SOL_DIR}/*.md 检查 frontmatter.slug；命中则 Edit 既有文件（追加 feature id 到 related_features + 在"补充观察"小节追加新观察 + 更新 last_updated），不新建。
 
@@ -98,7 +94,7 @@ frontmatter keywords 必须 ≥ 3 个；少于 3 个直接跳过本条 solution�
 
 身份铁律：
 - 禁强行凑数（无强信号必须在 summary 写"跳过"，不能写空 solution）
-- 禁写 spec / 代码 / progress / src/
+- 禁写 requirements / plan / 代码 / progress / src/
 - 禁修改 all-docs/doc/${ID}/ 下除 compound-summary.md 之外的任何历史档案
 
 完成后仅写文件，不输出额外摘要。
@@ -148,19 +144,19 @@ fi
 👉 下一步:
    - 人工 review ${REQ_DIR}compound-summary.md，决定是否信任本次产出
    - 不信任：直接 git checkout 撤销 docs/solutions/ 改动
-   - 信任：commit 入库，下次同类需求 RECON 自动接入
+   - 信任：commit 入库，下次同类需求 Lean Planner 自动接入
 ```
 ## When Not to Use
 
 - Status has not reached COMPLETE → add --force to run (generally not recommended)
 - The requirement is purely docs/typo → no strong signal to capture
-- The requirement is too small (single commit, no SA rework, no BUG) → running it is just an empty run
+- The requirement is too small (single commit, no Review rework, no BUG) → running it is just an empty run
 
 ## Relationship to Other Commands
 ```
 /cc-nexs:run          ← 跑流水线到 COMPLETE
 /cc-nexs:compound     ← 本命令，需求收尾后沉淀经验（旁路，可选）
-/cc-nexs:recon        ← 下个需求时 Repo Scout 会扫 docs/solutions/，命中即接入
+/cc-nexs:plan         ← 下个需求时 Lean Planner 会扫 docs/solutions/，命中即接入
 ```
 ## Output Contract
 

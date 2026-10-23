@@ -1,6 +1,6 @@
 ---
 name: "using-cc-nexs"
-description: "Guides new features, cross-module requirements, full development-test acceptance, or 'run by the SOP' requests into cc-nexs. New requirements default to lean, with support for a single consolidated Review, full/fast, test release, automated browser acceptance, manual fallback, and hotfix triage."
+description: "Guides new features, cross-module requirements, full development-test acceptance, or 'run by the SOP' requests into cc-nexs. New requirements default to lean, with support for a single consolidated Review, test release, automated browser acceptance, manual fallback, and hotfix triage."
 disable-model-invocation: true
 ---
 
@@ -11,14 +11,13 @@ Use `commands/*.md` as the source of truth for the workflow. Claude Code, Codex,
 ## Choosing an entry point
 
 - Standard new feature: default to `init -> plan -> Gateway A -> run -> Gateway B` with `mode=lean`.
-- When the legacy three-role, multi-round separation of code and acceptance is needed: specify `--mode=fast` explicitly.
-- High risk, complex DB/external contracts, or a genuine need for multiple Sprints or multiple rounds of specialist review: specify `--mode=full` explicitly.
+- High risk or complex DB/external contracts stay in Lean with a high/critical risk tier; split a requirement that cannot be reviewed and verified as one plan into separately approved Lean requirements.
 - Bounded, small-scope BUG: run `hotfix <symptom>` directly to create a latest-base `hotfix/<key>` and a BUG document without consuming a requirement number; `init --mode=hotfix` only provides compatibility forwarding to `init-hotfix`. For authorized revisions to the same failure, use `revise-hotfix`; for contract/schema/permission extensions, add `--promote-lean` to convert to Lean alongside the original BUG and pass through Gateway A.
 - Exploratory spikes or pure documentation tasks are not required to enter the main workflow.
 
 ## Starting
 ```text
-/cc-nexs:init <需求> [--mode=lean|hotfix|fast|full]
+/cc-nexs:init <需求> [--mode=lean|hotfix]
 /cc-nexs:brainstorm <id>          # requirements 模糊时可选
 /cc-nexs:plan <id>                # lean 默认；输出 HTML 后停 Gateway A
 /cc-nexs:approve-plan <id>
@@ -31,7 +30,6 @@ Codex uses the `$cc-nexs-*` mirror skill; do not treat `/cc-nexs:*` as a shell p
 New Lean requirements default to:
 ```yaml
 workflow:
-  sprint_delivery: final_only
   test_release:
     policy: auto_if_ready
 ```
@@ -41,7 +39,6 @@ workflow:
 - After test acceptance passes, stop at Gateway B; only `/cc-nexs:approve-release` authorizes merging into the configured base branch.
 - `--no-auto-test-release` or the feature `release.test=manual` explicitly switches to a manual test handoff.
 - Stop before push only when delivery-safety prerequisites such as the test environment, candidate, deploy test branch, or release driver are insufficient. browser/login/verification URL are checked only after deployment; if missing, enter the recoverable `manual_required`.
-- Legacy requirements without a `delivery` field remain `per_sprint + manual`.
 - Production merge/release is always manual.
 
 ## Post-deployment Browser Acceptance
@@ -57,7 +54,6 @@ Access only `release.test.allowed_hosts`. URLs may be discovered from project do
 1. Lean Gateway A: approve the hash binding of requirements + plan.
 2. Lean Gateway B: approve the exact candidate fingerprint that has passed consolidated Review, local verification, and test acceptance.
 3. Hotfix Gateway B: after test black-box acceptance passes, approve merging the exact candidate into base.
-4. Legacy G1/G2: retain the original semantics for fast/full only.
 
 Gates only pause cc-nexs role dispatch; they do not block the parent session's user-authorization tools.
 
@@ -70,9 +66,7 @@ verify-local        确定性本地集成验证
 lean-review         一次集中 Review / 一次 delta closure
 approve-release     Lean/Hotfix Gateway B
 release-base        批准后确定性合并 base
-approve-spec        G1
 release-test        确定性合入 test + release driver
-approve-deploy      manual G2 fallback
 status              只读状态和 release evidence
 doctor --release-test 严格发布前置检查
 hotfix              独立 P0/P1/P2/P3 mini-Lean：scope binding -> local -> one Review -> test -> Gateway B
@@ -84,6 +78,5 @@ Single-step role commands do not advance progress; only `run`/deterministic core
 - The workspace/repository worktree and branch assignment are correct;
 - requirements, config.mode, and progress mode are consistent;
 - Lean uses the configured `workflow.local_verify.driver`, or, when it is missing, runs the plan-approved command and records structured command/exit/proof; Hotfix may also execute the actual command bound to the matrix and register the same structured evidence, and must not defer it to test. Both keep the approved plan or bound Hotfix scope unchanged; authorized revisions are rebound through the deterministic controller;
-- full multi-Sprint slices cover all AC;
 - The automated test release project has test_branch and driver configured for the deploy repository; the Lean local repository is explicitly bound in the approved plan;
 - test URLs, allowed_hosts, and browser prerequisites are verified after deployment; when missing, recoverable manual verification is accepted, and delivery is not rolled back.

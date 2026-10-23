@@ -15,12 +15,8 @@ export function recordEnvironmentVerification({ cwd = process.cwd(), featureId, 
   const progress = context.progress;
   const expectedStates = progress.mode === 'hotfix'
     ? ['HOTFIX_TEST_RELEASE', 'HOTFIX_TEST_VERIFYING', 'HOTFIX_TEST_DEPLOYED_NEEDS_MANUAL_VERIFY']
-    : progress.mode === 'lean'
-      ? ['TEST_RELEASE', 'TEST_VERIFYING', 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY']
-      : progress.mode === 'full'
-        ? ['TEST_RELEASE', 'FINAL_QA', 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY']
-        : ['TEST_RELEASE', 'TEST', 'REGRESSION', 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY'];
-  if (!expectedStates || !expectedStates.includes(progress.state)) {
+    : ['TEST_RELEASE', 'TEST_VERIFYING', 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY'];
+  if (!expectedStates.includes(progress.state)) {
     throw new Error(`[cc-nexs] environment verification requires an active test-verifying state, found ${progress.mode}/${progress.state}`);
   }
   const latestAttempt = progress.delivery?.test?.attempts?.at(-1);

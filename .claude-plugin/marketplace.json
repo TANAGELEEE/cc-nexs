@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "cc-nexs",
-      "description": "Lean-default low-token development pipeline: plan gate, local verification, one consolidated Review, test acceptance, and release gate; fast/full remain available.",
+      "description": "Lean low-token development pipeline: independent plan review and plan gate, local verification, one consolidated Review, test acceptance, release gate, and Hotfix repairs.",
       "version": "0.6.0",
       "author": {
         "name": "cc-nexs"

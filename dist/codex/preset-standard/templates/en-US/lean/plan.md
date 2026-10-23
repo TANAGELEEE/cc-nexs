@@ -47,10 +47,10 @@ Each code repository must keep one machine-parseable policy line; `deploy` must 
 - Focus areas for centralized review:
 - Release order:
 - Rollback plan:
-## Complexity and Mode Fit
+## Complexity and Size
 - Complexity: low / medium / high
-- Full trigger items：none / high coupling across multiple modules / breaking public contract / high permission or funding risk / destructive migration / other
-- Mode recommendation: keep Lean / switch to Full
+- High-risk items: none / high coupling across multiple modules / breaking public contract / high permission or funding risk / destructive migration / other
+- Size recommendation: keep one Lean requirement / split into several Lean requirements
 - Basis for judgment:
 <!-- APPROVAL-SCOPE END -->
 

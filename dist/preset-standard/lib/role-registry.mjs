@@ -9,16 +9,6 @@ import { existsSync, readFileSync } from 'node:fs';
 import { detectRuntime, resolveRoleRuntime } from './runtime-resolver.mjs';
 import { extractFrontmatter } from './frontmatter.mjs';
 
-const DEFAULT_DEFINITIONS = {
-  planner: { agent: 'agents/planner.md', tool: 'claude-subagent', session_isolation: 'independent' },
-  'tech-lead': { agent: 'agents/tech-lead.md', tool: 'claude-subagent', session_isolation: 'independent' },
-  developer: { agent: 'agents/developer.md', tool: 'claude-subagent', session_isolation: 'independent' },
-  sa: { agent: 'agents/sa.md', tool: 'codex' },
-  qa: { agent: 'agents/qa.md', tool: 'codex' },
-  evaluator: { agent: 'agents/evaluator.md', tool: 'codex' },
-  reviewer: { agent: 'agents/reviewer.md', tool: 'claude-subagent', session_isolation: 'independent' },
-};
-
 export class RoleRegistry {
   constructor({
     preset,
@@ -52,14 +42,9 @@ export class RoleRegistry {
   }
 
   get(name) {
-    const fromPreset = this.definitions[name];
-    const fallback = DEFAULT_DEFINITIONS[name];
     const merged = resolveRoleRuntime({
       ...this.preset,
-      roles: {
-        ...this.preset.roles,
-        definitions: { ...this.definitions, ...(fromPreset ? {} : { [name]: fallback }) },
-      },
+      roles: { ...this.preset.roles, definitions: this.definitions },
     }, name, this.runtime, {
       models: this.models,
       featureModels: this.featureModels,

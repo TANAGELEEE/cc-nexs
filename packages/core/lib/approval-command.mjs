@@ -3,17 +3,16 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
-import { approveDeployGate, approveHumanGate, transitionState } from './progress-io.mjs';
-import { approveProgressGate, assertTestAttemptNotInvalidated, readProgressV2, recoverApprovedImplementationSprint } from './progress-v2.mjs';
+import { transitionState } from './progress-io.mjs';
+import { approveProgressGate, assertTestAttemptNotInvalidated, readProgressV2 } from './progress-v2.mjs';
 import { assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
 import { assertPlanApprovalCurrent, extractApprovalScope, planApprovalBinding } from './plan-contract.mjs';
 import { assertRecordedLocalVerification, extractLocalVerificationChecks } from './local-evidence.mjs';
 import { syncHotfixChangeStatuses, syncPlanChangeStatuses } from './release-change-docs.mjs';
 import { loadWorkspaceConfig } from './config-loader.mjs';
-import { assertImplementationApprovalCurrent, implementationApprovalBinding } from './implementation-plan.mjs';
 import { createReleaseExceptionBinding } from './release-exception.mjs';
 
-const GATES = new Set(['g1', 'g2', 'plan', 'release']);
+const GATES = new Set(['plan', 'release']);
 const SKIP_DIRS = new Set([
   '.git', '.next', '.turbo', 'build', 'coverage', 'dist', 'node_modules', 'out', 'target', 'vendor',
 ]);
@@ -22,7 +21,6 @@ export function approveFeatureGate({
   cwd = process.cwd(),
   featureId,
   gate,
-  sprint = null,
   approver = null,
   progressPath = null,
   testException = null,
@@ -58,11 +56,11 @@ export function approveFeatureGate({
         upgradedBinding.delivery_contract_version = 2;
         const upgraded = approveProgressGate(progressFile, { gate: 'plan', approver: actor, binding: upgradedBinding });
         return approvalResult({
-          progressFile, progress: upgraded, gate, sprint: null,
+          progressFile, progress: upgraded, gate,
           approval: upgraded.gates.plan, alreadyApproved: false,
         });
       }
-      return approvalResult({ progressFile, progress: before, gate, sprint: null, approval: existing, alreadyApproved: true });
+      return approvalResult({ progressFile, progress: before, gate, approval: existing, alreadyApproved: true });
     }
     if (before.state !== 'PLAN_PENDING_HUMAN') {
       throw new Error(`plan gate requires PLAN_PENDING_HUMAN, found ${before.state}`);
@@ -87,15 +85,14 @@ export function approveFeatureGate({
   } else if (gate === 'release') {
     const pendingState = before.mode === 'hotfix' ? 'HOTFIX_RELEASE_PENDING_HUMAN' : 'RELEASE_PENDING_HUMAN';
     const manualState = before.mode === 'hotfix' ? 'HOTFIX_TEST_DEPLOYED_NEEDS_MANUAL_VERIFY' : 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY';
-    const legacyAccepted = ['fast', 'full', 'lite'].includes(before.mode) && before.state === 'COMPLETE' && !before.delivery?.base?.attempts?.length;
     const recoverableTestState = ['lean', 'hotfix'].includes(before.mode) && ['TEST_RELEASE', 'TEST_VERIFYING', 'TEST_VERIFIED', 'HOTFIX_TEST_RELEASE', 'HOTFIX_TEST_VERIFYING'].includes(before.state);
-    if (!recoverableTestState && !legacyAccepted && before.state !== pendingState && !(testException && before.state === manualState)) {
+    if (!recoverableTestState && before.state !== pendingState && !(testException && before.state === manualState)) {
       const existing = before.gates.release;
       if (existing?.approved) {
         assertTestAttemptNotInvalidated(before.delivery?.test?.attempts?.find((item) => item.id === existing.binding?.test_attempt));
         const localChecks = extractLocalVerificationChecks(releaseScope(before, progressFile));
         assertRecordedLocalVerification(before, { source: existing.binding?.source, fingerprint: existing.binding?.candidate_fingerprint, expectedChecks: localChecks });
-        return approvalResult({ progressFile, progress: before, gate, sprint: null, approval: existing, alreadyApproved: true });
+        return approvalResult({ progressFile, progress: before, gate, approval: existing, alreadyApproved: true });
       }
       throw new Error(`release gate requires ${pendingState}, found ${before.state}`);
     }
@@ -125,110 +122,13 @@ export function approveFeatureGate({
     if (before.mode === 'hotfix') syncHotfixChangeStatuses(resolveHotfixDocument(before, dirname(progressFile)), approved.change_requests?.items);
     else if (before.mode === 'lean') syncPlanChangeStatuses(join(dirname(progressFile), 'plan.md'), approved.change_requests?.items);
     if (recoverableTestState) transitionState(markdownFile, { from: before.state, to: pendingState, reason: 'reconciled exact verified candidate and Review with existing user release authorization' });
-    if (legacyAccepted) transitionState(markdownFile, { from: 'COMPLETE', to: pendingState, reason: 'user authorized base release of previously accepted candidate' });
     if (exceptionBinding && before.state === manualState) {
       transitionState(markdownFile, { from: manualState, to: pendingState, reason: 'human authorized base release with a bound test-environment exception; test remains unverified' });
     }
-  } else if (gate === 'g1') {
-    const existing = before.gates.g1;
-    if (existing?.approved && before.state !== 'SPEC_PENDING_HUMAN') {
-      return approvalResult({ progressFile, progress: before, gate, sprint: null, approval: existing, alreadyApproved: true });
-    }
-    if (before.state !== 'SPEC_PENDING_HUMAN') {
-      throw new Error(`G1 requires SPEC_PENDING_HUMAN, found ${before.state}`);
-    }
-    const specFile = join(dirname(progressFile), 'spec.md');
-    if (!existsSync(specFile)) throw new Error('[cc-nexs] G1 requires spec.md');
-    const specText = readFileSync(specFile, 'utf8');
-    const repositories = resolveAssignedCodeRepositories({ progressFile, progress: before });
-    if (!existing?.approved) {
-      const binding = g1BindingWithSprintFallback(
-        implementationApprovalBinding(specText, { repositories, mode: before.mode }),
-        before,
-      );
-      approveHumanGate(markdownFile, { approver: actor, binding });
-    } else {
-      assertImplementationApprovalCurrent(before, specText, {
-        repositories, mode: before.mode, validateProgressSprint: false,
-      });
-      if (!Number.isInteger(existing.binding?.sprint_total) || existing.binding.sprint_total < 1) {
-        const upgradedBinding = g1BindingWithSprintFallback(
-          implementationApprovalBinding(specText, { repositories, mode: before.mode }),
-          before,
-        );
-        approveProgressGate(progressFile, {
-          gate: 'g1', approver: existing.approver || actor, binding: upgradedBinding,
-        });
-      } else {
-        recoverApprovedImplementationSprint(progressFile, { actor });
-      }
-      assertImplementationApprovalCurrent(readProgressV2(progressFile), specText, {
-        repositories, mode: before.mode,
-      });
-    }
-    transitionState(markdownFile, {
-      from: 'SPEC_PENDING_HUMAN',
-      to: 'SPEC_APPROVED',
-      reason: 'human approved',
-    });
-  } else {
-    const stateSprint = parseDeployGateSprint(before.state);
-    if (before.state !== 'DEPLOY_GATE' && before.state !== 'TEST_RELEASE' && stateSprint === null) {
-      const requestedSprint = normalizeSprint(sprint);
-      const existing = requestedSprint === null
-        ? before.gates.g2
-        : before.gates.g2?.sprints?.[String(requestedSprint)];
-      if (existing?.approved) {
-        return approvalResult({ progressFile, progress: before, gate, sprint: requestedSprint, approval: existing, alreadyApproved: true });
-      }
-      throw new Error(`G2 requires TEST_RELEASE, DEPLOY_GATE, or SPRINT_<N>_DEPLOY_GATE, found ${before.state}`);
-    }
-
-    let requestedSprint = normalizeSprint(sprint);
-    if (stateSprint !== null) {
-      if (requestedSprint !== null && requestedSprint !== stateSprint) {
-        throw new Error(`sprint mismatch: state is M${stateSprint}, requested M${requestedSprint}`);
-      }
-      requestedSprint = stateSprint;
-    } else {
-      // Fast mode and final-only delivery have a single deploy gate. Accept an optional M1 for a uniform CLI surface.
-      if (requestedSprint !== null && requestedSprint !== 1) {
-        throw new Error(`fast-mode DEPLOY_GATE does not accept sprint M${requestedSprint}`);
-      }
-      requestedSprint = null;
-    }
-
-    const existing = requestedSprint === null
-      ? before.gates.g2
-      : before.gates.g2?.sprints?.[String(requestedSprint)];
-    if (existing?.approved) {
-      return approvalResult({ progressFile, progress: before, gate, sprint: requestedSprint, approval: existing, alreadyApproved: true });
-    }
-    approveDeployGate(markdownFile, { approver: actor, sprint: requestedSprint });
   }
 
   const after = readProgressV2(progressFile);
-  const effectiveSprint = gate === 'g2' ? parseApprovedSprint(after, sprint) : null;
-  const approval = gate === 'g1'
-    ? after.gates.g1
-    : gate === 'plan' ? after.gates.plan
-      : gate === 'release' ? after.gates.release
-        : effectiveSprint === null ? after.gates.g2 : after.gates.g2.sprints[String(effectiveSprint)];
-  return approvalResult({ progressFile, progress: after, gate, sprint: effectiveSprint, approval, alreadyApproved: false });
-}
-
-function g1BindingWithSprintFallback(binding, progress) {
-  if (binding.contract_version === 1) return binding;
-  const explicitHistoricalTotal = Number.isInteger(progress.sprint?.total) && progress.sprint.total > 0
-    ? progress.sprint.total
-    : 1;
-  const total = progress.mode === 'full' ? explicitHistoricalTotal : 1;
-  return {
-    ...binding,
-    sprint_contract_version: 0,
-    sprints: Array.from({ length: total }, (_, index) => `M${index + 1}`),
-    sprint_total: total,
-  };
+  return approvalResult({ progressFile, progress: after, gate, approval: after.gates[gate], alreadyApproved: false });
 }
 
 function assertLeanTestDeliveryContract({ binding, progress, progressFile }) {
@@ -378,37 +278,17 @@ export function resolveFeatureProgress({ cwd = process.cwd(), featureId, progres
   throw new Error(`multiple progress.json files found for feature ${featureId}; pass --progress explicitly:\n${unique.map((path) => `- ${path}`).join('\n')}`);
 }
 
-export function normalizeSprint(value) {
-  if (value === null || value === undefined || value === '') return null;
-  const match = String(value).match(/^M?(\d+)$/i);
-  if (!match || Number(match[1]) < 1) throw new Error(`invalid sprint: ${value}`);
-  return Number(match[1]);
-}
-
-function approvalResult({ progressFile, progress, gate, sprint, approval, alreadyApproved }) {
+function approvalResult({ progressFile, progress, gate, approval, alreadyApproved }) {
   return {
     feature: progress.feature,
     mode: progress.mode,
     state: progress.state,
     gate,
-    sprint,
     approver: approval.approver,
     approvedAt: approval.approved_at,
     alreadyApproved,
     progressFile,
   };
-}
-
-function parseDeployGateSprint(state) {
-  const match = String(state).match(/^SPRINT_(\d+)_DEPLOY_GATE$/);
-  return match ? Number(match[1]) : null;
-}
-
-function parseApprovedSprint(progress, requested) {
-  const stateSprint = parseDeployGateSprint(progress.state);
-  if (stateSprint !== null) return stateSprint;
-  const normalized = normalizeSprint(requested);
-  return normalized === 1 && progress.mode !== 'full' ? null : normalized;
 }
 
 function sameFeatureId(left, right) {

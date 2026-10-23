@@ -48,7 +48,7 @@ export function reviseHotfix({ cwd = process.cwd(), featureId, progressPath = nu
     progress.hotfix = { ...progress.hotfix, severity: binding.severity, related_feature: binding.related_feature, scope_binding: binding, scope_bound_at: timestamp, review_required: true };
     progress.state = 'HOTFIX_IMPLEMENTING';
   }
-  progress.gates = { ...progress.gates, plan: { approved: false, binding: null }, release: { approved: false, binding: null }, g2: { approved: false, sprints: {} } };
+  progress.gates = { ...progress.gates, plan: { approved: false, binding: null }, release: { approved: false, binding: null } };
   progress.local_verification = { ...progress.local_verification, status: 'idle', candidate_fingerprint: null, context: null };
   progress.review = { status: 'idle', candidate_fingerprint: null, reviewed_commits: {}, blocking_findings: [], closure_attempts: 0, gateway_b_delta_attempts: 0 };
   progress.delivery.test.status = 'idle';

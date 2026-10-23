@@ -130,7 +130,7 @@ test('test release integrates candidates, invokes structured driver, records evi
   }, null, 2)}\n`);
   const projectConfigFile = join(root, 'cc-nexs.config.json');
   const projectConfig = {
-    workflow: { sprint_delivery: 'final_only', test_release: { policy: 'auto_if_ready' } },
+    workflow: { test_release: { policy: 'auto_if_ready' } },
     release: {
       test: {
         environment: 'test',
@@ -386,7 +386,7 @@ for (const scenario of ['running', 'failed', 'conflict', 'conflict-invalidated',
     repositories: [{ id: 'code', path: 'code', base_branch: 'master', test_branch: 'test', release_order: 10 }],
   }, null, 2)}\n`);
   writeFileSync(join(root, 'cc-nexs.config.json'), `${JSON.stringify({
-    workflow: { sprint_delivery: 'final_only', test_release: { policy: 'auto_if_ready' } },
+    workflow: { test_release: { policy: 'auto_if_ready' } },
     release: {
       test: {
         environment: 'test',

@@ -7,28 +7,18 @@ import { extractFrontmatter } from '../packages/core/lib/frontmatter.mjs';
 const root = resolve(import.meta.dirname, '..');
 const errors = [];
 const expectedCommands = [
-  'approve-deploy',
   'approve-plan',
   'approve-release',
-  'approve-spec',
   'brainstorm',
   'build',
   'doctor',
-  'fullstack',
-  'planner',
-  'dev',
-  'sa',
-  'qa',
-  'evaluator',
   'git-custodian',
   'hotfix',
   'revise-hotfix',
   'init',
   'lean-review',
   'lean-verify',
-  'migrate-progress',
   'migrate-feature-config',
-  'recon',
   'switch-test-target',
   'sync-base',
   'release-test',
@@ -36,24 +26,13 @@ const expectedCommands = [
   'release-base',
   'render-plan',
   'request-release-changes',
-  'review',
   'run',
   'status',
-  'verify',
   'verify-local',
   'plan',
   'execute',
 ];
 const expectedRoles = [
-  'fullstack',
-  'planner',
-  'tech-lead',
-  'sa',
-  'qa',
-  'evaluator',
-  'repo-scout',
-  'reviewer',
-  'verifier',
   'lean-planner',
   'lean-developer',
   'lean-reviewer',
@@ -61,8 +40,6 @@ const expectedRoles = [
   'hotfix-developer',
   'hotfix-reviewer',
   'hotfix-verifier',
-  'verifier-computer-use',
-  'qa-computer-use',
   'lean-verifier-computer-use',
   'hotfix-verifier-computer-use',
 ];
@@ -123,7 +100,7 @@ for (const command of expectedCommands) {
       'ship no provider-specific model IDs',
     ];
     if (!['hotfix', 'revise-hotfix'].includes(command)) {
-      contractMarkers.push('lean (default)', 'fast, and full', 'automatic risk routing', 'Lean high/critical', 'Hotfix P0/P1');
+      contractMarkers.push('lean (default)', 'standalone hotfix', 'automatic risk routing', 'Lean high/critical', 'Hotfix P0/P1');
     } else {
       contractMarkers.push('P0/P1 automatically routes Reviewer to escalated');
     }
@@ -131,7 +108,7 @@ for (const command of expectedCommands) {
       if (!skill.includes(marker)) fail(`${name}: missing P2 contract marker ${marker}`);
     }
     if (/\bworktree\s*:\s*true\b/.test(skill)) fail(`${name}: Pi fanout must never create child worktrees`);
-    if (['cc-nexs-approve-deploy', 'cc-nexs-approve-spec', 'cc-nexs-approve-plan', 'cc-nexs-approve-release'].includes(name)
+    if (['cc-nexs-approve-plan', 'cc-nexs-approve-release'].includes(name)
       && !skill.includes('../../../packages/core/lib/cc-nexs-cli.mjs')) {
       fail(`${name}: approval skill must invoke the deterministic control CLI`);
     }
@@ -221,7 +198,7 @@ if (existsSync(saPath)) {
   }
 }
 
-for (const file of ['verifier.md', 'qa.md', 'lean-verifier.md', 'hotfix-verifier.md']) {
+for (const file of ['lean-verifier.md', 'hotfix-verifier.md']) {
   const verifier = readFileSync(join(agentsRoot, file), 'utf8');
   const frontmatter = extractFrontmatter(verifier);
   if (!/^tools:.*\bbash\b/m.test(frontmatter)) fail(`${file}: ego lite browser operations require Bash`);
@@ -232,17 +209,7 @@ for (const file of ['verifier.md', 'qa.md', 'lean-verifier.md', 'hotfix-verifier
   }
 }
 
-for (const file of ['qa.md', 'qa-computer-use.md']) {
-  const qa = readFileSync(join(agentsRoot, file), 'utf8');
-  if (/chrome-devtools|mcp__chrome-devtools/i.test(qa)) {
-    fail(`${file}: Claude-only chrome-devtools instruction leaked into Pi QA`);
-  }
-  for (const marker of ['Pi QA Provider-Neutral Contract', '顶部冻结的唯一 Pi browser provider', '不得自行选择、混用或切换 provider']) {
-    if (!qa.includes(marker)) fail(`${file}: missing provider-neutral QA marker ${marker}`);
-  }
-}
-
-for (const file of ['verifier-computer-use.md', 'qa-computer-use.md', 'lean-verifier-computer-use.md', 'hotfix-verifier-computer-use.md']) {
+for (const file of ['lean-verifier-computer-use.md', 'hotfix-verifier-computer-use.md']) {
   const verifier = readFileSync(join(agentsRoot, file), 'utf8');
   const frontmatter = extractFrontmatter(verifier);
   if (/^skills:/m.test(frontmatter)) fail(`${file}: fallback verifier must not preload ego-browser`);
@@ -282,7 +249,7 @@ if (existsSync(releaseSkillPath)) {
 
 const roleBoundaryPath = join(root, 'packages/core/lib/role-boundary.mjs');
 const roleBoundary = readFileSync(roleBoundaryPath, 'utf8');
-for (const marker of ["sa: {", 'sa-review|sa-test-review|sa-code-review', 'isProgressMutation', 'progress\\.(?:md|json)']) {
+for (const marker of ["'lean-reviewer': {", 'isProgressMutation', 'progress\\.(?:md|json)']) {
   if (!roleBoundary.includes(marker)) fail(`role-boundary.mjs: missing Pi child guard marker ${marker}`);
 }
 
