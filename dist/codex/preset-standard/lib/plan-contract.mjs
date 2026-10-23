@@ -47,6 +47,33 @@ export function extractPlanTestDelivery(planText) {
   return delivery;
 }
 
+function tableRows(text, prefix) {
+  return text.split('\n').filter((line) => new RegExp(`^\\|\\s*${prefix}-\\d+\\s*\\|`).test(line));
+}
+
+function acIds(lines) {
+  return new Set(lines.flatMap((line) => line.match(/\bAC-\d+\b/g) || []));
+}
+
+// Every acceptance criterion in requirements.md must be planned, checked locally, and
+// verified in test; a plan may not invent criteria the requirements do not contain.
+export function assertRequirementTraceability(reqDir) {
+  const requirements = readFileSync(join(reqDir, 'requirements.md'), 'utf8').replace(/\r\n/g, '\n');
+  const scope = extractApprovalScope(readFileSync(join(reqDir, 'plan.md'), 'utf8'));
+  const required = [...new Set(tableRows(requirements, 'AC').map((line) => line.match(/AC-\d+/)[0]))];
+  if (required.length === 0) throw new Error('[cc-nexs] requirements.md must list acceptance criteria as AC-xxx table rows');
+  const coverage = { task: acIds(tableRows(scope, 'T')), 'local check': acIds(tableRows(scope, 'LV')), 'test check': acIds(tableRows(scope, 'TV')) };
+  const gaps = [];
+  for (const [kind, covered] of Object.entries(coverage)) {
+    const missing = required.filter((id) => !covered.has(id));
+    if (missing.length) gaps.push(`${kind}: ${missing.join(', ')}`);
+  }
+  const unknown = [...new Set(Object.values(coverage).flatMap((covered) => [...covered]))].filter((id) => !required.includes(id));
+  if (unknown.length) gaps.push(`not in requirements.md: ${unknown.join(', ')}`);
+  if (gaps.length) throw new Error(`[cc-nexs] plan.md does not trace every requirement (${gaps.join('; ')})`);
+  return required;
+}
+
 export function planApprovalBinding(reqDir, { requireRiskTier = false, requireDeliveryLane = false } = {}) {
   const requirements = normalized(readFileSync(join(reqDir, 'requirements.md'), 'utf8'));
   const plan = readFileSync(join(reqDir, 'plan.md'), 'utf8');

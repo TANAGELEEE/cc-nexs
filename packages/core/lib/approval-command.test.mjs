@@ -67,12 +67,14 @@ function createFeature({ id = '01', mode = 'lean', state, worktree = false } = {
   writeProgressV2(progressFile, progress);
   writeFileSync(join(docs, 'progress.md'), progressMarkdown(state));
   if (mode === 'lean') {
-    writeFileSync(join(docs, 'requirements.md'), '# Requirements\n\n- AC-001\n');
+    writeFileSync(join(docs, 'requirements.md'), '# Requirements\n\n| AC-ID | Then |\n|---|---|\n| AC-001 | works |\n');
     writeFileSync(join(docs, 'plan.md'), [
       '# Plan',
       '<!-- APPROVAL-SCOPE START -->',
       '## Tasks',
-      '- T-001 implements AC-001',
+      '| T-001 | AC-001 |',
+      '| LV-001 | AC-001 |',
+      '| TV-001 | AC-001 |',
       '- risk_tier: medium',
       '- delivery_lane: fast-track',
       '- test_delivery.api: deploy',
@@ -206,6 +208,18 @@ test('Lean Gateway A hashes requirements and plan scope before advancing', () =>
   assert.equal(progress.gates.plan.binding.delivery_contract_version, 2);
   assert.deepEqual(progress.gates.plan.binding.test_targets, { api: 'test' });
   assert.deepEqual(progress.events.map((event) => event.type), ['gate.approved', 'state.transition']);
+});
+
+test('Lean Gateway A requires every acceptance criterion to trace to a task, a local check, and a test check', () => {
+  const fixture = createFeature({ id: '20t', mode: 'lean', state: 'PLAN_PENDING_HUMAN' });
+  const approve = () => approveFeatureGate({ cwd: fixture.root, featureId: '20t', gate: 'plan', approver: 'Plan Owner' });
+  const delivery = ['- risk_tier: medium', '- delivery_lane: fast-track', '- test_delivery.api: deploy'];
+  writeFileSync(join(fixture.docs, 'requirements.md'), '| AC-ID | Then |\n|---|---|\n| AC-001 | works |\n| AC-002 | audited |\n');
+  writeLeanPlan(fixture.docs, ['| T-001 | AC-001 |', '| LV-001 | AC-001 |', '| TV-001 | AC-001, AC-003 |', ...delivery]);
+  assert.throws(approve, /does not trace every requirement \(task: AC-002; local check: AC-002; test check: AC-002; not in requirements.md: AC-003\)/);
+
+  writeLeanPlan(fixture.docs, ['| T-001 | AC-001, AC-002 |', '| LV-001 | AC-001, AC-002 |', '| TV-001 | AC-001 |', '| TV-002 | AC-002 |', ...delivery]);
+  assert.equal(approve().state, 'PLAN_APPROVED');
 });
 
 test('Lean Gateway A rejects incomplete or mistyped test delivery topology before approval', () => {

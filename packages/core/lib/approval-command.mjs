@@ -6,7 +6,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 import { transitionState } from './progress-io.mjs';
 import { approveProgressGate, assertTestAttemptNotInvalidated, readProgressV2 } from './progress-v2.mjs';
 import { assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
-import { assertPlanApprovalCurrent, extractApprovalScope, planApprovalBinding } from './plan-contract.mjs';
+import { assertPlanApprovalCurrent, assertRequirementTraceability, extractApprovalScope, planApprovalBinding } from './plan-contract.mjs';
 import { assertRecordedLocalVerification, extractLocalVerificationChecks } from './local-evidence.mjs';
 import { syncHotfixChangeStatuses, syncPlanChangeStatuses } from './release-change-docs.mjs';
 import { loadWorkspaceConfig } from './config-loader.mjs';
@@ -71,6 +71,7 @@ export function approveFeatureGate({
     });
     binding.test_targets = assertLeanTestDeliveryContract({ binding, progress: before, progressFile });
     binding.delivery_contract_version = 2;
+    assertRequirementTraceability(dirname(progressFile));
     if (!existing?.approved
       || existing?.binding?.combined_sha256 !== binding.combined_sha256
       || existing?.binding?.delivery_contract_version !== binding.delivery_contract_version
