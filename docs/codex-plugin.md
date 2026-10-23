@@ -6,9 +6,9 @@ cc-nexs ships a Codex plugin beside the Claude Code plugin. Both consume the sam
 
 Inside Codex, every role is dispatched as an independent native agent. The plugin does not start Claude Code and does not recursively invoke the Codex CLI. Implementer and reviewer contexts always remain isolated.
 
-The public preset stores portable profiles only. Private project or feature config may assign each role a concrete model and reasoning effort. Automatic routing uses the shared deterministic core: Explicit Lean high/critical can route the first Planner to `escalated`; risk discovered in the plan upgrades the subsequent Reviewer without starting a second Planner; Hotfix P0/P1 upgrades Reviewer; a feature role profile remains the final override. The public `escalated` profile is `inherit + xhigh`, so a project must override that profile to switch to a concrete stronger model. Use only models exposed by the current native-agent override surface; top-level model-catalog visibility alone is not sufficient.
+The public preset stores portable profiles only. Private project or feature config may assign each role a concrete model and reasoning effort. Automatic routing uses the shared deterministic core: Explicit Lean high/critical can route the first Planner to `escalated`; risk discovered in the plan upgrades the Plan Reviewer and subsequent Reviewer without starting a second Planner; Hotfix P0/P1 upgrades Reviewer; a feature role profile remains the final override. The public `escalated` profile is `inherit + xhigh`, so a project must override that profile to switch to a concrete stronger model. Use only models exposed by the current native-agent override surface; top-level model-catalog visibility alone is not sufficient.
 
-Inside Claude Code, all Lean roles use isolated Claude subagents, so Developer and Reviewer can use the same Claude model at different effort levels or different Claude models. Legacy full/fast SA/Evaluator/Reviewer roles retain their existing Codex CLI separation; executor-aware resolution uses the `codex` profile for those roles.
+Inside Claude Code, all Lean and Hotfix roles use isolated Claude subagents, so Developer, Plan Reviewer, and Reviewer can use the same Claude model at different effort levels or different Claude models. Cross-vendor adversarial review is out of scope; use the separate `nexs-sop` skill when it is required.
 
 ## Artifact Layout
 
@@ -27,11 +27,10 @@ The Codex marketplace is generated at:
 .agents/plugins/marketplace.json
 ```
 
-It points at Codex-only distributions generated from the same sources:
+It points at the Codex-only distribution generated from the same sources:
 
 ```text
 ./dist/codex/preset-standard
-./dist/codex/preset-minimal
 ```
 
 Codex-only distributions rename `commands/` to `command-docs/` and omit `.claude-plugin/`. This prevents automatic legacy command migration from exposing a second `Source Command ...` skill alongside each native adapter. The native adapters reference the same command bodies. Reinstall the local plugin and restart Codex to replace an older migrated cache.
@@ -52,15 +51,10 @@ Codex plugins expose reusable workflows through skills. During build, every `com
 | `/cc-nexs:approve-release` | `$cc-nexs-approve-release` |
 | `/cc-nexs:request-release-changes` | `$cc-nexs-request-release-changes` |
 | `/cc-nexs:release-base` | `$cc-nexs-release-base` |
-| `/cc-nexs:approve-spec` | `$cc-nexs-approve-spec` |
 | `/cc-nexs:release-test` | `$cc-nexs-release-test` |
 | `/cc-nexs:status` | `$cc-nexs-status` |
 | `/cc-nexs:build` | `$cc-nexs-build` |
 | `/cc-nexs:hotfix` | `$cc-nexs-hotfix` |
-| `/cc-nexs:fullstack` | `$cc-nexs-fullstack` |
-| `/cc-nexs:review` | `$cc-nexs-review` |
-| `/cc-nexs:verify` | `$cc-nexs-verify` |
-| `/cc-nexs:approve-deploy` | `$cc-nexs-approve-deploy` |
 
 Every generated mirror has `agents/openai.yaml` with `policy.allow_implicit_invocation: false`. Codex therefore omits it from the default model context and runs it only when the user selects or names the `$cc-nexs-*` skill. The original slash-style text remains as a compatibility hint, but it is not a native Codex slash command and must never be executed as a shell path:
 
@@ -88,27 +82,26 @@ Codex must write to exactly the same locations as Claude Code:
 | Flow | Required locations |
 | --- | --- |
 | `lean` | `requirements.md` and `plan.md` are the only authored documents; `config.json`, `progress.json`, and `progress.md` are control files; HTML is rendered to a local temporary directory only |
-| `full` | `all-docs/doc/{id}.{slug}/requirements.md`, `repo-context.md`, `spec.md`, `sa-review.md`, `dev-plan.md`, `api-doc.md`, `deploy.md`, `test-cases.md`, `sa-test-review.md`, `test-report.md`, `bugs/`, `sa-code-review.md`, `acceptance.md`, `progress.md`, `README.md` |
-| `fast` | Same `all-docs/doc/{id}.{slug}/` directory, single-sprint artifacts, `repo-context.md` folded into Fullstack spec phase, `test-cases.md` + `test-report.md` from Verifier, `sa-code-review.md` + `acceptance.md` from Reviewer |
 | `hotfix` | The assigned BUG document: related `doc/<id>.<slug>/bugs/BUG-<key>.md`, otherwise docs `hotfix/<key>/BUG-001.md`. Machine state/config remain in workspace `.cc-nexs/hotfixes/<key>/`; `progress.hotfix_document` locates the BUG. Legacy `hotfix.md` tasks remain resumable. |
 | `compound` | `docs/solutions/<topic>.md` plus `all-docs/doc/{id}.{slug}/compound-summary.md` |
 
 Generated Codex skills explicitly forbid relocating these paths.
 
-## Lean / Full / Fast / Hotfix Parity
+## Lean / Hotfix Parity
 
-### Lean (default)
+### Lean
 
 `mode=lean` keeps the low-token chain explicit:
 
 1. Planner creates one requirements document and one plan document, with optional parallel read-only research.
-2. Gateway A binds both documents by hash.
-3. Developers execute non-overlapping plan tasks in per-repository worktrees and feature branches.
-4. A deterministic local driver runs the available checks. If Lean has no driver, the parent runs only plan-approved commands and records exact command/exit/proof evidence; environment-only checks become structured `deferred_to_test` rather than repeated blockers. Hotfix may also record direct evidence for its frozen scope matrix; every required command must match and pass, and Hotfix cannot defer checks.
-5. The exact candidate is integrated to test and CI/deployment runs before any browser preflight.
-6. The deployed environment is verified independently; a local web may target the deployed test backend. Missing browser/login/URL capability records recoverable `manual_required` instead of blocking delivery.
-7. One independent consolidated Review reports all P0/P1 blockers; only one delta closure is allowed after fixes.
-8. Gateway B binds the reviewed and test-verified fingerprint before non-force base integration; docs are finalized last.
+2. An independent Plan Reviewer checks the plan against the requirements and the code; a blocked plan gets one revision and re-review, and open findings go to Gateway A.
+3. Gateway A binds both documents by hash, requires the plan review for that exact plan, and refuses acceptance criteria that do not trace to a task, a local check, and a test check.
+4. Developers execute non-overlapping plan tasks in per-repository worktrees and feature branches.
+5. A deterministic local driver runs the available checks. If Lean has no driver, the parent runs only plan-approved commands and records exact command/exit/proof evidence; environment-only checks become structured `deferred_to_test` rather than repeated blockers. Hotfix may also record direct evidence for its frozen scope matrix; every required command must match and pass, and Hotfix cannot defer checks.
+6. The exact candidate is integrated to test and CI/deployment runs before any browser preflight.
+7. The deployed environment is verified independently; a local web may target the deployed test backend. Missing browser/login/URL capability records recoverable `manual_required` instead of blocking delivery.
+8. One independent consolidated Review reports all P0/P1 blockers; only one delta closure is allowed after fixes.
+9. Gateway B binds the reviewed and test-verified fingerprint before non-force base integration; docs are finalized last.
 
 Private model configuration uses ordinary nested YAML. The following intentionally uses the same model with stronger Review reasoning; set another model ID if heterogeneous Review is preferred:
 
@@ -129,6 +122,7 @@ models:
         effort: xhigh
   roles:
     lean-developer: implementation
+    lean-plan-reviewer: review
     lean-reviewer: review
 ```
 
@@ -136,30 +130,7 @@ For GPT-6 Astra, select it in the host or set the private profile's model to `gp
 
 New features use `config_version: 2` and `risk_tier: auto` without generated role mappings. For an older Lean/Hotfix feature, run `$cc-nexs-migrate-feature-config <id> --dry-run` and then the same skill without `--dry-run`; custom feature overrides are preserved. A legacy approved Plan risk is derived only from its exact stored scope hash; unknown legacy risk is conservatively routed as high. Use `--dry-run --bind-plan-risk` and then `--bind-plan-risk` to materialize a derivable risk with an audit event.
 
-### Full
-
-`mode=full` keeps the five-role SOP with Repo Scout pre-spec recon:
-
-1. Repo Scout writes `repo-context.md`
-2. Planner writes or revises `spec.md`
-3. SA reviews `spec.md`, Sprint cases/code, then the complete integration candidate
-4. Tech Lead implements Sprint slices, syncs docs, and fixes review/deployed defects
-5. All Sprint development completes before one deterministic test release
-6. QA runs accumulated tests on the deployed environment; Evaluator writes final `acceptance.md`
-
-`$cc-nexs-run` remains the orchestrator entry. `$cc-nexs-approve-spec` records G1 and advances to `SPEC_APPROVED` through the shared control program.
-
-### Fast
-
-`mode=fast` keeps the three-role sequence:
-
-1. Fullstack performs spec and implementation phases
-2. Verifier writes and runs tests in the black-box role
-3. Reviewer performs spec review and the combined code-review plus acceptance pass
-
-Fast remains single-sprint only, uses stricter thresholds, skips SA test-case review, and has no TECH_LEAD_REVIEW fallback.
-
-Both modes default to `auto_if_ready`; `--no-auto-test-release` explicitly opts out of automatic delivery. Driver/test-branch failures stop delivery, while browser/login/verification-URL limitations occur only after deployment and enter recoverable manual verification. Production release remains explicit and human-authorized.
+Lean defaults to `auto_if_ready`; `--no-auto-test-release` explicitly opts out of automatic delivery. Driver/test-branch failures stop delivery, while browser/login/verification-URL limitations occur only after deployment and enter recoverable manual verification. Production release remains explicit and human-authorized.
 
 ### Hotfix
 
@@ -207,10 +178,7 @@ codex plugin marketplace add /path/to/cc-nexs
 ```
 
 It also copies the built plugin roots into `~/.codex/plugins/cache/cc-nexs/`,
-enables `cc-nexs@cc-nexs`, and disables `cc-nexs-minimal@cc-nexs` so mirror
-skills and lifecycle hooks do not run twice. Use
-`pnpm install:local:codex:minimal` to switch to the minimal preset; the installer
-keeps the standard preset cached but disabled.
+and enables `cc-nexs@cc-nexs`.
 
 Then restart Codex or open a new thread, check `cc-nexs@cc-nexs` from `/plugins` if desired, and review hooks with `/hooks`.
 
@@ -241,8 +209,8 @@ The Claude Code validator checks the Claude install surface and explicit-only co
 - plugin agents are routable only from an already explicit cc-nexs parent workflow
 - `pnpm smoke:claude-install` runs `install-local.mjs` under a temporary HOME and checks Claude's installed plugin cache, known marketplace file, symlink, and enabled plugin settings without touching the real `~/.claude`
 
-The SOP parity validator checks the lean / full / fast / hotfix load-bearing contract:
+The SOP parity validator checks the lean / plan review / hotfix load-bearing contract:
 
-- `preset.yml` declares Lean as default plus all explicit legacy mode role sets and thresholds
+- `preset.yml` declares Lean as default plus the Lean and Hotfix role sets and thresholds
 - `init`, `run`, and `hotfix` commands still declare the expected document paths and mode branching rules
-- generated Codex mirror skills still include the document write map and Lean / full / fast / hotfix mode locks
+- generated Codex mirror skills still include the document write map and Lean / Hotfix mode locks

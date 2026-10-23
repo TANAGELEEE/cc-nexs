@@ -6,16 +6,15 @@ Follow the steps in this document to customize a preset for a new stack / new te
 
 | Your Need | Recommendation |
 |---------|------|
-| Tweak stack-check rules and build commands, keep the five-way heterogeneous split | Copy `preset-standard` and modify it |
-| No five-way heterogeneous split; 3 roles are enough | Copy `preset-minimal` and modify it |
+| Tweak stack-check rules, build commands, templates, or role prompts | Copy `preset-standard` and modify it |
 | Introduce a new role (e.g. SecurityAuditor) | Add it to an existing preset |
 | Switch tools (use Gemini instead of Codex) | Just change `roles.definitions.<role>.tool` in preset.yml |
-| A completely new workflow (no spec, no sprint) | Redesign preset.yml + custom commands |
+| A different document set or gate layout | Redesign preset.yml, templates, and commands; the core state machine supports `lean` and `hotfix` |
 
 ## Getting Started
 ```bash
 cd packages/
-cp -r preset-minimal preset-myteam
+cp -r preset-standard preset-myteam
 cd preset-myteam
 ```
 Changes:
@@ -35,20 +34,22 @@ description: 一句话说明
 language: zh-CN | zh-TW | en-US  # default locale
 
 roles:
-  enabled:                     # 顺序敏感，决定状态机分派
-    - planner
-    - developer
-    - reviewer
+  enabled:                     # 状态机按角色名分派
+    - lean-planner
+    - lean-plan-reviewer
+    - lean-developer
+    - lean-reviewer
+    - lean-verifier
 
   definitions:
-    planner:
-      agent: agents/planner.md  # 相对 preset 根目录
+    lean-planner:
+      agent: agents/lean-planner.md  # 相对 preset 根目录
       tool: claude-subagent     # claude-subagent | codex | gemini | openai-cli | custom
-      alias: PM                 # 可选：UI 显示名
+      alias: Planner            # 可选：UI 显示名
       session_isolation: independent  # 强制独立 session
 
-    developer:
-      agent: agents/dev.md
+    lean-developer:
+      agent: agents/lean-developer.md
       tool: claude-subagent
       alias: 工程师
 
@@ -83,18 +84,14 @@ paths:
   bugs_dir: "bugs/"
 
 workflow:
-  sprint_enabled: true | false
-  human_gate_after: spec_reviewing_pass  # 或 null 关闭人工 gate
+  default_mode: lean
   thresholds:
     review_revision: 3
     fix_per_bug: 3
-    evaluator_reject: 2
 
 i18n:
   conclusion_pass: "PASS"
   conclusion_fail: "NEEDS_REVISION"
-  acceptance_pass: "通过"
-  acceptance_fail: "未通过"
   test_pass: "通过"
   test_fail: "阻塞"
 ```

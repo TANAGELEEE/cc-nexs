@@ -78,17 +78,16 @@ git diff --exit-code -- dist pi/agents pi/skills .claude-plugin/marketplace.json
    │
    ▼
 4. 调 core/lib/state-machine.mjs::nextStep(...)
-   - 输入：current_state、counters、enabledRoles、thresholds、sprint
-   - 输出：{ next, role, action, parallel?, stop?, circuitBreaker? }
+   - 输入：current_state、counters、enabledRoles、thresholds、workflow、mode
+   - 输出：{ next, role, action, stop?, circuitBreaker? }
    │
    ▼
 5. 根据 role 调对应阶段命令（preset 提供）：
-   - preset-standard 的 /cc-nexs:planner / sa / dev / qa / evaluator
-   - preset-minimal 的 /cc-nexs:planner / dev / review
+   - preset-standard 的 /cc-nexs:plan / execute / lean-review / lean-verify / hotfix
    │
    ▼
 6. 阶段命令通过 reviewer-adapter.mjs 选择工具：
-   - tool=claude-subagent → 用 Task 工具调子代理；Claude Code 的 Lean 四角色均走此路径
+   - tool=claude-subagent → 用 Task 工具调子代理；Claude Code 的 Lean 与 Hotfix 角色均走此路径
    - tool=codex → 用 Bash 工具调 codex CLI
    - tool=gemini / openai-cli / custom → 类似
    │
@@ -110,13 +109,13 @@ Zero-dependency hand-written YAML parser, supporting key:value, nesting, arrays,
 
 ### `core/lib/state-machine.mjs`
 
-Pure function. No I/O, no side effects. Given `(state, counters, thresholds, enabledRoles, sprint, humanGateApproved)`, decides the next step.
+Pure function. No I/O, no side effects. Given `(state, counters, thresholds, enabledRoles, humanGateApproved, workflow, mode)`, decides the next step for Lean or Hotfix.
 
 Characteristics:
-- `mode=lean` is the default for new requirements; the fast-track order is plan gate, locally executable verification, test delivery/acceptance, a single consolidated Review, release gate, base merge
-- Three-tier circuit breaker (review_revision / fix_per_bug / evaluator_reject)
-- Role flexibility (when evaluator is absent, reviewer takes over; when qa is absent, reviewer takes over)
-- Default stop: `SPEC_PENDING_HUMAN` (G1); manual/legacy G2, test release block, manual verification, and circuit breaker
+- `mode=lean` is used for new requirements; the fast-track order is plan, independent plan review, plan gate, locally executable verification, test delivery/acceptance, a single consolidated Review, release gate, base merge
+- Bounded loops: one plan revision, one Review delta closure, and the review_revision / fix_per_bug circuit breakers
+- Unsupported modes throw instead of falling back
+- Default stops: Gateway A, Gateway B, test release block, manual verification, and circuit breaker
 
 ### `core/lib/test-release.mjs`
 
@@ -157,7 +156,7 @@ Deep-merges core's zh-CN.json / zh-TW.json / en-US.json with the preset's i18n/<
 Cross-platform Node.js hooks (replacing the v0.1 bash hooks):
 
 - `role-boundary-guard.mjs` blocks unauthorized read / write / commands according to `CC_NEXS_ROLE`
-- Lean Gateway A/B and legacy G1/G2 return `stop: true` from the state machine to pause role dispatch; no global PreToolUse blocking is used. Approval can only record events and advance state through the `cc-nexs approve-*` core commands
+- Lean Gateway A/B and the Hotfix release gate return `stop: true` from the state machine to pause role dispatch; no global PreToolUse blocking is used. Approval can only record events and advance state through the `cc-nexs approve-*` core commands
 - `pre-merge-check.mjs` runs build_cmd + checks progress=COMPLETE before merging to the main branch
 
 Receives tool-call arguments via the stdin JSON protocol; exit 0 allows / 2 blocks.
@@ -166,7 +165,7 @@ Receives tool-call arguments via the stdin JSON protocol; exit 0 allows / 2 bloc
 
 Lean default:
 ```text
-INIT → PLANNING → PLAN_PENDING_HUMAN
+INIT → PLANNING → PLAN_REVIEWING → PLAN_PENDING_HUMAN
 → IMPLEMENTING → LOCAL_VERIFYING → TEST_RELEASE → TEST_VERIFYING
                                   ↘ TEST_DEPLOYED_NEEDS_MANUAL_VERIFY ↗
 → CONSOLIDATED_REVIEW → RELEASE_PENDING_HUMAN
@@ -174,25 +173,7 @@ INIT → PLANNING → PLAN_PENDING_HUMAN
 ```
 Lean maintains only two manually maintained documents, requirements.md and plan.md; after a Review block, at most one delta closure is allowed. Environment items that cannot be started locally are documented with `deferred_to_test` as evidence, and delivery continues. Browser, login/MFA, and acceptance URL checks are performed only after deployment; if any are missing, delivery enters the recoverable `TEST_DEPLOYED_NEEDS_MANUAL_VERIFY` state and does not roll back the test merge/CI.
 
-Legacy full:
-```
-INIT → REQ_DRAFTED → RECON_DONE → SPEC_DRAFTED → SPEC_REVIEWING
-     → SPEC_PENDING_HUMAN (G1) → SPEC_APPROVED
-
-for N in 1..total_sprints:
-  KICKOFF → DEV + QA_CASES → SA_TEST_REVIEW → DOC_SYNC → SA_CODE → DEV_DONE
-
-ALL_SPRINTS_DEV_DONE → INTEGRATION_REVIEW → TEST_RELEASE
-                     → FINAL_QA → FINAL_EVAL → COMPLETE
-
-FINAL_QA_BLOCKED → FINAL_FIX → FINAL_FIX_REVIEW → TEST_RELEASE → FINAL_QA
-```
-A Sprint is a development slice, not a deployment/acceptance slice. New requirements default to `final_only + auto_if_ready`; legacy progress without delivery stays on `per_sprint + manual`. An explicit exit, release driver, or test branch misconfiguration can block delivery before push; browser/login/MFA/verification URL issues only affect post-deployment acceptance and fall into recoverable manual verification. Production releases are always manual.
-
-Circuit-breaker arrows (not in the main diagram):
-- review_revision >= 3 → SPEC_REVIEWING (forces a Planner re-review)
-- fix_per_bug >= 3 → TECH_LEAD_REVIEW (implementation path re-evaluation)
-- evaluator_reject >= 2 → integration/spec approach re-evaluation
+An explicit exit, release driver, or test branch misconfiguration can block delivery before push; browser/login/MFA/verification URL issues only affect post-deployment acceptance and fall into recoverable manual verification. Production releases are always manual.
 
 ## Data Flow
 
@@ -201,17 +182,17 @@ Inputs entering cc-nexs:
 - Project `cc-nexs.config.yml` configured once by a human
 
 Flow artifacts (by role):
-- Planner → spec.md
-- Reviewer → review.md / sa-review.md / sa-code-review.md / sa-test-review.md
-- Developer → src/* + dev-plan.md + api-doc.md + deploy.md
-- QA → test-cases.md + test-report.md + bugs/ + qa-scripts/
-- Evaluator → acceptance.md
+- Lean Planner → requirements.md + plan.md approval scope
+- Lean Plan Reviewer → plan.md plan review section
+- Lean Developer → src/* within plan-approved paths
+- Lean Reviewer / Verifier → plan.md Review and Test sections
+- Hotfix roles → the assigned BUG document
 - Orchestrator/core controls → progress.json v2 + progress.md mirror
 
 Invariants:
-- spec.md can only be changed by the Planner
+- requirements.md and the plan approval scope can only be changed by the Planner
 - progress can only be changed by the orchestrator + deterministic approve/release controls
-- Review/test/acceptance md files are append-only and cannot be overwritten
+- Review and test evidence sections are append-only and cannot be overwritten
 
 ## Comparison with the Previous Version (v0.1 monolith)
 

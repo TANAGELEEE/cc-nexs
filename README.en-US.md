@@ -17,14 +17,11 @@ Source stays easy to maintain (monorepo) while distribution artifacts stay flat 
 
 | Preset | Use case | Roles | Tools | Language |
 |--------|---------|------|------|------|
-| `preset-standard` | General multi-repo projects; the concrete tech stack is injected by a private overlay | Supports **lean (default) / hotfix / fast / full**; Pi uses pi-subagents to isolate roles | Each Lean/Hotfix role can configure its model and effort/thinking; the public preset does not pin model IDs | English |
-| `preset-minimal` | General / personal projects / cross-language starting point | 3 roles (Planner / Developer / Reviewer)| Single Claude tool + subagent isolation | English |
+| `preset-standard` | General multi-repo projects; the concrete tech stack is injected by a private overlay | **lean** requirements and **hotfix** repairs; Pi uses pi-subagents to isolate roles | Each Lean/Hotfix role can configure its model and effort/thinking; the public preset does not pin model IDs | English |
 
 To add a preset, follow [docs/extending-presets.md](./docs/extending-presets.md). For modes and role selection, see [docs/role-map.md](./packages/preset-standard/docs/role-map.md) in `preset-standard`.
 
-New requirements in `preset-standard` default to Lean; small requirements that are low/medium risk, reuse existing capabilities, and add no new table schemas/infrastructure/breaking contracts take the fast-track by default: once the plan is approved, implementation runs in parallel across worktree/feature branches, and any build/start/smoke that can be completed locally is completed immediately; for example, when backend-java cannot be started locally, it records structured `deferred_to_test` evidence and moves on instead of retrying repeatedly. The exact candidate is then frozen, merged into test first with CI/deployment triggered, accepted in the deployed environment (web can start locally and connect to the deployed test backend), and finally given one consolidated Review, stopping at Gateway B. Browser, login/MFA, and acceptance page URLs all belong only to post-deployment verification; when a capability is missing, the flow enters a recoverable `manual_required` and does not block or roll back the test merge/CI. High-risk Lean uses the Review-first standard lane; Fast/Full must be specified explicitly; historical requirements without a `delivery` field keep the old per-Sprint + manual semantics.
-
-Explicit Fast/Full multi-end implementations are no longer handled serially by a single Fullstack/Tech Lead either. G1 binds the repository ownership DAG from the spec; backend/web workers in the same wave on different assigned worktrees start simultaneously on Claude Code, Codex, and Pi, and the whole batch shares the frozen model routing. Only after all have joined does per-repo aggregate verification run, along with the single shared-document sync and one candidate per repo; the same repository always runs serially, avoiding lockfile, codegen, formatter, and build-directory cross-contamination.
+New requirements in `preset-standard` use Lean. The Planner's plan is first challenged by an independent Plan Reviewer against the requirements and the code; a blocked plan gets one revision, and Gateway A refuses a plan whose acceptance criteria do not each trace to a task, a local check, and a test check. Small requirements that are low/medium risk, reuse existing capabilities, and add no new table schemas/infrastructure/breaking contracts take the fast-track by default: once the plan is approved, implementation runs in parallel across worktree/feature branches, and any build/start/smoke that can be completed locally is completed immediately; for example, when backend-java cannot be started locally, it records structured `deferred_to_test` evidence and moves on instead of retrying repeatedly. The exact candidate is then frozen, merged into test first with CI/deployment triggered, accepted in the deployed environment (web can start locally and connect to the deployed test backend), and finally given one consolidated Review, stopping at Gateway B. Browser, login/MFA, and acceptance page URLs all belong only to post-deployment verification; when a capability is missing, the flow enters a recoverable `manual_required` and does not block or roll back the test merge/CI. High-risk Lean uses the Review-first standard lane with an escalated Plan Reviewer and Reviewer; a requirement too large to review and verify as one plan is split into separately approved Lean requirements.
 
 Lean/Hotfix models use risk-driven routing. The effective precedence is: public preset < private overlay < project `cc-nexs.config.yml.models` < feature profiles/routing < matched routing rules < explicit overrides in feature `models.roles`. New feature templates no longer generate `models.roles`, so everyday project configuration actually takes effect.
 
@@ -69,7 +66,7 @@ models:
 ```
 Projects can continue to configure a low-budget everyday profile for Planner, Developer, Reviewer, and Verifier separately; only roles that match a risk rule are upgraded. An explicit feature profile remains the final human decision, and `models.routing.enabled: false` explicitly disables automatic routing. All three hosts always use an independent Reviewer session.
 
-Before configuring a specific model, you must defer to the host's native subagent override capability; a model appearing in the top-level catalog does not mean the current native-agent dispatch will necessarily allow it. Fast/Full still resolve `repo-scout/planner/tech-lead/sa/qa/evaluator/fullstack/reviewer/verifier`, and projects that mainly run these two modes should also map these roles explicitly; otherwise they inherit the host model.
+Before configuring a specific model, you must defer to the host's native subagent override capability; a model appearing in the top-level catalog does not mean the current native-agent dispatch will necessarily allow it.
 
 Note: `models.routing.rules` is an ordered array, and later matching rules override earlier matching rules; once an overlay/project/feature declares this array, it replaces the lower-level array as a whole rather than appending by `id`. When only overriding profiles/roles, do not redeclare rules.
 
@@ -89,32 +86,22 @@ All four Lean roles in Claude Code use independent Claude subagents; all four Le
 cc-nexs/
 ├── packages/                       source (monorepo)
 │   ├── core/                       shared framework
-│   │   ├── commands/               shared orchestrator commands (run/approve-spec/status/init)
+│   │   ├── commands/               shared orchestrator commands (run/approve-plan/status/release)
 │   │   ├── lib/                    Node.js framework code
 │   │   ├── hooks/                  cross-platform .mjs hooks
 │   │   ├── schemas/                preset / workspace / overlay / progress.json v2 Schema
 │   │   └── i18n/{zh-CN,en-US}.json
 │   │
-│   ├── preset-standard/            Heterogeneous five-party preset (English)
+│   ├── preset-standard/            Lean + Hotfix preset (English)
 │   │   ├── .claude-plugin/plugin.json
 │   │   ├── .codex-plugin/plugin.json
 │   │   ├── preset.yml
-│   │   ├── agents/ × 5             five-party role definitions
-│   │   ├── commands/ × 6           preset-owned phase commands (planner/sa/dev/qa/evaluator/hotfix）
+│   │   ├── agents/                 Lean, Hotfix, and Compound role definitions
+│   │   ├── commands/               preset-owned phase commands (init/plan/execute/lean-review/lean-verify/hotfix)
 │   │   ├── skills/ × 4
 │   │   ├── docs/                   preset architecture / workflow / role-map
-│   │   ├── templates/              11 localized templates
+│   │   ├── templates/              localized Lean, Hotfix, and solution templates
 │   │   └── hooks/hooks.json        hook registration (implementation scripts come from core)
-│   │
-│   └── preset-minimal/             3-role generic preset (English)
-│       ├── .claude-plugin/plugin.json
-│       ├── .codex-plugin/plugin.json
-│       ├── preset.yml
-│       ├── agents/ × 3
-│       ├── commands/ × 3
-│       ├── templates/
-│       ├── i18n/en-US/strings.json
-│       └── hooks/hooks.json
 │
 ├── scripts/
 │   └── build.mjs                   build script: materialize core into each preset
@@ -129,8 +116,8 @@ cc-nexs/
 │   ├── preset-standard/            flat self-contained plugin
 │   │   ├── .claude-plugin/plugin.json
 │   │   ├── .codex-plugin/plugin.json
-│   │   ├── commands/ × 10          preset 6 + core 4 materialized merge
-│   │   ├── agents/ × 5
+│   │   ├── commands/               preset + core commands materialized together
+│   │   ├── agents/
 │   │   ├── skills/                 Claude Code native skills (kept out of the Codex mirror to avoid polluting Claude)
 │   │   ├── codex-skills/           Codex command mirror skills
 │   │   ├── docs/
@@ -139,7 +126,6 @@ cc-nexs/
 │   │   ├── lib/                    materialized core/lib
 │   │   ├── schemas/                materialized core/schemas
 │   │   └── i18n/                   merged core + preset
-│   └── preset-minimal/             same structure
 │
 ├── examples/
 │   └── using-preset-standard/      example project
@@ -151,7 +137,7 @@ cc-nexs/
 │   └── extending-presets.md        new preset guide
 ├── pi/
 │   ├── extensions/cc-nexs.ts       Pi slash command + child role guard
-│   ├── skills/                      lean + fast + full + hotfix P2 command mirrors
+│   ├── skills/                      lean + hotfix P2 command mirrors
 │   └── agents/                      pi-subagents package roles
 │
 ├── pnpm-workspace.yaml
@@ -162,11 +148,10 @@ cc-nexs/
 pnpm build             # build all presets
 pnpm build:codex       # same as build; explicitly refresh Codex plugin artifacts
 pnpm build:standard    # build preset-standard only
-pnpm build:minimal     # build preset-minimal only
 pnpm validate:claude   # validate Claude Code marketplace / install script entry points / skill isolation
 pnpm validate:codex    # validate Codex manifest / marketplace / command mirror skills
 pnpm validate:pi       # validate Pi package / P2 skills / package agents / no fixed models
-pnpm validate:sop      # validate key document anchors and mirror contracts for lean / full / fast / hotfix
+pnpm validate:sop      # validate key document anchors and mirror contracts for lean / plan review / hotfix
 pnpm smoke:claude-install # smoke-test local Claude Code installation with a temporary HOME; do not touch the real ~/.claude
 pnpm smoke:pi-install  # verify local Pi package registration with a temporary PI_CODING_AGENT_DIR
 pnpm validate:plugins  # validate Claude Code + Codex plugin artifacts and installation shapes
@@ -181,7 +166,7 @@ What build does:
 5. Automatically generates `.claude-plugin/marketplace.json`, listing every preset as a Claude Code plugin
 6. Automatically generates `.agents/plugins/marketplace.json`, listing every preset as a Codex plugin
 7. Generates `codex-skills/` for Codex: each `commands/*.md` produces a `$cc-nexs-*` mirror skill that still points back to the original command document; the original `skills/` are not written into the Codex mirror, so the Claude Code plugin is not affected
-8. Generates lean + fast + full + hotfix command skills and package-qualified role agents for Pi; Fast/Full runs across multiple repos in the same wave are launched with a single `subagent({ tasks, concurrency, async: true, worktree: false, context: "fresh" })` call, then joined with `subagent_wait`
+8. Generates lean + hotfix command skills and package-qualified role agents for Pi
 
 `dist` is the actual plugin carrier. Claude Code reads `.claude-plugin/marketplace.json`; Codex reads `.agents/plugins/marketplace.json`. Both point to the same set of `dist/preset-*`. Entry points on all three platforms are explicit-trigger only: ordinary natural-language development requests will not automatically enable cc-nexs.
 
@@ -198,7 +183,7 @@ This runs:
 2. `pnpm validate:plugins`
 3. Sync `dist/preset-*` to `~/.codex/plugins/cache/cc-nexs/`
 4. `codex plugin marketplace add /path/to/cc-nexs`
-5. Enable `cc-nexs@cc-nexs` by default in `~/.codex/config.toml` and disable `cc-nexs-minimal@cc-nexs` to avoid duplicate skill candidates
+5. Enable `cc-nexs@cc-nexs` in `~/.codex/config.toml`
 
 Then restart Codex or open a new thread. You can check whether `cc-nexs@cc-nexs` is enabled in `/plugins`; before hooks run for the first time, you need to review + trust them in `/hooks`.
 
@@ -207,23 +192,18 @@ Codex uses an explicit skill entry point; each mirror skill's `agents/openai.yam
 $cc-nexs-init "requirement description"             # defaults to lean
 $cc-nexs-plan 01
 $cc-nexs-approve-plan 01
-$cc-nexs-init "complex requirement" --mode=full # full only when explicitly selected
 $cc-nexs-run 01
 $cc-nexs-approve-release 01
 $cc-nexs-release-base 01
 $cc-nexs-release-test 01
-$cc-nexs-approve-deploy 01
 $cc-nexs-hotfix "symptom description" --repos=api  # automatically creates a Hotfix branch and BUG document without consuming a requirement number
 ```
-The Codex-side implementation approach is command mirror skills. `$cc-nexs-run` reads `commands/run.md` as the single source of truth, so the document write locations and state machine logic for lean / full / fast / hotfix do not diverge. The approval skill calls the deterministic `cc-nexs` controller and does not modify progress manually. See [docs/codex-plugin.md](./docs/codex-plugin.md) for details.
+The Codex-side implementation approach is command mirror skills. `$cc-nexs-run` reads `commands/run.md` as the single source of truth, so the document write locations and state machine logic for lean / hotfix do not diverge. The approval skill calls the deterministic `cc-nexs` controller and does not modify progress manually. See [docs/codex-plugin.md](./docs/codex-plugin.md) for details.
 
 ### Claude Code local development (one command)
 ```bash
 cd /path/to/cc-nexs
 pnpm install:local              # equivalent to: build + copy to ~/.claude/plugins/cache/
-
-# switch to the minimal preset
-pnpm install:local:minimal
 ```
 `install:local` does the following:
 
@@ -232,11 +212,11 @@ pnpm install:local:minimal
 3. Sync `~/.claude/plugins/installed_plugins.json` metadata
 4. Verify that the plugin is enabled in `~/.claude/settings.json`
 
-Restart Claude Code after this and it takes effect. After changing source later, just run `pnpm install:local` once more. Claude Code's commands and native skills both set `disable-model-invocation: true`; they run only when the user types `/cc-nexs:*`, `/cc-nexs-minimal:*`, or an explicit skill command. The routing description for role agents is likewise limited to accepting dispatch only from an explicitly started cc-nexs parent flow.
+Restart Claude Code after this and it takes effect. After changing source later, just run `pnpm install:local` once more. Claude Code's commands and native skills both set `disable-model-invocation: true`; they run only when the user types `/cc-nexs:*` or an explicit skill command. The routing description for role agents is likewise limited to accepting dispatch only from an explicitly started cc-nexs parent flow.
 
 ### Pi P2 Installation
 
-Pi currently has experimental P2 support, with a commitment to the `preset-standard` lean, fast, full, and hotfix flows. Public GitHub installation:
+Pi currently has experimental P2 support, with a commitment to the `preset-standard` lean and hotfix flows. Public GitHub installation:
 ```bash
 pi install npm:pi-subagents@0.35.1
 # macOS preferred provider (open ego lite after installation for first-run setup)
@@ -259,8 +239,7 @@ Claude Code automated environment acceptance uses `chrome-devtools-mcp`; Codex r
 ### Install Claude Code from GitHub (other machines / collaborators)
 ```bash
 /plugin marketplace add <github-owner>/cc-nexs
-/plugin install cc-nexs@cc-nexs                 # five-party heterogeneous preset (preset-standard)
-/plugin install cc-nexs-minimal@cc-nexs         # 3 roles (preset-minimal)
+/plugin install cc-nexs@cc-nexs                 # preset-standard
 ```
 `/plugin marketplace add <github-owner>/cc-nexs` fetches the `.claude-plugin/marketplace.json` at the repository root; its `plugins[].source` points to `./dist/preset-*`—so the publishing repository must include a `dist/` that has passed reproducible-build verification.
 
@@ -278,15 +257,14 @@ Claude Code, Codex, and Pi share the same command semantics but use each runtime
 | Plain terminal | `cc-nexs approve-plan 01`, `cc-nexs verify-local 01`, `cc-nexs approve-release 01` |
 ```bash
 /cc-nexs:init "requirement description"          # defaults to lean; each repo uses an independent worktree + feature/<id>-<slug>
-/cc-nexs:plan [id]               # generate requirements/plan and temporary HTML, then stop at Gateway A
+/cc-nexs:plan [id]               # generate requirements/plan, run one independent plan review, render temporary HTML, then stop at Gateway A
 /cc-nexs:approve-plan [id]       # approve the plan hash
 /cc-nexs:run [id]                # implement → local verification where possible → test/CI → environment acceptance → one consolidated Review
 /cc-nexs:approve-release [id]    # Gateway B，approve the exact tested fingerprint
 /cc-nexs:request-release-changes [id] --type=... --feedback="..."  # submit Gateway B feedback and return safely
 /cc-nexs:release-base [id]       # merge into the configured base after approval; archive docs last
-/cc-nexs:run [id] --no-auto-test-release # explicitly hand this run to an external test release; Lean/Hotfix cannot use G2 as a substitute for a release attempt
+/cc-nexs:run [id] --no-auto-test-release # explicitly hand this run to an external test release; a manual release is not a release attempt
 /cc-nexs:release-test [id]      # deterministically merge the complete candidate into test and call the release driver
-/cc-nexs:approve-spec [id]      # human approval for the spec
 /cc-nexs:status [id]            # read-only status view
 /cc-nexs:build [--phase=...]      # select and run build/test commands from git diff
 
@@ -294,7 +272,7 @@ Claude Code, Codex, and Pi share the same command semantics but use each runtime
 /cc-nexs:hotfix [bug-key]         # resume: local verification, independent Review, test, Gateway B
 /cc-nexs:revise-hotfix [bug-key] --reason "reason" --authorization-evidence "existing authorization" # rebind the original task
 ```
-G1/G2 are state-machine pause points, not global tool locks. While waiting for human confirmation, the parent session can still perform Git, SQL, SSH, deployment, diagnostics, and documentation operations authorized by the user; only the next cc-nexs role will not be dispatched.
+Gateway A/B are state-machine pause points, not global tool locks. While waiting for human confirmation, the parent session can still perform Git, SQL, SSH, deployment, diagnostics, and documentation operations authorized by the user; only the next cc-nexs role will not be dispatched.
 
 ### Multi-module projects automatically select the build command by directory (since v0.3)
 
@@ -339,8 +317,8 @@ The concrete phase commands (invoked one step at a time by a role) are determine
 ## Design Principles
 
 1. **Event state machine** — `progress.json` v2 is the authoritative event log with revisions; `progress.md` is only a human-readable view
-2. **Two gate types with distinct semantics** — Lean fixes Gateway A (plan) and Gateway B (tested candidate); if acceptance capability is insufficient after deployment, the task enters a recoverable `manual_required`, and browser issues are no longer treated as G2 before test delivery
-3. **Three-tier circuit breaker** — repeated review rejections, repeated repair failures, and repeated acceptance failures each escalate to a different state
+2. **Two gate types with distinct semantics** — Lean fixes Gateway A (reviewed, traceable plan) and Gateway B (tested candidate); if acceptance capability is insufficient after deployment, the task enters a recoverable `manual_required` without blocking test delivery
+3. **Bounded loops** — one plan revision, one Review delta closure, and a per-bug repair breaker escalate to a human instead of looping
 4. **Hard isolation of role boundaries** — hooks block out-of-scope operations via the `CC_NEXS_ROLE` environment variable
 5. **Pluggable presets** — new project stacks get a new preset without touching core
 6. **One source for multiple runtimes** — Claude Code, Codex, and Pi share the command SOP; runtimes only adapt role scheduling, model resolution, and permission interception
@@ -348,7 +326,9 @@ The concrete phase commands (invoked one step at a time by a role) are determine
 
 ## Status
 
-The current version separates the development Sprint from requirement delivery: after the Lean fast-track records locally unverifiable items as `deferred_to_test`, it prioritizes completing the deterministic test merge/CI; cross-platform browser verification happens only after deployment, where insufficient capability can be recovered manually without rolling back delivery that has already completed.
+The current version runs Lean requirements and Hotfix repairs: after the Lean fast-track records locally unverifiable items as `deferred_to_test`, it prioritizes completing the deterministic test merge/CI; cross-platform browser verification happens only after deployment, where insufficient capability can be recovered manually without rolling back delivery that has already completed.
+
+For workflows that require cross-vendor adversarial review (for example a Claude planner with a Codex reviewer), use the separate `nexs-sop` skill; cc-nexs keeps every role inside the active runtime and contrasts models through per-role profiles.
 
 ## License
 

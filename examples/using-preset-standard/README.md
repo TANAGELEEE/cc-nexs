@@ -1,6 +1,6 @@
-# 演示：用 preset-standard 跑一个最小需求
+# 演示：用 preset-standard 跑一个最小 Lean 需求
 
-这个目录保留一个显式 `mode=full` 的兼容示例。新需求默认使用 Lean：`init -> plan -> approve-plan -> run -> approve-release`。
+这个目录是一个 Lean 示例需求（`/api/health` 健康检查）。流程：`init -> plan（含独立计划审核）-> approve-plan -> run -> approve-release`。
 
 ## 文件清单
 
@@ -9,49 +9,30 @@ examples/using-preset-standard/
 ├── cc-nexs.config.yml             # 项目级配置：选 preset、覆盖阈值
 └── doc/
     └── 01.demo-feature/           # 一个待开发的需求
-        ├── requirements.md        # PM 写业务需求
-        ├── spec.md                # Planner 产出
-        ├── progress.md            # orchestrator 维护
-        ├── ...                    # 其他模板
-        └── bugs/                  # QA 发现 bug 时落到这里
+        ├── requirements.md        # 业务需求与 AC 表（人工维护）
+        ├── plan.md                # Planner 产出；计划审核、Review、Test 证据也写在这里
+        ├── config.json            # mode=lean
+        └── progress.json / .md    # orchestrator 维护
 ```
 
 ## 真实使用步骤
 
 ```bash
-# 1. 软链 preset 到 ~/.claude/plugins/
-ln -s /path/cc-nexs/packages/preset-standard ~/.claude/plugins/cc-nexs
-
-# 2. 进入演示目录
+# 1. 安装插件（见仓库根目录 README）后进入演示目录
 cd examples/using-preset-standard
 
-# 3. 编辑业务需求
+# 2. 补全业务需求；每条验收标准写成 AC-xxx 表格行
 vi doc/01.demo-feature/requirements.md
-# (写一段：要开发什么 / 关键场景 / 验收要点)
 
-# 4. 启动流水线
+# 3. 生成计划：Planner 写 plan.md，独立 Plan Reviewer 审核，停在 Gateway A
+/cc-nexs:plan 01
+
+# 4. 审核计划与计划审核结论后批准
+/cc-nexs:approve-plan 01
+
+# 5. 实现、本地验证、test 交付与验收、一次集中 Review，停在 Gateway B
 /cc-nexs:run 01
 
-# 自动跑到 SPEC_PENDING_HUMAN 后停下，输出 spec 摘要让你审核
-# 5. 审核满意
-cat doc/01.demo-feature/spec.md
-/cc-nexs:approve-spec 01
-
-# 6. 继续
-/cc-nexs:run 01
-# 全自动跑到 COMPLETE
+# 6. 批准合并到 base
+/cc-nexs:approve-release 01
 ```
-
-## 想看对照体验？
-
-试试 preset-minimal（3 角色、英文、单工具）：
-
-```bash
-rm ~/.claude/plugins/cc-nexs
-ln -s /path/cc-nexs/packages/preset-minimal ~/.claude/plugins/cc-nexs
-
-# 重新跑同一需求，体感会简化（无 SA / Evaluator 分离，无 sprint 切片）
-/cc-nexs:run 01
-```
-
-切回原 preset 把链接换回去即可。

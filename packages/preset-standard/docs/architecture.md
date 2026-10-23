@@ -27,43 +27,26 @@ Claude Code, Codex, and Pi share the command documentation and the core controll
 `progress.json` v2 stores:
 
 - `state`, `revision`, `events[]`;
-- role counters, Sprint status, G1/G2;
-- Lean plan/release gates, local verification, and centralized Review fingerprint;
+- role counters;
+- plan review bound to the plan hash, plan/release gates, local verification, and centralized Review fingerprint;
 - repository worktree/candidate assignments;
 - `delivery.strategy`;
 - `delivery.test.policy/status/attempts[]`.
 
 `progress.md` is a rendered mirror. Roles cannot edit either file directly; the Orchestrator appends events through a revision-aware helper.
 
-When legacy progress has no `delivery`, the runtime injects safe defaults:
-```json
-{"strategy":"per_sprint","test":{"policy":"manual","status":"idle","attempts":[]}}
-```
-New progress defaults to `mode=lean + final_only + auto_if_ready`.
+New progress defaults to `mode=lean + auto_if_ready`.
 
 ## State Architecture
 
 Lean default chain:
 ```text
-INIT -> PLAN -> Gateway A -> IMPLEMENT
+INIT -> PLAN -> PLAN REVIEW -> Gateway A -> IMPLEMENT
 -> LOCAL VERIFY -> one CONSOLIDATED REVIEW
 -> TEST RELEASE -> TEST VERIFY -> Gateway B
 -> BASE MERGE -> COMPLETE
 ```
-Each repository uses `.worktrees/<id>-<slug>/<repo-id>` and `feature/<id>-<slug>`. Gateway A binds the requirements/plan scope, while Gateway B binds the candidate fingerprint shared by local verification, centralized Review, and test acceptance.
-
-Full development and delivery is divided into two zones. Each Sprint's approved ownership DAG fans out by repository wave; different worktrees run in parallel while the same worktree runs serially, and this merges with the existing parallelism of QA cases into the same first wave:
-```text
-Development zone
-  SPRINT_N_KICKOFF -> DEV/CASES -> DOC_SYNC -> SA_CODE -> DEV_DONE
-  repeated until ALL_SPRINTS_DEV_DONE
-
-Delivery zone
-  INTEGRATION_REVIEW -> TEST_RELEASE -> FINAL_QA -> FINAL_EVAL -> COMPLETE
-```
-This boundary prevents publishing M1 when the frontend and backend are only half complete. A Sprint can still be reviewed independently and form a candidate, but only complete requirements enter the delivery zone.
-
-Fast is a single-Sprint compressed version that likewise enters TEST_RELEASE after CODE_REVIEW. Multi-platform implementations run in parallel under the same ownership wave, and after the join a single docs owner synchronizes the shared documentation.
+Each repository uses `.worktrees/<id>-<slug>/<repo-id>` and `feature/<id>-<slug>`. Gateway A binds the requirements/plan scope and requires a plan review of that exact scope plus full acceptance-criteria traceability, while Gateway B binds the candidate fingerprint shared by local verification, centralized Review, and test acceptance.
 
 Hotfix uses an independent `hotfix/<key>` branch and a latest-base worktree, directly maintaining the BUG file in the docs repo, without consuming a requirement number or publishing placeholder commits. State resides in the workspace `.cc-nexs/hotfixes/<key>/`, and the document is located via `progress.hotfix_document`; the legacy hotfix.md can still be restored. All levels require local verification, independent Review, precise test evidence, and Gateway B; P3 line counts serve only as a risk reference. Authorized-scope revisions use `revise-hotfix` to rebind in place while preserving history; contract extensions use `--promote-lean` to migrate alongside the BUG into Lean and return to Gateway A, preserving the original branch and key. Environment acceptance limitations after a real deployment may be handled through an explicitly authorized Gateway B exception, and must not be marked as test passed or authorized for production deployment by default.
 
@@ -139,7 +122,7 @@ Lean also allows `deferred_to_test`: every locally executable check must pass, a
 
 ## Browser capability
 
-Browser is only a QA tool after a successful test merge/CI deployment; it is not a prerequisite capability for the test release:
+Browser is only a verification tool after a successful test merge/CI deployment; it is not a prerequisite capability for the test release:
 
 | Runtime | Capability |
 |---|---|
@@ -167,8 +150,7 @@ Repeated calls with the same successful fingerprint reuse the previous attempt. 
 - Some repositories have already been merged: the attempt retains evidence for each repository, and retry idempotently fills the gaps.
 - Driver failure/timeout/invalid JSON: the attempt is marked as failed and enters the release block.
 - Deployed but browser verification cannot be completed: a dedicated state waits for manual handling, without falsely reporting success.
-- QA failure: fix locally to FIXED, undergo an independent re-review, republish, and run a regression to VERIFIED after deployment.
-- Final acceptance failure: return to integration for revision, and do not directly change the status to pass.
+- Test verification failure: fix in the same feature worktree, re-verify locally, take one delta Review, then publish a new attempt and run regression after deployment.
 
 ## Runtime Materialization
 
@@ -188,7 +170,7 @@ The Pi base installation only requires `pi-subagents`. At runtime, probe for ego
 - Plaintext `password/passwd/credentials/secret_value` configuration fields are prohibited.
 - The browser may access only configured hosts.
 - Role sub-sessions cannot mutate Git or progress.
-- G1/G2 are state-machine stops, not global tool blocks.
+- Gateway A/B are state-machine stops, not global tool blocks.
 
 ## Completion and Production
 

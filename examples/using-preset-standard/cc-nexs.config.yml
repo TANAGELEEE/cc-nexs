@@ -18,7 +18,6 @@ workflow:
 thresholds:
   review_revision: 3
   fix_per_bug: 3
-  evaluator_reject: 2
 
 # 可选：项目本地化覆盖 preset 默认 language
 # language: zh-CN
@@ -40,23 +39,15 @@ thresholds:
 #         model: your-strong-model
 #         effort: xhigh
 #   roles:
-#     repo-scout: economical
-#     planner: daily-review
-#     tech-lead: daily-review
-#     sa: daily-review
-#     qa: economical
-#     evaluator: daily-review
-#     fullstack: daily-development
-#     reviewer: daily-review
-#     verifier: economical
+#     lean-planner: daily-review
+#     lean-plan-reviewer: daily-review
 #     lean-developer: daily-development
 #     lean-reviewer: daily-review
 # feature config.json 默认不生成 models.roles；显式 feature role override 仍最终优先。
 
-# 新需求默认在所有开发 Sprint 完成后，一次性合并到 test、发布并验收。
-# 显式设为 manual 可退回人工 G2；外部 driver 和 URL 通常放私有 overlay。
+# 新需求的完整 candidate 一次性合并到 test、发布并验收。
+# 显式设为 manual 则交给外部发布流程；外部 driver 和 URL 通常放私有 overlay。
 # workflow:
-#   sprint_delivery: final_only
 #   test_release:
 #     policy: auto_if_ready
 #     on_prerequisite_failure: manual_gate

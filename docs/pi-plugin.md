@@ -1,18 +1,13 @@
 # Pi P2 Support
 
-cc-nexs provides experimental Pi support for the `preset-standard` lean, fast, full, and hotfix workflows. It supports Tintin RPC v2 (`@tintinweb/pi-subagents@0.14.3`) as well as the external [`pi-subagents`](https://github.com/nicobailon/pi-subagents) package for isolated role sessions and does not invoke Codex CLI.
+cc-nexs provides experimental Pi support for the `preset-standard` lean and hotfix workflows. It supports Tintin RPC v2 (`@tintinweb/pi-subagents@0.14.3`) as well as the external [`pi-subagents`](https://github.com/nicobailon/pi-subagents) package for isolated role sessions and does not invoke Codex CLI.
 
 ## Supported boundary
 
 Supported end to end:
 
-- lean-default plan, two human gates, local verification, one consolidated Review, test verification, and base integration
-- Lean Planner, Developer, Reviewer, and Verifier isolation
-- fast-mode init and run
-- Repo Scout, Fullstack, Reviewer, and Verifier isolation
-- full-mode Planner, Tech Lead, SA, QA, and Evaluator isolation
-- Fast/Full multi-repository implementation waves: one asynchronous `subagent({ tasks, ... })` call starts the whole wave in progress-assigned worktrees, then `subagent_wait` joins it before aggregate verification and candidate creation
-- G1 and G2 approval commands
+- Lean plan, independent plan review, two human gates, local verification, one consolidated Review, test verification, and base integration
+- Lean Planner, Plan Reviewer, Developer, Reviewer, and Verifier isolation
 - workspace-aware build and Git Custodian commands
 - progress v2 state, counters, artifacts, and status/doctor commands
 - P0/P1/P2/P3 hotfix grading, isolated repair/review/regression, and candidate recording
@@ -21,11 +16,10 @@ Supported end to end:
 Not yet advertised as supported:
 
 - compound flow
-- preset-minimal
 
 The Pi skills fail closed for those flows instead of silently changing workflow semantics.
 
-Fast/Full implementation fanout uses `cc_nexs_dispatch`. It detects `pi-subagents@0.35.1` or Tintin RPC v2. Tintin spawns all siblings through its event RPC with separate model/thinking and the assigned cwd; completion notifications plus `get_subagent_result` provide the barrier. The public `Agent` tool lacks cwd and must not be substituted. The local installer registers translated `cc-nexs.*` roles; child session names activate role guards without process-wide role changes. For the legacy tasks API: Each wave is one `subagent({ tasks, concurrency, async: true, worktree: false, context: "fresh" })` call, followed by `subagent_wait({ id })`; Full includes QA case generation in the first batch. It never asks pi-subagents to create worktrees because Git Custodian owns the already assigned feature worktrees and every candidate mutation. Same-repository work remains serialized even when paths appear disjoint, and a fallback retry contains only failed/unavailable tasks.
+Parallel role dispatch uses `cc_nexs_dispatch`. It detects `pi-subagents@0.35.1` or Tintin RPC v2. Tintin spawns all siblings through its event RPC with separate model/thinking and the assigned cwd; completion notifications plus `get_subagent_result` provide the barrier. The public `Agent` tool lacks cwd and must not be substituted. The local installer registers translated `cc-nexs.*` roles; child session names activate role guards without process-wide role changes. For the legacy tasks API: Each wave is one `subagent({ tasks, concurrency, async: true, worktree: false, context: "fresh" })` call, followed by `subagent_wait({ id })`. It never asks pi-subagents to create worktrees because Git Custodian owns the already assigned feature worktrees and every candidate mutation. Same-repository work remains serialized even when paths appear disjoint, and a fallback retry contains only failed/unavailable tasks.
 
 ## Install
 
@@ -137,8 +131,6 @@ Pi registers the same P2 slash surface:
 /cc-nexs:approve-release 01
 /cc-nexs:request-release-changes 01 --type=implementation --feedback="调整错误提示"
 /cc-nexs:release-base 01
-/cc-nexs:approve-spec 01
-/cc-nexs:approve-deploy 01
 /cc-nexs:release-test 01
 /cc-nexs:hotfix "支付回调偶现 500" --repos=api
 /cc-nexs:hotfix <bug-key>
@@ -150,7 +142,7 @@ Each slash command forwards to an explicit-only generated Pi skill. The skill re
 
 All approval commands call the shared deterministic core. `verify-local`, `release-test`, and `release-base` call deterministic controllers for evidence and Git integration. `release-test` delivers the exact candidate before provider selection; verification limitations never rewrite that delivery result. Pi never edits progress files through model-generated patches.
 
-G1/G2 only pause cc-nexs role dispatch. They do not block the parent Pi session from performing user-authorized Git, SQL, SSH, deployment, diagnostics, or documentation work.
+Gateway A/B only pause cc-nexs role dispatch. They do not block the parent Pi session from performing user-authorized Git, SQL, SSH, deployment, diagnostics, or documentation work.
 
 Hotfix creates `hotfix/<key>` and `.worktrees/<key>/<repo>/` from latest configured bases without a shared feature number or placeholder push. The BUG lives in a related feature's `doc/<id>.<slug>/bugs/BUG-<key>.md`, or docs `hotfix/<key>/BUG-001.md` when unrelated. `progress.hotfix_document` locates the BUG; machine state/config stay in workspace `.cc-nexs/hotfixes/<key>/`. Legacy `hotfix.md` tasks remain resumable.
 
@@ -164,9 +156,7 @@ Package-qualified child roles run with explicit Pi tool allowlists. The cc-nexs 
 
 - Git mutation from role children
 - direct or shell-based mutation of `progress.md` / `progress.json` from every role child
-- role-forbidden reads and writes such as Reviewer reading `src/`
-- SA reading implementation source or writing anything other than `sa-review.md`, `sa-test-review.md`, and `sa-code-review.md`
-- Fullstack writing progress, review, acceptance, or test-report artifacts
+- role-forbidden reads and writes such as the consolidated Reviewer reading `src/` or the Plan Reviewer writing anything other than `plan.md`
 
 The parent orchestrator remains responsible for state transitions and Git Custodian operations. Pi packages and child tools still execute with the user's operating-system permissions; use Pi project trust and review package source before installation.
 

@@ -4,6 +4,16 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
+### Removed
+
+- **Fast and Full modes**: `mode=fast`, `mode=full`, and legacy `lite` are removed together with their state machines, run rules, roles (Repo Scout, Planner, Tech Lead, SA, QA, Evaluator, Fullstack, Reviewer, Verifier), commands, templates, G1/G2 gates, Sprint state, implementation ownership/delta controllers, feature README sync, and the legacy progress.md migration. Unsupported modes now fail closed. Requirements use Lean; repairs use Hotfix.
+- **preset-minimal**: The three-role preset and its install scripts are removed; `preset-standard` is the only published preset.
+
+### Added
+
+- **Independent Lean plan review**: A new `lean-plan-reviewer` role checks `requirements.md` and `plan.md` against the code before Gateway A and blocks only P0/P1. A blocked first round returns to the Planner once; later results go to Gateway A with open findings. `record-plan-review` binds the result to the plan hash and persists the next state, and Gateway A refuses a plan without a review of that exact hash.
+- **Requirement traceability at Gateway A**: Every `AC-xxx` row in `requirements.md` must appear in a task row, a local check row, and a test check row of the approved plan scope, and the plan may not cite criteria absent from the requirements.
+
 ### Added
 
 - **Three-runtime risk-driven automatic model escalation**: Added `risk_tier`, `models.routing`, a provider-neutral `escalated` profile, and a unified resolver. Lean high/critical automatically escalates the Planner/Reviewer, Hotfix P0/P1 automatically escalates the Reviewer; an explicit feature profile takes final precedence, and decisions output the risk source/signals/matched rules. New templates no longer hard-code `models.roles`, and `/cc-nexs:migrate-feature-config` safely migrates historical features; Gateway A also binds the concrete risk.
