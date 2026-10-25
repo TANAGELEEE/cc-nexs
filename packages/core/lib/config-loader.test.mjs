@@ -76,6 +76,14 @@ test('feature model config merges over project and portable profile defaults', (
   assert.deepEqual(merged.roles['lean-reviewer'], { profile: 'balanced', codex: { effort: 'high' } });
 });
 
+test('a higher layer effort synonym replaces the lower layer effort key', () => {
+  const merged = mergeModelConfigs(
+    { profiles: { escalated: { pi: { model: 'inherit', effort: 'xhigh' } } } },
+    { profiles: { escalated: { pi: { model: 'provider/model', thinking: 'medium' } } } },
+  );
+  assert.deepEqual(merged.profiles.escalated.pi, { model: 'provider/model', thinking: 'medium' });
+});
+
 test('feature object role selection replaces a portable string role without leaking string indexes', () => {
   const merged = mergeModelConfigs(
     { roles: { 'lean-reviewer': 'review' } },

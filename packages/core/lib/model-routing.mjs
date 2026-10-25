@@ -340,10 +340,21 @@ function validateStringList(value, path, validateItem = null) {
   if (validateItem) for (const item of value) validateItem(item);
 }
 
+const EFFORT_KEYS = ['effort', 'reasoning_effort', 'thinking'];
+
+// Model selections may name the reasoning level with any synonym; a higher
+// layer's level replaces the lower layer's whichever key each one uses.
+export function withoutShadowedEffort(base, override) {
+  if (!EFFORT_KEYS.some((key) => Object.hasOwn(override, key))) return base;
+  const out = { ...base };
+  for (const key of EFFORT_KEYS) delete out[key];
+  return out;
+}
+
 function deepMerge(base, override) {
   if (override === undefined) return clone(base);
   if (override === null || typeof override !== 'object' || Array.isArray(override)) return clone(override);
-  const out = base && typeof base === 'object' && !Array.isArray(base) ? { ...base } : {};
+  const out = base && typeof base === 'object' && !Array.isArray(base) ? withoutShadowedEffort({ ...base }, override) : {};
   for (const [key, value] of Object.entries(override)) out[key] = deepMerge(out[key], value);
   return out;
 }

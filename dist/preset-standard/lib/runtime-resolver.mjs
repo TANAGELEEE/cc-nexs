@@ -1,4 +1,4 @@
-import { applyModelRouting, resolveFeatureModelRouting } from './model-routing.mjs';
+import { applyModelRouting, resolveFeatureModelRouting, withoutShadowedEffort } from './model-routing.mjs';
 import { selectDiscoveredModel } from './model-selection.mjs';
 
 const RUNTIMES = new Set(['claude', 'codex', 'pi']);
@@ -58,7 +58,7 @@ export function resolveRoleRuntime(preset, role, runtime = detectRuntime(), {
     ? {}
     : modelConfig?.profiles?.[roleProfile]?.[modelRuntime] || {};
   const direct = typeof configuredRole === 'object' ? configuredRole?.[modelRuntime] || {} : {};
-  const configuredSelection = normalizeModelSelection({ ...profile, ...direct }, { role, runtime: modelRuntime, profile: roleProfile });
+  const configuredSelection = normalizeModelSelection({ ...withoutShadowedEffort(profile, direct), ...direct }, { role, runtime: modelRuntime, profile: roleProfile });
   const selection = selectDiscoveredModel(configuredSelection, modelRuntime, modelCatalog, modelProposal);
   if (!EFFORTS.has(selection.effort)) throw new Error('[cc-nexs] invalid discovered model effort');
   resolved.model_selection = { source: selection.source, reason: selection.reason || null };

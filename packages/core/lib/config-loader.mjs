@@ -12,7 +12,7 @@
 
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, dirname, extname, sep } from 'node:path';
-import { validateModelRoutingConfig } from './model-routing.mjs';
+import { validateModelRoutingConfig, withoutShadowedEffort } from './model-routing.mjs';
 
 function parseScalar(s) {
   if (s === '' || s === '~' || s === 'null') return null;
@@ -264,7 +264,7 @@ function readStructured(filePath) {
 function deepMerge(base, override) {
   if (override === undefined) return base;
   if (override === null || typeof override !== 'object' || Array.isArray(override)) return override;
-  const out = base && typeof base === 'object' && !Array.isArray(base) ? { ...base } : {};
+  const out = base && typeof base === 'object' && !Array.isArray(base) ? withoutShadowedEffort({ ...base }, override) : {};
   for (const [key, value] of Object.entries(override)) {
     out[key] = deepMerge(out[key], value);
   }

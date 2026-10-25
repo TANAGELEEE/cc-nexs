@@ -85,6 +85,24 @@ test('runtime model profiles support distinct models and Pi fallback chains', ()
   assert.deepEqual(reviewer.fallback_models, ['provider/backup']);
 });
 
+test('feature and role-level effort synonyms replace a lower layer effort key', () => {
+  const models = {
+    roles: { reviewer: 'review' },
+    profiles: { review: { pi: { model: 'provider/reviewer', effort: 'high' } } },
+  };
+  const featureProfile = resolveRoleRuntime(preset, 'reviewer', 'pi', {
+    models,
+    featureModels: { profiles: { review: { pi: { thinking: 'low' } } } },
+  });
+  assert.equal(featureProfile.effort, 'low');
+  const roleDirect = resolveRoleRuntime(preset, 'reviewer', 'pi', {
+    models,
+    featureModels: { roles: { reviewer: { profile: 'review', pi: { reasoning_effort: 'medium' } } } },
+  });
+  assert.equal(roleDirect.model, 'provider/reviewer');
+  assert.equal(roleDirect.effort, 'medium');
+});
+
 test('high-risk Lean roles are automatically upgraded by model routing', () => {
   const models = {
     profiles: {
