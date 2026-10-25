@@ -101,7 +101,7 @@ models:
     lean-reviewer: review
 ```
 
-For Lean and Hotfix, Reviewer may resolve to a different model or the same model as Developer with stronger `thinking`; fresh child context is mandatory in either case. If the primary model is unavailable, the parent tries `fallback_models` in order. Public `escalated` is only `inherit + xhigh`, so the private profile above is required when escalation should switch providers/models. Hotfix uses dedicated roles; P0/P1 heterogeneity can be required by private project policy, but is not hardcoded publicly.
+For Lean and Hotfix, Reviewer may resolve to a different model or the same model as Developer with stronger `thinking`; fresh child context is mandatory in either case. If the primary model is unavailable, the parent tries `fallback_models` in order. Pi `thinking` accepts `low`, `medium`, `high`, `xhigh` or `max`; Pi raises a level the model does not support to the next supported one, so set the level the model actually exposes. Public `escalated` is only `inherit + xhigh`, so the private profile above is required when escalation should switch providers/models. Hotfix uses dedicated roles; P0/P1 heterogeneity can be required by private project policy, but is not hardcoded publicly.
 
 Older feature configs may contain generated role maps that block project routing. Run `/cc-nexs:migrate-feature-config <id> --dry-run`, inspect the result, then run it without `--dry-run`. The migration preserves customized mappings. For a legacy approved Lean plan, `--bind-plan-risk` may materialize only a concrete risk proven by the original Gateway A hashes; otherwise runtime routing uses a conservative high floor.
 

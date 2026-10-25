@@ -13,6 +13,7 @@ test('detect both APIs and preserve cwd, model and thinking without isolation wo
   assert.equal(task.options.inheritContext, false);
   assert.equal(task.options.isolation, undefined);
   assert.throws(() => piTask({ agent: 'other', task: 'x', cwd: process.cwd() }), /requires/);
+  assert.equal(piTask({ agent: 'cc-nexs.lean-developer', task: 'x', cwd: process.cwd(), effort: 'max' }).options.thinkingLevel, 'max');
   assert.throws(() => piTask({ agent: 'cc-nexs.qa', task: 'x', cwd: process.cwd(), effort: 'ultra' }), /thinking/);
 });
 

@@ -8,6 +8,10 @@ All notable changes to cc-nexs will be documented here.
 
 - A model selection's `thinking` or `reasoning_effort` in a higher config layer (overlay, project, feature, role) now replaces a lower layer's `effort` instead of being silently shadowed by it.
 
+### Changed
+
+- Pi role dispatch accepts an explicit `max` thinking level.
+
 ## [0.7.0] - 2026-10-25
 
 ### Removed

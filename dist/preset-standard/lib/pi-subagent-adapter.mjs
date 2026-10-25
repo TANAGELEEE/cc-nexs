@@ -14,7 +14,7 @@ export function piTask(task) {
     || !isAbsolute(task.cwd || '') || !statSync(task.cwd).isDirectory()) {
     throw new Error('[cc-nexs] task requires a cc-nexs role, prompt and existing absolute assigned cwd');
   }
-  if (task.effort && !['inherit', 'low', 'medium', 'high', 'xhigh'].includes(task.effort)) {
+  if (task.effort && !['inherit', 'low', 'medium', 'high', 'xhigh', 'max'].includes(task.effort)) {
     throw new Error('[cc-nexs] unsupported Pi thinking level');
   }
   return {
