@@ -1,6 +1,6 @@
 {
   "name": "cc-nexs",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "Lean low-token development pipeline: independent plan review and plan gate, local verification, one consolidated Review, test acceptance, release gate, and Hotfix repairs.",
   "author": {
     "name": "cc-nexs"
