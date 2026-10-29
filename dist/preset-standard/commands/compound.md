@@ -33,9 +33,26 @@ fi
 ```
 ### 2. Locate the requirements directory
 ```bash
-[ -n "$CC_NEXS_REQ_DIR" ] && REQ_DIR="$CC_NEXS_REQ_DIR" || REQ_DIR=$(ls -d all-docs/doc/${ID}.*/ 2>/dev/null | head -1)
+if [ -n "$CC_NEXS_REQ_DIR" ]; then
+  REQ_DIR="$CC_NEXS_REQ_DIR"
+else
+  # Standalone runs resolve the docs repository from the workspace config; legacy layouts fall back to all-docs.
+  CC_NEXS_RESOLVED_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-${CODEX_PLUGIN_ROOT:-${CC_NEXS_PLUGIN_ROOT:-}}}}"
+  [ -n "$CC_NEXS_RESOLVED_PLUGIN_ROOT" ] || { echo "❌ 找不到 plugin root（需 CLAUDE_PLUGIN_ROOT / PLUGIN_ROOT / CODEX_PLUGIN_ROOT / CC_NEXS_PLUGIN_ROOT）"; exit 1; }
+  DOCS_ROOT=$(CC_NEXS_LIB="${CC_NEXS_RESOLVED_PLUGIN_ROOT}/lib" node --input-type=module -e '
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+const lib = (name) => import(pathToFileURL(join(process.env.CC_NEXS_LIB, name)).href);
+const { findProjectConfigRoot } = await lib("config-root.mjs");
+const { loadWorkspaceConfig } = await lib("config-loader.mjs");
+const root = findProjectConfigRoot();
+const workspace = loadWorkspaceConfig({ projectRoot: root });
+process.stdout.write(workspace?.repositories.find((repo) => repo.id === workspace.docs_repository)?.absolute_path || join(root, "all-docs"));
+') || exit 1
+  REQ_DIR=$(ls -d "${DOCS_ROOT}"/doc/${ID}.*/ 2>/dev/null | head -1)
+fi
 if [ -z "$REQ_DIR" ]; then
-  echo "❌ 需求目录不存在: all-docs/doc/${ID}.*/"
+  echo "❌ 需求目录不存在: ${DOCS_ROOT}/doc/${ID}.*/"
   exit 1
 fi
 echo "📂 目录: ${REQ_DIR}"
