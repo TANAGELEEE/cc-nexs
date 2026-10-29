@@ -5,13 +5,13 @@
   },
   "metadata": {
     "description": "cc-nexs: Lean fast-track 多代理流水线，本地可执行验证后优先交付 test/CI，部署后验收并集中 Review。",
-    "version": "0.7.2"
+    "version": "0.7.3"
   },
   "plugins": [
     {
       "name": "cc-nexs",
       "description": "Lean low-token development pipeline: independent plan review and plan gate, local verification, one consolidated Review, test acceptance, release gate, and Hotfix repairs.",
-      "version": "0.7.2",
+      "version": "0.7.3",
       "author": {
         "name": "cc-nexs"
       },

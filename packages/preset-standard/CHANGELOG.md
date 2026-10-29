@@ -4,6 +4,8 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-10-29
+
 ### Fixed
 
 - `/cc-nexs:compound <id>` run outside a dispatch (without `CC_NEXS_REQ_DIR`) now finds the requirement under the workspace's configured docs repository instead of a hard-coded `all-docs/`, so a docs repository at another path such as `alldocs/` works. Projects without a workspace config still fall back to `all-docs/`.
