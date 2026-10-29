@@ -562,3 +562,31 @@ test('COMPLETE cannot conceal failed or pending base release', () => {
     assert.equal(readProgressV2(file).state, 'BASE_MERGING');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test('a deployed test revision that contains the integration is accepted only with a recorded full-commit proof', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-progress-contains-'));
+  const file = join(root, 'progress.json');
+  const integrationCommit = 'a'.repeat(40);
+  const laterTip = 'b'.repeat(40);
+  const succeed = (environmentRevision, environmentRevisionProof) => completeTestRelease(file, {
+    attemptId: 'test-release-1', status: 'succeeded', pipeline: { id: 'p' },
+    deployment: { environment: 'test' }, environmentRevision, environmentRevisionProof,
+  });
+  try {
+    writeProgressV2(file, createProgressV2({ featureId: '05', featureSlug: 'contains', preset: 'preset-standard' }));
+    beginTestRelease(file, { source: { api: 'abc123' } });
+    recordTestIntegration(file, {
+      attemptId: 'test-release-1', repository: 'api', sourceCommit: 'abc123',
+      targetBranch: 'test', targetBefore: 'base123', integrationCommit,
+    });
+    completeTestRelease(file, { attemptId: 'test-release-1', status: 'deploying', pipeline: { id: 'p' } });
+    assert.throws(() => succeed({ api: laterTip }, null), /does not match its test integration/);
+    assert.throws(() => succeed({ api: 'bbbbbbb' }, { api: 'contains' }), /does not match its test integration/);
+    succeed({ api: laterTip }, { api: 'contains' });
+    const attempt = readProgressV2(file).delivery.test.attempts.at(-1);
+    assert.deepEqual(attempt.environment_revision, { api: laterTip });
+    assert.deepEqual(attempt.environment_revision_proof, { api: 'contains' });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

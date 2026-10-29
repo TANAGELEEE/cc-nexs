@@ -4,6 +4,10 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Test delivery no longer stalls when CI deploys a later tip of the shared test branch or reports a short SHA. A deployed `environment_revision` is accepted when its full commit contains the recorded integration commit; the controller records the actual deployed commit with an `exact` or `contains` proof, and Gateway B and test-environment exceptions honor that proof. This applies to Lean and Hotfix alike.
+
 ## [0.7.1] - 2026-10-29
 
 ### Fixed

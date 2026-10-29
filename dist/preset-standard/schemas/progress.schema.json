@@ -129,6 +129,7 @@
                   "pipeline": { "type": ["object", "null"] },
                   "deployment": { "type": ["object", "null"] },
                   "environment_revision": { "type": ["object", "string", "null"] },
+                  "environment_revision_proof": { "type": ["object", "null"] },
                   "verification": { "type": ["object", "null"] },
                   "started_at": { "type": "string" },
                   "completed_at": { "type": ["string", "null"] },

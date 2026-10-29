@@ -253,12 +253,19 @@ export function recordTestIntegration(file, {
   return progress;
 }
 
+// The release controller proves `contains` with Git before recording it; the
+// ledger only accepts that proof for a full commit id.
+export function deploymentContainsIntegration(revision, relation, integrationCommit) {
+  return revision === integrationCommit || (relation === 'contains' && /^[0-9a-f]{40}$/.test(revision || ''));
+}
+
 export function completeTestRelease(file, {
   attemptId,
   status,
   pipeline = null,
   deployment = null,
   environmentRevision = null,
+  environmentRevisionProof = null,
   reason = '',
   actor = 'release-controller',
   expectedRevision = null,
@@ -295,7 +302,7 @@ export function completeTestRelease(file, {
   }
   if (['succeeded', 'deployed_needs_manual_verification'].includes(status)) {
     for (const [repository, integration] of Object.entries(attempt.integrations || {})) {
-      if (environmentRevision[repository] !== integration.integrationCommit) {
+      if (!deploymentContainsIntegration(environmentRevision[repository], environmentRevisionProof?.[repository], integration.integrationCommit)) {
         throw new Error(`[cc-nexs] environment revision for ${repository} does not match its test integration`);
       }
     }
@@ -304,6 +311,7 @@ export function completeTestRelease(file, {
   attempt.pipeline = pipeline;
   attempt.deployment = deployment;
   attempt.environment_revision = environmentRevision;
+  attempt.environment_revision_proof = environmentRevisionProof;
   attempt.completed_at = ['deploying', 'awaiting_receipt', 'merge_conflict', 'configuration_blocked'].includes(status) ? null : new Date().toISOString();
   if (reason) attempt.reason = reason;
   testDelivery.status = status;

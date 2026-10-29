@@ -280,6 +280,19 @@ export function assertCandidateExcludesTestHistory({ repo, sourceCommit, baseBra
   }
 }
 
+// CI may deploy a later tip of the shared test branch or report a short SHA.
+// The deployment proves the candidate when its full commit contains the
+// integration commit; the actual deployed commit is what gets recorded.
+export function resolveDeployedRevision({ repo, targetBranch, revision, integrationCommit }) {
+  if (revision === integrationCommit) return { revision, relation: 'exact' };
+  if (typeof revision !== 'string' || !/^[0-9a-f]{7,40}$/i.test(revision)) return null;
+  fetchBase(repo, targetBranch);
+  let deployed;
+  try { deployed = git(repo, ['rev-parse', '--verify', '--quiet', `${revision}^{commit}`]); } catch { return null; }
+  if (!isAncestor(repo, integrationCommit, deployed)) return null;
+  return { revision: deployed, relation: deployed === integrationCommit ? 'exact' : 'contains' };
+}
+
 export function integrateCandidateToTest({
   repo,
   repositoryId,

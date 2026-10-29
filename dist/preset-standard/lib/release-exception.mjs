@@ -1,4 +1,4 @@
-import { assertTestAttemptNotInvalidated, assertDeferredChecksClosed, candidateFingerprint } from './progress-v2.mjs';
+import { assertTestAttemptNotInvalidated, assertDeferredChecksClosed, candidateFingerprint, deploymentContainsIntegration } from './progress-v2.mjs';
 import { jsonValuesEqual } from './canonical-json.mjs';
 import { assertRecordedLocalVerification } from './local-evidence.mjs';
 
@@ -66,7 +66,7 @@ function assertExceptionPrerequisites(progress) {
     || Object.entries(attempt.integrations).some(([repository, integration]) => (
       !integration.integrationCommit
       || integration.sourceCommit !== attempt.source[repository]
-      || attempt.environment_revision[repository] !== integration.integrationCommit
+      || !deploymentContainsIntegration(attempt.environment_revision[repository], attempt.environment_revision_proof?.[repository], integration.integrationCommit)
     ))) {
     throw new Error('[cc-nexs] test exception requires deployment evidence for the exact integrated test revision');
   }

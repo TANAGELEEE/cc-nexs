@@ -15,6 +15,7 @@ import {
   isSensitiveBasePath,
   isWorktreeRegistered,
   prepareFeatureForMerge,
+  resolveDeployedRevision,
 } from './git-custodian.mjs';
 import { createProgressV2, readProgressV2, recordRepositoryAssignments, writeProgressV2 } from './progress-v2.mjs';
 
@@ -479,6 +480,42 @@ test('candidates that merged or rebased onto test history are refused; integrate
 
     check(mergedTest, ['test02', null]);
     check(mergedTest, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a deployed revision proves the integration when it is that commit or a later test tip containing it', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-deployed-revision-'));
+  const origin = join(root, 'origin.git');
+  const repo = join(root, 'repo');
+  const commitFile = (name) => {
+    writeFileSync(join(repo, name), `${name}\n`);
+    git(repo, ['add', name]);
+    git(repo, ['commit', '-m', name]);
+    return git(repo, ['rev-parse', 'HEAD']);
+  };
+  try {
+    mkdirSync(origin);
+    git(origin, ['init', '--bare']);
+    git(root, ['clone', origin, repo]);
+    configure(repo);
+    git(repo, ['checkout', '-b', 'test']);
+    const before = commitFile('before.txt');
+    const integrationCommit = commitFile('integration.txt');
+    const laterTip = commitFile('other-team.txt');
+    git(repo, ['push', '-u', 'origin', 'test']);
+    git(repo, ['checkout', '-b', 'unrelated', before]);
+    const unrelated = commitFile('unrelated.txt');
+    const resolve = (revision) => resolveDeployedRevision({ repo, targetBranch: 'test', revision, integrationCommit });
+
+    assert.deepEqual(resolve(integrationCommit), { revision: integrationCommit, relation: 'exact' });
+    assert.deepEqual(resolve(integrationCommit.slice(0, 9)), { revision: integrationCommit, relation: 'exact' });
+    assert.deepEqual(resolve(laterTip.slice(0, 12)), { revision: laterTip, relation: 'contains' });
+    assert.equal(resolve(before), null);
+    assert.equal(resolve(unrelated), null);
+    assert.equal(resolve('not-a-sha'), null);
+    assert.equal(resolve('f'.repeat(40)), null);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

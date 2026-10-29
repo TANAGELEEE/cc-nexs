@@ -642,6 +642,23 @@ test('test release driver fails closed on invalid output, process failure, timeo
       driver: { command: process.execPath, args: [mismatchedDriver], timeoutMs: 1000 },
       payload: mismatchedPayload,
     }), /does not match the integrated commit/);
+    const laterTip = 'c'.repeat(40);
+    const containing = invokeTestReleaseDriver({
+      workspaceRoot: root,
+      driver: { command: process.execPath, args: [mismatchedDriver], timeoutMs: 1000 },
+      payload: mismatchedPayload,
+      resolveRevision: (repository, revision, integrationCommit) => (
+        repository === 'api' && revision === 'merge-old' && integrationCommit === 'merge-expected' ? { revision: laterTip, relation: 'contains' } : null
+      ),
+    });
+    assert.deepEqual(containing.environment_revision, { api: laterTip });
+    assert.deepEqual(containing.environment_revision_proof, { api: 'contains' });
+    assert.throws(() => invokeTestReleaseDriver({
+      workspaceRoot: root,
+      driver: { command: process.execPath, args: [mismatchedDriver], timeoutMs: 1000 },
+      payload: mismatchedPayload,
+      resolveRevision: () => null,
+    }), /does not match the integrated commit or a test revision containing it/);
 
     const reorderedPipeline = {
       operation: 'release_test_status',

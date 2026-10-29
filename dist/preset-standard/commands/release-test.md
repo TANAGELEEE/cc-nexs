@@ -47,7 +47,7 @@ node <plugin-root>/lib/cc-nexs-cli.mjs release-test <feature-id> --resume
 
 Hotfix resume also includes `--hotfix`.
 
-The same driver receives `operation=release_test_status` plus the previous attempt evidence and returns `pending`, `succeeded`, or `failed`. Combined evidence across start/poll must keep the same non-empty pipeline identity; terminal deployment must name environment `test`, and every deployed repository's `environment_revision` must equal its recorded integration commit.
+The same driver receives `operation=release_test_status` plus the previous attempt evidence and returns `pending`, `succeeded`, or `failed`. Combined evidence across start/poll must keep the same non-empty pipeline identity; terminal deployment must name environment `test`, and every deployed repository's `environment_revision` must be its recorded integration commit or a later test commit that contains it (a short SHA is accepted). The controller records the full deployed commit and whether it was `exact` or `contains`.
 
 A driver timeout or missing authenticated CI receipt records `awaiting_receipt`, not a product failure. `--resume` can also recover a legacy failed attempt with complete integration evidence and no product verification failure: it preserves the old reason in recovery history, queries `release_test_status` for that same attempt, and validates pipeline/environment revision before accepting success. It does not start a new deployment.
 

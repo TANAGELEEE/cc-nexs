@@ -9,7 +9,7 @@ import { loadConfig, loadWorkspaceConfig } from './config-loader.mjs';
 import { jsonValuesEqual } from './canonical-json.mjs';
 import { assertLocalCandidateWorktree } from './candidate-context.mjs';
 import { assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
-import { assertCandidateExcludesTestHistory, integrateCandidateToTest, removeIntegrationWorktree, resolveCandidateCommit } from './git-custodian.mjs';
+import { assertCandidateExcludesTestHistory, integrateCandidateToTest, removeIntegrationWorktree, resolveCandidateCommit, resolveDeployedRevision } from './git-custodian.mjs';
 import { approvedPlanDeliveryContract, extractApprovalScope } from './plan-contract.mjs';
 import { assertRecordedLocalVerification, extractLocalVerificationChecks } from './local-evidence.mjs';
 import {
@@ -428,6 +428,7 @@ function persistDriverResult(progressFile, attempt, driverResult) {
     pipeline: driverResult.pipeline || currentAttempt.pipeline || null,
     deployment: driverResult.deployment || currentAttempt.deployment || null,
     environmentRevision: driverResult.environment_revision || currentAttempt.environment_revision || null,
+    environmentRevisionProof: driverResult.environment_revision_proof || currentAttempt.environment_revision_proof || null,
     reason: driverResult.reason || '',
     expectedRevision: latest.revision,
   });
@@ -506,10 +507,16 @@ function invokeDriver(context, attempt, operation) {
     driver: context.driver,
     workspaceRoot: context.workspaceRoot,
     payload,
+    resolveRevision: (repositoryId, revision, integrationCommit) => {
+      const repository = context.deployRepositories.find((item) => item.id === repositoryId);
+      return repository
+        ? resolveDeployedRevision({ repo: repository.repo, targetBranch: repository.targetBranch, revision, integrationCommit })
+        : null;
+    },
   });
 }
 
-export function invokeTestReleaseDriver({ driver, workspaceRoot, payload }) {
+export function invokeTestReleaseDriver({ driver, workspaceRoot, payload, resolveRevision = null }) {
   let output;
   try {
     output = execFileSync(driver.command, driver.args, {
@@ -560,11 +567,21 @@ export function invokeTestReleaseDriver({ driver, workspaceRoot, payload }) {
     throw new Error('[cc-nexs] release driver deployment evidence does not match the requested test environment');
   }
   if (['succeeded', 'deployed_needs_manual_verification'].includes(result.status)) {
+    const revisions = {};
+    const proof = {};
     for (const [repository, integration] of Object.entries(payload.integrations || {})) {
-      if (effectiveEnvironmentRevision[repository] !== integration.integrationCommit) {
-        throw new Error(`[cc-nexs] release driver environment_revision for ${repository} does not match the integrated commit`);
+      const revision = effectiveEnvironmentRevision[repository];
+      const resolved = resolveRevision
+        ? resolveRevision(repository, revision, integration.integrationCommit)
+        : revision === integration.integrationCommit ? { revision, relation: 'exact' } : null;
+      if (!resolved) {
+        throw new Error(`[cc-nexs] release driver environment_revision for ${repository} does not match the integrated commit or a test revision containing it`);
       }
+      revisions[repository] = resolved.revision;
+      proof[repository] = resolved.relation;
     }
+    result.environment_revision = { ...effectiveEnvironmentRevision, ...revisions };
+    result.environment_revision_proof = proof;
   }
   if (result?.status === 'failed' && /No (?:release|test) driver configured|driver configuration|not configured/i.test(result.reason || '')) result.status = 'configuration_blocked';
   return result;
