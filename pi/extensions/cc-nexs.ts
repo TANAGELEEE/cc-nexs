@@ -6,6 +6,7 @@ import { Type } from "@earendil-works/pi-ai";
 import { modelGateway } from "../../packages/core/lib/model-gateway.mjs";
 import { findWorkspaceRoot } from "../../packages/core/lib/candidate-context.mjs";
 import { piSubagentApi, piTask, subagentRpc } from "../../packages/core/lib/pi-subagent-adapter.mjs";
+import { blockedTestBranchIntegration } from "../../packages/core/lib/test-branch-guard.mjs";
 
 import {
   runCcNexsCommand,
@@ -70,6 +71,15 @@ export default function ccNexsPiExtension(pi: ExtensionAPI) {
 
   {
     pi.on("tool_call", (event, ctx) => {
+      if (event.toolName === "bash") {
+        const testBranch = blockedTestBranchIntegration(String((event.input as Record<string, unknown>)?.command || ""), ctx.cwd);
+        if (testBranch) {
+          return {
+            block: true,
+            reason: `Merging, rebasing or pulling test branch ${testBranch} brings other unreleased features into this branch. cc-nexs integrates candidates into test only in temporary worktrees; use /cc-nexs:release-test, and resolve test conflicts with /cc-nexs:resolve-test-conflict.`,
+          };
+        }
+      }
       if (!childRole) return undefined;
       if (["Agent", "subagent", "get_subagent_result", "steer_subagent"].includes(event.toolName)
         || event.toolName.startsWith("cc_nexs_")) {

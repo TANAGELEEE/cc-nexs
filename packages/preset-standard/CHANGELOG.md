@@ -12,6 +12,7 @@ All notable changes to cc-nexs will be documented here.
 ### Changed
 
 - Pi role dispatch accepts an explicit `max` thinking level.
+- The Git guard now blocks every session, the orchestrator included, from merging, rebasing or pulling a configured or switched test branch inside a cc-nexs workspace. Claude Code and Codex enforce it through the hook, Pi through its extension.
 
 ## [0.7.0] - 2026-10-25
 
