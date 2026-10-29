@@ -7,7 +7,7 @@ argument-hint: "<reserve|create|candidate|prepare|cleanup|finalize|reclaim> [fea
 
 # /cc-nexs:git-custodian
 
-Only the Orchestrator may invoke this command. Implementation, review, and verification roles must not run branch, merge, push, worktree-removal, or branch-deletion commands.
+Only the Orchestrator may invoke this command. Implementation, review, and verification roles must not run branch, merge, push, worktree-removal, or branch-deletion commands. No session, the Orchestrator included, merges, rebases, or pulls a test branch into a feature branch; feature branches take only the configured base, and test conflicts go through `/cc-nexs:resolve-test-conflict`.
 
 Load `.cc-nexs/workspace.yml` with `loadWorkspaceConfig()` and use `git-custodian.mjs`. After create, persist each returned `baseBranch` and `baseCommit` in progress.json. Later prepare/cleanup actions use that recorded base branch and fail if the workspace mapping changed unexpectedly.
 

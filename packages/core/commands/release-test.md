@@ -31,6 +31,8 @@ node <plugin-root>/lib/cc-nexs-cli.mjs release-test <feature-id> [--retry | --dr
 
 The controller freezes every candidate SHA and holds a per-feature controller lock. It integrates only `deploy` candidates into the latest `origin/<test_branch>` in temporary worktrees with normal non-force pushes; local candidates remain part of the attempt fingerprint and expose their exact clean worktree for the post-deploy Web harness. It then invokes the structured project release driver with the backward-compatible `operation=release_test` start request and records immutable integration evidence in progress.json.
 
+Never merge, rebase, or pull a test branch into a feature branch or its worktree, even to resolve a conflict: test carries other unreleased features that would then ride into the base branch. Resolve test conflicts only through `/cc-nexs:resolve-test-conflict`. The controller refuses a candidate that contains test-only history (`TEST_HISTORY`); rebuild that feature branch from the latest base with only its own commits.
+
 For CI/CD systems triggered by the test push, the driver should return promptly:
 
 ```json
@@ -51,7 +53,7 @@ A driver timeout or missing authenticated CI receipt records `awaiting_receipt`,
 
 If a terminal driver failure has moved the workflow to `TEST_RELEASE_BLOCKED` or `HOTFIX_TEST_RELEASE_BLOCKED`, an explicit `--retry` reopens the release state and creates a new attempt. It never retries a still-`deploying` pipeline; that path must use `--resume`.
 
-Only after deployment success does the parent check URLs, allowed hosts, browser/login, and environment-specific behavior. Missing verification capability records `manual_required` and stops in the recoverable `TEST_DEPLOYED_NEEDS_MANUAL_VERIFY` state without undoing the completed test delivery. A real product failure follows the normal test-fix path. Full mode runs accumulated cross-sprint final QA; fast mode runs initial or regression verification based on the release attempt number.
+Only after deployment success does the parent check URLs, allowed hosts, browser/login, and environment-specific behavior. Missing verification capability records `manual_required` and stops in the recoverable `TEST_DEPLOYED_NEEDS_MANUAL_VERIFY` state without undoing the completed test delivery. A real product failure follows the normal test-fix path.
 
 ## Explicit opt-out
 
