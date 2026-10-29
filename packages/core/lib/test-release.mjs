@@ -9,7 +9,7 @@ import { loadConfig, loadWorkspaceConfig } from './config-loader.mjs';
 import { jsonValuesEqual } from './canonical-json.mjs';
 import { assertLocalCandidateWorktree } from './candidate-context.mjs';
 import { assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
-import { integrateCandidateToTest, removeIntegrationWorktree, resolveCandidateCommit } from './git-custodian.mjs';
+import { assertCandidateExcludesTestHistory, integrateCandidateToTest, removeIntegrationWorktree, resolveCandidateCommit } from './git-custodian.mjs';
 import { approvedPlanDeliveryContract, extractApprovalScope } from './plan-contract.mjs';
 import { assertRecordedLocalVerification, extractLocalVerificationChecks } from './local-evidence.mjs';
 import {
@@ -141,6 +141,8 @@ export function preflightTestRelease({
         targetBranch: requestedDelivery === 'local' ? null : approvedTestTarget,
         worktree,
         releaseOrder: repo.release_order,
+        baseBranch: configuredRepo.base_branch,
+        testBranches: [configuredRepo.test_branch, repo.test_branch],
       };
     })
     .sort((left, right) => left.releaseOrder - right.releaseOrder || left.id.localeCompare(right.id));
@@ -175,6 +177,11 @@ export function preflightTestRelease({
   rejectProductionVerificationUrls(release);
   const driver = normalizeDriver(release.driver, workspaceRoot);
   if (!verification && !driver) throw new Error('[cc-nexs] release.test.driver is required for auto_if_ready');
+  if (!verification) {
+    for (const repository of repositories) {
+      assertCandidateExcludesTestHistory({ repo: repository.repo, sourceCommit: repository.sourceCommit, baseBranch: repository.baseBranch, testBranches: repository.testBranches });
+    }
+  }
 
   return {
     progressFile,

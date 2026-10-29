@@ -559,7 +559,7 @@ function withPresetEnv(fixture, fn) {
   }
 }
 
-function createEnvironmentBlockedCandidate(mode, id) {
+function createEnvironmentBlockedCandidate(mode, id, { mergeTest = false } = {}) {
   const fixture = createFeature({ id, mode, state: mode === 'lean' ? 'PLAN_PENDING_HUMAN' : 'HOTFIX_TEST_VERIFYING' });
   if (mode === 'lean') approveFeatureGate({ cwd: fixture.root, featureId: id, gate: 'plan', approver: 'Owner' });
   const base = bindCandidate(fixture);
@@ -578,6 +578,16 @@ function createEnvironmentBlockedCandidate(mode, id) {
   writeFileSync(join(worktree, 'candidate.txt'), 'fixed\n');
   git(worktree, ['add', 'candidate.txt']);
   git(worktree, ['commit', '-m', 'fix']);
+  if (mergeTest) {
+    const testWorktree = join(fixture.root, 'api-test');
+    git(repo, ['worktree', 'add', '-b', 'test', testWorktree, 'main']);
+    writeFileSync(join(testWorktree, 'other-feature.txt'), 'unreleased\n');
+    git(testWorktree, ['add', 'other-feature.txt']);
+    git(testWorktree, ['commit', '-m', 'other unreleased feature']);
+    git(testWorktree, ['push', 'origin', 'test']);
+    git(worktree, ['fetch', 'origin']);
+    git(worktree, ['merge', '--no-edit', 'origin/test']);
+  }
   const source = { api: git(worktree, ['rev-parse', 'HEAD']) };
   git(repo, ['update-ref', 'refs/cc-nexs/candidates/api', source.api]);
   const assigned = readProgressV2(fixture.progressFile);
@@ -688,6 +698,20 @@ test(`base release refuses overlapping or sensitive paths (${changedPath}) witho
   });
 });
 }
+
+test('base release refuses a candidate that merged the test branch', () => {
+  const fixture = createEnvironmentBlockedCandidate('lean', '26-test-history', { mergeTest: true });
+  withPresetEnv(fixture, () => {
+    approveFeatureGate({ cwd: fixture.root, featureId: '26-test-history', gate: 'release', approver: 'Owner', testException });
+    const approved = readProgressV2(fixture.progressFile);
+    approved.state = 'BASE_MERGING';
+    writeProgressV2(fixture.progressFile, approved);
+    const remoteBefore = fixture.git(fixture.repo, ['ls-remote', 'origin', 'refs/heads/main']);
+    assert.throws(() => runBaseRelease({ cwd: fixture.root, featureId: '26-test-history' }), /TEST_HISTORY: .*origin\/test/);
+    assert.equal(readProgressV2(fixture.progressFile).state, 'BASE_MERGE_BLOCKED');
+    assert.equal(fixture.git(fixture.repo, ['ls-remote', 'origin', 'refs/heads/main']), remoteBefore);
+  });
+});
 
 test('scope-invalidated test attempts cannot retain release approval or authorize base integration', () => {
   const fixture = createEnvironmentBlockedCandidate('hotfix', '27');

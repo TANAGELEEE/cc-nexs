@@ -210,6 +210,18 @@ test('test release integrates candidates, invokes structured driver, records evi
     assert.throws(() => runCcNexsCommand(['release-test', '05', '--dry-run', '--progress', progressFile], { cwd: root }), /structured evidence/);
     writeProgressV2(progressFile, structuredClone(completeProgress));
 
+    // A candidate that merged origin/test is refused even with evidence bound to it.
+    const contaminated = git(code, ['commit-tree', `${sourceCommit}^{tree}`, '-p', sourceCommit, '-p', 'origin/test', '-m', 'merge test into feature']);
+    const contaminatedSource = { code: contaminated, other: localSourceCommit };
+    const contaminatedProgress = structuredClone(completeProgress);
+    contaminatedProgress.local_verification.candidate_fingerprint = candidateFingerprint(contaminatedSource);
+    Object.assign(contaminatedProgress.local_verification.attempts.at(-1), { fingerprint: candidateFingerprint(contaminatedSource), source: contaminatedSource });
+    git(code, ['update-ref', candidateRef, contaminated]);
+    writeProgressV2(progressFile, contaminatedProgress);
+    assert.throws(() => runCcNexsCommand(['release-test', '05', '--dry-run', '--progress', progressFile], { cwd: root }), /TEST_HISTORY: .*origin\/test/);
+    git(code, ['update-ref', candidateRef, sourceCommit]);
+    writeProgressV2(progressFile, structuredClone(completeProgress));
+
 
     const approvedPlan = readFileSync(join(reqDir, 'plan.md'), 'utf8');
     writeFileSync(join(reqDir, 'plan.md'), approvedPlan.replace('test_delivery.other: local', 'test_delivery.other: deploy'));

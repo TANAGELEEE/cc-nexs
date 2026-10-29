@@ -259,6 +259,27 @@ export function assertCandidateContainsRemoteBase({ repo, candidateRef, baseBran
   return { sourceCommit, baseCommit };
 }
 
+// Candidates reach test only through --no-ff merges, so the first-parent chain
+// of a test branch holds test-side commits that a feature never builds on. A
+// candidate containing one has merged, rebased or pulled test and would carry
+// other unreleased work into the base branch.
+export function assertCandidateExcludesTestHistory({ repo, sourceCommit, baseBranch, testBranches }) {
+  const branches = [...new Set(testBranches.filter(Boolean))].map((branch) => assertSegment(branch, 'test branch'));
+  if (branches.length === 0) return;
+  const base = fetchBase(repo, baseBranch);
+  const candidateOnly = new Set(git(repo, ['rev-list', sourceCommit, `^${base}`]).split('\n').filter(Boolean));
+  if (candidateOnly.size === 0) return;
+  // A test branch absent from origin has no history to leak; an unreachable remote still fails closed.
+  const published = git(repo, ['ls-remote', '--heads', 'origin', ...branches.map((branch) => `refs/heads/${branch}`)]);
+  for (const branch of branches.filter((name) => published.split('\n').some((line) => line.endsWith(`\trefs/heads/${name}`)))) {
+    const test = fetchBase(repo, branch);
+    const leaked = git(repo, ['rev-list', '--first-parent', test, `^${base}`]).split('\n').filter((commit) => candidateOnly.has(commit));
+    if (leaked.length) {
+      throw new Error(`[cc-nexs] TEST_HISTORY: candidate ${sourceCommit} contains ${leaked.length} commit(s) from origin/${branch} that are not in origin/${baseBranch} (${leaked.slice(0, 5).join(', ')}${leaked.length > 5 ? ', ...' : ''}); rebuild the feature branch from origin/${baseBranch} with only its own commits, then re-freeze the candidate`);
+    }
+  }
+}
+
 export function integrateCandidateToTest({
   repo,
   repositoryId,

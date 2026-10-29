@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import {
+  assertCandidateExcludesTestHistory,
   cleanupMergedWorktree,
   commitCandidate,
   createWorkspaceWorktrees,
@@ -432,4 +433,53 @@ test('protected branch rejection retains the server reason instead of claiming b
     writeFileSync(join(origin, 'hooks', 'pre-receive'), '#!/bin/sh\necho "protected branch" >&2\nexit 1\n', {mode:0o755});
     assert.throws(() => integrateCandidateToTest({repo, repositoryId:'api', candidateRef:'refs/cc-nexs/candidates/rejected/api', targetBranch:'main'}), /PUSH_REJECTED.*did not advance[\s\S]*protected branch/);
   } finally { rmSync(root, {recursive:true, force:true}); }
+});
+
+test('candidates that merged or rebased onto test history are refused; integrated features are not', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-test-history-'));
+  const origin = join(root, 'origin.git');
+  const repo = join(root, 'repo');
+  const commitFile = (name) => {
+    writeFileSync(join(repo, name), `${name}\n`);
+    git(repo, ['add', name]);
+    git(repo, ['commit', '-m', name]);
+    return git(repo, ['rev-parse', 'HEAD']);
+  };
+  try {
+    mkdirSync(origin);
+    git(origin, ['init', '--bare']);
+    git(root, ['clone', origin, repo]);
+    configure(repo);
+    git(repo, ['checkout', '-b', 'main']);
+    commitFile('base.txt');
+    git(repo, ['push', '-u', 'origin', 'main']);
+    git(repo, ['checkout', '-b', 'other', 'main']);
+    commitFile('other.txt');
+    git(repo, ['checkout', '-b', 'integrated', 'main']);
+    const integrated = commitFile('integrated.txt');
+    git(repo, ['checkout', '-b', 'test', 'main']);
+    git(repo, ['merge', '--no-ff', '--no-edit', 'other']);
+    git(repo, ['merge', '--no-ff', '--no-edit', 'integrated']);
+    git(repo, ['push', '-u', 'origin', 'test']);
+    const check = (sourceCommit, testBranches = ['test']) => assertCandidateExcludesTestHistory({ repo, sourceCommit, baseBranch: 'main', testBranches });
+
+    check(integrated);
+    check(git(repo, ['rev-parse', 'origin/main']));
+
+    git(repo, ['checkout', '-b', 'merged-test', 'main']);
+    commitFile('merged.txt');
+    git(repo, ['merge', '--no-edit', 'origin/test']);
+    const mergedTest = git(repo, ['rev-parse', 'HEAD']);
+    assert.throws(() => check(mergedTest), /TEST_HISTORY: .*contains 2 commit\(s\) from origin\/test that are not in origin\/main/);
+
+    git(repo, ['checkout', '-b', 'rebased', 'main']);
+    commitFile('rebased.txt');
+    git(repo, ['rebase', 'origin/test']);
+    assert.throws(() => check(git(repo, ['rev-parse', 'HEAD'])), /TEST_HISTORY/);
+
+    check(mergedTest, ['test02', null]);
+    check(mergedTest, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

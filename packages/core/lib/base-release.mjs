@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 
 import { resolveCandidateContext } from './candidate-context.mjs';
 import {
+  assertCandidateExcludesTestHistory,
   cleanupMergedWorktree,
   integrateCandidateToTest,
 } from './git-custodian.mjs';
@@ -84,6 +85,18 @@ function executeBaseRelease(context) {
     repositories: context.repositories,
     testedSource,
   });
+  for (const item of context.repositories) {
+    assertCandidateExcludesTestHistory({
+      repo: item.repository.absolute_path,
+      sourceCommit: item.sourceCommit,
+      baseBranch: baseTargets[item.id],
+      testBranches: [
+        item.repository.test_branch,
+        context.progress.delivery?.test?.target?.branches?.[item.id],
+        testAttempt?.integrations?.[item.id]?.targetBranch,
+      ],
+    });
+  }
 
   const attempt = beginBaseRelease(context.progressFile, {
     source: context.source,

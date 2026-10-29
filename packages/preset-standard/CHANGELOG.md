@@ -7,6 +7,7 @@ All notable changes to cc-nexs will be documented here.
 ### Fixed
 
 - A model selection's `thinking` or `reasoning_effort` in a higher config layer (overlay, project, feature, role) now replaces a lower layer's `effort` instead of being silently shadowed by it.
+- Test release and base release refuse a candidate that contains history from a test branch's first-parent chain (`TEST_HISTORY`). A feature branch that merged, rebased onto or pulled test would otherwise carry other unreleased features into the base branch.
 
 ### Changed
 
