@@ -4,6 +4,8 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-29
+
 ### Fixed
 
 - A model selection's `thinking` or `reasoning_effort` in a higher config layer (overlay, project, feature, role) now replaces a lower layer's `effort` instead of being silently shadowed by it.
