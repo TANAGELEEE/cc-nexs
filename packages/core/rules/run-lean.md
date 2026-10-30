@@ -52,6 +52,8 @@ The next state-machine pass routes the failure to the implementation/fix state s
 
 An environment-only check may return Lean-only `deferred_to_test`. It continues exactly like `passed`, never redispatches the Developer merely because local backend startup or an external service is unavailable, and records each deferral as structured evidence with a stable exact check id, reason, and test execution plan. Hotfix-style unstructured text is not valid here.
 
+Deferral covers only a check that could not run, or could not reach its assertions, because of the local environment. A check that ran and failed an assertion is `failed`, even when the same failure reproduces on the base commit; this applies equally to results produced by a configured driver. When a failure looks unrelated to the candidate, run the same command on the merge-base and record both results as proof. A base-reproducing failure is still `failed`: fix it inside the approved paths, or report it as a pre-existing base failure with that evidence so the user decides whether it is fixed on the base branch or brought into scope.
+
 Every deferred id becomes mandatory evidence in test. Close it only with structured evidence equivalent to:
 
 ```text
