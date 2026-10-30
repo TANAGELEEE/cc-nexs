@@ -13,7 +13,7 @@ Lean/Hotfix Gateway B change request. Resolve the packaged CLI and run:
 node <plugin-root>/lib/cc-nexs-cli.mjs request-release-changes <feature-id> --type <kind> --feedback <text> [--ac <id>] [--path <path>]
 ```
 
-The deterministic controller accepts only the mode-specific release-pending state, appends a structured row to Lean `plan.md` or the assigned Hotfix BUG document (legacy `hotfix.md`), keeps status synchronized, and retains old evidence as history.
+The deterministic controller accepts the mode-specific release-pending state, plus Lean `TEST_VERIFY_FAILED` for `scope` only: use it when the fix for a blocked test attempt needs paths or ACs outside the approved plan, which `TEST_FIXING` cannot touch. Repairs inside the approved scope stay on `TEST_FIXING`, and failed-attempt evidence goes through `record-test-verification`. The controller appends a structured row to Lean `plan.md` or the assigned Hotfix BUG document (legacy `hotfix.md`), keeps status synchronized, and retains old evidence as history.
 
 - `evidence`: no code or AC change; remain at Gateway B.
 - `implementation`: approved scope is unchanged; invalidate current candidate evidence and route through the same feature worktrees, local re-verification, one Gateway B delta Review, a new test attempt, test regression, and Gateway B again.

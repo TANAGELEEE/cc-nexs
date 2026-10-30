@@ -113,6 +113,8 @@ Changes at Gateway B must use `/cc-nexs:request-release-changes <id> --type=... 
 - `implementation`: `GATEWAY_B_CHANGE_REQUESTED -> GATEWAY_B_FIXING -> GATEWAY_B_LOCAL_REVERIFYING -> GATEWAY_B_DELTA_REVIEW`; PASS creates a new test attempt and regression evidence. A blocked delta goes to `HUMAN_INTERVENTION`.
 - `scope`: `SCOPE_CHANGE_REQUESTED -> PLANNING -> PLAN_REVIEWING -> PLAN_PENDING_HUMAN`; Planner updates requirements plus plan approval scope, a fresh plan review is recorded for the new plan, and a new Gateway A hash is mandatory.
 
+At `TEST_VERIFY_FAILED`, when the fix needs paths or ACs outside the approved plan, run the same `scope` request instead of opening a new feature. It follows the same scope path and keeps the branch, worktrees, candidate history and the failed test attempt; local verification, Review and test delivery run again for the new candidate after Gateway A. Fixes inside the approved scope stay on `TEST_FIXING`.
+
 Keep each request row synchronized with progress. A newer request marks the prior open row `addressed`; release approval marks the current row `approved` before archive.
 
 ## Base release and completion

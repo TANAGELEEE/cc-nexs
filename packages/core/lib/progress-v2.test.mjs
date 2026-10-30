@@ -92,6 +92,43 @@ test('Gateway B evidence feedback stays at the gate while scope feedback invalid
   }
 });
 
+test('a failed Lean test attempt can reopen planning through a scope change only', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-test-failed-scope-'));
+  const file = join(root, 'progress.json');
+  try {
+    const progress = createProgressV2({ featureId: '03f', featureSlug: 'test-failed-scope', preset: 'preset-standard' });
+    progress.state = 'TEST_VERIFY_FAILED';
+    progress.gates.plan = { approved: true, binding: { combined_sha256: 'approved' } };
+    progress.plan_review = { status: 'passed', plan_sha256: 'a'.repeat(64), rounds: 1, blocking_findings: [] };
+    progress.local_verification = { status: 'passed', candidate_fingerprint: 'candidate', attempts: [{ fingerprint: 'candidate', status: 'passed' }] };
+    progress.review = { status: 'passed', candidate_fingerprint: 'candidate', reviewed_commits: { api: 'abc' }, blocking_findings: [], closure_attempts: 0, gateway_b_delta_attempts: 0 };
+    progress.delivery.test.status = 'verify_failed';
+    progress.delivery.test.attempts = [{ id: 'test-release-1', status: 'succeeded', verification: { status: 'blocked' } }];
+    writeProgressV2(file, progress);
+
+    assert.throws(() => recordReleaseChangeRequest(file, { kind: 'implementation', feedback: 'fix', actor: 'owner' }), /TEST_FIXING/);
+    assert.throws(() => recordReleaseChangeRequest(file, { kind: 'evidence', feedback: 'proof', actor: 'owner' }), /record-test-verification/);
+
+    const { request } = recordReleaseChangeRequest(file, { kind: 'scope', feedback: 'fix needs an unapproved path', paths: ['src/b.js'], actor: 'owner' });
+    const saved = readProgressV2(file);
+    assert.equal(request.from_state, 'TEST_VERIFY_FAILED');
+    assert.equal(saved.state, 'SCOPE_CHANGE_REQUESTED');
+    assert.equal(saved.gates.plan.approved, false);
+    assert.equal(saved.plan_review, null);
+    assert.equal(saved.local_verification.status, 'idle');
+    assert.equal(saved.review.status, 'idle');
+    assert.equal(saved.delivery.test.status, 'idle');
+    assert.deepEqual(saved.delivery.test.attempts.map((attempt) => attempt.id), ['test-release-1']);
+    assert.equal(saved.events.at(-1).from, 'TEST_VERIFY_FAILED');
+
+    saved.state = 'IMPLEMENTING';
+    writeProgressV2(file, saved);
+    assert.throws(() => recordReleaseChangeRequest(file, { kind: 'scope', feedback: 'too early', actor: 'owner' }), /RELEASE_PENDING_HUMAN or TEST_VERIFY_FAILED/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('Hotfix Gateway B implementation feedback enters one bounded repair path and scope expansion is rejected', () => {
   const root = mkdtempSync(join(tmpdir(), 'cc-nexs-hotfix-gateway-b-'));
   const file = join(root, 'progress.json');

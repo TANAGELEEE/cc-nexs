@@ -651,9 +651,19 @@ export function recordReleaseChangeRequest(file, {
   const progress = readProgressV2(file);
   if (!['lean', 'hotfix'].includes(progress.mode)) throw new Error(`[cc-nexs] release-gate changes require lean or hotfix mode, found ${progress.mode}`);
   const pendingState = progress.mode === 'hotfix' ? 'HOTFIX_RELEASE_PENDING_HUMAN' : 'RELEASE_PENDING_HUMAN';
-  if (progress.state !== pendingState) {
-    throw new Error(`[cc-nexs] release-gate changes require ${pendingState}, found ${progress.state}`);
+  // A failed Lean test attempt may need paths or ACs outside the approved plan; scope is its only route back to Gateway A.
+  const fromTestFailure = progress.mode === 'lean' && progress.state === 'TEST_VERIFY_FAILED';
+  if (fromTestFailure && kind === 'implementation') {
+    throw new Error('[cc-nexs] repair a failed test attempt within the approved scope through TEST_FIXING; use --type scope only when the fix needs unapproved paths or ACs');
   }
+  if (fromTestFailure && kind === 'evidence') {
+    throw new Error('[cc-nexs] record evidence for a failed test attempt with record-test-verification');
+  }
+  if (progress.state !== pendingState && !fromTestFailure) {
+    const allowed = progress.mode === 'lean' ? `${pendingState} or TEST_VERIFY_FAILED (scope only)` : pendingState;
+    throw new Error(`[cc-nexs] release-gate changes require ${allowed}, found ${progress.state}`);
+  }
+  const fromState = progress.state;
   if (progress.mode === 'hotfix' && kind === 'scope') {
     throw new Error('[cc-nexs] hotfix scope/contract feedback cannot expand the bound patch; initialize a new lean change');
   }
@@ -676,6 +686,7 @@ export function recordReleaseChangeRequest(file, {
     affected_acs: [...affectedAcs],
     paths: [...paths],
     status: kind === 'evidence' ? 'recorded' : 'open',
+    from_state: fromState,
     requested_by: actor,
     requested_at: timestamp,
   };
@@ -702,7 +713,7 @@ export function recordReleaseChangeRequest(file, {
     timestamp,
     type: `gate.release.change_requested.${kind}`,
     actor,
-    from: pendingState,
+    from: fromState,
     to: progress.state,
     data: request,
   });
