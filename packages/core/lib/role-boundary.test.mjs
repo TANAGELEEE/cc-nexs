@@ -33,6 +33,36 @@ test('git mutation detection covers history and worktree changes', () => {
   assert.equal(isGitMutation('git worktree remove .worktrees/01'), true);
 });
 
+test('git mutation detection covers repository, index, working tree and remote-ref changes', () => {
+  for (const command of [
+    'git init -q probe-repo',
+    'git clone https://example.test/repo.git',
+    'git stash',
+    'git restore src/app.ts',
+    'git pull --ff-only',
+    'git fetch origin',
+    'git rm -r --cached src',
+    'git mv a.ts b.ts',
+    'git apply fix.patch',
+    'git am < series.mbox',
+    'git submodule update --init',
+    'git update-index --assume-unchanged a.ts',
+    'git gc --prune=now',
+    'git notes add -m x',
+  ]) {
+    assert.equal(isGitMutation(command), true, command);
+  }
+});
+
+test('git mutation detection sees through global options before the subcommand', () => {
+  assert.equal(isGitMutation('git -c user.name=x commit -m test'), true);
+  assert.equal(isGitMutation('git --no-pager -C api push origin HEAD'), true);
+  assert.equal(isGitMutation('git --git-dir=.git --work-tree=. reset --hard'), true);
+  for (const command of ['git log --oneline -5', 'git diff base...HEAD', 'git show HEAD:a.ts', 'git -C api rev-parse HEAD', 'git config user.name', 'git remote -v', 'cat .git/config']) {
+    assert.equal(isGitMutation(command), false, command);
+  }
+});
+
 test('progress mutation detection blocks shell writes but allows inspection', () => {
   assert.equal(isProgressMutation("cat all-docs/doc/01/progress.md"), false);
   assert.equal(isProgressMutation("rg 'state' all-docs/doc/01/progress.json"), false);
