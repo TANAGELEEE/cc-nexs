@@ -76,6 +76,8 @@ Use `loadConfig({ projectRoot: pwd })`. Resolve:
 Resolve each dispatched role from a fresh coherent snapshot:
 
 ```js
+const progressV2 = readProgressV2(PROGRESS_JSON);
+const featureConfig = JSON.parse(readFileSync(join(REQ_DIR, 'config.json'), 'utf8'));
 const planText = MODE === 'lean' && existsSync(join(REQ_DIR, 'plan.md'))
   ? readFileSync(join(REQ_DIR, 'plan.md'), 'utf8')
   : '';
@@ -110,59 +112,14 @@ Every dispatch gets `CC_NEXS_REQ_DIR=<absolute-feature-doc-dir>/` and the reposi
 
 ### Construct `workflow`
 
-`readProgress(progress.md)` delegates to its sibling progress.json. Rebuild the object before each `nextStep()` call:
+Rebuild the snapshot before each `nextStep()` call with `buildWorkflowSnapshot({ cwd, featureId, noAutoTestRelease })` from `lib/workflow-snapshot.mjs`, or run `node <plugin-root>/lib/cc-nexs-cli.mjs status <id> [--no-auto-test-release]`, which prints the state, revision and `nextStep()` result. The snapshot reads only authoritative progress.json, feature `config.json` and the loaded config:
 
-```js
-const progress = readProgress(PROGRESS_MD);
-const progressV2 = readProgressV2(PROGRESS_JSON);
-const featureConfig = JSON.parse(readFileSync(join(REQ_DIR, 'config.json'), 'utf8'));
-const normalizedTestRelease = progress.workflow?.test_release
-  || { policy: 'manual', status: 'idle', attempt: 0 };
-const releaseOptOut = ARGS.includes('--no-auto-test-release');
-const configuredOverride = project.workflow?.test_release?.policy
-  ?? overlay?.workflow?.test_release?.policy;
-const persistedPolicy = resolveTestReleasePolicy({
-  progress: progressV2,
-  featureConfig,
-  configured: mergedWorkflow?.test_release?.policy,
-  configuredOverride,
-});
-const latestLocalAttempt = progressV2.local_verification?.attempts?.findLast((item) => (
-  item.fingerprint === progressV2.local_verification?.candidate_fingerprint
-));
-const exactRecordedReview = ['passed', 'blocked'].includes(progressV2.review?.status)
-  && progressV2.review?.candidate_fingerprint === progressV2.local_verification?.candidate_fingerprint
-  && latestLocalAttempt?.fingerprint === progressV2.review?.candidate_fingerprint;
-const workflow = {
-  plan_approved: progressV2.gates?.plan?.approved === true,
-  delivery_lane: progressV2.gates?.plan?.binding?.delivery_lane || 'standard',
-  release_approved: progressV2.gates?.release?.approved === true,
-  hotfix: progressV2.hotfix ? {
-    ...progressV2.hotfix,
-    delta_attempts: progressV2.review?.closure_attempts || 0,
-  } : null,
-  local_verification: {
-    status: progressV2.local_verification?.status || 'idle',
-    context: progressV2.local_verification?.context || null,
-  },
-  review: {
-    status: progressV2.review?.status || 'idle',
-    exact: exactRecordedReview,
-    closure_attempts: progressV2.review?.closure_attempts || 0,
-    gateway_b_delta_attempts: progressV2.review?.gateway_b_delta_attempts || 0,
-  },
-  test_release: {
-    policy: releaseOptOut ? 'manual' : persistedPolicy,
-    status: normalizedTestRelease.status,
-    attempt: normalizedTestRelease.attempt || 0,
-    prerequisites_met: true,
-  },
-  base_release: {
-    status: progressV2.delivery?.base?.status || 'idle',
-    attempt: progressV2.delivery?.base?.attempts?.length || 0,
-  },
-};
-```
+- `plan_approved`, `delivery_lane` and `release_approved` come from the plan/release gates.
+- `review.exact` is true only when a passed/blocked Review, the current local candidate fingerprint and the latest local attempt for it are the same fingerprint.
+- `test_release.policy` resolves feature `release.test`, then project/overlay `workflow.test_release.policy`, then the persisted policy; `--no-auto-test-release` forces `manual` for this invocation only. `test_release.attempt` counts attempts with both a deployment and an environment revision.
+- `enabledRoles` is `preset.modes[MODE].enabled`, falling back to `preset.roles.enabled`; thresholds come from `mergedThresholds`.
+
+Do not assemble this object by hand.
 
 New features default to `auto_if_ready`. An explicit project/overlay `manual` or `disabled` wins. `--no-auto-test-release` affects only this invocation; `config.json.release.test=manual` persists the choice.
 
@@ -187,7 +144,7 @@ Repeat until terminal or stopped:
    - `parse_*_conclusion` → parse only the active rule's file/pattern/outcomes.
    - `continue`, `continue_to_test`, and `noop` → no role/tool side effect; apply only the returned state movement.
    - `unknown_state` or `unknown_phase` → stop as a genuine controller failure and report the exact mode/state; never guess a transition.
-6. Let the completed action determine `effectiveNext` (normally the returned `next`; `verify_local` failure uses the active rule's explicit failure state). Re-read authoritative progress, then persist `effectiveNext` **before** honoring `stop: true`. If the current state is still the captured `state` and `effectiveNext !== state`, call `transitionState(PROGRESS_MD, { from: state, to: effectiveNext, reason })` exactly once—even when the action persisted evidence and incremented revision. This covers boundaries such as `TEST_VERIFIED -> RELEASE_PENDING_HUMAN` and `TEST_RELEASE -> *_BLOCKED|*_DEPLOYED_NEEDS_MANUAL_VERIFY`; returning first would strand progress in the prior state. If a controller already changed state to `effectiveNext`, do not append a synthetic transition. Any third state is stale/conflicting: discard the decision, rebuild the snapshot, and call `nextStep()` again.
+6. Let the completed action determine `effectiveNext` (normally the returned `next`; `verify_local` failure uses the active rule's explicit failure state). Re-read authoritative progress, then persist `effectiveNext` **before** honoring `stop: true`. If the current state is still the captured `state` and `effectiveNext !== state`, run `cc-nexs advance <id> --from <state> --to <effectiveNext> --reason <text>` (equivalent to `transitionState(PROGRESS_MD, { from: state, to: effectiveNext, reason })`) exactly once; it rejects a stale `--from`—even when the action persisted evidence and incremented revision. This covers boundaries such as `TEST_VERIFIED -> RELEASE_PENDING_HUMAN` and `TEST_RELEASE -> *_BLOCKED|*_DEPLOYED_NEEDS_MANUAL_VERIFY`; returning first would strand progress in the prior state. If a controller already changed state to `effectiveNext`, do not append a synthetic transition. Any third state is stale/conflicting: discard the decision, rebuild the snapshot, and call `nextStep()` again.
 7. Exact candidate fingerprint, attempt, evidence, and from-state checks make reruns idempotent. Never redispatch a completed role, re-integrate a candidate, retrigger CI, or append a transition already reflected in authoritative state. Release actions that only update delivery status must be re-read and routed by `nextStep()`; they never receive an invented same-state transition.
 8. Only after step 6/7, if `stop: true`, render the active rule's summary from the newly persisted state and return. Otherwise the loop continues immediately.
 

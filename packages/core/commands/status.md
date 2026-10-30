@@ -11,7 +11,7 @@ argument-hint: "[feature_id]"
 
 1. Resolve authoritative progress.json v2 plus its progress.md mirror, including workspace `.cc-nexs/hotfixes/<key>/` and legacy docs state; resolve the BUG separately through `progress.hotfix_document`
 2. Read mode/state/revision/gates/counters/delivery from progress.json; require config.json.mode to agree and report config_version/risk_tier migration status, including `plan_binding_status=bound|derived|unknown` for approved Lean work
-3. Use `readProgressV2()` (or `readProgress(progress.md)` compatibility delegation)
+3. Use `readProgressV2()` (or `readProgress(progress.md)` compatibility delegation), and run `node <plugin-root>/lib/cc-nexs-cli.mjs status <id>` for the deterministic state, revision and `nextStep()` result; base "Suggested next step" on that output instead of re-deriving it
 4. Print (Lean 显示 plan/local review/test/base；Hotfix 显示 scope/severity/local/review/test/base)：
 
 ```
