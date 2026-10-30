@@ -88,6 +88,7 @@
               "affected_acs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
               "paths": { "type": "array", "items": { "type": "string", "minLength": 1 } },
               "status": { "enum": ["recorded", "open", "addressed", "approved"] },
+              "from_state": { "enum": ["RELEASE_PENDING_HUMAN", "HOTFIX_RELEASE_PENDING_HUMAN", "TEST_VERIFY_FAILED"] },
               "requested_by": { "type": "string" },
               "requested_at": { "type": "string" },
               "resolved_at": { "type": "string" }

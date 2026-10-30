@@ -59,6 +59,29 @@ test('Gateway B controller updates the canonical plan and renders HTML', () => {
   }
 });
 
+test('a failed test attempt records a scope change in the canonical plan and requirements', () => {
+  const current = fixture();
+  try {
+    const progress = readProgressV2(current.progressFile);
+    progress.state = 'TEST_VERIFY_FAILED';
+    writeProgressV2(current.progressFile, progress);
+    const result = requestReleaseChanges({
+      cwd: current.root,
+      featureId: '42',
+      kind: 'scope',
+      feedback: 'refresh fix needs an unapproved converter',
+      paths: ['src/converter.ts'],
+      actor: 'product-owner',
+    });
+    assert.equal(result.state, 'SCOPE_CHANGE_REQUESTED');
+    assert.equal(result.request.from_state, 'TEST_VERIFY_FAILED');
+    assert.match(readFileSync(join(current.docs, 'plan.md'), 'utf8'), /gateway-b-1/);
+    assert.match(readFileSync(join(current.docs, 'requirements.md'), 'utf8'), /refresh fix needs an unapproved converter/);
+  } finally {
+    rmSync(current.root, { recursive: true, force: true });
+  }
+});
+
 test('Gateway B controller validates canonical documents before mutating progress', () => {
   const current = fixture({ includePlan: false });
   try {
