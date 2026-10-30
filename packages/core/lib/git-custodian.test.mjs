@@ -393,6 +393,31 @@ test('MR success text cannot replace remote ancestry proof', () => {
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+test('MR driver owns the source branch push so push-option MR creation is not a no-op', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-mr-push-'));
+  try {
+    const origin = join(root, 'remote.git');
+    const repo = join(root, 'repo');
+    git(root, ['init', '--bare', origin]); git(root, ['clone', origin, repo]); configure(repo);
+    git(repo, ['checkout', '-b', 'main']);
+    writeFileSync(join(repo, 'base.txt'), 'base'); git(repo, ['add', '.']); git(repo, ['commit', '-m', 'base']); git(repo, ['push', 'origin', 'main']);
+    const base = git(repo, ['rev-parse', 'HEAD']);
+    git(repo, ['checkout', '-b', 'feature']);
+    writeFileSync(join(repo, 'change.txt'), 'feature'); git(repo, ['add', '.']); git(repo, ['commit', '-m', 'feature']);
+    git(repo, ['update-ref', 'refs/cc-nexs/candidates/test/api', 'HEAD']);
+    const options = { repo, repositoryId: 'api', candidateRef: 'refs/cc-nexs/candidates/test/api', targetBranch: 'main', requireDisjointTargetChanges: true };
+    assert.throws(() => integrateCandidateToTest({ ...options, mergeRequest: () => ({ status: 'pending', url: 'https://git.example/mr/1' }) }), /MR driver did not push/);
+    const result = integrateCandidateToTest({ ...options, mergeRequest: (payload) => {
+      assert.equal(git(repo, ['ls-remote', '--heads', 'origin', `refs/heads/${payload.sourceBranch}`]), '');
+      git(repo, ['push', 'origin', `${payload.integrationCommit}:refs/heads/${payload.sourceBranch}`]);
+      return { status: 'pending', url: 'https://git.example/mr/2' };
+    } });
+    assert.equal(result.pending, true);
+    assert.equal(result.mergeRequest.url, 'https://git.example/mr/2');
+    assert.equal(git(repo, ['rev-parse', 'origin/main']), base);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test('exact merged-tree checks permit disjoint sensitive base changes without moving the tested ref', () => {
   const root = mkdtempSync(join(tmpdir(), 'cc-nexs-integration-check-'));
   try {

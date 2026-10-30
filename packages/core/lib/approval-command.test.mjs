@@ -787,7 +787,7 @@ test('protected MR pending is resumed and remote merge reconciles ledger and cle
   const fixture = createEnvironmentBlockedCandidate('hotfix', 'mr-resume');
   withPresetEnv(fixture, () => {
     writeFileSync(join(fixture.root, 'cc-nexs.config.yml'), `preset_path: .cc-nexs\nrelease:\n  base:\n    driver:\n      command: ${process.execPath}\n      args: [mr.mjs]\n`);
-    writeFileSync(join(fixture.root, 'mr.mjs'), `import {appendFileSync} from 'node:fs'; let s=''; for await(const c of process.stdin)s+=c; const p=JSON.parse(s); appendFileSync('mr.log',JSON.stringify(p)+'\\n'); console.log(JSON.stringify({status:'pending',url:'https://git.example/mr/1'}));`);
+    writeFileSync(join(fixture.root, 'mr.mjs'), `import {appendFileSync} from 'node:fs'; import {execFileSync} from 'node:child_process'; let s=''; for await(const c of process.stdin)s+=c; const p=JSON.parse(s); appendFileSync('mr.log',JSON.stringify(p)+'\\n'); execFileSync('git',['-C',${JSON.stringify(fixture.repo)},'push','-q','origin',p.integrationCommit+':refs/heads/'+p.sourceBranch]); console.log(JSON.stringify({status:'pending',url:'https://git.example/mr/1'}));`);
     approveFeatureGate({ cwd: fixture.root, featureId: 'mr-resume', gate: 'release', approver: 'Owner', testException });
     const p = readProgressV2(fixture.progressFile); p.state = 'HOTFIX_BASE_MERGING'; writeProgressV2(fixture.progressFile, p);
     assert.equal(runBaseRelease({ cwd: fixture.root, featureId: 'mr-resume' }).status, 'running');
