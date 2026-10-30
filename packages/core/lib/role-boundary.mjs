@@ -58,7 +58,9 @@ const ROLE_ALIASES = {
   'lean-verifier-computer-use': 'lean-verifier',
   'hotfix-verifier-computer-use': 'hotfix-verifier',
 };
-const GIT_MUTATION = /\bgit(?:\s+-C\s+\S+)?\s+(?:add|commit|push|merge|rebase|checkout|switch|branch|reset|clean|cherry-pick|revert|tag|update-ref|worktree\s+(?:add|remove|move|prune|repair|lock|unlock))\b/;
+// Global options such as `-C <path>`, `-c <key=value>` or `--git-dir=<path>` may precede the subcommand.
+// `config` and `remote` stay allowed because their common forms only read.
+const GIT_MUTATION = /\bgit(?:\s+(?:-[Cc]\s+\S+|--[\w-]+(?:=\S+)?))*\s+(?:add|am|apply|branch|checkout|cherry-pick|clean|clone|commit|fetch|gc|init|merge|mv|notes|pull|push|rebase|reset|restore|revert|rm|stash|submodule|switch|tag|update-index|update-ref|worktree\s+(?:add|remove|move|prune|repair|lock|unlock))\b/;
 const PROGRESS_PATH = /(?:^|[\\/\s"'])progress\.(?:md|json)(?=$|[\s"';&|)])/i;
 const SHELL_FILE_MUTATION = /(?:^|[;&|]\s*)(?:rm|mv|cp|install|truncate)\b|\btee\b|\bsed\b[^\n]*(?:\s-i(?:\s|$)|--in-place)|\bperl\b[^\n]*\s-[^\s]*i[^\s]*|(?:^|[^<])>>?/i;
 
