@@ -5,7 +5,7 @@
 //   - "claude-subagent" : invoke Claude as a subagent within the same plugin session (handled by orchestrator command, not this lib)
 //   - "gemini"          : `gemini -p "<prompt>"`  (hypothetical, command varies)
 //   - "openai-cli"      : `openai api chat.completions.create ...`
-//   - "pi-subagent"     : invoke an isolated agent through the pi-subagents extension
+//   - "pi-subagent"     : run an isolated Pi role process through cc_nexs_dispatch
 //   - "custom"          : preset must provide `command_template` (e.g. "mytool --in {file} --prompt '{prompt}'")
 //
 // This module returns an argv plan rather than a shell command. Callers must use
@@ -83,7 +83,7 @@ export function planReviewerInvocation({
         model,
         thinking: effort,
         fallbackModels,
-        notes: 'Invoke the package-qualified cc-nexs role through pi-subagents with fresh context. Use cc_nexs_dispatch to adapt thinking and assigned cwd to tasks or Tintin RPC v2; retry fallbackModels only for failed tasks.',
+        notes: 'Run the package-qualified cc-nexs role through cc_nexs_dispatch as an isolated Pi process with fresh context, assigned cwd, model and thinking; retry fallbackModels only for failed tasks.',
       };
 
     case 'gemini':

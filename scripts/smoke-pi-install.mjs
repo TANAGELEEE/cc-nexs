@@ -6,7 +6,6 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
-const withSubagents = process.env.CC_NEXS_PI_SUBAGENTS_SMOKE === '1';
 const probe = spawnSync('pi', ['--version'], { encoding: 'utf8' });
 if (probe.error?.code === 'ENOENT') {
   console.log('Pi install smoke skipped: pi executable is not installed in this environment.');
@@ -63,11 +62,6 @@ function queryCommands(env) {
 
 try {
   const env = { ...process.env, PI_CODING_AGENT_DIR: agentDir, PI_OFFLINE: '1' };
-  if (withSubagents) {
-    const installEnv = { ...env };
-    delete installEnv.PI_OFFLINE;
-    execFileSync('pi', ['install', 'npm:pi-subagents@0.35.1'], { env: installEnv, stdio: 'pipe' });
-  }
   execFileSync('pi', ['install', root, '--approve'], { env, stdio: 'pipe' });
   const settings = JSON.parse(readFileSync(join(agentDir, 'settings.json'), 'utf8'));
   const configured = JSON.stringify(settings);
@@ -79,9 +73,7 @@ try {
   for (const required of ['cc-nexs:init', 'cc-nexs:run', 'cc-nexs:release-test', 'cc-nexs:hotfix', 'cc-nexs:doctor', 'skill:cc-nexs-run', 'skill:cc-nexs-release-test', 'skill:cc-nexs-hotfix']) {
     if (!names.has(required)) throw new Error(`Pi did not load required command: ${required}`);
   }
-  if (withSubagents && !names.has('subagents-doctor')) throw new Error('pi-subagents did not load beside cc-nexs');
-  const scope = withSubagents ? 'package, pi-subagents, extension, and skills' : 'package, extension, and skills';
-  console.log(`Pi install smoke passed with Pi ${probe.stdout.trim()}: ${scope} loaded in isolation.`);
+  console.log(`Pi install smoke passed with Pi ${probe.stdout.trim()}: package, extension, and skills loaded in isolation.`);
 } finally {
   rmSync(agentDir, { recursive: true, force: true });
 }

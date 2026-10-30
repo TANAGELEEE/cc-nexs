@@ -3,10 +3,6 @@ name: lean-verifier
 package: cc-nexs
 description: "Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests. Black-box acceptance role for the Lean mode test environment. Verifies the deployed candidate against the plan's test matrix. Preferred ego lite provider."
 tools: bash, read, write, edit, find, ls
-defaultContext: fresh
-systemPromptMode: replace
-inheritProjectContext: true
-inheritSkills: false
 skills: ego-browser
 ---
 
@@ -16,7 +12,7 @@ You are already running as an isolated cc-nexs Pi child agent. Execute this role
 Any Claude Task-tool, Claude subagent, Codex CLI, or nested agent invocation shown below is legacy runtime syntax only.
 Never invoke `claude`, `codex`, another `pi` process, `/cc-nexs:*`, or the `subagent` tool from this child.
 The parent orchestrator owns progress transitions and Git Custodian operations. Do not run Git mutation commands.
-The parent resolves the cc-nexs role profile and passes model/thinking through the detected Pi adapter; do not choose or persist a model ID.
+The parent resolves the cc-nexs role profile and passes model/thinking through cc_nexs_dispatch; do not choose or persist a model ID.
 
 ## Pi Ego Lite Browser Contract
 

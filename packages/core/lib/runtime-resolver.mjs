@@ -11,9 +11,9 @@ export function detectRuntime(env = process.env) {
   }
   if (env.CODEX_HOME || env.CODEX_THREAD_ID || env.CODEX_SANDBOX) return 'codex';
   // The Pi extension sets CC_NEXS_RUNTIME=pi in its own process. Only the
-  // child marker is safe for implicit detection; PI_CODING_AGENT_DIR may be
-  // exported in shells that also launch Claude Code or Codex.
-  if (env.PI_SUBAGENT_CHILD === '1') return 'pi';
+  // cc_nexs_dispatch child marker is safe for implicit detection;
+  // PI_CODING_AGENT_DIR may be exported in shells that also launch Claude Code or Codex.
+  if (env.CC_NEXS_CHILD_ROLE?.startsWith('cc-nexs.')) return 'pi';
   return 'claude';
 }
 

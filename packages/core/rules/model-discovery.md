@@ -85,11 +85,9 @@ record selection source/reason with the existing dispatch summary. No new approv
 round or manually maintained model registry is required.
 
 Dispatch the resolved model through the existing native tool. Omit the model field
-for `inherit`. Pi uses `cc_nexs_dispatch`: tasks API encodes `provider/model:thinking`;
-Tintin RPC v2 passes model and thinking separately and binds the assigned cwd.
-The Agent tool alone cannot bind cwd. The local installer translates role files,
-and child session-name detection preserves role boundaries without global env races.
-Join all returned child IDs before recording success or advancing the workflow.
+for `inherit`. Pi uses `cc_nexs_dispatch`, which starts each role as its own Pi
+process with `--model`, `--thinking` and the assigned cwd, and returns only after
+every child exits. Record success or advance the workflow only from those results.
 Claude and Codex use only effort controls supported by their actual tool. A fallback
 must be available at that executor and permitted by existing policy; retry only the
 failed role after a confirmed model/transport failure, never completed siblings or

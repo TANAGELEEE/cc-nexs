@@ -45,14 +45,14 @@ test('Claude-hosted external Codex roles resolve Codex model profiles', () => {
   assert.equal(reviewer.model, 'codex-review-model');
 });
 
-test('Pi maps every role to an isolated pi-subagents role without a fixed model', () => {
+test('Pi maps every role to an isolated Pi role process without a fixed model', () => {
   const implementer = resolveRoleRuntime(preset, 'implementer', 'pi');
   const reviewer = resolveRoleRuntime(preset, 'reviewer', 'pi');
   assert.equal(implementer.tool, 'pi-subagent');
   assert.equal(reviewer.tool, 'pi-subagent');
   assert.equal(reviewer.session_isolation, 'independent');
   assert.equal(reviewer.model, 'inherit');
-  assert.equal(detectRuntime({ PI_SUBAGENT_CHILD: '1' }), 'pi');
+  assert.equal(detectRuntime({ CC_NEXS_CHILD_ROLE: 'cc-nexs.lean-reviewer' }), 'pi');
   assert.equal(detectRuntime({ PI_CODING_AGENT_DIR: '/tmp/pi-config' }), 'claude');
 });
 

@@ -1,11 +1,11 @@
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
-import { getAgentDir, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { existsSync } from "node:fs";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "@earendil-works/pi-ai";
 import { modelGateway } from "../../packages/core/lib/model-gateway.mjs";
 import { findWorkspaceRoot } from "../../packages/core/lib/candidate-context.mjs";
-import { piSubagentApi, piTask, subagentRpc } from "../../packages/core/lib/pi-subagent-adapter.mjs";
+import { PI_CHILD_ROLE_ENV, piTask, runPiWave } from "../../packages/core/lib/pi-subagent-adapter.mjs";
 import { blockedTestBranchIntegration } from "../../packages/core/lib/test-branch-guard.mjs";
 
 import {
@@ -56,18 +56,21 @@ function commandDescription(name: string): string {
   return `Execute the cc-nexs ${name} workflow`;
 }
 
+// Re-run the Pi CLI that loaded this extension, as Pi's own subagent example does.
+function piInvocation(): { command: string; args: string[] } {
+  const script = process.argv[1];
+  if (script && !script.startsWith("/$bunfs/") && existsSync(script)) return { command: process.execPath, args: [script] };
+  return { command: "pi", args: [] };
+}
+
 export default function ccNexsPiExtension(pi: ExtensionAPI) {
   process.env.CC_NEXS_RUNTIME = "pi";
   process.env.CC_NEXS_PLUGIN_ROOT = PACKAGE_ROOT;
 
-  const qualifiedChildRole = process.env.PI_SUBAGENT_CHILD_AGENT || "";
-  const isCcNexsChild = qualifiedChildRole.startsWith("cc-nexs.");
-  let childRole = isCcNexsChild ? normalizeRole(qualifiedChildRole) : "";
+  // cc_nexs_dispatch runs each role in its own Pi process tagged with this variable.
+  const qualifiedChildRole = process.env[PI_CHILD_ROLE_ENV] || "";
+  const childRole = qualifiedChildRole.startsWith("cc-nexs.") ? normalizeRole(qualifiedChildRole) : "";
   if (childRole) process.env.CC_NEXS_ROLE = childRole;
-  pi.on("session_start", (_event, ctx) => {
-    const name = ctx.sessionManager.getSessionName() || "";
-    if (name.startsWith("cc-nexs.")) childRole = normalizeRole(name.split("#")[0]);
-  });
 
   {
     pi.on("tool_call", (event, ctx) => {
@@ -132,56 +135,30 @@ export default function ccNexsPiExtension(pi: ExtensionAPI) {
   if (!childRole) pi.registerTool({
     name: "cc_nexs_dispatch",
     label: "cc-nexs Pi dispatch",
-    description: "Detect Pi subagent API or dispatch one bounded wave with frozen models and assigned worktrees. Tintin uses RPC v2 because Agent lacks cwd. Wait for all completion notifications before recording gateway results.",
+    description: "Run one bounded wave of cc-nexs role children, each as an isolated headless Pi process in its assigned worktree with the frozen model and thinking. Returns after every child finishes, with per-child ok, output and error.",
     parameters: Type.Object({
-      tasks: Type.Optional(Type.Array(Type.Object({
+      tasks: Type.Array(Type.Object({
         agent: Type.String(), task: Type.String(), cwd: Type.String(),
         model: Type.Optional(Type.String()), effort: Type.Optional(Type.String()),
-      }))),
-      concurrency: Type.Optional(Type.Integer({ minimum: 1 })),
+        env: Type.Optional(Type.Record(Type.String(), Type.String(), { description: "Only CC_NEXS_PROGRESS_FILE, CC_NEXS_REQ_DIR and BUG_FILE." })),
+      }), { minItems: 1 }),
+      concurrency: Type.Integer({ minimum: 1 }),
     }),
-    async execute(_id, params, _signal, _update, ctx) {
-      const api = piSubagentApi(pi.getAllTools());
-      if (api === "tintin-rpc-v2") {
-        const handshake = await subagentRpc(pi.events, "ping");
-        if (handshake.version !== 2) throw new Error("Unsupported Pi subagent RPC version");
-      }
-      if (!params.tasks?.length) return { content: [{ type: "text", text: JSON.stringify({ api }) }], details: { api } };
+    async execute(_id, params, signal, update, ctx) {
       const tasks = params.tasks.map(piTask);
-      if (api === "tintin-rpc-v2") {
-        for (const task of tasks) {
-          const expected = readFileSync(resolve(PACKAGE_ROOT, "pi/tintin-agents", `${task.type}.md`), "utf8");
-          const installed = readFileSync(resolve(getAgentDir(), "agents", `${task.type}.md`), "utf8");
-          if (installed !== expected) throw new Error("Tintin cc-nexs roles are stale; run install:local:pi and reload");
-          for (const directory of [".pi/agents", ".agents/agents"]) {
-            const override = resolve(ctx.cwd, directory, `${task.type}.md`);
-            if (existsSync(override) && readFileSync(override, "utf8") !== expected) {
-              throw new Error(`Project agent shadows the cc-nexs role contract: ${override}`);
-            }
-          }
-        }
-      }
-      if (!params.concurrency || tasks.length > params.concurrency) throw new Error("Split the wave into bounded batches before dispatch");
-      if (api === "tasks") {
-        const outcome = await ctx.executeTool("subagent", {
-          tasks: params.tasks.map((task) => ({
-            agent: task.agent, task: task.task, cwd: task.cwd,
-            ...((task.model && task.model !== "inherit") || (task.effort && task.effort !== "inherit") ? {
-              model: `${task.model && task.model !== "inherit" ? task.model : `${ctx.model.provider}/${ctx.model.id}`}${task.effort && task.effort !== "inherit" ? `:${task.effort}` : ""}`,
-            } : {}),
-          })),
-          concurrency: params.concurrency, async: true, worktree: false, context: "fresh",
-        });
-        if (outcome.isError) throw new Error(JSON.stringify(outcome.result));
-        return outcome.result;
-      }
-      const results = await Promise.allSettled(tasks.map((task) => subagentRpc(pi.events, "spawn", {
-        ...task, options: { ...task.options, signal: _signal },
-      })));
-      const result = { api, children: results.map((item, index) => ({
-        agent: tasks[index].type,
-        ...(item.status === "fulfilled" ? { id: item.value.id } : { error: String(item.reason) }),
-      })) };
+      if (tasks.length > params.concurrency) throw new Error("Split the wave into bounded batches before dispatch");
+      let finished = 0;
+      const children = await runPiWave(tasks, {
+        agentsDir: resolve(PACKAGE_ROOT, "pi/agents"),
+        invocation: piInvocation(),
+        defaults: { model: ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined, thinking: pi.getThinkingLevel() },
+        signal,
+        onChildDone: (child) => {
+          finished += 1;
+          update?.({ content: [{ type: "text", text: `${finished}/${tasks.length} cc-nexs children finished; last ${child.agent} ${child.ok ? "ok" : "failed"}` }], details: {} });
+        },
+      });
+      const result = { api: "pi-process", children };
       return { content: [{ type: "text", text: JSON.stringify(result) }], details: result };
     },
   });
