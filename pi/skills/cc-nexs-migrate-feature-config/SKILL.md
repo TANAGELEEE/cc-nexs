@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-migrate-feature-config
-description: /cc-nexs:migrate-feature-config Pi P2 adapter skill. Invoke only through /cc-nexs:migrate-feature-config or /skill:cc-nexs-migrate-feature-config; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Safely migrate an existing Lean/Hotfix config.json to automatic risk-based model routing without removing explicit overrides.
+description: "/cc-nexs:migrate-feature-config Pi P2 adapter skill. Invoke only through /cc-nexs:migrate-feature-config or /skill:cc-nexs-migrate-feature-config; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Safely migrate an existing Lean/Hotfix config.json to automatic risk-based model routing without removing explicit overrides."
 disable-model-invocation: true
 ---
 

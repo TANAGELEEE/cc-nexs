@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-verify-local
-description: /cc-nexs:verify-local Pi P2 adapter skill. Invoke only through /cc-nexs:verify-local or /skill:cc-nexs-verify-local; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Run deterministic Lean/Hotfix local build/start/smoke/E2E and bind evidence to exact candidate commits.
+description: "/cc-nexs:verify-local Pi P2 adapter skill. Invoke only through /cc-nexs:verify-local or /skill:cc-nexs-verify-local; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Run deterministic Lean/Hotfix local build/start/smoke/E2E and bind evidence to exact candidate commits."
 disable-model-invocation: true
 ---
 

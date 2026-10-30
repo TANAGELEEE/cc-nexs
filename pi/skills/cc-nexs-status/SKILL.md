@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-status
-description: /cc-nexs:status Pi P2 adapter skill. Invoke only through /cc-nexs:status or /skill:cc-nexs-status; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Read-only status snapshot of the active feature pipeline.
+description: "/cc-nexs:status Pi P2 adapter skill. Invoke only through /cc-nexs:status or /skill:cc-nexs-status; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Read-only status snapshot of the active feature pipeline."
 disable-model-invocation: true
 ---
 

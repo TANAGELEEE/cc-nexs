@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-build
-description: /cc-nexs:build Pi P2 adapter skill. Invoke only through /cc-nexs:build or /skill:cc-nexs-build; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Run only changed modules with exact-candidate success caching and dependency-aware bounded parallelism.
+description: "/cc-nexs:build Pi P2 adapter skill. Invoke only through /cc-nexs:build or /skill:cc-nexs-build; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Run only changed modules with exact-candidate success caching and dependency-aware bounded parallelism."
 disable-model-invocation: true
 ---
 

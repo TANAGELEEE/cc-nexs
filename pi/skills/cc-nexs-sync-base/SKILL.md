@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-sync-base
-description: /cc-nexs:sync-base Pi P2 adapter skill. Invoke only through /cc-nexs:sync-base or /skill:cc-nexs-sync-base; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Synchronize changed base into assigned development worktrees and resume verification.
+description: "/cc-nexs:sync-base Pi P2 adapter skill. Invoke only through /cc-nexs:sync-base or /skill:cc-nexs-sync-base; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Synchronize changed base into assigned development worktrees and resume verification."
 disable-model-invocation: true
 ---
 

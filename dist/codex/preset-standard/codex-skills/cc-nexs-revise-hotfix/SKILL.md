@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-revise-hotfix
-description: /cc-nexs:revise-hotfix Codex mirror skill. Use when $cc-nexs-revise-hotfix is explicitly invoked. Record authorized Hotfix scope revisions in place, or promote the same repair to Lean.
+description: "/cc-nexs:revise-hotfix Codex mirror skill. Use when $cc-nexs-revise-hotfix is explicitly invoked. Record authorized Hotfix scope revisions in place, or promote the same repair to Lean."
 ---
 
 # /cc-nexs:revise-hotfix for Codex

@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-release-base
-description: /cc-nexs:release-base Pi P2 adapter skill. Invoke only through /cc-nexs:release-base or /skill:cc-nexs-release-base; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Integrate exact approved candidates into configured base branches and clean worktrees after proof.
+description: "/cc-nexs:release-base Pi P2 adapter skill. Invoke only through /cc-nexs:release-base or /skill:cc-nexs-release-base; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Integrate exact approved candidates into configured base branches and clean worktrees after proof."
 disable-model-invocation: true
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-approve-plan
-description: /cc-nexs:approve-plan Pi P2 adapter skill. Invoke only through /cc-nexs:approve-plan or /skill:cc-nexs-approve-plan; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Approve the Lean requirements and plan scope, binding the gate to their hashes.
+description: "/cc-nexs:approve-plan Pi P2 adapter skill. Invoke only through /cc-nexs:approve-plan or /skill:cc-nexs-approve-plan; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Approve the Lean requirements and plan scope, binding the gate to their hashes."
 disable-model-invocation: true
 ---
 

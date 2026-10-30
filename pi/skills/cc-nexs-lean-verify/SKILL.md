@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-lean-verify
-description: /cc-nexs:lean-verify Pi P2 adapter skill. Invoke only through /cc-nexs:lean-verify or /skill:cc-nexs-lean-verify; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Lean test environment black-box acceptance, aggregating AC evidence directly into plan.md.
+description: "/cc-nexs:lean-verify Pi P2 adapter skill. Invoke only through /cc-nexs:lean-verify or /skill:cc-nexs-lean-verify; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Lean test environment black-box acceptance, aggregating AC evidence directly into plan.md."
 disable-model-invocation: true
 ---
 

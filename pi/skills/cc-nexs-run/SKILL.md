@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-run
-description: /cc-nexs:run Pi P2 adapter skill. Invoke only through /cc-nexs:run or /skill:cc-nexs-run; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Lean/Hotfix orchestrator. Runs the active mode through local verification, Review, one exact-candidate test release, and the release gate unless explicitly opted out or prerequisites are unavailable.
+description: "/cc-nexs:run Pi P2 adapter skill. Invoke only through /cc-nexs:run or /skill:cc-nexs-run; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Lean/Hotfix orchestrator. Runs the active mode through local verification, Review, one exact-candidate test release, and the release gate unless explicitly opted out or prerequisites are unavailable."
 disable-model-invocation: true
 ---
 

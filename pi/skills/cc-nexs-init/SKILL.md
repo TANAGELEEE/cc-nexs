@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-init
-description: /cc-nexs:init Pi P2 adapter skill. Invoke only through /cc-nexs:init or /skill:cc-nexs-init; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Initialize a new requirement directory from a template. Automatically continues numbering from existing numbers under all-docs/doc/, and automatically generates a slug from the requirement description. By default, creates an independent git worktree in .worktrees/<id>-<slug>/, so multiple requirements can run in parallel.
+description: "/cc-nexs:init Pi P2 adapter skill. Invoke only through /cc-nexs:init or /skill:cc-nexs-init; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Initialize a new requirement directory from a template. Automatically continues numbering from existing numbers under all-docs/doc/, and automatically generates a slug from the requirement description. By default, creates an independent git worktree in .worktrees/<id>-<slug>/, so multiple requirements can run in parallel."
 disable-model-invocation: true
 ---
 

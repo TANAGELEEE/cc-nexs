@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-brainstorm
-description: /cc-nexs:brainstorm Pi P2 adapter skill. Invoke only through /cc-nexs:brainstorm or /skill:cc-nexs-brainstorm; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Optional requirements clarification entry point: completes requirements.md; when requirements are complete, proceeds directly to the planning step of the current mode.
+description: "/cc-nexs:brainstorm Pi P2 adapter skill. Invoke only through /cc-nexs:brainstorm or /skill:cc-nexs-brainstorm; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Optional requirements clarification entry point: completes requirements.md; when requirements are complete, proceeds directly to the planning step of the current mode."
 disable-model-invocation: true
 ---
 

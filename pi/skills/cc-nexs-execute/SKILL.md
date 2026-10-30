@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-execute
-description: /cc-nexs:execute Pi P2 adapter skill. Invoke only through /cc-nexs:execute or /skill:cc-nexs-execute; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Lean implementation entry point. Implements in parallel by plan task and path ownership; not responsible for Git mutation.
+description: "/cc-nexs:execute Pi P2 adapter skill. Invoke only through /cc-nexs:execute or /skill:cc-nexs-execute; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Lean implementation entry point. Implements in parallel by plan task and path ownership; not responsible for Git mutation."
 disable-model-invocation: true
 ---
 

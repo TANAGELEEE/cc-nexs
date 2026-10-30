@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-sync-base
-description: /cc-nexs:sync-base Codex mirror skill. Use when $cc-nexs-sync-base is explicitly invoked. Synchronize changed base into assigned development worktrees and resume verification.
+description: "/cc-nexs:sync-base Codex mirror skill. Use when $cc-nexs-sync-base is explicitly invoked. Synchronize changed base into assigned development worktrees and resume verification."
 ---
 
 # /cc-nexs:sync-base for Codex

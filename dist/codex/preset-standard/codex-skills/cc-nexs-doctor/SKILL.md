@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-doctor
-description: /cc-nexs:doctor Codex mirror skill. Use when $cc-nexs-doctor is explicitly invoked. Validate workspace repositories, private overlay, and progress.json v2 files without changing project state.
+description: "/cc-nexs:doctor Codex mirror skill. Use when $cc-nexs-doctor is explicitly invoked. Validate workspace repositories, private overlay, and progress.json v2 files without changing project state."
 ---
 
 # /cc-nexs:doctor for Codex

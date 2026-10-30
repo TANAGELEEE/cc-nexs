@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-doctor
-description: /cc-nexs:doctor Pi P2 adapter skill. Invoke only through /cc-nexs:doctor or /skill:cc-nexs-doctor; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Validate workspace repositories, private overlay, and progress.json v2 files without changing project state.
+description: "/cc-nexs:doctor Pi P2 adapter skill. Invoke only through /cc-nexs:doctor or /skill:cc-nexs-doctor; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Validate workspace repositories, private overlay, and progress.json v2 files without changing project state."
 disable-model-invocation: true
 ---
 

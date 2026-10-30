@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-release-test
-description: /cc-nexs:release-test Pi P2 adapter skill. Invoke only through /cc-nexs:release-test or /skill:cc-nexs-release-test; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Integrate final feature candidates into test, run the project release driver, then hand deployed evidence to the black-box Verifier.
+description: "/cc-nexs:release-test Pi P2 adapter skill. Invoke only through /cc-nexs:release-test or /skill:cc-nexs-release-test; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Integrate final feature candidates into test, run the project release driver, then hand deployed evidence to the black-box Verifier."
 disable-model-invocation: true
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-switch-test-target
-description: /cc-nexs:switch-test-target Codex mirror skill. Use when $cc-nexs-switch-test-target is explicitly invoked. Switch one task to an explicitly authorized non-production test environment.
+description: "/cc-nexs:switch-test-target Codex mirror skill. Use when $cc-nexs-switch-test-target is explicitly invoked. Switch one task to an explicitly authorized non-production test environment."
 ---
 
 # /cc-nexs:switch-test-target for Codex

@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-brainstorm
-description: /cc-nexs:brainstorm Codex mirror skill. Use when $cc-nexs-brainstorm is explicitly invoked. Optional requirements clarification entry point: completes requirements.md; when requirements are complete, proceeds directly to the planning step of the current mode.
+description: "/cc-nexs:brainstorm Codex mirror skill. Use when $cc-nexs-brainstorm is explicitly invoked. Optional requirements clarification entry point: completes requirements.md; when requirements are complete, proceeds directly to the planning step of the current mode."
 ---
 
 # /cc-nexs:brainstorm for Codex

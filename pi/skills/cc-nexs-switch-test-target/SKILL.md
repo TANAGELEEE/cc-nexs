@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-switch-test-target
-description: /cc-nexs:switch-test-target Pi P2 adapter skill. Invoke only through /cc-nexs:switch-test-target or /skill:cc-nexs-switch-test-target; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Switch one task to an explicitly authorized non-production test environment.
+description: "/cc-nexs:switch-test-target Pi P2 adapter skill. Invoke only through /cc-nexs:switch-test-target or /skill:cc-nexs-switch-test-target; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Switch one task to an explicitly authorized non-production test environment."
 disable-model-invocation: true
 ---
 

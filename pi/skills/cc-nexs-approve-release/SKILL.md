@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-approve-release
-description: /cc-nexs:approve-release Pi P2 adapter skill. Invoke only through /cc-nexs:approve-release or /skill:cc-nexs-approve-release; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Record Gateway B approval for an exact candidate and its test evidence or authorized environment exception.
+description: "/cc-nexs:approve-release Pi P2 adapter skill. Invoke only through /cc-nexs:approve-release or /skill:cc-nexs-approve-release; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Record Gateway B approval for an exact candidate and its test evidence or authorized environment exception."
 disable-model-invocation: true
 ---
 

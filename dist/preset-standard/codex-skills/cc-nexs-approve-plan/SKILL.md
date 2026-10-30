@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-approve-plan
-description: /cc-nexs:approve-plan Codex mirror skill. Use when $cc-nexs-approve-plan is explicitly invoked. Approve the Lean requirements and plan scope, binding the gate to their hashes.
+description: "/cc-nexs:approve-plan Codex mirror skill. Use when $cc-nexs-approve-plan is explicitly invoked. Approve the Lean requirements and plan scope, binding the gate to their hashes."
 ---
 
 # /cc-nexs:approve-plan for Codex

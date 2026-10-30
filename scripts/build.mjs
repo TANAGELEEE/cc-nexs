@@ -205,6 +205,7 @@ function extractCommandName(commandText, commandFile) {
 function extractDescription(commandText, commandName) {
   const m = commandText.match(/^description:\s*(.+)$/m);
   const desc = m ? m[1].trim() : `Mirror ${commandName} in Codex.`;
+  if (desc.startsWith('"')) return JSON.parse(desc);
   return desc.replace(/^["']|["']$/g, '');
 }
 
@@ -382,7 +383,7 @@ function generateCodexSkills(dst) {
     const controlBlock = deterministicControlBlock(commandBase, '../../lib/cc-nexs-cli.mjs');
     const body = `---
 name: ${skillName}
-description: ${description}
+description: ${JSON.stringify(description)}
 ---
 
 # ${commandName} for Codex
@@ -554,7 +555,7 @@ function generatePiResources() {
     mkdirSync(skillDir, { recursive: true });
     const body = `---
 name: ${skillName}
-description: ${description}
+description: ${JSON.stringify(description)}
 disable-model-invocation: true
 ---
 

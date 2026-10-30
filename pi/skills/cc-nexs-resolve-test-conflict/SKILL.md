@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-resolve-test-conflict
-description: /cc-nexs:resolve-test-conflict Pi P2 adapter skill. Invoke only through /cc-nexs:resolve-test-conflict or /skill:cc-nexs-resolve-test-conflict; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Continue test delivery after a real test branch merge conflict.
+description: "/cc-nexs:resolve-test-conflict Pi P2 adapter skill. Invoke only through /cc-nexs:resolve-test-conflict or /skill:cc-nexs-resolve-test-conflict; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Continue test delivery after a real test branch merge conflict."
 disable-model-invocation: true
 ---
 

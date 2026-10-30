@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-execute
-description: /cc-nexs:execute Codex mirror skill. Use when $cc-nexs-execute is explicitly invoked. Lean implementation entry point. Implements in parallel by plan task and path ownership; not responsible for Git mutation.
+description: "/cc-nexs:execute Codex mirror skill. Use when $cc-nexs-execute is explicitly invoked. Lean implementation entry point. Implements in parallel by plan task and path ownership; not responsible for Git mutation."
 ---
 
 # /cc-nexs:execute for Codex

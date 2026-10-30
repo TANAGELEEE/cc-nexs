@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-git-custodian
-description: /cc-nexs:git-custodian Pi P2 adapter skill. Invoke only through /cc-nexs:git-custodian or /skill:cc-nexs-git-custodian; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Sole Git mutation boundary for multi-repository worktrees, candidate commits, merge verification, and safe cleanup.
+description: "/cc-nexs:git-custodian Pi P2 adapter skill. Invoke only through /cc-nexs:git-custodian or /skill:cc-nexs-git-custodian; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with isolated roles through pi-subagents. Sole Git mutation boundary for multi-repository worktrees, candidate commits, merge verification, and safe cleanup."
 disable-model-invocation: true
 ---
 

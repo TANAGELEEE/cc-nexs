@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-revise-hotfix
-description: /cc-nexs:revise-hotfix Pi P2 adapter skill. Invoke only through /cc-nexs:revise-hotfix or /skill:cc-nexs-revise-hotfix; never auto-trigger from ordinary natural-language requests. Supports the preset-standard standalone Hotfix branch and BUG document without consuming a requirement number, with isolated roles through pi-subagents. Record authorized Hotfix scope revisions in place, or promote the same repair to Lean.
+description: "/cc-nexs:revise-hotfix Pi P2 adapter skill. Invoke only through /cc-nexs:revise-hotfix or /skill:cc-nexs-revise-hotfix; never auto-trigger from ordinary natural-language requests. Supports the preset-standard standalone Hotfix branch and BUG document without consuming a requirement number, with isolated roles through pi-subagents. Record authorized Hotfix scope revisions in place, or promote the same repair to Lean."
 disable-model-invocation: true
 ---
 

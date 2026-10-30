@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-compound
-description: /cc-nexs:compound Codex mirror skill. Use when $cc-nexs-compound is explicitly invoked. Compound role entry point. Read all-docs/doc/<id>/* for the completed requirement and distill \"non-obvious lessons\" into docs/solutions/<topic>.md, so the Lean Planner picks it up for the next similar requirement. Bypass command; does not enter the state machine.
+description: "/cc-nexs:compound Codex mirror skill. Use when $cc-nexs-compound is explicitly invoked. Compound role entry point. Read all-docs/doc/<id>/* for the completed requirement and distill \"non-obvious lessons\" into docs/solutions/<topic>.md, so the Lean Planner picks it up for the next similar requirement. Bypass command; does not enter the state machine."
 ---
 
 # /cc-nexs:compound for Codex

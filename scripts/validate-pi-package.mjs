@@ -50,6 +50,14 @@ function fail(message) {
   errors.push(message);
 }
 
+function isJsonString(raw) {
+  try {
+    return typeof JSON.parse(raw) === 'string';
+  } catch {
+    return false;
+  }
+}
+
 const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 if (!packageJson.keywords?.includes('pi-package')) fail('package.json: missing pi-package keyword');
 if (packageJson.pi?.extensions?.[0] !== './pi/extensions/cc-nexs.ts') fail('package.json: invalid Pi extension path');
@@ -85,6 +93,9 @@ for (const command of expectedCommands) {
     const skillFrontmatter = extractFrontmatter(skill);
     if (!/^disable-model-invocation:\s*true\s*$/m.test(skillFrontmatter)) {
       fail(`${name}: explicit-only Pi skill must set disable-model-invocation: true`);
+    }
+    if (!isJsonString(skillFrontmatter.match(/^description:\s*(.+)$/m)?.[1]?.trim() ?? '')) {
+      fail(`${name}: frontmatter description must be a double-quoted string so Pi's YAML parser accepts ': '`);
     }
     const contractMarkers = [
       'preset-standard',
