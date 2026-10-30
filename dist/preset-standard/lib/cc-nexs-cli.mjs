@@ -21,6 +21,7 @@ import { recordEnvironmentVerification } from './test-verification-control.mjs';
 import { migrateFeatureConfig } from './feature-config.mjs';
 import { modelGateway } from './model-gateway.mjs';
 import { formatInventory, reclaimWorktrees } from './worktree-reclaim.mjs';
+import { advanceFeatureState, featureStatus } from './workflow-snapshot.mjs';
 
 export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   const [command, ...args] = argv;
@@ -42,6 +43,8 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
     }
     return reclaimWorktrees({ cwd, ...options });
   }
+  if (command === 'status') return featureStatus({ cwd, ...parseStatusOptions(args) });
+  if (command === 'advance') return advanceFeatureState({ cwd, ...parseAdvanceOptions(args) });
   if (command === 'init-hotfix') return initializeHotfix({ cwd, ...parseHotfixLifecycleOptions(args, true) });
   if (command === 'revise-hotfix') return reviseHotfix({ cwd, ...parseHotfixLifecycleOptions(args, false) });
   if (command === 'release-test') {
@@ -209,6 +212,25 @@ function parseFeatureOptions(args) {
   return options;
 }
 
+function parseStatusOptions(args) {
+  const rest = args.filter((token) => token !== '--no-auto-test-release');
+  return { ...parseFeatureOptions(rest), noAutoTestRelease: rest.length !== args.length };
+}
+
+function parseAdvanceOptions(args) {
+  const fields = { '--from': 'from', '--to': 'to', '--reason': 'reason' };
+  const options = {};
+  const rest = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const token = args[index];
+    const equals = token.indexOf('=');
+    const flag = equals < 0 ? token : token.slice(0, equals);
+    if (fields[flag]) options[fields[flag]] = equals < 0 ? requireValue(args, ++index, flag) : token.slice(equals + 1);
+    else rest.push(token);
+  }
+  return { ...parseFeatureOptions(rest), ...options };
+}
+
 function parseFeatureMigrationOptions(args) {
   const positional = [];
   const options = { featureId: null, progressPath: null, dryRun: false, bindPlanRisk: false };
@@ -353,6 +375,25 @@ function printResult(result) {
     if (result.state) console.log(`State: ${result.state}`);
     return;
   }
+  if (result.kind === 'feature-status') {
+    const { next } = result;
+    console.log(`cc-nexs status: ${result.feature.id} ${result.feature.slug}`);
+    console.log(`Mode: ${result.input.mode}`);
+    console.log(`State: ${result.input.state} (revision ${result.revision})`);
+    console.log(`Next: ${next.next}`);
+    console.log(`Action: ${next.action}${next.role ? ` (role: ${next.role})` : ''}${next.stop ? ' [stop]' : ''}`);
+    if (next.circuitBreaker) console.log(`Circuit breaker: ${next.circuitBreaker}${next.bug ? ` (${next.bug})` : ''}`);
+    console.log(`Progress: ${result.progressFile}`);
+    return;
+  }
+  if (result.kind === 'feature-advance') {
+    console.log(`cc-nexs advance: ${result.feature.id} ${result.from} -> ${result.to} (revision ${result.revision})`);
+    if (result.expectedNext && result.expectedNext !== result.to) {
+      console.log(`Note: nextStep() expected ${result.expectedNext}; confirm the active rule's failure mapping requires ${result.to}`);
+    }
+    console.log(`Progress: ${result.progressFile}`);
+    return;
+  }
   if (result.kind === 'feature-config-migration') {
     console.log(`cc-nexs feature config ${result.changed ? (result.dryRun ? 'needs migration' : 'migrated') : 'is current'}`);
     console.log(`Feature: ${result.feature.id} ${result.feature.slug}`);
@@ -470,6 +511,8 @@ function printResult(result) {
 
 function printUsage() {
   console.error('Usage:');
+  console.error('  cc-nexs status <feature-id> [--no-auto-test-release] [--progress <path>]');
+  console.error('  cc-nexs advance <feature-id> --from <state> --to <state> [--reason <text>] [--progress <path>]');
   console.error('  cc-nexs resolve-test-conflict <feature-id> [--progress <path>]');
   console.error('  cc-nexs reclaim-worktrees [--sizes] [--confirm <token>]');
   console.error('  cc-nexs switch-test-target --request <json-file>');
