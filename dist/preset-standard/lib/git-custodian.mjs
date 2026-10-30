@@ -377,13 +377,16 @@ export function integrateCandidateToTest({
     }
     if (mergeRequest) {
       const sourceBranch = `cc-nexs-mr-${repositoryId}-${integrationCommit}`;
-      git(integrationWorktree, ['push', 'origin', `${integrationCommit}:refs/heads/${sourceBranch}`]);
+      // The driver pushes sourceBranch itself: a controller push first would make the driver's
+      // push a no-op, and GitLab ignores merge_request.* push options on an unchanged ref.
       const receipt = mergeRequest({ repository: repositoryId, sourceBranch, sourceCommit, integrationCommit, targetBranch, targetBefore });
       if (!receipt || !['pending', 'merged'].includes(receipt.status) || typeof receipt.url !== 'string' || !/^https?:\/\//.test(receipt.url)) throw new Error('[cc-nexs] invalid MR receipt');
       const remote = fetchBase(repo, targetBranch);
       const remoteCommit = git(repo, ['rev-parse', remote]);
       const merged = isAncestor(repo, integrationCommit, remoteCommit);
       if (receipt.status === 'merged' && !merged) throw new Error('[cc-nexs] MR receipt has no remote ancestry proof');
+      const pushed = git(repo, ['ls-remote', '--heads', 'origin', `refs/heads/${sourceBranch}`]).split(/\s+/)[0];
+      if (!merged && pushed !== integrationCommit) throw new Error(`[cc-nexs] MR driver did not push origin/${sourceBranch} at ${integrationCommit}`);
       return { repository: repositoryId, sourceCommit, targetBranch, targetBefore, integrationCommit, remoteCommit, pending: !merged, mergeRequest: receipt, integrationVerification };
     }
     try {
