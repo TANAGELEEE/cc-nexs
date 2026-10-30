@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-hotfix
-description: /cc-nexs:hotfix Codex mirror skill. Use when $cc-nexs-hotfix is explicitly invoked. Hotfix — independent fix branch and BUG document, local verification, independent Review, test acceptance, and Gateway B.
+description: "/cc-nexs:hotfix Codex mirror skill. Use when $cc-nexs-hotfix is explicitly invoked. Hotfix — independent fix branch and BUG document, local verification, independent Review, test acceptance, and Gateway B."
 ---
 
 # /cc-nexs:hotfix for Codex

@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-release-test
-description: /cc-nexs:release-test Codex mirror skill. Use when $cc-nexs-release-test is explicitly invoked. Integrate final feature candidates into test, run the project release driver, then hand deployed evidence to the black-box Verifier.
+description: "/cc-nexs:release-test Codex mirror skill. Use when $cc-nexs-release-test is explicitly invoked. Integrate final feature candidates into test, run the project release driver, then hand deployed evidence to the black-box Verifier."
 ---
 
 # /cc-nexs:release-test for Codex

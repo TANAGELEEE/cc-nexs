@@ -19,12 +19,7 @@
     ],
     "skills": [
       "./pi/skills"
-    ],
-    "subagents": {
-      "agents": [
-        "./pi/agents"
-      ]
-    }
+    ]
   },
   "workspaces": [
     "packages/*"

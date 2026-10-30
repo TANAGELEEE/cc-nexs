@@ -80,7 +80,6 @@ rewritten; state and preview Markdown are under `.cc-nexs/model-dispatch/`.
   `magpie/group/auto-gpt-6-luna`; isolated child returned `CC_NEXS_PI_CHILD_OK`,
   one turn and zero tool uses. Probe files were outside the repository.
 
-Pi compatibility now uses `cc_nexs_dispatch`: legacy tasks API remains supported;
-Tintin RPC v2 supports actual assigned worktrees (the public Agent tool does not).
-Use the local installer to register translated role files. Completion, not spawn
-acceptance, determines whether a choice is remembered.
+Pi dispatch now uses `cc_nexs_dispatch`, which runs each role as its own headless
+Pi process in the assigned worktree; the subagent packages above are no longer used.
+Completion, not spawn acceptance, determines whether a choice is remembered.

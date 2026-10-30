@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-migrate-feature-config
-description: /cc-nexs:migrate-feature-config Codex mirror skill. Use when $cc-nexs-migrate-feature-config is explicitly invoked. Safely migrate an existing Lean/Hotfix config.json to automatic risk-based model routing without removing explicit overrides.
+description: "/cc-nexs:migrate-feature-config Codex mirror skill. Use when $cc-nexs-migrate-feature-config is explicitly invoked. Safely migrate an existing Lean/Hotfix config.json to automatic risk-based model routing without removing explicit overrides."
 ---
 
 # /cc-nexs:migrate-feature-config for Codex

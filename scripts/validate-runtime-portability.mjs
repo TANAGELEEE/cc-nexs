@@ -38,7 +38,7 @@ for (const marker of ['runtimes:', 'claude:', 'codex:', 'pi:', 'models:', 'routi
 }
 
 const piSkill = readFileSync(join(root, 'pi/skills/cc-nexs-run/SKILL.md'), 'utf8');
-for (const marker of ['lean (default)', 'pi-subagents@0.35.1', 'subagent({', 'cc_nexs_dispatch', 'async: true', 'worktree: false', 'context: "fresh"', 'subagent_wait({ id', 'same model with higher thinking', 'automatic risk routing', 'Lean high/critical', 'Hotfix P0/P1', 'explicit feature role profile remains final', 'ship no provider-specific model IDs']) {
+for (const marker of ['lean (default)', 'cc_nexs_dispatch', 'pi --mode json -p --no-session', 'returns only after every child exits', 'fresh context', 'same model with higher thinking', 'automatic risk routing', 'Lean high/critical', 'Hotfix P0/P1', 'explicit feature role profile remains final', 'ship no provider-specific model IDs']) {
   if (!piSkill.includes(marker)) errors.push(`Pi run skill: missing ${marker}`);
 }
 if (/run_in_background|background Agent calls?/i.test(piSkill)) errors.push('Pi run skill: obsolete background Agent API');
@@ -83,4 +83,4 @@ if (errors.length) {
   for (const error of errors) console.error(`- ${error}`);
   process.exit(1);
 }
-console.log('Runtime portability passed: Claude-native Lean, Codex native-only, Pi subagent task fanout, portable profiles, and private per-role overrides.');
+console.log('Runtime portability passed: Claude-native Lean, Codex native-only, Pi process fanout, portable profiles, and private per-role overrides.');

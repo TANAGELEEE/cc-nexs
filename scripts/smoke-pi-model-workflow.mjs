@@ -17,10 +17,10 @@ const child = spawnSync('pi', [
   '--no-session', '--no-mcp', '--no-context-files', '--no-skills',
   '-e', join(root, 'scripts/fixtures/pi-model-workflow.ts'),
   '--model', model, '--thinking', 'low',
-  '--tools', 'cc_live_probe,cc_nexs_models,cc_nexs_model_gateway,cc_nexs_dispatch,Agent,get_subagent_result,subagent,subagent_wait',
+  '--tools', 'cc_live_probe,cc_nexs_models,cc_nexs_model_gateway,cc_nexs_dispatch',
   '--mode', 'json', '-p',
   'Call cc_live_probe once only. It orchestrates the entire authorized integration smoke. Return its result. Do not call other tools yourself.',
-], { cwd, encoding: 'utf8', timeout: 180000, maxBuffer: 16 * 1024 * 1024,
+], { cwd, encoding: 'utf8', timeout: 600000, maxBuffer: 16 * 1024 * 1024,
   env: { ...process.env, CC_NEXS_PI_SMOKE_REPORT: report } });
 writeFileSync(join(cwd, 'events.jsonl'), child.stdout || '', { mode: 0o600 });
 writeFileSync(join(cwd, 'stderr.log'), child.stderr || '', { mode: 0o600 });

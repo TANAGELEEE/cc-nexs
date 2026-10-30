@@ -17,7 +17,7 @@
 
 | Preset | 適用場景 | 角色 | 工具 | 語言 |
 |--------|---------|------|------|------|
-| `preset-standard` | 通用多倉專案；具體技術棧由私有 overlay 注入 | **lean** 需求與 **hotfix** 修復；Pi 使用 pi-subagents 隔離角色 | 每個 Lean/Hotfix 角色可配置模型與 effort/thinking；公開 preset 不固定模型 ID | 中文 |
+| `preset-standard` | 通用多倉專案；具體技術棧由私有 overlay 注入 | **lean** 需求與 **hotfix** 修復；Pi 以獨立 Pi 進程隔離每個角色 | 每個 Lean/Hotfix 角色可配置模型與 effort/thinking；公開 preset 不固定模型 ID | 中文 |
 
 新增預設按 [docs/extending-presets.md](./docs/extending-presets.md) 操作。模式和角色選擇見 `preset-standard` 的 [docs/role-map.md](./packages/preset-standard/docs/role-map.md)。
 
@@ -83,7 +83,7 @@ models:
 
 遷移只移除結構化精確匹配舊模板的完整預設對映；任何自定義 role/profile/routing 都會保留。`--bind-plan-risk` 是獨立 opt-in：僅將 hash 驗證透過的 concrete risk 回填舊 Gateway A，並記錄 migration event；stale/缺失/歧義 scope 會拒絕寫入。
 
-Claude Code 的 Lean 四角色全部使用獨立 Claude 子代理；Codex 的 Lean 四角色全部使用獨立 native agent；Pi 使用 `pi-subagents@0.35.1` 的 `subagent`，將 thinking 編碼為任務的 `provider/model:thinking` selector，無需在 `.pi/settings.json` 再維護一份角色對映。Pi 的 `fallback_models` 只重試失敗任務，不重複執行已成功的並行 sibling。
+Claude Code 的 Lean 四角色全部使用獨立 Claude 子代理；Codex 的 Lean 四角色全部使用獨立 native agent；Pi 透過 `cc_nexs_dispatch` 為每個角色啟動獨立的 headless Pi 進程，逐個傳入 `--model` 與 `--thinking`，不需任何子代理套件，也無需在 `.pi/settings.json` 再維護一份角色對映。Pi 的 `fallback_models` 只重試失敗任務，不重複執行已成功的並行 sibling。
 
 ## 目錄結構
 
@@ -143,7 +143,7 @@ cc-nexs/
 ├── pi/
 │   ├── extensions/cc-nexs.ts       Pi slash command + child role guard
 │   ├── skills/                      lean + hotfix P2 command mirrors
-│   └── agents/                      pi-subagents package roles
+│   └── agents/                      cc_nexs_dispatch 使用的 Pi 角色提示與工具
 │
 ├── pnpm-workspace.yaml
 └── package.json
@@ -234,7 +234,6 @@ pnpm install:local              # 等價於：build + 拷到 ~/.claude/plugins/c
 Pi 當前為實驗性 P2 支援，承諾 `preset-standard` lean 和 hotfix 流程。公開 GitHub 安裝：
 
 ```bash
-pi install npm:pi-subagents@0.35.1
 # macOS 首選 provider（安裝後開啟 ego lite 完成一次首次引導）
 npx skills add citrolabs/ego-lite
 # Windows 或 ego lite 不可用時的 fallback
@@ -251,7 +250,7 @@ pnpm install
 pnpm install:local:pi
 ```
 
-Pi 不呼叫 Codex CLI。生成的 Pi skills 設定 `disable-model-invocation: true`，從系統提示中隱藏，只能透過 `/cc-nexs:*` 或 `/skill:cc-nexs-*` 顯式呼叫。Lean 各角色從 cc-nexs profile 解析 `model`、`thinking` 和 `fallback_models`；父代理在 `subagent` 任務的 `model` selector 中編碼 thinking，Reviewer 可用不同模型，也可用相同模型但更高 thinking。主模型不可用時只按 fallback 順序重試失敗任務。`.pi/settings.json` 只保留 Pi 認證與 `enabledModels` 範圍。Pi 在 test merge/CI 完成後才選擇瀏覽器 provider：優先 ego lite，不可用時選擇獨立的 computer-use Verifier，並要求有效配置為 `browser_use: true`、`headless: true`。同一 child 不會同時獲得兩套 provider；兩者都不可用或登入態失效時，已部署 candidate 保持不變，verification 進入可恢復的 `manual_required`。詳見 [Pi P2 支援](./docs/pi-plugin.md)。
+Pi 不呼叫 Codex CLI。生成的 Pi skills 設定 `disable-model-invocation: true`，從系統提示中隱藏，只能透過 `/cc-nexs:*` 或 `/skill:cc-nexs-*` 顯式呼叫。Lean 各角色從 cc-nexs profile 解析 `model`、`thinking` 和 `fallback_models`；`cc_nexs_dispatch` 將其傳給每個子進程，Reviewer 可用不同模型，也可用相同模型但更高 thinking。主模型不可用時只按 fallback 順序重試失敗任務。從 0.8.x 升級：cc-nexs 已不再使用 `pi-subagents`；`.pi/settings.json` 中 `fallbackModels` override 的清理方式見 [Pi P2 支援](./docs/pi-plugin.md#install)。`.pi/settings.json` 只保留 Pi 認證與 `enabledModels` 範圍。Pi 在 test merge/CI 完成後才選擇瀏覽器 provider：優先 ego lite，不可用時選擇獨立的 computer-use Verifier，並要求有效配置為 `browser_use: true`、`headless: true`。同一 child 不會同時獲得兩套 provider；兩者都不可用或登入態失效時，已部署 candidate 保持不變，verification 進入可恢復的 `manual_required`。詳見 [Pi P2 支援](./docs/pi-plugin.md)。
 
 Claude Code 自動環境驗收使用 `chrome-devtools-mcp`；Codex 複用當前已登入的 in-app/Chrome 會話。三端都只在部署後訪問 `release.test.allowed_hosts`，瀏覽器、登入/MFA 或驗收 URL 缺失只會產生 `manual_required`，不會阻止 test merge/CI。不得從專案 memory、Markdown 或 Git 讀取明文賬號密碼，必要登入只允許透過 opaque `credential_ref` 對接外部 secret provider。
 

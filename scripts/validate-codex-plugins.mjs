@@ -18,6 +18,14 @@ function fail(message) {
   errors.push(message);
 }
 
+function isJsonString(raw) {
+  try {
+    return typeof JSON.parse(raw) === 'string';
+  } catch {
+    return false;
+  }
+}
+
 function readJson(path) {
   try {
     return JSON.parse(readFileSync(path, 'utf-8'));
@@ -114,6 +122,9 @@ function validateSkill(skillRoot) {
   const description = frontmatter.match(/^description:\s*(.+)$/m)?.[1]?.trim();
   if (!name) fail(`${skillPath}: missing frontmatter name`);
   if (!description) fail(`${skillPath}: missing frontmatter description`);
+  if (description && !isJsonString(description)) {
+    fail(`${skillPath}: frontmatter description must be a double-quoted string so YAML parsers accept ': '`);
+  }
   if (description && description.length > 1024) {
     fail(`${skillPath}: description exceeds 1024 characters`);
   }

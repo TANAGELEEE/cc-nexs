@@ -161,7 +161,7 @@ Repeated calls with the same successful fingerprint reuse the previous attempt. 
 - For Pi, generate restricted P2 command skills and provider-specific package agents; the ego Verifier gets only Bash/`ego-browser`, and the fallback Verifier gets only computer-use tools;
 - Keep Claude commands as the single source of truth.
 
-The Pi base installation only requires `pi-subagents`. At runtime, probe for ego lite first; if it is unavailable, use the fallback Verifier only when computer-use is installed and its effective configuration is set to `browser_use: true` and `headless: true`. Only when neither option is available does it fall back to manual, without blocking capabilities such as init/status/build.
+The Pi base installation needs no subagent package; cc-nexs runs each role as its own Pi process. At runtime, probe for ego lite first; if it is unavailable, use the fallback Verifier only when computer-use is installed and its effective configuration is set to `browser_use: true` and `headless: true`. Only when neither option is available does it fall back to manual, without blocking capabilities such as init/status/build.
 
 ## Security Boundaries
 

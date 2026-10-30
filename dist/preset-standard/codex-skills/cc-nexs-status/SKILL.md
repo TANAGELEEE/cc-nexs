@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-status
-description: /cc-nexs:status Codex mirror skill. Use when $cc-nexs-status is explicitly invoked. Read-only status snapshot of the active feature pipeline.
+description: "/cc-nexs:status Codex mirror skill. Use when $cc-nexs-status is explicitly invoked. Read-only status snapshot of the active feature pipeline."
 ---
 
 # /cc-nexs:status for Codex

@@ -50,17 +50,25 @@ function fail(message) {
   errors.push(message);
 }
 
+function isJsonString(raw) {
+  try {
+    return typeof JSON.parse(raw) === 'string';
+  } catch {
+    return false;
+  }
+}
+
 const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 if (!packageJson.keywords?.includes('pi-package')) fail('package.json: missing pi-package keyword');
 if (packageJson.pi?.extensions?.[0] !== './pi/extensions/cc-nexs.ts') fail('package.json: invalid Pi extension path');
 if (!packageJson.pi?.skills?.includes('./pi/skills')) fail('package.json: missing Pi skills path');
-if (!packageJson.pi?.subagents?.agents?.includes('./pi/agents')) fail('package.json: missing pi-subagents agent path');
+if (packageJson.pi?.subagents) fail('package.json: cc-nexs roles must not depend on a third-party subagent package');
 
 const extensionPath = join(root, 'pi/extensions/cc-nexs.ts');
 if (!existsSync(extensionPath)) fail('Pi extension is missing');
 else {
   const extension = readFileSync(extensionPath, 'utf8');
-  for (const marker of ['CC_NEXS_RUNTIME = "pi"', 'PI_SUBAGENT_CHILD_AGENT', 'pi.registerCommand', 'isGitMutation', 'isProgressMutation', 'roleBoundaryViolation']) {
+  for (const marker of ['CC_NEXS_RUNTIME = "pi"', 'PI_CHILD_ROLE_ENV', 'runPiWave', 'pi.registerCommand', 'isGitMutation', 'isProgressMutation', 'roleBoundaryViolation']) {
     if (!extension.includes(marker)) fail(`Pi extension: missing ${marker}`);
   }
   for (const marker of ['runCcNexsCommand', 'splitCommandArguments']) {
@@ -86,14 +94,14 @@ for (const command of expectedCommands) {
     if (!/^disable-model-invocation:\s*true\s*$/m.test(skillFrontmatter)) {
       fail(`${name}: explicit-only Pi skill must set disable-model-invocation: true`);
     }
+    if (!isJsonString(skillFrontmatter.match(/^description:\s*(.+)$/m)?.[1]?.trim() ?? '')) {
+      fail(`${name}: frontmatter description must be a double-quoted string so Pi's YAML parser accepts ': '`);
+    }
     const contractMarkers = [
       'preset-standard',
-      'pi-subagents@0.35.1',
       'cc_nexs_dispatch',
-      '@tintinweb/pi-subagents@0.14.3',
-      'RPC v2',
-      'get_subagent_result',
-      'worktree: false',
+      'pi --mode json -p --no-session',
+      'returns only after every child exits',
       'failed/unavailable tasks',
       'never rerun successful siblings',
       'same model with higher thinking',
@@ -149,15 +157,6 @@ for (const command of ['hotfix', 'revise-hotfix']) {
   if (hotfixSkill.includes('P3 Review skipping')) fail(`cc-nexs-${command}: obsolete P3 Review exemption`);
 }
 
-for (const role of expectedRoles) {
-  const file = join(root, 'pi/tintin-agents', `cc-nexs.${role}.md`);
-  if (!existsSync(file)) { fail(`Missing Tintin role: ${role}`); continue; }
-  const text = readFileSync(file, 'utf8');
-  for (const marker of ['inherit_context: false', 'prompt_mode: replace', 'disallowed_tools: Agent', 'package: cc-nexs']) {
-    if (!text.includes(marker)) fail(`Tintin ${role}: missing ${marker}`);
-  }
-}
-
 const agentsRoot = join(root, 'pi/agents');
 const agentFiles = existsSync(agentsRoot) ? readdirSync(agentsRoot).filter((file) => file.endsWith('.md')).sort() : [];
 for (const role of expectedRoles) {
@@ -167,7 +166,7 @@ for (const role of expectedRoles) {
   if (!existsSync(path)) continue;
   const text = readFileSync(path, 'utf8');
   const frontmatter = extractFrontmatter(text);
-  for (const marker of [`name: ${role}`, 'package: cc-nexs', 'defaultContext: fresh']) {
+  for (const marker of [`name: ${role}`, 'package: cc-nexs', 'tools: ']) {
     if (!frontmatter.includes(marker)) fail(`${file}: missing ${marker}`);
   }
   if (!frontmatter.includes(explicitAgentTriggerPrefix)) {

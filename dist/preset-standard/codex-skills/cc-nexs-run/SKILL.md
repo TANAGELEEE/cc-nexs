@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-run
-description: /cc-nexs:run Codex mirror skill. Use when $cc-nexs-run is explicitly invoked. Lean/Hotfix orchestrator. Runs the active mode through local verification, Review, one exact-candidate test release, and the release gate unless explicitly opted out or prerequisites are unavailable.
+description: "/cc-nexs:run Codex mirror skill. Use when $cc-nexs-run is explicitly invoked. Lean/Hotfix orchestrator. Runs the active mode through local verification, Review, one exact-candidate test release, and the release gate unless explicitly opted out or prerequisites are unavailable."
 ---
 
 # /cc-nexs:run for Codex

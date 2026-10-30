@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-lean-verify
-description: /cc-nexs:lean-verify Codex mirror skill. Use when $cc-nexs-lean-verify is explicitly invoked. Lean test environment black-box acceptance, aggregating AC evidence directly into plan.md.
+description: "/cc-nexs:lean-verify Codex mirror skill. Use when $cc-nexs-lean-verify is explicitly invoked. Lean test environment black-box acceptance, aggregating AC evidence directly into plan.md."
 ---
 
 # /cc-nexs:lean-verify for Codex

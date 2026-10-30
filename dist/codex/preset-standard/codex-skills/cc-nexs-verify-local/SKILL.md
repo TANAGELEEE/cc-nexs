@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-verify-local
-description: /cc-nexs:verify-local Codex mirror skill. Use when $cc-nexs-verify-local is explicitly invoked. Run deterministic Lean/Hotfix local build/start/smoke/E2E and bind evidence to exact candidate commits.
+description: "/cc-nexs:verify-local Codex mirror skill. Use when $cc-nexs-verify-local is explicitly invoked. Run deterministic Lean/Hotfix local build/start/smoke/E2E and bind evidence to exact candidate commits."
 ---
 
 # /cc-nexs:verify-local for Codex

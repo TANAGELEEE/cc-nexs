@@ -3,10 +3,6 @@ name: hotfix-verifier-computer-use
 package: cc-nexs
 description: "Only dispatch after the user explicitly invokes a cc-nexs command or skill; never auto-trigger for ordinary natural-language requests. Independently perform black-box reproduction, regression, and smoke acceptance of the exact Hotfix candidate in the test environment. Headless pi-computer-use fallback provider."
 tools: read, write, bash, find, grep, ls, find_roots, observe_ui, search_ui, expand_ui, inspect_ui, act_ui, read_text, wait_for
-defaultContext: fresh
-systemPromptMode: replace
-inheritProjectContext: true
-inheritSkills: false
 ---
 
 # Pi Runtime Override
@@ -15,7 +11,7 @@ You are already running as an isolated cc-nexs Pi child agent. Execute this role
 Any Claude Task-tool, Claude subagent, Codex CLI, or nested agent invocation shown below is legacy runtime syntax only.
 Never invoke `claude`, `codex`, another `pi` process, `/cc-nexs:*`, or the `subagent` tool from this child.
 The parent orchestrator owns progress transitions and Git Custodian operations. Do not run Git mutation commands.
-The parent resolves the cc-nexs role profile and passes model/thinking through the detected Pi adapter; do not choose or persist a model ID.
+The parent resolves the cc-nexs role profile and passes model/thinking through cc_nexs_dispatch; do not choose or persist a model ID.
 
 ## Pi Headless Computer Use Browser Contract
 
