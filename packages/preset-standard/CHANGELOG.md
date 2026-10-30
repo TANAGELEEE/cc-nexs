@@ -4,6 +4,18 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-30
+
+### Added
+
+- `cc-nexs status <id>` prints the feature's state, revision and `nextStep()` result (next state, action, role, stop, circuit breaker). `cc-nexs advance <id> --from <state> --to <state>` persists one run-loop transition and rejects a stale `--from`. `buildWorkflowSnapshot()` builds the `nextStep()` input from progress and config, replacing the hand-assembled snapshot in `run.md`.
+
+### Changed
+
+- **`release.base.driver` now pushes the MR source branch itself.** The controller no longer pushes `cc-nexs-mr-<repo>-<commit>` before calling the driver, so GitLab `merge_request.*` push options create the MR instead of being ignored on an unchanged ref. A pending receipt is rejected unless `origin/<sourceBranch>` equals the integration commit. Drivers that only call an API and relied on the controller's push must now push the branch.
+- A Lean feature in `TEST_VERIFY_FAILED` can run `request-release-changes --type scope` when the fix needs paths or ACs outside the approved plan. It follows the existing scope path back to Gateway A and keeps the branch, worktrees and failed attempt. Each change request records `from_state`.
+- `run-lean.md` limits `deferred_to_test` to checks the local environment kept from running. A check that ran and failed an assertion stays `failed`, even when it also fails on the base commit.
+
 ## [0.7.3] - 2026-10-29
 
 ### Fixed
