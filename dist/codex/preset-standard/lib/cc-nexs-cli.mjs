@@ -16,6 +16,7 @@ import { runLocalVerification } from './local-verify.mjs';
 import { recordLeanPlanReview, recordLeanReview } from './review-control.mjs';
 import { requestReleaseChanges } from './release-change-command.mjs';
 import { renderLeanPlan } from './plan-render.mjs';
+import { requestPlanAmendment, reviewPlanAmendment } from './plan-amendment.mjs';
 import { runTestRelease } from './test-release.mjs';
 import { recordEnvironmentVerification } from './test-verification-control.mjs';
 import { migrateFeatureConfig } from './feature-config.mjs';
@@ -65,6 +66,11 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
     const options = parseReviewOptions(args);
     if (options.closure || options.gatewayBDelta) throw new Error('record-plan-review does not accept delta review flags');
     return recordLeanPlanReview({ cwd, featureId: options.featureId, progressPath: options.progressPath, status: options.status, blockingFindings: options.blockingFindings });
+  }
+  if (command === 'amend-plan') return requestPlanAmendment({ cwd, ...parseAmendmentOptions(args) });
+  if (command === 'record-amendment-review') {
+    const { amendmentId, status, blockingFindings, featureId, progressPath } = parseAmendmentOptions(args);
+    return reviewPlanAmendment({ cwd, featureId, progressPath, amendmentId, status, blockingFindings });
   }
   if (command === 'start-hotfix') {
     return startHotfix({ cwd, ...parseStartHotfixOptions(args) });
@@ -252,6 +258,29 @@ function parseFeatureMigrationOptions(args) {
   return options;
 }
 
+function parseAmendmentOptions(args) {
+  const lists = { '--ac': 'acs', '--path': 'paths', '--finding': 'blockingFindings' };
+  const values = { '--reason': 'reason', '--target': 'target', '--amendment': 'amendmentId', '--progress': 'progressPath' };
+  const flags = { '--passed': 'passed', '--blocked': 'blocked' };
+  const options = { acs: [], paths: [], blockingFindings: [], progressPath: null };
+  const positional = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const token = args[index];
+    const equals = token.indexOf('=');
+    const flag = equals < 0 ? token : token.slice(0, equals);
+    if (flags[token]) options.status = flags[token];
+    else if (lists[flag] || values[flag]) {
+      const value = equals < 0 ? requireValue(args, ++index, flag) : token.slice(equals + 1);
+      if (lists[flag]) options[lists[flag]].push(value);
+      else options[values[flag]] = value;
+    } else if (token.startsWith('-')) throw new Error(`unknown option: ${token}`);
+    else positional.push(token);
+  }
+  options.featureId = positional[0] || null;
+  if (positional.length > 1) throw new Error(`unexpected arguments: ${positional.slice(1).join(' ')}`);
+  return options;
+}
+
 function parseReviewOptions(args) {
   const positional = [];
   const options = { featureId: null, progressPath: null, closure: false, gatewayBDelta: false, blockingFindings: [] };
@@ -387,6 +416,17 @@ function printResult(result) {
     console.log(`Next: ${next.next}`);
     console.log(`Action: ${next.action}${next.role ? ` (role: ${next.role})` : ''}${next.stop ? ' [stop]' : ''}`);
     if (next.circuitBreaker) console.log(`Circuit breaker: ${next.circuitBreaker}${next.bug ? ` (${next.bug})` : ''}`);
+    console.log(`Milestones: ${result.milestones.map((item) => `${item.id}=${item.status}${item.detail ? ` (${item.detail})` : ''}`).join(', ')}`);
+    console.log(`Progress: ${result.progressFile}`);
+    return;
+  }
+  if (result.kind === 'plan-amendment') {
+    console.log(`cc-nexs plan amendment ${result.amendment.id}: ${result.amendment.status}`);
+    console.log(`Feature: ${result.feature.id} ${result.feature.slug}`);
+    console.log(`Target: ${result.amendment.target}`);
+    console.log(`ACs: ${result.amendment.acs.join(', ')}`);
+    console.log(`Paths: ${result.amendment.paths.join(', ')}`);
+    console.log(`State: ${result.state}`);
     console.log(`Progress: ${result.progressFile}`);
     return;
   }
@@ -534,6 +574,8 @@ function printUsage() {
   console.error('  cc-nexs verify-local <feature-id> [--preflight|--passed|--failed|--deferred-to-test --evidence-json <json>] [--progress <path>]');
   console.error('  cc-nexs record-review <feature-id> <--passed|--blocked> [--finding <P0/P1 text>] [--closure|--gateway-b-delta] [--progress <path>]');
   console.error('  cc-nexs record-plan-review <feature-id> <--passed|--blocked> [--finding <P0/P1 text>] [--progress <path>]');
+  console.error('  cc-nexs amend-plan <feature-id> --ac <id> --path <path> --reason <text> [--target <feature|test-integration>] [--progress <path>]');
+  console.error('  cc-nexs record-amendment-review <feature-id> --amendment <id> <--passed|--blocked> [--finding <P0/P1 text>] [--progress <path>]');
   console.error('  cc-nexs start-hotfix <feature-id> [--level <P0|P1|P2|P3>] [--related <feature-id>] [--progress <path>]');
   console.error('  cc-nexs assert-hotfix-candidate <feature-id> [--progress <path>]');
   console.error('  cc-nexs record-test-verification <feature-id> <--passed|--blocked|--manual-required> --evidence <text> [--attempt <id>] [--progress <path>]');

@@ -27,4 +27,4 @@ Fast-track constraints:
 - When no local driver is configured, do not add one-off project scripts: the parent Orchestrator runs `verify-local <id> --preflight`, then the plan-approved commands directly, and binds the real command/exit_code/proof with `verify-local --passed|--deferred-to-test --evidence-json`; at least one command must actually pass.
 - Do not refactor outside the ACs, generalize, or "harden along the way." If an improvement is worth doing but not required, record a follow-up and continue with the current delivery.
 
-Any change to requirements or `APPROVAL-SCOPE` invalidates the Plan Gate; stop.
+Any change to requirements or `APPROVAL-SCOPE` invalidates the Plan Gate; stop. A repair that keeps every AC and decision boundary but needs more paths is not such a change: use the same-AC amendment in `rules/run-lean.md` and continue without asking.

@@ -28,6 +28,8 @@ Lean 只维护两份由人工维护的文档：`requirements.md` 和 `plan.md`�
 
 如果 Gateway B 提出意见，必须按结构分类：补充证据留在门禁；批准范围内的实现修改要经过同一个 feature worktree、本地重验、一次 Gateway B delta Review、新的 test attempt 和回归；需求、AC 或方案边界发生变化时，会使 Gateway A 哈希失效，并返回 Planner。旧 candidate 与 test attempt 仅作为历史保留，不能再授权 base merge。
 
+执行中为关闭已批准 AC 而需要更多路径时，不属于范围变更：记录一条同 AC 修订（`amend-plan`），经独立 Plan Reviewer 审核后继续，不询问人，也不影响 Gateway A 哈希。修订不能新增 AC、跨越非目标、放宽检查，或改变权限、数据、基础设施、公开契约和生产操作；这些仍走 scope 返回 Gateway A。
+
 新需求初始化如下：
 ```yaml
 workflow:

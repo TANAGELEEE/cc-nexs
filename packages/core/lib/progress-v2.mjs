@@ -112,6 +112,13 @@ export function validateProgressV2(progress) {
       errors.push('change_requests.current must reference an item');
     }
   }
+  if (progress?.plan_amendments !== undefined) {
+    if (!Array.isArray(progress.plan_amendments?.items)) errors.push('plan_amendments.items must be an array');
+    for (const amendment of progress.plan_amendments?.items || []) {
+      if (!amendment?.id || !Array.isArray(amendment?.acs) || !Array.isArray(amendment?.paths)) errors.push(`plan amendment ${amendment?.id || '<missing>'} is malformed`);
+      if (!['pending_review', 'active', 'blocked'].includes(amendment?.status)) errors.push(`plan amendment ${amendment?.id || '<missing>'} status is invalid`);
+    }
+  }
   return errors;
 }
 
@@ -631,6 +638,74 @@ function invalidateLeanCandidateEvidence(progress) {
   if (progress.gates?.release) progress.gates.release = { approved: false, binding: null };
 }
 
+const LEAN_SCOPE_RETURN_STATES = new Set(['LOCAL_VERIFY_FAILED', 'LOCAL_REVERIFY_FAILED', 'TEST_MERGE_CONFLICT', 'TEST_VERIFY_FAILED']);
+
+const AMENDMENT_STATES = new Set([
+  'IMPLEMENTING', 'LOCAL_VERIFY_FAILED', 'LOCAL_REVERIFY_FAILED', 'REVIEW_FIXING',
+  'TEST_MERGE_CONFLICT', 'TEST_VERIFY_FAILED', 'TEST_FIXING',
+]);
+
+// Paths needed to close an already-approved AC stay outside the Gateway A hash; a
+// reviewed ledger entry extends them without replacing the human approval.
+export function recordPlanAmendment(file, { acs, paths, reason, target = 'feature', actor = 'orchestrator', expectedRevision = null }) {
+  if (!['feature', 'test-integration'].includes(target)) throw new Error('[cc-nexs] amendment target must be feature or test-integration');
+  if (typeof reason !== 'string' || !reason.trim()) throw new Error('[cc-nexs] amendment requires a reason');
+  if (!Array.isArray(acs) || acs.length === 0) throw new Error('[cc-nexs] amendment requires at least one approved AC');
+  if (!Array.isArray(paths) || paths.length === 0 || paths.some((item) => typeof item !== 'string' || !item.trim())) {
+    throw new Error('[cc-nexs] amendment requires at least one path');
+  }
+  const unsafe = paths.find((item) => item.startsWith('/') || item.split('/').includes('..'));
+  if (unsafe) throw new Error(`[cc-nexs] amendment paths must stay inside the repository: ${unsafe}`);
+  const progress = readProgressV2(file);
+  if (expectedRevision !== null && progress.revision !== expectedRevision) {
+    throw new Error(`[cc-nexs] stale progress revision: expected ${expectedRevision}, found ${progress.revision}`);
+  }
+  if (progress.mode !== 'lean') throw new Error('[cc-nexs] plan amendments apply to Lean only');
+  if (!AMENDMENT_STATES.has(progress.state)) {
+    throw new Error(`[cc-nexs] plan amendment requires ${[...AMENDMENT_STATES].join(', ')}, found ${progress.state}`);
+  }
+  progress.plan_amendments ||= { items: [] };
+  const pending = progress.plan_amendments.items.find((item) => item.status === 'pending_review');
+  if (pending) throw new Error(`[cc-nexs] amendment ${pending.id} is still waiting for its independent review`);
+  const amendment = {
+    id: `A-${progress.plan_amendments.items.length + 1}`,
+    target,
+    acs: [...acs],
+    paths: [...new Set(paths)],
+    reason: reason.trim(),
+    status: 'pending_review',
+    from_state: progress.state,
+    requested_by: actor,
+    requested_at: new Date().toISOString(),
+  };
+  progress.plan_amendments.items.push(amendment);
+  appendMutationEvent(progress, { type: 'plan.amendment_requested', actor, data: amendment });
+  writeProgressV2(file, progress);
+  return { progress, amendment };
+}
+
+export function recordPlanAmendmentReview(file, { amendmentId, status, blockingFindings = [], actor = 'lean-plan-reviewer', expectedRevision = null }) {
+  if (!['passed', 'blocked'].includes(status)) throw new Error(`[cc-nexs] invalid amendment review status: ${status}`);
+  if (status === 'blocked' && blockingFindings.length === 0) throw new Error('[cc-nexs] a blocked amendment review requires at least one P0/P1 finding');
+  if (status === 'passed' && blockingFindings.length > 0) throw new Error('[cc-nexs] a passing amendment review cannot contain blocking findings');
+  if (blockingFindings.some((item) => typeof item !== 'string' || !/^P[01]\b/.test(item))) {
+    throw new Error('[cc-nexs] blocking amendment findings must be P0/P1 strings');
+  }
+  const progress = readProgressV2(file);
+  if (expectedRevision !== null && progress.revision !== expectedRevision) {
+    throw new Error(`[cc-nexs] stale progress revision: expected ${expectedRevision}, found ${progress.revision}`);
+  }
+  const amendment = progress.plan_amendments?.items.find((item) => item.id === amendmentId);
+  if (!amendment) throw new Error(`[cc-nexs] plan amendment not found: ${amendmentId || '<missing>'}`);
+  if (amendment.status !== 'pending_review') throw new Error(`[cc-nexs] amendment ${amendment.id} is already ${amendment.status}`);
+  amendment.status = status === 'passed' ? 'active' : 'blocked';
+  amendment.blocking_findings = blockingFindings;
+  amendment.reviewed_at = new Date().toISOString();
+  appendMutationEvent(progress, { type: 'plan.amendment_reviewed', actor, data: { id: amendment.id, status: amendment.status, blocking_findings: blockingFindings } });
+  writeProgressV2(file, progress);
+  return { progress, amendment };
+}
+
 export function recordReleaseChangeRequest(file, {
   kind,
   feedback,
@@ -651,16 +726,16 @@ export function recordReleaseChangeRequest(file, {
   const progress = readProgressV2(file);
   if (!['lean', 'hotfix'].includes(progress.mode)) throw new Error(`[cc-nexs] release-gate changes require lean or hotfix mode, found ${progress.mode}`);
   const pendingState = progress.mode === 'hotfix' ? 'HOTFIX_RELEASE_PENDING_HUMAN' : 'RELEASE_PENDING_HUMAN';
-  // A failed Lean test attempt may need paths or ACs outside the approved plan; scope is its only route back to Gateway A.
-  const fromTestFailure = progress.mode === 'lean' && progress.state === 'TEST_VERIFY_FAILED';
-  if (fromTestFailure && kind === 'implementation') {
-    throw new Error('[cc-nexs] repair a failed test attempt within the approved scope through TEST_FIXING; use --type scope only when the fix needs unapproved paths or ACs');
+  // A blocked Lean delivery may need a real decision outside the approved plan; scope is its route back to Gateway A.
+  const fromExecution = progress.mode === 'lean' && LEAN_SCOPE_RETURN_STATES.has(progress.state);
+  if (fromExecution && kind === 'implementation') {
+    throw new Error('[cc-nexs] repair a blocked delivery within the approved scope through its fix state such as TEST_FIXING; use amend-plan for extra paths under the same ACs, and --type scope only for a decision the approved plan does not cover');
   }
-  if (fromTestFailure && kind === 'evidence') {
-    throw new Error('[cc-nexs] record evidence for a failed test attempt with record-test-verification');
+  if (fromExecution && kind === 'evidence') {
+    throw new Error('[cc-nexs] record evidence for a blocked delivery with record-test-verification or verify-local');
   }
-  if (progress.state !== pendingState && !fromTestFailure) {
-    const allowed = progress.mode === 'lean' ? `${pendingState} or TEST_VERIFY_FAILED (scope only)` : pendingState;
+  if (progress.state !== pendingState && !fromExecution) {
+    const allowed = progress.mode === 'lean' ? `${pendingState} or ${[...LEAN_SCOPE_RETURN_STATES].join('/')} (scope only)` : pendingState;
     throw new Error(`[cc-nexs] release-gate changes require ${allowed}, found ${progress.state}`);
   }
   const fromState = progress.state;

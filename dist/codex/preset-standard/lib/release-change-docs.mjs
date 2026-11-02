@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { PLAN_SCOPE_MARKERS } from './plan-contract.mjs';
+
 export function assertReleaseChangeDocuments(featureDir, { scope = false } = {}) {
   const required = [join(featureDir, 'plan.md'), ...(scope ? [join(featureDir, 'requirements.md')] : [])];
   const missing = required.filter((file) => !existsSync(file));
@@ -14,6 +16,32 @@ export function appendPlanChange(file, request) {
   const header = '| ID | 类型 | 提出人 | 影响 AC | 允许修改路径 | 意见 | 状态 |\n|---|---|---|---|---|---|---|';
   const row = `| ${cell(request.id)} | ${cell(request.kind)} | ${cell(request.requested_by)} | ${cell(request.affected_acs.join(', ') || '-')} | ${cell(request.paths.join(', ') || '-')} | ${cell(request.feedback)} | ${cell(request.status)} |`;
   appendTableRow(file, heading, header, row);
+}
+
+const PLAN_CHANGE_HEADINGS = ['## 计划变更', '## 計劃變更', '## Plan Changes'];
+
+// Written only after the approval markers, so the Gateway A hash cannot move.
+export function appendPlanAmendment(file, amendment) {
+  const text = readFileSync(file, 'utf8');
+  const scopeEnd = text.indexOf(PLAN_SCOPE_MARKERS.END);
+  const approved = text.slice(0, scopeEnd);
+  const log = text.slice(scopeEnd);
+  const heading = PLAN_CHANGE_HEADINGS.find((item) => log.includes(item)) || PLAN_CHANGE_HEADINGS[0];
+  const header = '| 日期 | 变更 | 是否影响批准范围 | 动作 |\n|---|---|---|---|';
+  const change = `${amendment.id} [${amendment.target}] ${amendment.acs.join(', ')}: ${amendment.reason} (${amendment.paths.join(', ')})`;
+  const row = `| ${amendment.requested_at.slice(0, 10)} | ${cell(change)} | no | ${cell(amendment.status)} |`;
+  writeFileSync(file, `${approved}${withTableRow(log, heading, header, row)}`, 'utf8');
+}
+
+export function syncPlanAmendmentStatus(file, amendment) {
+  const prefix = `| ${amendment.requested_at.slice(0, 10)} | ${amendment.id} [`;
+  const next = readFileSync(file, 'utf8').split('\n').map((line) => {
+    if (!line.startsWith(prefix)) return line;
+    const columns = line.split('|');
+    columns[columns.length - 2] = ` ${amendment.status} `;
+    return columns.join('|');
+  }).join('\n');
+  writeFileSync(file, next, 'utf8');
 }
 
 export function appendRequirementChange(file, request) {
@@ -70,17 +98,15 @@ export function syncHotfixChangeStatuses(file, requests = []) {
 }
 
 function appendTableRow(file, heading, header, row) {
-  const text = readFileSync(file, 'utf8');
-  let next;
+  writeFileSync(file, withTableRow(readFileSync(file, 'utf8'), heading, header, row), 'utf8');
+}
+
+function withTableRow(text, heading, header, row) {
   const headingIndex = text.indexOf(heading);
-  if (headingIndex === -1) {
-    next = `${text.trimEnd()}\n\n${heading}\n\n${header}\n${row}\n`;
-  } else {
-    const nextHeading = text.indexOf('\n## ', headingIndex + heading.length);
-    const insertAt = nextHeading === -1 ? text.length : nextHeading;
-    next = `${text.slice(0, insertAt).trimEnd()}\n${row}\n\n${text.slice(insertAt).replace(/^\n+/, '')}`;
-  }
-  writeFileSync(file, next, 'utf8');
+  if (headingIndex === -1) return `${text.trimEnd()}\n\n${heading}\n\n${header}\n${row}\n`;
+  const nextHeading = text.indexOf('\n## ', headingIndex + heading.length);
+  const insertAt = nextHeading === -1 ? text.length : nextHeading;
+  return `${text.slice(0, insertAt).trimEnd()}\n${row}\n\n${text.slice(insertAt).replace(/^\n+/, '')}`;
 }
 
 function cell(value) {

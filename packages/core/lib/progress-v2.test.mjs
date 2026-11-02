@@ -123,7 +123,7 @@ test('a failed Lean test attempt can reopen planning through a scope change only
 
     saved.state = 'IMPLEMENTING';
     writeProgressV2(file, saved);
-    assert.throws(() => recordReleaseChangeRequest(file, { kind: 'scope', feedback: 'too early', actor: 'owner' }), /RELEASE_PENDING_HUMAN or TEST_VERIFY_FAILED/);
+    assert.throws(() => recordReleaseChangeRequest(file, { kind: 'scope', feedback: 'too early', actor: 'owner' }), /RELEASE_PENDING_HUMAN or .*TEST_VERIFY_FAILED/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
