@@ -4,6 +4,19 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-02
+
+### Added
+
+- `amend-plan` and `record-amendment-review` record extra paths needed to close an approved AC in a reviewed ledger outside `APPROVAL-SCOPE`. The Gateway A binding and existing approvals stay valid, and no human question is needed. New ACs, crossed non-goals, weakened checks, and permission, data, infrastructure, public-contract, or production changes still use `scope`.
+- Lean plans declare baseline fast-check results, terminal-consumer sampling, Test operations authorized once at Gateway A, and a Test integration policy. Planner and Plan Reviewer treat them as part of the plan.
+- `cc-nexs status` prints delivery milestones for the current candidate and the attempt blocking them; questions and blocker reports to the user must state them.
+
+### Changed
+
+- A `scope` request is also accepted from `LOCAL_VERIFY_FAILED`, `LOCAL_REVERIFY_FAILED`, and `TEST_MERGE_CONFLICT`, which previously had no route back to Gateway A.
+- Integration-only Test conflicts may regenerate declared derived paths, and integration checks are not added to the plan as new gates.
+
 ## [0.9.0] - 2026-11-02
 
 ### Added
