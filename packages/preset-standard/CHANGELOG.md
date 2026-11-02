@@ -4,6 +4,8 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-02
+
 ### Added
 
 - Driver runs get a managed attempt directory, `.cc-nexs/runtime/verify/<task>/<attempt>/`. The payload carries `scratch_dir`, removed when the attempt ends on success and failure alike, and `artifacts_dir`, which is kept with the driver logs and a receipt holding their hashes. Scratch stays when it holds a dirty Git checkout or the driver's result names it.
