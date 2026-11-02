@@ -1,5 +1,7 @@
 import { jsonValuesEqual } from './canonical-json.mjs';
 
+const BROWSER_COMMAND = /^browser:\s*\S/;
+
 export function assertRecordedLocalVerification(progress, { source, fingerprint, expectedChecks = [] }) {
   const verification = progress.local_verification;
   const latest = verification?.attempts?.at(-1);
@@ -28,7 +30,7 @@ export function extractLocalVerificationChecks(scope) {
     const cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split(/(?<!\\)\|/)
       .map((cell) => cell.trim().replace(/\\\|/g, '|').replace(/^`(.*)`$/, '$1'));
     if (cells[0] === 'Check') {
-      commandColumn = cells.findIndex((cell) => ['命令/Driver', 'Command'].includes(cell));
+      commandColumn = cells.findIndex((cell) => ['命令/Driver', 'Command/Driver', 'Command'].includes(cell));
       continue;
     }
     if (commandColumn === -1 || /^:?-+:?$/.test(cells[0])) continue;
@@ -37,7 +39,8 @@ export function extractLocalVerificationChecks(scope) {
     if (!check || !command || ['-', 'pending'].includes(command) || checks.some((item) => item.check === check)) {
       throw new Error('[cc-nexs] local verification matrix requires unique Check IDs and exact nonempty commands');
     }
-    checks.push({ check, command });
+    // Command rows keep their exact shape so existing contract fingerprints stay valid.
+    checks.push({ check, command, ...(BROWSER_COMMAND.test(command) && { method: 'browser' }) });
   }
   return checks;
 }
@@ -54,7 +57,13 @@ export function validateLocalEvidence(status, evidence, { allowTestDefer = false
   const checks = evidence.map((item) => item.check.trim());
   if (new Set(checks).size !== checks.length) throw new Error('[cc-nexs] local verification evidence contains duplicate checks');
   for (const item of evidence) {
-    if (item.result === 'passed' || item.result === 'failed') {
+    if ((item.result === 'passed' || item.result === 'failed') && item.method === 'browser') {
+      // A browser observation has no exit code; its proof is the page state that was seen.
+      if (typeof item.command !== 'string' || !BROWSER_COMMAND.test(item.command.trim())
+        || typeof item.proof !== 'string' || !item.proof.trim()) {
+        throw new Error('[cc-nexs] browser local evidence requires check, a browser: command, and proof');
+      }
+    } else if (item.result === 'passed' || item.result === 'failed') {
       if (typeof item.command !== 'string' || !item.command.trim()
         || typeof item.proof !== 'string' || !item.proof.trim()
         || !Number.isInteger(item.exit_code) || (item.result === 'passed' ? item.exit_code !== 0 : item.exit_code === 0)) {
@@ -68,6 +77,9 @@ export function validateLocalEvidence(status, evidence, { allowTestDefer = false
     const expected = expectedChecks.find((check) => check.check === item.check.trim());
     if (expected && item.result !== 'deferred_to_test' && item.command.trim() !== expected.command) {
       throw new Error(`[cc-nexs] local verification command does not match the bound matrix for ${expected.check}`);
+    }
+    if (expected?.method === 'browser' && item.result !== 'deferred_to_test' && item.method !== 'browser') {
+      throw new Error(`[cc-nexs] local verification check ${expected.check} requires browser evidence`);
     }
   }
   if (status === 'failed') {
@@ -83,7 +95,7 @@ export function validateLocalEvidence(status, evidence, { allowTestDefer = false
     || evidence.some((item) => !['passed', 'deferred_to_test'].includes(item.result)))) {
     throw new Error('[cc-nexs] deferred local verification requires structured test deferral evidence');
   }
-  if (!evidence.some((item) => item.result === 'passed')) {
+  if (!evidence.some((item) => item.result === 'passed' && item.method !== 'browser')) {
     throw new Error('[cc-nexs] local evidence requires at least one passed command with check, command, exit_code=0, and proof');
   }
   const missing = expectedChecks.filter((expected) => !checks.includes(expected.check));

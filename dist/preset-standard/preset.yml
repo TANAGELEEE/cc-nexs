@@ -1,5 +1,5 @@
 name: preset-standard
-version: 0.8.0
+version: 0.9.0
 description: General multi-role development SOP with Lean requirements and Hotfix repairs; no language, framework, repository, or organization conventions are bound.
 language: en-US
 
@@ -255,6 +255,7 @@ workflow:
   local_verify:
     driver: null
     reuse_passed: true
+    min_free_gb: 10
   thresholds:
     review_revision: 3
     fix_per_bug: 3

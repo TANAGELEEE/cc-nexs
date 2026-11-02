@@ -33,7 +33,7 @@
 |---|---|---|---|
 <!-- HOTFIX-SCOPE END -->
 
-`intended_paths` 填寫逗號分隔的 `repo-id/path`；P0/P1 必須填寫受影響 AC、回滾負責人和步驟。矩陣每行填寫唯一 Check ID 和實際命令，至少覆蓋必要復現與迴歸檢查；不要用說明文字或佔位命令代替。
+`intended_paths` 填寫逗號分隔的 `repo-id/path`；P0/P1 必須填寫受影響 AC、回滾負責人和步驟。矩陣每行填寫唯一 Check ID 和實際命令，至少覆蓋必要復現與迴歸檢查；不要用說明文字或佔位命令代替。矩陣只放 lint、型別檢查和定向測試；修改頁面且能在本地執行時，再加 `browser: <啟動命令> @ <頁面路徑>` 行。完整生產構建由 CI 執行，僅當改動構建配置、依賴、lockfile、路由生成或發佈流程時才放入矩陣。
 
 ## 實現與回滾
 
@@ -43,7 +43,7 @@
 
 ## 本地驗證
 
-使用配置的 driver，或在無 driver 時執行繫結矩陣內的命令並登記 `check/command/exit_code/proof/result`。證據繫結精確 candidate，Hotfix 不允許延期到 test。
+使用配置的 driver，或在無 driver 時執行繫結矩陣內的命令並登記 `check/command/exit_code/proof/result`；瀏覽器行登記 `check/method/command/proof/result`。證據繫結精確 candidate，Hotfix 不允許延期到 test。
 
 ## 集中 Review
 

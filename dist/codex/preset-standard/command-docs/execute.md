@@ -24,7 +24,7 @@ Fast-track constraints:
 - Run only the targeted checks specified by the plan, preferring to reuse/extend the most recent existing tests; do not add new test files unless there is no existing file where the key regression can live.
 - Record the same confirmed baseline Maven/Nexus/external-dependency blocker only once; do not repeatedly download, re-run, or have multiple children prove it again.
 - Real compile/unit/lint failures must be fixed; only start/smoke/E2E that explicitly depend on locally unavailable infrastructure may be recorded as `deferred_to_test` per the driver contract, with the test action written out. Code failures must not be disguised as deferred.
-- When no local driver is configured, do not add one-off project scripts: the parent Orchestrator runs the plan-approved commands directly and binds the real command/exit_code/proof with `verify-local --passed|--deferred-to-test --evidence-json`; at least one command must actually pass.
+- When no local driver is configured, do not add one-off project scripts: the parent Orchestrator runs `verify-local <id> --preflight`, then the plan-approved commands directly, and binds the real command/exit_code/proof with `verify-local --passed|--deferred-to-test --evidence-json`; at least one command must actually pass.
 - Do not refactor outside the ACs, generalize, or "harden along the way." If an improvement is worth doing but not required, record a follow-up and continue with the current delivery.
 
 Any change to requirements or `APPROVAL-SCOPE` invalidates the Plan Gate; stop.

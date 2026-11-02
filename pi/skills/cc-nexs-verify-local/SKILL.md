@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-verify-local
-description: "/cc-nexs:verify-local Pi P2 adapter skill. Invoke only through /cc-nexs:verify-local or /skill:cc-nexs-verify-local; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with each role in an isolated Pi process. Run deterministic Lean/Hotfix local build/start/smoke/E2E and bind evidence to exact candidate commits."
+description: "/cc-nexs:verify-local Pi P2 adapter skill. Invoke only through /cc-nexs:verify-local or /skill:cc-nexs-verify-local; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with each role in an isolated Pi process. Run the fast Lean/Hotfix pre-deployment checks and bind evidence to exact candidate commits."
 disable-model-invocation: true
 ---
 
@@ -16,7 +16,7 @@ Resolve `../../../packages/core/lib/cc-nexs-cli.mjs` relative to this SKILL.md a
 node <resolved-cli-path> verify-local <feature-id> [--passed | --failed | --deferred-to-test] [--evidence-json <json>]... [--progress <path>]
 ```
 
-With a configured driver, omit direct evidence flags. Without a driver, execute Lean plan-approved or Hotfix scope-bound commands first, then pass their real structured results. Both paths require exact command/exit_code/proof evidence covering the frozen matrix. Hotfix accepts passed/failed only and never defers checks. Never invent evidence or replace this control with model-generated progress edits.
+With a configured driver, omit direct evidence flags. Without a driver, execute Lean plan-approved or Hotfix scope-bound commands first, then pass their real structured results. Both paths require exact command/exit_code/proof evidence covering the frozen matrix; a `browser:` row records method/command/proof instead of an exit code. Hotfix accepts passed/failed only and never defers checks. Never invent evidence or replace this control with model-generated progress edits.
 
 ## P2 Runtime Contract
 

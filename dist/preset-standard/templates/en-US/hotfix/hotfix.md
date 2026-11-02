@@ -28,13 +28,13 @@ Fill in the actual path and verification command, then bind. For scope, tier, or
 | Check | Repository | Command/Driver | Expected Result |
 |---|---|---|---|
 <!-- HOTFIX-SCOPE END -->
-`intended_paths` takes comma-separated `repo-id/path` entries; for P0/P1 you must fill in the affected ACs, the rollback owner, and the steps. Each row of the matrix must contain a unique Check ID and the actual command, covering at minimum the necessary reproduction and regression checks; do not substitute explanatory text or placeholder commands.
+`intended_paths` takes comma-separated `repo-id/path` entries; for P0/P1 you must fill in the affected ACs, the rollback owner, and the steps. Each row of the matrix must contain a unique Check ID and the actual command, covering at minimum the necessary reproduction and regression checks; do not substitute explanatory text or placeholder commands. Keep the matrix to lint, type check, and targeted tests, and add a `browser: <start command> @ <page path>` row when the fix changes a page and can run locally. CI runs the full production build, so add it here only when the change touches build configuration, dependencies, lockfiles, route generation, or publishing.
 ## Implementation and Rollback
 - Fix plan:
 - Affected call surface:
 - Rollback verification evidence:
 ## Local Verification
-Use the configured driver, or, when no driver is available, run the command in the binding matrix and record `check/command/exit_code/proof/result`. Evidence binds to the exact candidate; Hotfixes may not be deferred to test.
+Use the configured driver, or, when no driver is available, run the command in the binding matrix and record `check/command/exit_code/proof/result`; a browser row records `check/method/command/proof/result`. Evidence binds to the exact candidate; Hotfixes may not be deferred to test.
 ## Consolidated Review
 P0/P1/P2/P3 all require independent review. File counts and changed line counts are for risk reference only; they cannot prove that no behavior changes occurred. Record conclusions for candidates, blockers, and fix deltas.
 ## Test Environment Acceptance

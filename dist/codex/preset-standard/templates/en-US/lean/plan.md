@@ -33,7 +33,9 @@ Each code repository must keep one machine-parseable policy line; `deploy` must 
 
 | Check | AC | Type | Command/Driver | Pass criteria | Test action when local execution is not possible |
 |---|---|---|---|---|---|
-| LV-001 | AC-001 | targeted build/test/start/smoke |  |  |  |
+| LV-001 | AC-001 | lint/typecheck/targeted test/browser |  |  |  |
+
+Local verification is a fast check before deployment; acceptance in test is the main gate. Frontend changes run lint, type check, and targeted tests, with a `browser: <start command> @ <page path>` row for each affected page; backend changes run targeted tests. CI runs the full production build, so add it here only when the change touches build configuration, dependencies, lockfiles, route generation, or publishing.
 
 ## Test Environment Acceptance Matrix
 

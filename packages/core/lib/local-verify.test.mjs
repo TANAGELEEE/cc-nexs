@@ -60,7 +60,7 @@ test('Lean local verification invokes the configured driver and binds evidence t
       "});",
     ].join('\n'));
     writeFileSync(join(root, 'cc-nexs.config.json'), JSON.stringify({
-      workflow: { local_verify: { driver: { command: process.execPath, args: [driver], timeout_seconds: 30 } } },
+      workflow: { local_verify: { min_free_gb: 0, driver: { command: process.execPath, args: [driver], timeout_seconds: 30 } } },
     }, null, 2));
 
     git(api, ['init', '-b', 'feature/30-local-verify']);
@@ -129,7 +129,7 @@ test('Lean local verification invokes the configured driver and binds evidence t
     assert.throws(() => runLocalVerification({ cwd: root, featureId: '30', progressPath: progressFile }), /worktree must be clean at exact candidate/);
     writeFileSync(join(api, 'app.txt'), 'ready\n');
     writeFileSync(join(root, 'cc-nexs.config.json'), JSON.stringify({
-      workflow: { local_verify: { driver: { command: process.execPath, args: [driver, '--reconfigured'], timeout_seconds: 30 } } },
+      workflow: { local_verify: { min_free_gb: 0, driver: { command: process.execPath, args: [driver, '--reconfigured'], timeout_seconds: 30 } } },
     }));
     assert.equal(runLocalVerification({ cwd: root, featureId: '30', progressPath: progressFile }).reused, undefined);
     assert.equal(readProgressV2(progressFile).local_verification.attempts.length, 2);
@@ -151,7 +151,7 @@ test('Lean local verification invokes the configured driver and binds evidence t
 
     const beforeDirtyDriver = readProgressV2(progressFile).revision;
     writeFileSync(join(root, 'cc-nexs.config.json'), JSON.stringify({
-      workflow: { local_verify: { driver: { command: process.execPath, args: [driver, '--dirty'], timeout_seconds: 30 } } },
+      workflow: { local_verify: { min_free_gb: 0, driver: { command: process.execPath, args: [driver, '--dirty'], timeout_seconds: 30 } } },
     }));
     assert.throws(() => runLocalVerification({ cwd: root, featureId: '30', progressPath: progressFile }), /worktree must be clean at exact candidate/);
     assert.equal(readProgressV2(progressFile).revision, beforeDirtyDriver);
@@ -340,6 +340,91 @@ test('Lean local verification can defer an environment-only backend start to tes
     assert.equal(direct('passed', [passedEvidence]).status, 'passed');
     writeFileSync(join(docs, 'hotfix.md'), '<!-- HOTFIX-SCOPE START -->\n- severity: P1\n<!-- HOTFIX-SCOPE END -->');
     assert.throws(() => direct('passed', [passedEvidence]), /hotfix|must be no/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Lean local verification records a bound browser row through the direct evidence path', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-local-verify-browser-'));
+  const web = join(root, 'web');
+  const docs = join(root, 'docs', 'doc', '32.local-verify-browser');
+  try {
+    mkdirSync(join(root, '.cc-nexs'), { recursive: true });
+    mkdirSync(web, { recursive: true });
+    mkdirSync(docs, { recursive: true });
+    writeFileSync(join(root, '.cc-nexs', 'workspace.yml'), [
+      'version: 1',
+      'docs_repository: docs',
+      'repositories:',
+      '  - id: docs',
+      '    path: docs',
+      '    docs: true',
+      '  - id: web',
+      '    path: web',
+      '    base_branch: main',
+      '    test_branch: test',
+    ].join('\n'));
+    writeFileSync(join(root, 'cc-nexs.config.json'), '{}\n');
+
+    git(web, ['init', '-b', 'feature/32-local-verify-browser']);
+    git(web, ['config', 'user.name', 'Test User']);
+    git(web, ['config', 'user.email', 'test@example.com']);
+    writeFileSync(join(web, 'page.txt'), 'ready\n');
+    git(web, ['add', 'page.txt']);
+    git(web, ['commit', '-m', 'initial']);
+    const commit = git(web, ['rev-parse', 'HEAD']);
+    const candidateRef = 'refs/cc-nexs/candidates/32-local-verify-browser/web';
+    git(web, ['update-ref', candidateRef, commit]);
+
+    writeFileSync(join(docs, 'requirements.md'), '# Requirements\n\n- AC-001\n');
+    writeFileSync(join(docs, 'plan.md'), [
+      '# Plan',
+      '<!-- APPROVAL-SCOPE START -->',
+      '- risk_tier: low',
+      '- delivery_lane: fast-track',
+      '',
+      '| Check | AC | Type | Command/Driver | Pass criteria |',
+      '|---|---|---|---|---|',
+      '| LV-001 | AC-001 | lint | pnpm lint | clean |',
+      '| LV-002 | AC-001 | browser | browser: pnpm dev @ /settings | footer stays visible |',
+      '<!-- APPROVAL-SCOPE END -->',
+      '',
+    ].join('\n'));
+    writeFileSync(join(docs, 'progress.md'), '## 当前状态\n\n```yaml\ncurrent_state: IMPLEMENTING\nupdated_at: null\n```\n\n## 历史轨迹\n\n- (尚无)\n');
+    const progress = createProgressV2({ featureId: '32', featureSlug: 'local-verify-browser', preset: 'preset-standard' });
+    progress.state = 'IMPLEMENTING';
+    progress.gates.plan = { approved: true, binding: planApprovalBinding(docs) };
+    progress.repositories.web = {
+      branch: 'feature/32-local-verify-browser',
+      worktree: 'web',
+      candidate: { commit, ref: candidateRef, paths: ['page.txt'] },
+    };
+    const progressFile = join(docs, 'progress.json');
+    writeProgressV2(progressFile, progress);
+
+    const lint = { check: 'LV-001', result: 'passed', command: 'pnpm lint', exit_code: 0, proof: 'clean' };
+    const browser = {
+      check: 'LV-002', result: 'passed', method: 'browser',
+      command: 'browser: pnpm dev @ /settings', proof: 'footer stays visible at 375px',
+    };
+    const record = (status, ...evidence) => runCcNexsCommand([
+      'verify-local', '32', status,
+      ...evidence.flatMap((item) => ['--evidence-json', JSON.stringify(item)]),
+      '--progress', progressFile,
+    ], { cwd: root });
+
+    assert.throws(() => record('--passed', lint), /must cover bound checks: LV-002/);
+    const { method, ...withoutMethod } = browser;
+    assert.equal(method, 'browser');
+    assert.throws(() => record('--passed', lint, { ...withoutMethod, exit_code: 0 }), /requires browser evidence/);
+    const failed = record('--failed', lint, { ...browser, result: 'failed', proof: 'footer overlaps the submit button' });
+    assert.equal(failed.status, 'failed');
+    assert.equal(record('--passed', lint, browser).status, 'passed');
+    const recorded = readProgressV2(progressFile).local_verification.attempts.at(-1);
+    assert.deepEqual(recorded.evidence, [lint, browser]);
+    const reused = runLocalVerification({ cwd: root, featureId: '32', progressPath: progressFile });
+    assert.equal(reused.reused, true);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
