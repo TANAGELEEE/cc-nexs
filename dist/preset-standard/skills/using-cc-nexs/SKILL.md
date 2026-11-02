@@ -62,7 +62,7 @@ Gates only pause cc-nexs role dispatch; they do not block the parent session's u
 run                 主编排
 plan                Lean 计划 + HTML
 approve-plan        Lean Gateway A
-verify-local        确定性本地集成验证
+verify-local        确定性部署前快速验证
 lean-review         一次集中 Review / 一次 delta closure
 approve-release     Lean/Hotfix Gateway B
 release-base        批准后确定性合并 base

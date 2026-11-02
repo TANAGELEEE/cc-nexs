@@ -40,6 +40,8 @@ High/critical plans may not use fast-track. In either lane `/cc-nexs:approve-rel
 
 When no local driver is configured, the parent Orchestrator—not a child role—runs the plan-approved commands directly in each exact candidate worktree and records only their real results with `/cc-nexs:verify-local <id> --passed|--deferred-to-test|--failed` plus structured `--evidence-json`. A passing/deferred result must contain at least one actually executed passing item with non-empty `check`, the exact `command`, `exit_code: 0`, and non-empty `proof`. A failed result must contain an actually executed failed item with non-empty `check`, exact `command`, a non-zero integer `exit_code`, and concrete `proof`; it cannot include a deferred item or claim failure without execution. Do not record an assertion about a command that was not run, and do not invent success from expected output. The direct-evidence path is invalid when a configured driver exists.
 
+Local verification stays a fast check before test acceptance. A matrix row whose command starts with `browser:` is run by the parent Orchestrator as `commands/verify-local.md` describes and recorded with `method: "browser"`, the exact matrix command, and concrete `proof`. A page that needs an undeployed backend change, or a parent without a browser provider or login, records that row as `deferred_to_test`.
+
 A real compile/unit/lint failure is `failed`. Override the success transition exactly as follows; any other status is a controller failure and does not transition:
 
 | action source state | `passed` / `deferred_to_test` effective next | `failed` effective next |

@@ -43,7 +43,9 @@
 
 | Check | AC | 型別 | 命令/Driver | 透過條件 | 無法本地執行時的 Test 動作 |
 |---|---|---|---|---|---|
-| LV-001 | AC-001 | targeted build/test/start/smoke |  |  |  |
+| LV-001 | AC-001 | lint/typecheck/targeted test/browser |  |  |  |
+
+本地驗證只做部署前的快速回饋，主要驗收在 test 環境。前端跑 lint、型別檢查和定向測試，受影響頁面用 `browser: <啟動命令> @ <頁面路徑>` 行做瀏覽器驗證；後端跑定向測試。完整生產構建由 CI 執行，僅當改動構建配置、依賴、lockfile、路由生成或發佈流程時才放入矩陣。
 
 ## Test 環境驗收矩陣
 

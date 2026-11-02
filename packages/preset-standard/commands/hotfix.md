@@ -27,7 +27,7 @@ Fill in the BUG document's `HOTFIX-SCOPE`:
 
 - `intended_paths` must list the actual fix paths; for multiple repos use `repo-id/path`, separated by commas; it must not remain `-`.
 - P0/P1 must fill in `affected_acs`, `rollback_owner`, and `rollback_steps`.
-- Fill in the local verification matrix inside the scope marker, with the first column as `Check` and the command column as `命令/Driver`. Record a unique check ID and the complete command that will actually be executed; descriptions such as "run the relevant tests" cannot replace the command.
+- Fill in the local verification matrix inside the scope marker, with the first column as `Check` and the command column as `命令/Driver`. Record a unique check ID and the complete command that will actually be executed; descriptions such as "run the relevant tests" cannot replace the command. Keep the matrix to the reproduction and regression checks: lint, type check, and targeted tests, plus a `browser: <start command> @ <page path>` row when the fix changes a page and can run locally. A full production build stays with CI unless the fix touches build configuration, dependencies, lockfiles, route generation, or publishing.
 - Changes to ACs, APIs, database schema, permission models, or large-scale refactoring cannot continue as a Hotfix; use `--promote-lean` from Section 4.
 
 Then bind the scope:
@@ -48,7 +48,7 @@ The Orchestrator calls `nextStep` with `progress.json.mode=hotfix`. Developer, R
 ```text
 node <plugin-root>/lib/cc-nexs-cli.mjs verify-local <id>
 ```
-If `workflow.local_verify.driver` is present, use the driver; if there is no driver, run the commands in the binding matrix inside the exact candidate worktree, then record the real results with `verify-local <id> --passed|--failed --evidence-json <json>`. Each piece of evidence includes `check`, `command`, an integer `exit_code`, `proof`, and `result`; it must cover the binding matrix and the commands must match. Hotfixes do not allow `deferred_to_test`, and a real failure must not be recorded as a pass. Passed evidence for the same candidate and a valid scope may be reused.
+If `workflow.local_verify.driver` is present, use the driver; if there is no driver, run the commands in the binding matrix inside the exact candidate worktree, then record the real results with `verify-local <id> --passed|--failed --evidence-json <json>`. Each piece of evidence includes `check`, `command`, an integer `exit_code`, `proof`, and `result` (a browser row uses `method: "browser"` instead of `exit_code`); it must cover the binding matrix and the commands must match. Hotfixes do not allow `deferred_to_test`, and a real failure must not be recorded as a pass. Passed evidence for the same candidate and a valid scope may be reused.
 
 Once all levels pass locally, the work enters an independent centralized Review:
 ```text
