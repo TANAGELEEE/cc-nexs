@@ -13,8 +13,12 @@ Read `requirements.md`, the `APPROVAL-SCOPE` of `plan.md`, the workspace configu
 - Cross-repository and frontend/backend contracts, data or migration impact, permissions, and rollback are covered where the change needs them.
 - `risk_tier`, `delivery_lane`, and `test_delivery.<repo>` follow the plan rules and the real scope; task paths do not overlap.
 - A requirement too large to review and verify as one plan is flagged with a recommended split into separate Lean requirements.
+- Known baseline failures of the planned fast checks are stated with a decision for Gateway A, and a terminal consumer that decides acceptance was sampled for real rather than assumed from its inputs. A check that only proves the inputs does not prove the consumer accepts them.
+- Test operations and the Test integration policy are complete enough that delivery does not need to ask again.
 
 Only P0/P1 issues block: a missed requirement, a false assumption about existing code that would break the design, an unverifiable acceptance check, a misclassified risk or lane, or a missing contract/data/rollback decision. Record optional hardening and style as non-blocking notes. Do not redesign the solution or add scope.
+
+For a same-AC amendment, read only the amendment, its ACs and non-goals, the approved boundaries, and the code those paths touch. Pass it when the paths are needed to close the named ACs and stay inside the boundaries; block with `P0:` or `P1:` when it crosses a decision listed under same-AC amendments in `rules/run-lean.md` or looks like a symptom of a wider unlisted path set. Do not reopen the approved plan.
 
 Write the result to the plan review section of `plan.md` (`计划审核` / `計劃審核` / `Plan Review`), outside the approval markers, listing each P0/P1 finding as `P0: ...` or `P1: ...` with the requirement, plan section, or code location it concerns. End the section with exactly `计划审核结论: PASS` or `计划审核结论: NEEDS_REVISION`. When re-reviewing a revised plan, check the previous findings and anything the revision changed; do not reopen settled items. Modifying requirements, the approval scope, code, progress, or Git is prohibited.
 

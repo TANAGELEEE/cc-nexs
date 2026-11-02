@@ -69,6 +69,14 @@
     },
     "review": { "type": "object" },
     "plan_review": { "type": ["object", "null"] },
+    "plan_amendments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items"],
+      "properties": {
+        "items": { "type": "array", "items": { "type": "object" } }
+      }
+    },
     "change_requests": {
       "type": "object",
       "additionalProperties": false,

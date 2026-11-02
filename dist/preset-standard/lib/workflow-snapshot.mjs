@@ -83,7 +83,32 @@ export function buildWorkflowSnapshot({ cwd = process.cwd(), featureId, progress
 
 export function featureStatus(options = {}) {
   const snapshot = buildWorkflowSnapshot(options);
-  return { kind: 'feature-status', ...snapshot, next: nextStep(snapshot.input) };
+  const milestones = deliveryMilestones(readProgressV2(snapshot.progressFile));
+  return { kind: 'feature-status', ...snapshot, milestones, next: nextStep(snapshot.input) };
+}
+
+/** Distance to delivery for the current candidate; attempts of an older candidate do not count. */
+export function deliveryMilestones(progress) {
+  const local = progress.local_verification || {};
+  const fingerprint = local.candidate_fingerprint || null;
+  const latest = progress.delivery?.test?.attempts?.at(-1);
+  const attempt = latest && fingerprint && latest.fingerprint === fingerprint && !latest.invalidated_at ? latest : null;
+  const deployed = Boolean(attempt?.deployment && attempt?.environment_revision);
+  const failedAttempt = attempt?.status === 'failed' || attempt?.status === 'merge_conflict';
+  const row = (id, done, blocked, detail = '') => ({ id, status: done ? 'done' : blocked ? 'blocked' : 'pending', ...(detail && !done && { detail }) });
+  const review = progress.review || {};
+  const base = progress.delivery?.base?.status || 'idle';
+  return [
+    progress.mode === 'hotfix'
+      ? row('scope', Boolean(progress.hotfix?.scope_binding), false)
+      : row('plan', progress.gates?.plan?.approved === true, false),
+    row('implementation', Object.values(progress.repositories || {}).some((repository) => repository.candidate?.ref || repository.candidate?.commit), false),
+    row('local_verification', ['passed', 'deferred_to_test'].includes(local.status), local.status === 'failed'),
+    row('test_deployment', deployed, !deployed && failedAttempt, attempt ? `${attempt.id} ${attempt.status}` : ''),
+    row('test_acceptance', attempt?.status === 'verified', deployed && (failedAttempt || attempt?.status === 'deployed_needs_manual_verification'), attempt && deployed ? `${attempt.id} ${attempt.status}` : ''),
+    row('review', review.status === 'passed' && review.candidate_fingerprint === fingerprint, review.status === 'blocked'),
+    row('base_merge', base === 'succeeded', !['idle', 'running', 'succeeded'].includes(base)),
+  ];
 }
 
 /** CLI form of the run loop's persist step: move from the captured state to effectiveNext exactly once. */

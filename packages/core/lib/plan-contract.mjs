@@ -55,12 +55,16 @@ function acIds(lines) {
   return new Set(lines.flatMap((line) => line.match(/\bAC-\d+\b/g) || []));
 }
 
+export function requirementAcIds(reqDir) {
+  const requirements = readFileSync(join(reqDir, 'requirements.md'), 'utf8').replace(/\r\n/g, '\n');
+  return [...new Set(tableRows(requirements, 'AC').map((line) => line.match(/AC-\d+/)[0]))];
+}
+
 // Every acceptance criterion in requirements.md must be planned, checked locally, and
 // verified in test; a plan may not invent criteria the requirements do not contain.
 export function assertRequirementTraceability(reqDir) {
-  const requirements = readFileSync(join(reqDir, 'requirements.md'), 'utf8').replace(/\r\n/g, '\n');
   const scope = extractApprovalScope(readFileSync(join(reqDir, 'plan.md'), 'utf8'));
-  const required = [...new Set(tableRows(requirements, 'AC').map((line) => line.match(/AC-\d+/)[0]))];
+  const required = requirementAcIds(reqDir);
   if (required.length === 0) throw new Error('[cc-nexs] requirements.md must list acceptance criteria as AC-xxx table rows');
   const coverage = { task: acIds(tableRows(scope, 'T')), 'local check': acIds(tableRows(scope, 'LV')), 'test check': acIds(tableRows(scope, 'TV')) };
   const gaps = [];

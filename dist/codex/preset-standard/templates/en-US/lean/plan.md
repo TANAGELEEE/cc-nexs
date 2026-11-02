@@ -43,6 +43,13 @@ Local verification is a fast check before deployment; acceptance in test is the 
 |---|---|---|---|
 | TV-001 | AC-001 |  |  |
 
+## Baseline and Terminal Sampling
+- Baseline fast check (fast checks and dependency-install dry run on base; existing failures and the decision they need):
+- Terminal consumer (indexer, crawler, pipeline, batch job; write "none" if there is none):
+- Admission conditions and real sample result (from current sources and real output, without publishing):
+## Pre-authorized Test Operations
+- Test environment operations (action, target, rollback; not asked again after Gateway A):
+- Test integration policy (derived paths and the command that regenerates them; write "none" if there is none):
 ## Risks and Release
 - risk_tier: pending
 - Risk assessment basis:

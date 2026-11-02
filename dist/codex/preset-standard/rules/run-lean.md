@@ -75,6 +75,7 @@ Apply the common delivery-safety preflight in `commands/run.md`, plus the approv
 3. Local candidates must be their recorded clean worktrees on the recorded branch and exact candidate commit, including no untracked files.
 4. Start CI/CD once. `pending` persists `delivery.test.status=deploying` and a pipeline reference. Return immediately; a later run's `poll_test_release` invokes `--resume` once and neither reintegrates nor retriggers.
 5. A failed deployment may be deliberately retried with `--retry`; it creates a new attempt but does not turn the first successful deployment into “regression” verification.
+6. Test operations listed in the plan's pre-authorized section (for example a rebuild with rollback) are covered by Gateway A: run them without asking again. An unlisted operation is asked once. Integration work the plan's policy does not cover uses a `--target test-integration` amendment, never a new approval round.
 
 Only after the release driver records success with pipeline, deployment, and exact environment revision evidence, run verification preflight:
 
@@ -117,9 +118,21 @@ Changes at Gateway B must use `/cc-nexs:request-release-changes <id> --type=... 
 - `implementation`: `GATEWAY_B_CHANGE_REQUESTED -> GATEWAY_B_FIXING -> GATEWAY_B_LOCAL_REVERIFYING -> GATEWAY_B_DELTA_REVIEW`; PASS creates a new test attempt and regression evidence. A blocked delta goes to `HUMAN_INTERVENTION`.
 - `scope`: `SCOPE_CHANGE_REQUESTED -> PLANNING -> PLAN_REVIEWING -> PLAN_PENDING_HUMAN`; Planner updates requirements plus plan approval scope, a fresh plan review is recorded for the new plan, and a new Gateway A hash is mandatory.
 
-At `TEST_VERIFY_FAILED`, when the fix needs paths or ACs outside the approved plan, run the same `scope` request instead of opening a new feature. It follows the same scope path and keeps the branch, worktrees, candidate history and the failed test attempt; local verification, Review and test delivery run again for the new candidate after Gateway A. Fixes inside the approved scope stay on `TEST_FIXING`.
+At `LOCAL_VERIFY_FAILED`, `LOCAL_REVERIFY_FAILED`, `TEST_MERGE_CONFLICT`, or `TEST_VERIFY_FAILED`, when the repair needs a decision the approved plan does not cover, run the same `scope` request instead of opening a new feature. It follows the same scope path and keeps the branch, worktrees, candidate history and the blocked attempt; local verification, Review and test delivery run again for the new candidate after Gateway A. Fixes inside the approved scope stay on their fix state.
 
 Keep each request row synchronized with progress. A newer request marks the prior open row `addressed`; release approval marks the current row `approved` before archive.
+
+## Same-AC amendments
+
+More paths are not a human decision. Gateway A approves criteria and boundaries, so a repair that needs extra implementation, dependency, generated, or test-integration paths to close an approved AC continues without asking:
+
+1. The Orchestrator records it from `IMPLEMENTING`, a local failure, `REVIEW_FIXING`, `TEST_MERGE_CONFLICT`, `TEST_VERIFY_FAILED`, or `TEST_FIXING`: `node <plugin-root>/lib/cc-nexs-cli.mjs amend-plan <id> --ac <AC> --path <path> --reason <why> [--target feature|test-integration]`. Collect the whole known path closure into one amendment rather than one per file.
+2. Dispatch an independent `lean-plan-reviewer` on that amendment only, then run `record-amendment-review <id> --amendment <A-n> --passed|--blocked [--finding "P1: ..."]`.
+3. Passed: the Developer may touch those paths and the current state continues. Blocked: use the `scope` request.
+
+The ledger lives in `plan_amendments` and the plan's change log, outside `APPROVAL-SCOPE`, so the Gateway A binding and existing evidence stay valid; a new candidate still needs its own local verification, Review, and test evidence.
+
+Use `scope` instead when the repair adds or edits an AC, crosses a stated non-goal, weakens a local or test check, changes permissions, schema or migrations, adds infrastructure or secrets, breaks a public contract, adds a repository, or acts on production.
 
 ## Base release and completion
 

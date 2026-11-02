@@ -35,6 +35,9 @@ Models:     <next role → matched rule / profile / model / effort / feature ove
    lean: PLAN / IMPLEMENT / LOCAL VERIFY / REVIEW / TEST / BASE MERGE
    hotfix: SCOPE / IMPLEMENT / LOCAL VERIFY / REVIEW / TEST / GATEWAY B / BASE MERGE
 
+📍 Delivery milestones
+   <Milestones line from the CLI status: done / pending / blocked with the blocking attempt>
+
 🔢 Counters
    Review revisions:  <n>/<threshold>
    Fix per bug:       <map>
