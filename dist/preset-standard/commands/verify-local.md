@@ -2,7 +2,7 @@
 description: "Run the fast Lean/Hotfix pre-deployment checks and bind evidence to exact candidate commits."
 disable-model-invocation: true
 allowed-tools: "Read, Bash, mcp__chrome-devtools__*"
-argument-hint: "[feature_id] [--passed|--failed|--deferred-to-test] [--evidence-json <json>]..."
+argument-hint: "[feature_id] [--preflight|--passed|--failed|--deferred-to-test] [--evidence-json <json>]..."
 ---
 
 # /cc-nexs:verify-local
@@ -19,7 +19,7 @@ Local verification is a fast check before deployment; acceptance in the test env
 - Backend: targeted tests for the changed behavior.
 - Full production build: only when the change touches build configuration, dependencies, lockfiles, route generation, or publishing. CI builds every test release.
 
-When the project configures `workflow.local_verify.driver`, the driver receives one JSON payload on stdin containing exact candidate commits and repository worktrees. It runs the bound matrix, stops all processes, then returns one JSON object:
+When the project configures `workflow.local_verify.driver`, the driver receives one JSON payload on stdin containing exact candidate commits, repository worktrees, `scratch_dir`, and `artifacts_dir`. It runs the bound matrix, stops all processes, then returns one JSON object:
 
 ```json
 {"status":"passed","evidence":[{"check":"api-smoke","result":"passed","command":"./scripts/api-smoke.sh","exit_code":0,"proof":"smoke passed"}]}
@@ -36,6 +36,24 @@ When a Lean candidate cannot start or reach required shared infrastructure local
   ]
 }
 ```
+
+## Attempt artifacts
+
+Each driver run gets one controller-owned directory, `.cc-nexs/runtime/verify/<task>/<attempt>/`:
+
+- `scratch/` (`scratch_dir`): anything rebuildable, such as a source export, dependency install, or `.next` output. The controller removes it when the attempt ends, on success and failure alike, after recording evidence.
+- `artifacts/` (`artifacts_dir`): logs, hashes, and reports the driver wants to keep. Evidence that points at a file must point here.
+- `driver.stdout.log`, `driver.stderr.log`, and `receipt.json`: the controller's own record of the attempt, including log hashes and what happened to scratch. They are kept.
+
+Prefer checks in the candidate worktree; use `scratch_dir` only when a check needs a separate copy. The controller keeps scratch when it holds a dirty Git checkout or when the driver's result names `scratch_dir`, and records why in the receipt.
+
+## Free space
+
+Before a driver run the controller checks the workspace and every candidate worktree volume against `workflow.local_verify.min_free_gb` (default 10; 0 disables the check). When a volume is below it, the controller removes scratch left by inactive attempts once and measures again. If a volume is still too low, verify-local stops with a blocker that names it. That blocker is not a verification failure: no attempt is recorded and no repair state applies. Stop, report it, and rerun only after space is freed. Never move outputs to another disk to get past it. Worktrees and logs are reclaimed only through `/cc-nexs:git-custodian reclaim`.
+
+Without a driver, run `verify-local <feature-id> --preflight` before the matrix commands. It applies the same check and records nothing.
+
+## Direct evidence
 
 If no driver is configured, Lean and Hotfix can use direct evidence without creating a project-level script. The parent runs Lean plan-approved commands or Hotfix scope-bound commands in the exact candidate worktrees and records their real results. For example, the following Lean-only deferral must use the actual commands from the approved matrix:
 

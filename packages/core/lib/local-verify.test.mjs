@@ -60,7 +60,7 @@ test('Lean local verification invokes the configured driver and binds evidence t
       "});",
     ].join('\n'));
     writeFileSync(join(root, 'cc-nexs.config.json'), JSON.stringify({
-      workflow: { local_verify: { driver: { command: process.execPath, args: [driver], timeout_seconds: 30 } } },
+      workflow: { local_verify: { min_free_gb: 0, driver: { command: process.execPath, args: [driver], timeout_seconds: 30 } } },
     }, null, 2));
 
     git(api, ['init', '-b', 'feature/30-local-verify']);
@@ -129,7 +129,7 @@ test('Lean local verification invokes the configured driver and binds evidence t
     assert.throws(() => runLocalVerification({ cwd: root, featureId: '30', progressPath: progressFile }), /worktree must be clean at exact candidate/);
     writeFileSync(join(api, 'app.txt'), 'ready\n');
     writeFileSync(join(root, 'cc-nexs.config.json'), JSON.stringify({
-      workflow: { local_verify: { driver: { command: process.execPath, args: [driver, '--reconfigured'], timeout_seconds: 30 } } },
+      workflow: { local_verify: { min_free_gb: 0, driver: { command: process.execPath, args: [driver, '--reconfigured'], timeout_seconds: 30 } } },
     }));
     assert.equal(runLocalVerification({ cwd: root, featureId: '30', progressPath: progressFile }).reused, undefined);
     assert.equal(readProgressV2(progressFile).local_verification.attempts.length, 2);
@@ -151,7 +151,7 @@ test('Lean local verification invokes the configured driver and binds evidence t
 
     const beforeDirtyDriver = readProgressV2(progressFile).revision;
     writeFileSync(join(root, 'cc-nexs.config.json'), JSON.stringify({
-      workflow: { local_verify: { driver: { command: process.execPath, args: [driver, '--dirty'], timeout_seconds: 30 } } },
+      workflow: { local_verify: { min_free_gb: 0, driver: { command: process.execPath, args: [driver, '--dirty'], timeout_seconds: 30 } } },
     }));
     assert.throws(() => runLocalVerification({ cwd: root, featureId: '30', progressPath: progressFile }), /worktree must be clean at exact candidate/);
     assert.equal(readProgressV2(progressFile).revision, beforeDirtyDriver);

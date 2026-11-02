@@ -1,5 +1,5 @@
 import { releaseScope } from './release-scope.mjs';
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
@@ -14,6 +14,16 @@ import {
   readProgressV2,
   recordLocalVerification,
 } from './progress-v2.mjs';
+import {
+  beginVerifyAttempt,
+  finishVerifyAttempt,
+  formatGb,
+  freeBytesAt,
+  lowVolumes,
+  minFreeGb,
+  saveDriverOutput,
+} from './verify-artifacts.mjs';
+import { reclaimInactiveVerifyScratch } from './worktree-reclaim.mjs';
 
 export function runLocalVerification({
   cwd = process.cwd(),
@@ -21,6 +31,8 @@ export function runLocalVerification({
   progressPath = null,
   recordStatus = null,
   evidence: recordedEvidence = [],
+  preflightOnly = false,
+  freeBytes = freeBytesAt,
 } = {}) {
   const context = resolveCandidateContext({ cwd, featureId, progressPath });
   releaseScope(context.progress, context.progressFile);
@@ -63,6 +75,14 @@ export function runLocalVerification({
       progressFile: context.progressFile,
     };
   }
+  if (preflightOnly) {
+    return {
+      kind: 'local-verification-preflight',
+      feature: context.progress.feature,
+      disk: ensureDiskSpace(context, freeBytes),
+      progressFile: context.progressFile,
+    };
+  }
   if (
     context.config.mergedWorkflow?.local_verify?.reuse_passed !== false
     && isLocalVerificationReadyStatus(context.progress.local_verification?.status)
@@ -96,12 +116,22 @@ export function runLocalVerification({
     const flags = context.progress.mode === 'lean' ? '--passed, --failed, or --deferred-to-test' : '--passed or --failed';
     throw new Error(`[cc-nexs] workflow.local_verify.driver is not configured; run scope-bound local commands in the exact candidate worktrees, then use verify-local ${flags} with structured --evidence-json records`);
   }
+  ensureDiskSpace(context, freeBytes);
+  const attempt = beginVerifyAttempt({
+    root: context.workspaceRoot,
+    taskId: context.progress.feature.id,
+    source: context.source,
+    fingerprint,
+    timeoutMs: driver.timeoutMs,
+  });
   const payload = {
     schema_version: 1,
     operation: 'verify_local',
     feature: context.progress.feature,
     source: context.source,
     reused: false,
+    scratch_dir: attempt.scratchDir,
+    artifacts_dir: attempt.artifactsDir,
     repositories: Object.fromEntries(context.repositories.map((item) => [item.id, {
       worktree: item.assignment.worktree ? resolve(context.workspaceRoot, item.assignment.worktree) : null,
       branch: item.assignment.branch,
@@ -116,27 +146,52 @@ export function runLocalVerification({
       },
     },
   };
-  const result = invokeLocalVerifyDriver({ driver, workspaceRoot: context.workspaceRoot, payload });
-  assertVerificationWorktrees(context);
-  const evidence = result.evidence || [];
-  recordLocalVerification(context.progressFile, {
-    source: context.source,
-    status: result.status,
-    context: verificationContext,
-    evidence,
-    contractFingerprint,
-    expectedRevision: context.progress.revision,
-  });
-  return {
-    kind: 'local-verification',
-    feature: context.progress.feature,
-    status: result.status,
-    context: verificationContext,
-    evidence,
-    source: context.source,
-    progress: readProgressV2(context.progressFile),
-    progressFile: context.progressFile,
-  };
+  // Scratch outlives evidence recording so nothing the driver proved is removed first.
+  const ending = { status: 'error', error: null };
+  try {
+    const result = invokeLocalVerifyDriver({ driver, workspaceRoot: context.workspaceRoot, payload, attempt });
+    assertVerificationWorktrees(context);
+    const evidence = result.evidence || [];
+    recordLocalVerification(context.progressFile, {
+      source: context.source,
+      status: result.status,
+      context: verificationContext,
+      evidence,
+      contractFingerprint,
+      expectedRevision: context.progress.revision,
+    });
+    ending.status = result.status;
+    return {
+      kind: 'local-verification',
+      feature: context.progress.feature,
+      status: result.status,
+      context: verificationContext,
+      evidence,
+      source: context.source,
+      attemptDir: attempt.dir,
+      progress: readProgressV2(context.progressFile),
+      progressFile: context.progressFile,
+    };
+  } catch (error) {
+    ending.error = error.message;
+    throw error;
+  } finally {
+    finishVerifyAttempt(attempt, ending);
+  }
+}
+
+// One reclaim, one recheck: a blocker never moves outputs to another disk and never loops.
+function ensureDiskSpace(context, freeBytes) {
+  const thresholdGb = minFreeGb(context.config.mergedWorkflow?.local_verify);
+  const paths = [context.workspaceRoot, ...context.repositories.map((item) => resolve(context.workspaceRoot, item.assignment.worktree))];
+  if (lowVolumes({ paths, thresholdGb, freeBytes }).length === 0) return { min_free_gb: thresholdGb, reclaimed: [] };
+  const reclaimed = reclaimInactiveVerifyScratch({ root: context.workspaceRoot, workspace: context.workspace });
+  const low = lowVolumes({ paths, thresholdGb, freeBytes });
+  if (low.length > 0) {
+    const volumes = low.map((volume) => `${volume.path} has ${formatGb(volume.freeBytes)} GB free`).join('; ');
+    throw new Error(`[cc-nexs] local verification blocked by low disk space: ${volumes}; workflow.local_verify.min_free_gb requires ${thresholdGb} GB after reclaiming ${reclaimed.length} inactive verification artifact(s). Free space on that volume (cc-nexs reclaim-worktrees lists what can go), then rerun verify-local; do not move outputs to another disk.`);
+  }
+  return { min_free_gb: thresholdGb, reclaimed: reclaimed.map((entry) => entry.display) };
 }
 
 function assertVerificationWorktrees(context) {
@@ -162,23 +217,22 @@ function resolveVerificationContext(progress) {
   return existing || 'implementation';
 }
 
-export function invokeLocalVerifyDriver({ driver, workspaceRoot, payload }) {
-  let output;
-  try {
-    output = execFileSync(driver.command, driver.args, {
-      cwd: workspaceRoot,
-      encoding: 'utf8',
-      input: `${JSON.stringify(payload)}\n`,
-      timeout: driver.timeoutMs,
-      maxBuffer: 8 * 1024 * 1024,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, CC_NEXS_FEATURE_ID: String(payload.feature.id) },
-    }).trim();
-  } catch (error) {
-    throw new Error(`[cc-nexs] local verification driver failed: ${error.stderr?.toString().trim() || error.message}`);
+export function invokeLocalVerifyDriver({ driver, workspaceRoot, payload, attempt = null }) {
+  const run = spawnSync(driver.command, driver.args, {
+    cwd: workspaceRoot,
+    encoding: 'utf8',
+    input: `${JSON.stringify(payload)}\n`,
+    timeout: driver.timeoutMs,
+    maxBuffer: 8 * 1024 * 1024,
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: { ...process.env, CC_NEXS_FEATURE_ID: String(payload.feature.id) },
+  });
+  if (attempt) saveDriverOutput(attempt, run);
+  if (run.error || run.status !== 0) {
+    throw new Error(`[cc-nexs] local verification driver failed: ${run.stderr?.trim() || run.error?.message || `exit ${run.status ?? run.signal}`}`);
   }
   let result;
-  try { result = JSON.parse(output); }
+  try { result = JSON.parse(run.stdout.trim()); }
   catch { throw new Error('[cc-nexs] local verification driver must write one JSON object to stdout'); }
   if (!['passed', 'failed', 'deferred_to_test'].includes(result?.status)) {
     throw new Error(`[cc-nexs] invalid local verification status: ${result?.status || '<missing>'}`);

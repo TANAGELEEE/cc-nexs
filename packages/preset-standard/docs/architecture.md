@@ -7,6 +7,7 @@ packages/core/
   progress-v2.mjs       revision + event + delivery attempts
   git-custodian.mjs     唯一 Git mutation 边界
   local-verify.mjs      Lean/Hotfix 部署前快速验证
+  verify-artifacts.mjs  验证 attempt 目录、清理与磁盘预检
   base-release.mjs      Gateway B 后的 base 集成控制器
   test-release.mjs      test 集成与 release driver 控制器
   doctor.mjs            workspace/release 前置检查
@@ -112,13 +113,21 @@ workflow:
       args: [.cc-nexs/local-verify.mjs]
       timeout_seconds: 1200
 ```
-The controller sends `{operation, feature, source, repositories}` JSON over stdin; each repo entry includes the exact candidate SHA and its assigned worktree. The driver runs the approved plan or bound Hotfix scope matrix and writes only a single JSON object to stdout:
+The controller sends `{operation, feature, source, scratch_dir, artifacts_dir, repositories}` JSON over stdin; each repo entry includes the exact candidate SHA and its assigned worktree. The driver runs the approved plan or bound Hotfix scope matrix and writes only a single JSON object to stdout:
 ```json
 {"status":"passed","evidence":[{"check":"api-smoke","result":"passed","command":"./scripts/api-smoke.sh","exit_code":0,"proof":"smoke passed"}]}
 ```
 The command in the example above is illustrative only; the actual command must match the frozen matrix. The driver and direct registration use the same evidence validation, covering all required Checks; a string list, or a PASS without execution evidence, is invalid. The matrix stays a fast check before test acceptance: frontend lint, type check, targeted tests, and browser checks; backend targeted tests; and a full production build only when the change touches build configuration, dependencies, lockfiles, route generation, or publishing. A `browser: <start command> @ <page path>` row records `method: "browser"`, the exact command, and concrete `proof` instead of an exit code, and a passing result still needs one executed command.
 
 Lean also allows `deferred_to_test`: every locally executable check must pass, at least one start/smoke/E2E check constrained by local infrastructure must supply `{check,result,reason,test_action}`, and the result of all evidence may only be `passed|deferred_to_test`, with no duplicate checks. A genuine compile/unit/lint failure cannot be deferred. The same fingerprint reuses that result, and each deferred check must be closed out in the final test evidence with the exact object `{check,result:"passed",proof}`; a free-text substring does not count. Hotfixes may not be deferred. The driver must own readiness, non-conflicting ports, and process cleanup on both the success and failure paths. Local validation shortens the feedback loop but cannot replace the immutable test release and test environment acceptance.
+
+### Attempt artifacts and free space
+
+Each driver run owns `.cc-nexs/runtime/verify/<task>/<attempt>/`. `scratch/` holds rebuildable output and is removed when the attempt ends, on success and failure alike, after evidence is recorded. `artifacts/` holds what the driver wants to keep; `driver.stdout.log`, `driver.stderr.log`, and `receipt.json` (status, source, log hashes, scratch outcome) are the controller's record. Scratch stays when it holds a dirty Git checkout or when the driver's result names `scratch_dir`, so cleanup never deletes dirty source or the only copy of evidence. The directory does not take part in the candidate fingerprint.
+
+`inventoryWorktrees` lists these attempts alongside worktrees. An attempt counts as running while its receipt says so, its pid is alive, and its deadline has not passed. Scratch from any other attempt is reclaimable, except dirty source and the scratch that the latest evidence of an unfinished task names. Logs and receipts become reclaimable only when their task is complete; a task with no state found is kept for inspection. Reclaim uses the existing confirmation token.
+
+Before a driver run, or on `verify-local --preflight` for the direct-evidence path, the controller checks the workspace and each candidate worktree volume against `workflow.local_verify.min_free_gb` (default 10; 0 disables it). Below that threshold it removes inactive scratch once without confirmation, because scratch is rebuildable, and measures again. If a volume is still too low it stops with a blocker: no attempt is recorded, the state does not change, outputs are not moved to another disk, and nothing retries.
 
 ## Browser capability
 

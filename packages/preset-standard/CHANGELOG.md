@@ -6,6 +6,9 @@ All notable changes to cc-nexs will be documented here.
 
 ### Added
 
+- Driver runs get a managed attempt directory, `.cc-nexs/runtime/verify/<task>/<attempt>/`. The payload carries `scratch_dir`, removed when the attempt ends on success and failure alike, and `artifacts_dir`, which is kept with the driver logs and a receipt holding their hashes. Scratch stays when it holds a dirty Git checkout or the driver's result names it.
+- `doctor --worktrees` and `reclaim-worktrees` list `.cc-nexs/runtime/verify/`, keeping running attempts and the logs of active tasks and reclaiming the rest through the existing confirmation token.
+- Local verification checks free space against `workflow.local_verify.min_free_gb` (default 10; 0 disables it) on the workspace and candidate worktree volumes. Below it, inactive scratch is reclaimed once; if a volume is still too low, verify-local stops with a blocker. `verify-local --preflight` runs the same check for the direct-evidence path.
 - Local verification matrices accept `browser: <start command> @ <page path>` rows. The parent Orchestrator runs them and records `method: "browser"`, the exact command, and concrete `proof` instead of an exit code; a passing result still needs one executed command.
 
 ### Changed

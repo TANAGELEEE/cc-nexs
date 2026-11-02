@@ -119,7 +119,8 @@
           "type": "object",
           "properties": {
             "driver": { "$ref": "#/definitions/driver" },
-            "reuse_passed": { "type": "boolean", "default": true }
+            "reuse_passed": { "type": "boolean", "default": true },
+            "min_free_gb": { "type": "number", "minimum": 0, "default": 10 }
           }
         },
         "thresholds": {

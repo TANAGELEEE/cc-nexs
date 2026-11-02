@@ -163,10 +163,11 @@ function parseTestVerificationOptions(args) {
 
 function parseLocalVerificationOptions(args) {
   const positional = [];
-  const options = { featureId: null, progressPath: null, recordStatus: null, evidence: [] };
+  const options = { featureId: null, progressPath: null, recordStatus: null, evidence: [], preflightOnly: false };
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index];
-    if (token === '--passed') options.recordStatus = options.recordStatus ? 'invalid' : 'passed';
+    if (token === '--preflight') options.preflightOnly = true;
+    else if (token === '--passed') options.recordStatus = options.recordStatus ? 'invalid' : 'passed';
     else if (token === '--failed') options.recordStatus = options.recordStatus ? 'invalid' : 'failed';
     else if (token === '--deferred-to-test') options.recordStatus = options.recordStatus ? 'invalid' : 'deferred_to_test';
     else if (token === '--evidence-json') options.evidence.push(parseEvidenceJson(requireValue(args, ++index, token)));
@@ -182,6 +183,9 @@ function parseLocalVerificationOptions(args) {
   }
   if (options.evidence.length > 0 && !options.recordStatus) {
     throw new Error('verify-local --evidence-json requires --passed, --failed, or --deferred-to-test');
+  }
+  if (options.preflightOnly && options.recordStatus) {
+    throw new Error('verify-local --preflight cannot record evidence');
   }
   if (positional.length > 1) throw new Error(`unexpected arguments: ${positional.slice(1).join(' ')}`);
   return options;
@@ -412,7 +416,13 @@ function printResult(result) {
   if (result.kind === 'local-verification') {
     console.log(`cc-nexs local verification ${result.status}${result.reused ? ' (reused)' : ''}`);
     console.log(`Feature: ${result.feature.id} ${result.feature.slug}`);
+    if (result.attemptDir) console.log(`Attempt: ${result.attemptDir}`);
     console.log(`Progress: ${result.progressFile}`);
+    return;
+  }
+  if (result.kind === 'local-verification-preflight') {
+    console.log(`cc-nexs local verification preflight passed (minimum ${result.disk.min_free_gb} GB free)`);
+    for (const path of result.disk.reclaimed) console.log(`  reclaimed ${path}`);
     return;
   }
   if (result.kind === 'hotfix-start') {
@@ -462,7 +472,7 @@ function printResult(result) {
   }
   if (result.kind === 'worktree-reclaim') {
     if (!result.applied) { for (const line of formatInventory(result)) console.log(line); return; }
-    console.log(`cc-nexs reclaimed ${result.removed.length} worktree(s)`);
+    console.log(`cc-nexs reclaimed ${result.removed.length} item(s)`);
     for (const entry of result.removed) console.log(`  removed ${entry.display}`);
     for (const entry of result.failed) console.log(`  failed  ${entry.display}: ${entry.error}`);
     if (result.failed.length) process.exitCode = 1;
@@ -521,7 +531,7 @@ function printUsage() {
   console.error('  cc-nexs approve-release <feature-id> [--approver <name>] [--progress <path>]');
   console.error('    [--test-exception --authorization-evidence <text> --reason <text> --environment-evidence <text> --rollback-evidence <text>]');
   console.error('  cc-nexs release-test <feature-id> [--resume | --retry] [--dry-run] [--hotfix] [--progress <path>]');
-  console.error('  cc-nexs verify-local <feature-id> [--passed|--failed|--deferred-to-test --evidence-json <json>] [--progress <path>]');
+  console.error('  cc-nexs verify-local <feature-id> [--preflight|--passed|--failed|--deferred-to-test --evidence-json <json>] [--progress <path>]');
   console.error('  cc-nexs record-review <feature-id> <--passed|--blocked> [--finding <P0/P1 text>] [--closure|--gateway-b-delta] [--progress <path>]');
   console.error('  cc-nexs record-plan-review <feature-id> <--passed|--blocked> [--finding <P0/P1 text>] [--progress <path>]');
   console.error('  cc-nexs start-hotfix <feature-id> [--level <P0|P1|P2|P3>] [--related <feature-id>] [--progress <path>]');

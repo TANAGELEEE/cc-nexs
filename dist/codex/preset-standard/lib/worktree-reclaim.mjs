@@ -6,6 +6,7 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { loadWorkspaceConfig } from './config-loader.mjs';
 import { cleanupMergedWorktree, isWorktreeRegistered, removeIntegrationWorktree } from './git-custodian.mjs';
 import { readProgressV2 } from './progress-v2.mjs';
+import { classifyVerifyArtifacts, verifyArtifactRoot } from './verify-artifacts.mjs';
 
 function git(cwd, args) {
   return execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -157,11 +158,25 @@ export function inventoryWorktrees({ cwd = process.cwd(), sizes = false } = {}) 
       }
     }
   }
+  entries.push(...classifyVerifyArtifacts({ root, tasks }));
   for (const entry of entries) {
     entry.display = relative(root, entry.path) || '.';
     if (sizes) entry.bytes = sizeOf(entry.path);
   }
-  return { kind: 'worktree-inventory', root, workspace, conflictRoot, entries, token: planToken(entries) };
+  return { kind: 'worktree-inventory', root, workspace, conflictRoot, verifyRoot: verifyArtifactRoot(root), entries, token: planToken(entries) };
+}
+
+// Preflight needs no confirmation because it removes only rebuildable scratch, never logs or worktrees.
+export function reclaimInactiveVerifyScratch({ root, workspace }) {
+  const removed = [];
+  for (const entry of classifyVerifyArtifacts({ root, tasks: readTasks(root, workspace) })) {
+    if (entry.kind !== 'verify-scratch' || entry.action !== 'reclaim') continue;
+    try {
+      rmSync(entry.path, { recursive: true, force: true, maxRetries: 3 });
+      removed.push({ ...entry, display: relative(root, entry.path) });
+    } catch { /* The free-space recheck decides whether this was enough. */ }
+  }
+  return removed;
 }
 
 // The token binds confirmation to the exact set and HEADs that were shown.
@@ -187,7 +202,8 @@ export function reclaimWorktrees({ cwd = process.cwd(), confirm = null, sizes = 
       } else if (entry.kind === 'test-conflict' && entry.repo) {
         removeIntegrationWorktree({ repo: entry.repo, worktree: entry.path, root: inventory.conflictRoot });
       } else {
-        const within = entry.kind === 'test-conflict' ? inventory.conflictRoot : inventory.workspace.worktree_root;
+        const within = entry.kind === 'test-conflict' ? inventory.conflictRoot
+          : entry.kind.startsWith('verify-') ? inventory.verifyRoot : inventory.workspace.worktree_root;
         const rel = relative(within, entry.path);
         if (!rel || rel.startsWith('..') || isAbsolute(rel)) throw new Error(`[cc-nexs] unsafe reclaim path: ${entry.path}`);
         rmSync(entry.path, { recursive: true, force: true });
@@ -200,6 +216,7 @@ export function reclaimWorktrees({ cwd = process.cwd(), confirm = null, sizes = 
   }
   pruneEmptyParents(inventory.workspace.worktree_root, 1);
   pruneEmptyParents(inventory.conflictRoot, 2);
+  pruneEmptyParents(inventory.verifyRoot, 1);
   return { ...inventory, kind: 'worktree-reclaim', applied: true, removed, failed };
 }
 

@@ -255,6 +255,7 @@ workflow:
   local_verify:
     driver: null
     reuse_passed: true
+    min_free_gb: 10
   thresholds:
     review_revision: 3
     fix_per_bug: 3

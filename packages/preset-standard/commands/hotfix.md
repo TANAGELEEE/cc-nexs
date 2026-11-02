@@ -48,7 +48,7 @@ The Orchestrator calls `nextStep` with `progress.json.mode=hotfix`. Developer, R
 ```text
 node <plugin-root>/lib/cc-nexs-cli.mjs verify-local <id>
 ```
-If `workflow.local_verify.driver` is present, use the driver; if there is no driver, run the commands in the binding matrix inside the exact candidate worktree, then record the real results with `verify-local <id> --passed|--failed --evidence-json <json>`. Each piece of evidence includes `check`, `command`, an integer `exit_code`, `proof`, and `result` (a browser row uses `method: "browser"` instead of `exit_code`); it must cover the binding matrix and the commands must match. Hotfixes do not allow `deferred_to_test`, and a real failure must not be recorded as a pass. Passed evidence for the same candidate and a valid scope may be reused.
+If `workflow.local_verify.driver` is present, use the driver; if there is no driver, run `verify-local <id> --preflight`, then run the commands in the binding matrix inside the exact candidate worktree, and record the real results with `verify-local <id> --passed|--failed --evidence-json <json>`. Each piece of evidence includes `check`, `command`, an integer `exit_code`, `proof`, and `result` (a browser row uses `method: "browser"` instead of `exit_code`); it must cover the binding matrix and the commands must match. Hotfixes do not allow `deferred_to_test`, and a real failure must not be recorded as a pass. Passed evidence for the same candidate and a valid scope may be reused.
 
 Once all levels pass locally, the work enters an independent centralized Review:
 ```text
