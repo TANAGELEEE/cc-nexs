@@ -102,6 +102,9 @@ test('a current-mode task merged outside the controller is completed through the
   git(ws.code, ['update-ref', 'refs/cc-nexs/candidates/BUG-1/code', work.commits[0]]);
   git(ws.code, ['push', '-q', 'origin', `${work.commits[0]}:master`]);
   const file = ws.task('BUG-1', { branch: 'hotfix/BUG-1', base_branch: 'master', worktree: null, candidate: { commit: null, ref: 'refs/cc-nexs/candidates/BUG-1/code', paths: [] } }, { mode: 'hotfix', state: 'HOTFIX_BASE_MERGE_BLOCKED' });
+  const blocked = JSON.parse(readFileSync(file, 'utf8'));
+  blocked.delivery.base = { status: 'failed', attempts: [{ id: 'base-release-1', status: 'failed', integrations: {}, reason: 'PUSH_REJECTED' }] };
+  writeFileSync(file, `${JSON.stringify(blocked, null, 2)}\n`);
   const plan = reconcileTask({ cwd: ws.root, featureId: 'BUG-1', progressPath: file });
   assert.equal(plan.legacy, false);
   assert.equal(plan.repositories[0].relation, 'ancestor');
@@ -109,4 +112,7 @@ test('a current-mode task merged outside the controller is completed through the
   const progress = readProgressV2(file);
   assert.equal(progress.state, 'COMPLETE');
   assert.equal(progress.events.at(-1).type, 'state.transition');
+  assert.equal(progress.delivery.base.status, 'succeeded');
+  assert.deepEqual(progress.delivery.base.attempts.at(-1).integrations.code, { source_commit: work.commits[0], target_branch: 'master', merge_relation: 'ancestor' });
+  assert.equal(progress.delivery.base.attempts.at(-1).reconciled, true);
 });

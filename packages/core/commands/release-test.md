@@ -39,7 +39,7 @@ For CI/CD systems triggered by the test push, the driver should return promptly:
 {"status":"pending","pipeline":{"id":"123","url":"https://ci.example/123"}}
 ```
 
-This persists `delivery.test.status=deploying` and returns control immediately. Resume without another merge or trigger:
+This persists `delivery.test.status=deploying` and returns control immediately. `examples/drivers/gitlab-test-release-driver.mjs` is a reference GitLab driver that reads pipelines through the API, so no browser is needed to observe CI. Resume without another merge or trigger:
 
 ```text
 node <plugin-root>/lib/cc-nexs-cli.mjs release-test <feature-id> --resume

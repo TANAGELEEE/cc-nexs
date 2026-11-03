@@ -546,6 +546,22 @@ export function checkBaseReadiness({ repo, repositoryId, sourceCommit, targetBra
   return { ...result, status: 'ready', sensitive: changes.sensitive };
 }
 
+// A dedicated Test target (one task switched off the shared test branch) is a
+// slot for this task alone. Work on it that is neither in the base, in this
+// candidate, nor one of this task's own integrations belongs to someone else;
+// integrating would test a tree that is not this candidate.
+export function assertDedicatedTargetFree({ repo, targetBranch, baseBranch, sourceCommit, ownCommits = [] }) {
+  const target = fetchBase(repo, targetBranch);
+  const base = fetchBase(repo, baseBranch);
+  const known = ownCommits.filter((commit) => typeof commit === 'string' && /^[0-9a-f]{40}$/.test(commit)
+    && (() => { try { git(repo, ['cat-file', '-e', `${commit}^{commit}`]); return true; } catch { return false; } })());
+  const foreign = git(repo, ['rev-list', target, `^${base}`, `^${sourceCommit}`, ...known.map((commit) => `^${commit}`)]).split('\n').filter(Boolean);
+  if (foreign.length) {
+    throw new Error(`[cc-nexs] TARGET_OCCUPIED: origin/${targetBranch} carries ${foreign.length} commit(s) that are not in origin/${baseBranch}, this candidate, or this task's earlier integrations (${foreign.slice(0, 3).join(', ')}${foreign.length > 3 ? ', ...' : ''}); free the target with its owners or switch back to the shared test branch`);
+  }
+  return { targetBranch, free: true };
+}
+
 // How a head relates to a base: contained by ancestry, every commit present as
 // an equivalent patch (cherry-picked or ported), or still carrying work. Squash
 // merges and partial ports land in the last two; only a person can tell which

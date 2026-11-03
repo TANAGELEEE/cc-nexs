@@ -24,6 +24,7 @@ High/critical plans may not use fast-track. In either lane `/cc-nexs:approve-rel
 | `lean-developer / fix_test` | `/cc-nexs:execute <id> --phase=test-fix` |
 | `lean-developer / fix_gateway_b_feedback` | `/cc-nexs:execute <id> --phase=gateway-b-fix` |
 | `lean-developer / sync_base` | `/cc-nexs:execute <id> --phase=base-sync` |
+| `lean-developer / bind_derived` | `/cc-nexs:execute <id> --phase=bind-derived` |
 | `lean-reviewer / review_candidate` | `/cc-nexs:lean-review <id>` |
 | `lean-reviewer / review_tested_candidate` | `/cc-nexs:lean-review <id>` with current attempt/environment evidence |
 | `lean-reviewer / review_delta` | `/cc-nexs:lean-review <id> --closure` |
@@ -83,6 +84,8 @@ Only after the release driver records success with pipeline, deployment, and exa
 - Resolve deployed endpoints, restrict navigation to `release.test.allowed_hosts`, prove test—not production—and reuse existing login.
 - If Web is approved as `local`, start only its recorded exact candidate worktree with the approved command, inject the deployed backend-java test endpoint/environment revision as API base, verify the combined flow, and always clean up the local process.
 - Execute and structurally close every deferred check id.
+
+With `derived_binding: before-final-test` in the approved plan, implementation and test-fix rounds leave the declared derived paths at their base values. Once a candidate passes Test, `nextStep()` returns `bind_derived`: the Developer runs only the declared generator, Custodian forms the candidate, run `node <plugin-root>/lib/cc-nexs-cli.mjs record-derived-binding <id>`, and local verification, Review and one final Test attempt follow the normal path. Later rounds regenerate those paths like source. A Test conflict on a path the policy marks "keep the Test side" is resolved with the Test branch version (`git checkout --ours -- <path>` in the conflict worktree) unless the candidate changes content Test must show; then regenerate it instead.
 
 A test failure starts one repair round for all reported failures. Before a new test attempt, the repair must pass locally: a frontend-only fix is reproduced and confirmed with a `browser:` row or targeted test against the deployed test backend, and a backend fix with its targeted tests. Redeploy only once the round's fixes pass locally; a deployment is not the check for a fix that can run locally.
 

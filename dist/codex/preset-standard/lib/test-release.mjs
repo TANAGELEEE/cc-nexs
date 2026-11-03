@@ -9,7 +9,7 @@ import { loadConfig, loadWorkspaceConfig } from './config-loader.mjs';
 import { jsonValuesEqual } from './canonical-json.mjs';
 import { assertLocalCandidateWorktree } from './candidate-context.mjs';
 import { assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
-import { assertCandidateExcludesTestHistory, integrateCandidateToTest, removeIntegrationWorktree, resolveCandidateCommit, resolveDeployedRevision } from './git-custodian.mjs';
+import { assertCandidateExcludesTestHistory, assertDedicatedTargetFree, integrateCandidateToTest, removeIntegrationWorktree, resolveCandidateCommit, resolveDeployedRevision } from './git-custodian.mjs';
 import { approvedPlanDeliveryContract, extractApprovalScope } from './plan-contract.mjs';
 import { assertRecordedLocalVerification, extractLocalVerificationChecks } from './local-evidence.mjs';
 import {
@@ -143,6 +143,8 @@ export function preflightTestRelease({
         releaseOrder: repo.release_order,
         baseBranch: configuredRepo.base_branch,
         testBranches: [configuredRepo.test_branch, repo.test_branch],
+        dedicatedTarget: requestedDelivery !== 'local' && Boolean(progress.delivery.test.target?.branches?.[repo.id])
+          && approvedTestTarget !== configuredRepo.test_branch,
       };
     })
     .sort((left, right) => left.releaseOrder - right.releaseOrder || left.id.localeCompare(right.id));
@@ -355,6 +357,15 @@ function integratePendingRepositories(context, attemptId) {
         throw new Error(`[cc-nexs] recorded test integration does not match the bound candidate for ${repository.id}`);
       }
       continue;
+    }
+    if (repository.dedicatedTarget) {
+      assertDedicatedTargetFree({
+        repo: repository.repo,
+        targetBranch: repository.targetBranch,
+        baseBranch: repository.baseBranch,
+        sourceCommit: repository.sourceCommit,
+        ownCommits: progress.delivery.test.attempts.map((attempt) => attempt.integrations?.[repository.id]?.integrationCommit),
+      });
     }
     const result = integrateCandidateToTest({
       repo: repository.repo,

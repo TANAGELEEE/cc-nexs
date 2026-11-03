@@ -47,6 +47,21 @@ export function extractPlanTestDelivery(planText) {
   return delivery;
 }
 
+// before-final-test: derived paths (generated bindings, manifests) stay at
+// their base values through implementation and Test rounds and are generated
+// once for the final Test attempt. each-candidate (the default) regenerates
+// them with every candidate.
+export function extractPlanDerivedBinding(planText) {
+  const declared = [...String(planText).matchAll(/^\s*-\s*derived_binding:\s*(\S+)\s*$/gmi)];
+  if (declared.length > 1) throw new Error('[cc-nexs] plan.md approval scope must contain at most one derived_binding');
+  if (!declared.length) return null;
+  const value = declared[0][1].toLowerCase();
+  if (!['before-final-test', 'each-candidate'].includes(value)) {
+    throw new Error('[cc-nexs] plan.md derived_binding must be before-final-test or each-candidate');
+  }
+  return value === 'before-final-test' ? value : null;
+}
+
 function tableRows(text, prefix) {
   return text.split('\n').filter((line) => new RegExp(`^\\|\\s*${prefix}-\\d+\\s*\\|`).test(line));
 }
@@ -85,6 +100,7 @@ export function planApprovalBinding(reqDir, { requireRiskTier = false, requireDe
   const riskTier = extractPlanRiskTier(approvalScope);
   const deliveryLane = extractPlanDeliveryLane(approvalScope);
   const testDelivery = extractPlanTestDelivery(approvalScope);
+  const derivedBinding = extractPlanDerivedBinding(approvalScope);
   if (requireRiskTier && (!riskTier || riskTier === 'auto')) {
     throw new Error('[cc-nexs] Gateway A requires plan.md risk_tier to be low, medium, high, or critical');
   }
@@ -102,6 +118,7 @@ export function planApprovalBinding(reqDir, { requireRiskTier = false, requireDe
     delivery_lane: deliveryLane || (requireRiskTier ? 'standard' : null),
     delivery_contract_version: deliveryLane ? 1 : 0,
     test_delivery: testDelivery,
+    ...(derivedBinding && { derived_binding: derivedBinding }),
   };
 }
 

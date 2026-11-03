@@ -14,7 +14,8 @@ Read `requirements.md`, the `APPROVAL-SCOPE` of `plan.md`, the workspace configu
 - `risk_tier`, `delivery_lane`, and `test_delivery.<repo>` follow the plan rules and the real scope; task paths do not overlap.
 - A requirement too large to review and verify as one plan is flagged with a recommended split into separate Lean requirements.
 - Known baseline failures of the planned fast checks are stated with a decision for Gateway A, and a terminal consumer that decides acceptance was sampled for real rather than assumed from its inputs. A check that only proves the inputs does not prove the consumer accepts them.
-- Test operations and the Test integration policy are complete enough that delivery does not need to ask again.
+- Test operations and the Test integration policy are complete enough that delivery does not need to ask again; `derived_binding: before-final-test` is used only for derived paths Test does not validate.
+- A production check that the test environment relaxes has a production-strict local check; a plan that relies on Test for it is a P1.
 
 Only P0/P1 issues block: a missed requirement, a false assumption about existing code that would break the design, an unverifiable acceptance check, a misclassified risk or lane, or a missing contract/data/rollback decision. Record optional hardening and style as non-blocking notes. Do not redesign the solution or add scope.
 

@@ -1003,6 +1003,32 @@ export function recordBaseIntegration(file, { attemptId, repository, integration
   return progress;
 }
 
+// Work that reached its bases outside the controller, proven by reconcile, is
+// recorded as its own succeeded base attempt so the ledger says how it landed.
+export function recordReconciledBase(file, { repositories, actor = 'orchestrator' } = {}) {
+  if (!Array.isArray(repositories) || repositories.length === 0) throw new Error('[cc-nexs] reconciled base release requires proven repositories');
+  const progress = readProgressV2(file);
+  const delivery = requireDelivery(progress);
+  const timestamp = new Date().toISOString();
+  const attempt = {
+    id: `base-release-${delivery.base.attempts.length + 1}`,
+    status: 'succeeded',
+    reconciled: true,
+    fingerprint: null,
+    source: Object.fromEntries(repositories.map((item) => [item.repository, item.head])),
+    integrations: Object.fromEntries(repositories.map((item) => [item.repository, {
+      source_commit: item.head, target_branch: item.baseBranch, merge_relation: item.relation,
+    }])),
+    started_at: timestamp,
+    completed_at: timestamp,
+  };
+  delivery.base.attempts.push(attempt);
+  delivery.base.status = 'succeeded';
+  appendMutationEvent(progress, { type: 'delivery.base.reconciled', actor, data: attempt });
+  writeProgressV2(file, progress);
+  return progress;
+}
+
 export function completeBaseRelease(file, { attemptId, status, reason = '', actor = 'base-release-controller' } = {}) {
   if (!['succeeded', 'failed'].includes(status)) throw new Error(`[cc-nexs] invalid base release status: ${status}`);
   const progress = readProgressV2(file);

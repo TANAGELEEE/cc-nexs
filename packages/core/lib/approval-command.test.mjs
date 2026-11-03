@@ -783,6 +783,63 @@ test('BASE_CHANGED clean sync resumes verification; real conflict remains develo
   }
 });
 
+test('deferred derived bindings route a Test-verified candidate through one bind round', () => {
+  const fixture = createFeature({ id: 'derived', state: 'PLAN_PENDING_HUMAN' });
+  withPresetEnv(fixture, () => {
+    const plan = readFileSync(join(fixture.docs, 'plan.md'), 'utf8').replace('- test_delivery.api: deploy', '- test_delivery.api: deploy\n- derived_binding: before-final-test');
+    writeFileSync(join(fixture.docs, 'plan.md'), plan);
+    markPlanReviewed(fixture);
+    approveFeatureGate({ cwd: fixture.root, featureId: 'derived', gate: 'plan', approver: 'Owner' });
+    assert.equal(readProgressV2(fixture.progressFile).gates.plan.binding.derived_binding, 'before-final-test');
+    const progress = readProgressV2(fixture.progressFile);
+    progress.state = 'TEST_VERIFIED';
+    writeProgressV2(fixture.progressFile, progress);
+    const pending = runCcNexsCommand(['status', 'derived'], { cwd: fixture.root });
+    assert.deepEqual(pending.next, { next: 'TEST_FIXING', role: 'lean-developer', action: 'bind_derived' });
+    assert.throws(() => runCcNexsCommand(['record-derived-binding', 'derived'], { cwd: fixture.root }), /requires the TEST_FIXING bind_derived round/);
+    assert.throws(() => runCcNexsCommand(['advance', 'derived', '--from', 'TEST_VERIFIED', '--to', 'TEST_FIXING', '--reason', 'x'.repeat(301)], { cwd: fixture.root }), /at most 300 characters/);
+    runCcNexsCommand(['advance', 'derived', '--from', 'TEST_VERIFIED', '--to', 'TEST_FIXING', '--reason', 'bind deferred derived data'], { cwd: fixture.root });
+    assert.ok(runCcNexsCommand(['status', 'derived'], { cwd: fixture.root }).taskFiles.endsWith(join('.cc-nexs', 'runtime', 'tasks', 'derived')));
+    assert.equal(runCcNexsCommand(['record-derived-binding', 'derived'], { cwd: fixture.root }).status, 'bound');
+    assert.equal(runCcNexsCommand(['record-derived-binding', 'derived'], { cwd: fixture.root }).alreadyRecorded, true);
+    const bound = readProgressV2(fixture.progressFile);
+    bound.state = 'TEST_VERIFIED';
+    writeProgressV2(fixture.progressFile, bound);
+    assert.notEqual(runCcNexsCommand(['status', 'derived'], { cwd: fixture.root }).next.action, 'bind_derived');
+  });
+});
+
+test('finish-base-sync completes a resolved sync merge on the development branch and moves the candidate', () => {
+  const fixture = createEnvironmentBlockedCandidate('lean', 'finish-sync');
+  withPresetEnv(fixture, () => {
+    const state = readProgressV2(fixture.progressFile);
+    state.state = 'BASE_CHANGED';
+    writeProgressV2(fixture.progressFile, state);
+    writeFileSync(join(fixture.repo, 'candidate.txt'), 'upstream\n');
+    writeFileSync(join(fixture.repo, 'upstream-only.txt'), 'upstream\n');
+    fixture.git(fixture.repo, ['add', '.']);
+    fixture.git(fixture.repo, ['commit', '-m', 'upstream']);
+    fixture.git(fixture.repo, ['push', 'origin', 'main']);
+    const base = fixture.git(fixture.repo, ['rev-parse', 'HEAD']);
+    const synced = runCcNexsCommand(['sync-base', 'finish-sync'], { cwd: fixture.root });
+    assert.equal(synced.conflicts, true);
+    const worktree = join(fixture.root, 'api-feature');
+    assert.throws(() => runCcNexsCommand(['finish-base-sync', 'finish-sync'], { cwd: fixture.root }), /unresolved conflicts remain in api: candidate\.txt/);
+    writeFileSync(join(worktree, 'candidate.txt'), 'fixed and upstream\n');
+    writeFileSync(join(worktree, 'notes.txt'), 'stray\n');
+    assert.throws(() => runCcNexsCommand(['finish-base-sync', 'finish-sync'], { cwd: fixture.root }), /changes outside the resolution \(notes\.txt\)/);
+    rmSync(join(worktree, 'notes.txt'));
+    const finished = runCcNexsCommand(['finish-base-sync', 'finish-sync'], { cwd: fixture.root });
+    assert.equal(finished.state, 'IMPLEMENTING');
+    const head = fixture.git(worktree, ['rev-parse', 'HEAD']);
+    assert.deepEqual(fixture.git(worktree, ['show', '-s', '--format=%P', 'HEAD']).split(' '), [fixture.source.api, base]);
+    assert.equal(fixture.git(fixture.repo, ['rev-parse', 'refs/cc-nexs/candidates/api']), head);
+    assert.equal(fixture.git(worktree, ['show', 'HEAD:upstream-only.txt']), 'upstream');
+    assert.equal(readProgressV2(fixture.progressFile).local_verification.status, 'idle');
+    assert.equal(runCcNexsCommand(['finish-base-sync', 'finish-sync'], { cwd: fixture.root }).results[0].alreadyFinished, true);
+  });
+});
+
 test('base preflight moves a drifted candidate to BASE_CHANGED before Gateway B is requested', () => {
   const fixture = createEnvironmentBlockedCandidate('lean', 'preflight');
   withPresetEnv(fixture, () => {
