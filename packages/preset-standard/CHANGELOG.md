@@ -4,6 +4,28 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-03
+
+### Added
+
+- `finish-base-sync <id> [--path <repo>:<path>]` completes a `sync-base` merge that stopped on conflicts. It stages the reported conflicts and named paths, refuses leftover conflict markers or unnamed changes, commits with the candidate and base as parents, and moves the candidate ref.
+- `derived_binding: before-final-test` in the approved plan leaves declared derived paths at their base values through implementation and Test rounds. Once a candidate passes Test, `nextStep()` returns `bind_derived`; after the Developer runs the declared generator and Custodian forms the candidate, `record-derived-binding <id>` records it, and local verification, Review and one final Test attempt follow. The default `each-candidate` keeps the existing behavior.
+- Reference GitLab drivers in `examples/drivers/`: `gitlab-mr-driver.mjs` creates or finds the MR from the feature branch at the exact candidate, and `gitlab-test-release-driver.mjs` reads pipelines through the API, accepts a later pipeline that contains a superseded integration, and can play named manual jobs.
+- `stats <id>` reports active and elapsed time, Test attempts and deployments, conflict time, deploy wait, and human approvals from the event ledger.
+- Plans list post-release steps as `- [ ]` lines in a post-release section. `status` and `finalize-docs` print the open ones, and a `COMPLETE` summary reports the task as merged, not live, while any remain.
+
+### Changed
+
+- A dedicated Test target (a branch other than the workspace `test_branch`) refuses integration with `TARGET_OCCUPIED` when it carries commits that are not in the base, the candidate, or the task's earlier integrations.
+- The Test integration policy can mark a derived path "keep the Test side"; Test conflicts on it take the Test branch version unless the candidate changes content Test must show.
+- When the test environment relaxes a production check, the plan puts the production-strict command for the affected area in the local verification matrix, and plan review treats relying on Test for it as P1.
+- `advance --reason` is limited to 300 characters of plain sentences.
+- Resume reads `cc-nexs status` and progress; an Orchestrator checkpoint whose revision differs from progress is only a hint and is rewritten.
+
+### Fixed
+
+- `reconcile` could not record `COMPLETE` for a task with a failed base release attempt. It now records the proven integration as a reconciled base attempt first.
+
 ## [0.12.0] - 2026-11-03
 
 ### Added
