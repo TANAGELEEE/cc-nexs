@@ -46,7 +46,8 @@ export { acquireTestReleaseLock, preflightTestRelease, runTestRelease } from './
 export { runLocalVerification } from './local-verify.mjs';
 export { recordLeanReview } from './review-control.mjs';
 export { requestReleaseChanges } from './release-change-command.mjs';
-export { runBaseRelease } from './base-release.mjs';
+export { preflightBaseRelease, runBaseRelease } from './base-release.mjs';
+export { finalizeDocs } from './docs-finalize.mjs';
 export { assertHotfixCandidate, startHotfix } from './hotfix-control.mjs';
 export { initializeHotfix } from './hotfix-init.mjs';
 export { reviseHotfix } from './hotfix-revision.mjs';

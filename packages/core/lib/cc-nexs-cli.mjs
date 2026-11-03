@@ -8,7 +8,8 @@ import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 import { approveFeatureGate } from './approval-command.mjs';
-import { runBaseRelease } from './base-release.mjs';
+import { preflightBaseRelease, runBaseRelease } from './base-release.mjs';
+import { finalizeDocs } from './docs-finalize.mjs';
 import { assertHotfixCandidate, startHotfix } from './hotfix-control.mjs';
 import { initializeHotfix } from './hotfix-init.mjs';
 import { reviseHotfix } from './hotfix-revision.mjs';
@@ -56,6 +57,8 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   if (command === 'release-base') {
     return runBaseRelease({ cwd, ...parseFeatureOptions(args) });
   }
+  if (command === 'base-preflight') return preflightBaseRelease({ cwd, ...parseFeatureOptions(args) });
+  if (command === 'finalize-docs') return finalizeDocs({ cwd, ...parseFeatureOptions(args) });
   if (command === 'verify-local') {
     return runLocalVerification({ cwd, ...parseLocalVerificationOptions(args) });
   }
@@ -491,6 +494,22 @@ function printResult(result) {
     console.log(`Progress: ${result.progressFile}`);
     return;
   }
+  if (result.kind === 'base-preflight') {
+    console.log(`cc-nexs base preflight ${result.status}`);
+    console.log(`Feature: ${result.feature.id} ${result.feature.slug}`);
+    for (const item of result.results) console.log(`Repository: ${item.repository} ${item.status}${item.reason ? ` (${item.reason})` : ''}`);
+    console.log(`State: ${result.state}`);
+    console.log(`Progress: ${result.progressFile}`);
+    return;
+  }
+  if (result.kind === 'docs-finalize') {
+    console.log(`cc-nexs docs finalize ${result.status}${result.alreadyFinalized ? ' (already finalized)' : ''}`);
+    console.log(`Feature: ${result.feature.id} ${result.feature.slug}`);
+    if (result.sourceCommit) console.log(`Docs candidate: ${result.sourceCommit}`);
+    if (result.mergeRequest?.url) console.log(`Merge request: ${result.mergeRequest.url}`);
+    if (result.status === 'pending') console.log('Next: rerun finalize-docs after the merge request is merged');
+    return;
+  }
   if (result.kind === 'base-release') {
     console.log(`cc-nexs base release ${result.status}`);
     console.log(`Feature: ${result.feature.id} ${result.feature.slug}`);
@@ -581,6 +600,8 @@ function printUsage() {
   console.error('  cc-nexs record-test-verification <feature-id> <--passed|--blocked|--manual-required> --evidence <text> [--attempt <id>] [--progress <path>]');
   console.error('  cc-nexs request-release-changes <feature-id> --type <evidence|implementation|scope> --feedback <text> [--ac <id>] [--path <path>] [--progress <path>]');
   console.error('  cc-nexs release-base <feature-id> [--progress <path>]');
+  console.error('  cc-nexs base-preflight <feature-id> [--progress <path>]');
+  console.error('  cc-nexs finalize-docs <feature-id> [--progress <path>]');
   console.error('  cc-nexs render-plan <feature-id> [--progress <path>]');
   console.error('  cc-nexs migrate-feature-config <feature-id> [--dry-run] [--bind-plan-risk] [--progress <path>]');
   console.error('  cc-nexs model-gateway <inspect|prepare|view|start|feedback|result> --request <json-file>');

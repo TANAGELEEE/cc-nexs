@@ -783,20 +783,78 @@ test('BASE_CHANGED clean sync resumes verification; real conflict remains develo
   }
 });
 
+test('base preflight moves a drifted candidate to BASE_CHANGED before Gateway B is requested', () => {
+  const fixture = createEnvironmentBlockedCandidate('lean', 'preflight');
+  withPresetEnv(fixture, () => {
+    const ready = runCcNexsCommand(['base-preflight', 'preflight'], { cwd: fixture.root });
+    assert.equal(ready.status, 'ready');
+    assert.equal(ready.state, 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY');
+    writeFileSync(join(fixture.repo, 'unrelated.txt'), 'another team\n');
+    fixture.git(fixture.repo, ['add', 'unrelated.txt']);
+    fixture.git(fixture.repo, ['commit', '-m', 'unrelated']);
+    fixture.git(fixture.repo, ['push', 'origin', 'main']);
+    assert.equal(runCcNexsCommand(['base-preflight', 'preflight'], { cwd: fixture.root }).status, 'ready');
+    writeFileSync(join(fixture.repo, 'candidate.txt'), 'other implementation\n');
+    fixture.git(fixture.repo, ['add', 'candidate.txt']);
+    fixture.git(fixture.repo, ['commit', '-m', 'overlap']);
+    fixture.git(fixture.repo, ['push', 'origin', 'main']);
+    const before = readProgressV2(fixture.progressFile);
+    const drift = runCcNexsCommand(['base-preflight', 'preflight'], { cwd: fixture.root });
+    assert.equal(drift.status, 'base_changed');
+    assert.equal(drift.state, 'BASE_CHANGED');
+    const after = readProgressV2(fixture.progressFile);
+    assert.equal(after.state, 'BASE_CHANGED');
+    assert.deepEqual(after.delivery.test, before.delivery.test);
+    assert.equal(fixture.git(fixture.repo, ['rev-parse', 'refs/cc-nexs/candidates/api']), fixture.source.api);
+  });
+});
+
 test('protected MR pending is resumed and remote merge reconciles ledger and cleanup', () => {
   const fixture = createEnvironmentBlockedCandidate('hotfix', 'mr-resume');
   withPresetEnv(fixture, () => {
+    const remote = join(fixture.root, 'remote.git');
     writeFileSync(join(fixture.root, 'cc-nexs.config.yml'), `preset_path: .cc-nexs\nrelease:\n  base:\n    driver:\n      command: ${process.execPath}\n      args: [mr.mjs]\n`);
-    writeFileSync(join(fixture.root, 'mr.mjs'), `import {appendFileSync} from 'node:fs'; import {execFileSync} from 'node:child_process'; let s=''; for await(const c of process.stdin)s+=c; const p=JSON.parse(s); appendFileSync('mr.log',JSON.stringify(p)+'\\n'); execFileSync('git',['-C',${JSON.stringify(fixture.repo)},'push','-q','origin',p.integrationCommit+':refs/heads/'+p.sourceBranch]); console.log(JSON.stringify({status:'pending',url:'https://git.example/mr/1'}));`);
+    writeFileSync(join(fixture.root, 'mr.mjs'), `import {appendFileSync} from 'node:fs'; import {execFileSync} from 'node:child_process'; let s=''; for await(const c of process.stdin)s+=c; const p=JSON.parse(s); appendFileSync('mr.log',JSON.stringify(p)+'\\n'); execFileSync('git',['-C',${JSON.stringify(fixture.repo)},'push','-q','origin',p.sourceCommit+':refs/heads/'+p.sourceBranch]); console.log(JSON.stringify({status:'pending',url:'https://git.example/mr/1'}));`);
     approveFeatureGate({ cwd: fixture.root, featureId: 'mr-resume', gate: 'release', approver: 'Owner', testException });
     const p = readProgressV2(fixture.progressFile); p.state = 'HOTFIX_BASE_MERGING'; writeProgressV2(fixture.progressFile, p);
+    const firstTarget = fixture.git(fixture.repo, ['rev-parse', 'origin/main']);
     assert.equal(runBaseRelease({ cwd: fixture.root, featureId: 'mr-resume' }).status, 'running');
+    const server = join(fixture.root, 'server');
+    fixture.git(fixture.root, ['clone', '-q', remote, server]);
+    fixture.git(server, ['config', 'user.name', 'Server']);
+    fixture.git(server, ['config', 'user.email', 'server@example.com']);
+    fixture.git(server, ['checkout', '-q', 'main']);
+    writeFileSync(join(server, 'unrelated.txt'), 'another team\n');
+    fixture.git(server, ['add', 'unrelated.txt']);
+    fixture.git(server, ['commit', '-q', '-m', 'unrelated']);
+    fixture.git(server, ['push', '-q', 'origin', 'main']);
     assert.equal(runBaseRelease({ cwd: fixture.root, featureId: 'mr-resume' }).status, 'running');
     const calls = readFileSync(join(fixture.root, 'mr.log'), 'utf8').trim().split('\n').map(JSON.parse);
-    assert.equal(calls[0].sourceBranch, calls[1].sourceBranch);
-    fixture.git(fixture.repo, ['push', 'origin', `${calls[0].integrationCommit}:refs/heads/main`]);
+    assert.equal(calls.length, 2);
+    for (const call of calls) {
+      assert.equal(call.sourceBranch, 'feature/test');
+      assert.equal(call.sourceCommit, fixture.source.api);
+      assert.equal('integrationCommit' in call, false);
+    }
+    const pending = readProgressV2(fixture.progressFile).delivery.base.attempts.at(-1).integrations.api;
+    assert.equal(pending.merge_request.status, 'pending');
+    assert.equal(pending.integration_commit, null);
+    assert.equal(pending.target_before, firstTarget);
+    fixture.git(server, ['fetch', '-q', 'origin']);
+    fixture.git(server, ['merge', '--no-ff', '--no-edit', 'origin/feature/test']);
+    fixture.git(server, ['push', '-q', 'origin', 'main']);
+    const mergeCommit = fixture.git(server, ['rev-parse', 'HEAD']);
     assert.equal(runBaseRelease({ cwd: fixture.root, featureId: 'mr-resume' }).status, 'succeeded');
-    assert.equal(readProgressV2(fixture.progressFile).delivery.base.attempts.length, 1);
+    const released = readProgressV2(fixture.progressFile).delivery.base;
+    assert.equal(released.attempts.length, 1);
+    const merged = released.attempts[0].integrations.api;
+    assert.deepEqual(merged.merge_request, { status: 'merged', url: 'https://git.example/mr/1' });
+    assert.equal(merged.target_before, firstTarget);
+    assert.equal(merged.integration_commit, mergeCommit);
+    assert.equal(merged.merge_relation, 'merge');
+    assert.equal(merged.source_branch, 'feature/test');
+    assert.equal(fixture.git(fixture.repo, ['ls-remote', '--heads', 'origin', 'refs/heads/feature/test']), '');
+    assert.equal(fixture.git(fixture.repo, ['ls-remote', '--heads', 'origin', 'cc-nexs-mr-*']), '');
     assert.equal(runBaseRelease({ cwd: fixture.root, featureId: 'mr-resume' }).status, 'succeeded');
   });
 });
