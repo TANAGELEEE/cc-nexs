@@ -200,3 +200,64 @@ test('reference Test release driver waits for every deploy job in child pipeline
   assert.deepEqual(done.json.deployment.jobs.api.map((job) => [job.id, job.pipeline]), [['401', '22'], ['402', '22']]);
   assert.deepEqual(done.json.environment_revision, { api: integration });
 });
+
+test('without a token the Test driver turns browser-observed receipts into release evidence', async () => {
+  const { root, repo, commit } = repository();
+  const integration = commit('integration.txt');
+  const options = { cwd: root, env: { GITLAB_TOKEN: '' } };
+  const payload = (previous = {}) => ({ schema_version: 1, operation: 'release_test_status', feature: { id: '367', slug: 'demo' }, environment: 'test', attempt: 'test-release-1', integrations: { api: { sourceCommit: integration, targetBranch: 'test', integrationCommit: integration } }, previous });
+  const args = ['--receipts', '.cc-nexs/runtime/tasks'];
+  const record = (extra) => run('gitlab-test-release-driver.mjs', ['record-receipt', '--receipts', '.cc-nexs/runtime/tasks', '--feature', '367', '--attempt', 'test-release-1', '--repo', 'api', ...extra], {}, options);
+
+  assert.equal((await record(['--status', 'pending', '--pipeline-id', '11', '--pipeline-url', 'https://gitlab.example.com/p/11', '--observed-via', 'pipeline page'])).code, 1);
+  const awaiting = await run('gitlab-test-release-driver.mjs', args, payload(), options);
+  assert.equal(awaiting.json.status, 'awaiting_receipt');
+  assert.match(awaiting.json.reason, /signed-in browser .* record-receipt --receipts \.cc-nexs\/runtime\/tasks --feature 367 --attempt test-release-1 --repo api/);
+
+  const pendingRecord = await record(['--status', 'pending', '--pipeline-id', '11', '--pipeline-url', 'https://gitlab.example.com/p/11', '--observed-via', 'signed-in GitLab pipeline page', '--note', 'QA gate waiting']);
+  assert.equal(pendingRecord.code, 0, pendingRecord.stderr);
+  const pending = await run('gitlab-test-release-driver.mjs', args, payload(), options);
+  assert.equal(pending.json.status, 'pending');
+  assert.deepEqual(pending.json.pipeline, { api: { id: '11', url: 'https://gitlab.example.com/p/11' } });
+  assert.match(pending.json.reason, /QA gate waiting/);
+
+  assert.match((await record(['--status', 'succeeded', '--pipeline-id', '11', '--pipeline-url', 'https://gitlab.example.com/p/11', '--observed-via', 'ops publication page'])).stderr, /requires --revision/);
+  assert.match((await record(['--status', 'succeeded', '--pipeline-id', '12', '--pipeline-url', 'https://gitlab.example.com/p/12', '--revision', integration, '--deploy-job', 'deploy', '--observed-via', 'ops'])).stderr, /pipeline already recorded as 11/);
+  const done = await record(['--status', 'succeeded', '--pipeline-id', '11', '--pipeline-url', 'https://gitlab.example.com/p/11', '--revision', integration.slice(0, 9), '--deploy-job', '发布-测试环境', '--deploy-pipeline', '12', '--observed-via', 'ops publication page']);
+  assert.equal(done.code, 0, done.stderr);
+  const succeeded = await run('gitlab-test-release-driver.mjs', args, payload({ pipeline: pending.json.pipeline }), options);
+  assert.equal(succeeded.json.status, 'succeeded');
+  assert.deepEqual(succeeded.json.pipeline, pending.json.pipeline);
+  assert.deepEqual(succeeded.json.environment_revision, { api: integration.slice(0, 9) });
+  assert.equal(succeeded.json.deployment.jobs.api[0].name, '发布-测试环境');
+  assert.equal(succeeded.json.deployment.jobs.api[0].pipeline, '12');
+
+  const other = commit('other.txt');
+  const moved = await run('gitlab-test-release-driver.mjs', args, { ...payload(), integrations: { api: { sourceCommit: other, targetBranch: 'test', integrationCommit: other } } }, options);
+  assert.equal(moved.code, 1);
+  assert.match(moved.stderr, /belongs to another integration/);
+  void repo;
+});
+
+test('without a token the MR driver resolves an unprintable MR from a browser-recorded URL', async () => {
+  const { root, repo, commit } = repository();
+  git(repo, ['checkout', '-q', '-b', 'feature/09-demo']);
+  const source = commit('feature.txt');
+  git(repo, ['push', '-q', 'origin', 'HEAD:refs/heads/feature/09-demo']);
+  git(repo, ['checkout', '-q', 'main']);
+  const options = { cwd: root, env: { GITLAB_TOKEN: '', GITLAB_API_URL: 'http://127.0.0.1:9/api/v4', GITLAB_PROJECT: 'group/api' } };
+  const request = { operation: 'ensure_merge_request', repository: 'api', sourceBranch: 'feature/09-demo', sourceCommit: source, targetBranch: 'main', targetBefore: git(repo, ['rev-parse', 'origin/main']) };
+  const args = ['--repo', 'api=api', '--receipts', '.cc-nexs/runtime/merge-requests'];
+  const blocked = await run('gitlab-mr-driver.mjs', args, request, options);
+  assert.equal(blocked.code, 1);
+  assert.match(blocked.stderr, /already holds the candidate.*signed-in GitLab page.*record-mr --receipts \.cc-nexs\/runtime\/merge-requests --repository api --source-branch feature\/09-demo/s);
+  const url = 'https://gitlab.example.com/group/api/-/merge_requests/9';
+  const recordArgs = ['record-mr', '--receipts', '.cc-nexs/runtime/merge-requests', '--repository', 'api', '--source-branch', 'feature/09-demo', '--target-branch', 'main', '--url', url];
+  assert.equal((await run('gitlab-mr-driver.mjs', [...recordArgs, '--source-commit', 'abc'], {}, options)).code, 1);
+  assert.equal((await run('gitlab-mr-driver.mjs', [...recordArgs, '--source-commit', source], {}, options)).code, 0);
+  const pending = await run('gitlab-mr-driver.mjs', args, request, options);
+  assert.equal(pending.code, 0, pending.stderr);
+  assert.deepEqual(pending.json, { status: 'pending', url });
+  const stale = await run('gitlab-mr-driver.mjs', args, { ...request, sourceCommit: commit('newer.txt') }, options);
+  assert.notEqual(stale.json?.url, url);
+});

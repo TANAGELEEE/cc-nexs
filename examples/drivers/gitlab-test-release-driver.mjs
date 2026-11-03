@@ -16,6 +16,9 @@
 //
 //   node gitlab-test-release-driver.mjs --repo web=web [--repo api=services/api]
 //     [--deploy-job "deploy|release"] [--play-manual "^qa-gate$"]
+//   node gitlab-test-release-driver.mjs --receipts .cc-nexs/runtime/tasks
+//     (no API token: read receipts recorded from a signed-in browser with
+//      `record-receipt`; the awaiting_receipt reason prints the exact command)
 //
 // --play-manual plays matching manual jobs of this pipeline once; use it only
 // where your team allows automation to pass that gate in Test.
@@ -24,7 +27,8 @@
 // Environment: GITLAB_TOKEN (read_api; api when --play-manual is used),
 // GITLAB_API_URL (default https://<remote host>/api/v4), GITLAB_PROJECT (override).
 import { execFileSync, spawnSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { gitlabProject } from './gitlab-mr-driver.mjs';
@@ -37,12 +41,13 @@ function fail(message) {
 }
 
 function parseArgs(argv) {
-  const options = { repos: {}, deployJob: /deploy|release/i, playManual: null };
+  const options = { repos: {}, deployJob: /deploy|release/i, playManual: null, receipts: null };
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index + 1];
     if (argv[index] === '--repo' && value?.includes('=')) { const [id, path] = value.split(/=(.*)/s); options.repos[id] = path; }
     else if (argv[index] === '--deploy-job' && value) options.deployJob = new RegExp(value, 'i');
     else if (argv[index] === '--play-manual' && value) options.playManual = new RegExp(value);
+    else if (argv[index] === '--receipts' && value) options.receipts = value;
     else fail(`unknown argument: ${argv[index]}`);
     index += 1;
   }
@@ -134,7 +139,94 @@ async function inspect(context, integration, previousPipeline, options) {
   return { state: 'failed', pipeline: identity, reason: `${context.id}: pipeline ${pipeline.id} ${pipeline.status}` };
 }
 
+// Browser receipts: where API tokens are not allowed, a person or the
+// Orchestrator reads the pipeline in a signed-in browser (the GitLab pipeline
+// page or an operations publication page) and records only what it saw. The
+// driver turns that record into the controller's evidence; the controller still
+// proves the deployed revision contains the integration through Git ancestry.
+const RECEIPT_STATUSES = new Set(['pending', 'succeeded', 'failed']);
+const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+function receiptFile(root, featureId, attempt) {
+  if (!SAFE_SEGMENT.test(String(featureId)) || !SAFE_SEGMENT.test(String(attempt))) fail('unsafe feature or attempt id');
+  return join(resolve(process.cwd(), root), String(featureId), 'release', `${attempt}.json`);
+}
+
+function readJson(file) {
+  return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null;
+}
+
+function writeJson(file, value) {
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(`${file}.tmp`, `${JSON.stringify(value, null, 2)}\n`);
+  renameSync(`${file}.tmp`, file);
+}
+
+function browserInspect({ payload, options }) {
+  const file = receiptFile(options.receipts, payload.feature?.id, payload.attempt);
+  const request = {
+    feature: payload.feature, attempt: payload.attempt, environment: payload.environment || 'test',
+    integrations: Object.fromEntries(Object.entries(payload.integrations).map(([id, item]) => [id, { integrationCommit: item.integrationCommit, targetBranch: item.targetBranch }])),
+  };
+  const record = readJson(file) || { request, repositories: {} };
+  if (JSON.stringify(record.request) !== JSON.stringify(request)) fail(`receipt ${file} belongs to another integration; it is never reused`);
+  writeJson(file, record);
+  const script = relative(process.cwd(), process.argv[1]) || process.argv[1];
+  const results = {};
+  for (const [id, integration] of Object.entries(request.integrations)) {
+    const seen = record.repositories[id];
+    const sha = integration.integrationCommit;
+    if (!seen) {
+      results[id] = { state: 'awaiting', reason: `${id}: open the Test pipeline for ${sha.slice(0, 12)} on ${integration.targetBranch} in the signed-in browser (GitLab pipeline page or the operations publication page), then record what you saw: node ${script} record-receipt --receipts ${options.receipts} --feature ${payload.feature.id} --attempt ${payload.attempt} --repo ${id} --status pending|succeeded|failed --pipeline-id <id> --pipeline-url <url> [--revision <deployed commit> --deploy-job <job>] --observed-via "<page>"` };
+      continue;
+    }
+    const pipeline = { id: seen.pipeline.id, url: seen.pipeline.url };
+    if (seen.status === 'pending') results[id] = { state: 'pending', pipeline, reason: `${id}: ${seen.note || `pipeline ${seen.pipeline.id} still running or waiting for a manual job`} (observed via ${seen.observed_via})` };
+    else if (seen.status === 'failed') results[id] = { state: 'failed', pipeline, reason: `${id}: pipeline ${seen.pipeline.id} observed failed via ${seen.observed_via}${seen.note ? `: ${seen.note}` : ''}` };
+    else results[id] = { state: 'succeeded', pipeline, revision: seen.revision, jobs: [{ name: seen.deploy_job, pipeline: seen.deploy_pipeline || seen.pipeline.id, observed_via: seen.observed_via, observed_at: seen.observed_at }] };
+  }
+  return results;
+}
+
+function recordReceipt(argv) {
+  const values = {};
+  for (let index = 0; index < argv.length; index += 2) {
+    if (!argv[index]?.startsWith('--') || argv[index + 1] === undefined) fail(`invalid record-receipt argument: ${argv[index]}`);
+    values[argv[index].slice(2)] = argv[index + 1];
+  }
+  for (const field of ['receipts', 'feature', 'attempt', 'repo', 'status', 'pipeline-id', 'pipeline-url', 'observed-via']) {
+    if (!values[field]?.trim()) fail(`record-receipt requires --${field}`);
+  }
+  if (!RECEIPT_STATUSES.has(values.status)) fail('--status must be pending, succeeded, or failed');
+  if (!/^https?:\/\//.test(values['pipeline-url'])) fail('--pipeline-url must be the page that was observed');
+  if (values.status === 'succeeded') {
+    if (!/^[0-9a-f]{7,40}$/i.test(values.revision || '')) fail('a succeeded receipt requires --revision with the deployed commit (7-40 hex)');
+    if (!values['deploy-job']?.trim()) fail('a succeeded receipt requires --deploy-job naming the deploy job or publication record');
+  }
+  const file = receiptFile(values.receipts, values.feature, values.attempt);
+  const record = readJson(file);
+  if (!record) fail(`no receipt request for ${values.feature} ${values.attempt}; run release-test first`);
+  if (!record.request.integrations[values.repo]) fail(`${values.repo} is not part of attempt ${values.attempt}`);
+  const previous = record.repositories[values.repo];
+  if (previous && previous.pipeline.id !== values['pipeline-id']) {
+    fail(`pipeline already recorded as ${previous.pipeline.id}; record a later pipeline that deployed this integration with --deploy-pipeline`);
+  }
+  record.repositories[values.repo] = {
+    status: values.status,
+    pipeline: { id: values['pipeline-id'], url: values['pipeline-url'] },
+    ...(values.revision && { revision: values.revision.toLowerCase() }),
+    ...(values['deploy-job'] && { deploy_job: values['deploy-job'] }),
+    ...(values['deploy-pipeline'] && { deploy_pipeline: values['deploy-pipeline'] }),
+    ...(values.note && { note: values.note }),
+    observed_via: values['observed-via'],
+    observed_at: new Date().toISOString(),
+  };
+  writeJson(file, record);
+  print({ recorded: values.repo, status: values.status, file });
+}
+
 async function main() {
+  if (process.argv[2] === 'record-receipt') return recordReceipt(process.argv.slice(3));
   const options = parseArgs(process.argv.slice(2));
   let text = '';
   for await (const chunk of process.stdin) text += chunk;
@@ -142,11 +234,16 @@ async function main() {
   if (!['release_test', 'release_test_status'].includes(payload.operation)) fail(`unsupported operation: ${payload.operation}`);
   const entries = Object.entries(payload.integrations || {});
   if (!entries.length) fail('no Test integrations in the request');
-  const results = {};
   for (const [id, integration] of entries) {
-    if (!options.repos[id]) fail(`no --repo mapping for ${id}`);
     if (!/^[0-9a-f]{40}$/.test(integration?.integrationCommit || '')) fail(`integration commit for ${id} is missing`);
-    results[id] = await inspect(repositoryContext(id, options.repos[id]), integration, payload.previous?.pipeline?.[id], options);
+  }
+  let results = {};
+  if (options.receipts) results = browserInspect({ payload, options });
+  else {
+    for (const [id, integration] of entries) {
+      if (!options.repos[id]) fail(`no --repo mapping for ${id}`);
+      results[id] = await inspect(repositoryContext(id, options.repos[id]), integration, payload.previous?.pipeline?.[id], options);
+    }
   }
   const states = Object.values(results).map((item) => item.state);
   const pipeline = Object.fromEntries(Object.entries(results).filter(([, item]) => item.pipeline).map(([id, item]) => [id, item.pipeline]));
