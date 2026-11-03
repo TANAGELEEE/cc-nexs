@@ -4,6 +4,10 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
+### Fixed
+
+- The reference GitLab Test release driver finds deploy jobs in child pipelines, requires every matching deploy job to succeed, keeps a manual gate or deploy job pending, and returns `awaiting_receipt` instead of an error when the token is missing or the API is unreachable.
+
 ## [0.13.0] - 2026-11-03
 
 ### Added

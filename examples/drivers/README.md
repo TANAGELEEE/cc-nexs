@@ -23,10 +23,14 @@ release:
 ## Test release: `gitlab-test-release-driver.mjs`
 
 Reads pipelines for the Test integration commit through the API, so no browser
-is needed to observe CI. A pipeline canceled by a later push to the shared Test
-branch is resolved from the later successful pipeline whose commit contains the
-integration. `--play-manual <regex>` plays matching manual jobs once; use it only
-where your team allows automation to pass that gate in Test.
+is needed to observe CI. Deploy jobs are found in the pipeline and in child
+pipelines started by trigger jobs; every job matching `--deploy-job` must
+succeed. A manual gate or deploy job keeps the attempt pending until someone runs
+it. A pipeline canceled by a later push to the shared Test branch is resolved from
+the later successful pipeline whose commit contains the integration. A missing
+token or an unreachable API returns `awaiting_receipt`, so the attempt is resumed
+rather than failed. `--play-manual <regex>` plays matching manual jobs once; use it
+only where your team allows automation to pass that gate in Test.
 
 ```yaml
 release:
