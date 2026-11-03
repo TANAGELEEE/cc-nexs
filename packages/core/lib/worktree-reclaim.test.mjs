@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -146,6 +146,87 @@ test('reclaim refuses a plan that changed after it was shown', () => {
     writeFileSync(join(done.worktree, 'late.txt'), 'new work\n');
     assert.throws(() => reclaimWorktrees({ cwd: root, confirm: token }), /plan changed/);
     assert.ok(existsSync(join(done.worktree, 'late.txt')));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('task files and legacy drafts follow task state; only rebuildable draft caches are reclaimed', () => {
+  const { root, task } = fixture();
+  try {
+    task('h-done', { state: 'COMPLETE', merge: true });
+    task('h-active', { state: 'HOTFIX_IMPLEMENTING', commit: false });
+    const files = (id) => join(root, '.cc-nexs', 'runtime', 'tasks', id);
+    for (const id of ['h-done', 'h-active', 'h-orphan']) {
+      mkdirSync(join(files(id), 'scratch', 'export'), { recursive: true });
+      writeFileSync(join(files(id), 'request.json'), '{}\n');
+    }
+    const drafts = join(root, '.cc-nexs', 'drafts');
+    const doneDraft = join(drafts, 'h-done');
+    mkdirSync(join(doneDraft, 'verify-1', 'web', 'node_modules', 'pkg'), { recursive: true });
+    mkdirSync(join(doneDraft, 'verify-1', 'web', '.next', 'cache'), { recursive: true });
+    writeFileSync(join(doneDraft, 'verify-1', 'web', 'page.tsx'), 'export {}\n');
+    writeFileSync(join(doneDraft, 'verify-1', 'result.json'), '{}\n');
+    mkdirSync(join(doneDraft, 'checkout', 'node_modules'), { recursive: true });
+    writeFileSync(join(doneDraft, 'checkout', '.git'), 'gitdir: elsewhere\n');
+    mkdirSync(join(drafts, 'h-active', 'web', 'node_modules'), { recursive: true });
+    mkdirSync(join(drafts, 'unrelated', 'node_modules'), { recursive: true });
+
+    const inventory = inventoryWorktrees({ cwd: root });
+    assert.equal(byPath(inventory, 'runtime/tasks/h-done').action, 'reclaim');
+    assert.match(byPath(inventory, 'runtime/tasks/h-active').reason, /active task h-active/);
+    assert.match(byPath(inventory, 'runtime/tasks/h-orphan').reason, /no task state/);
+    assert.equal(byPath(inventory, 'drafts/h-done/verify-1/web/node_modules').action, 'reclaim');
+    assert.equal(byPath(inventory, 'drafts/h-done/verify-1/web/.next').action, 'reclaim');
+    assert.equal(byPath(inventory, 'drafts/h-done/checkout/node_modules'), undefined);
+    assert.match(byPath(inventory, 'drafts/h-done').reason, /not managed by cc-nexs, inspect manually/);
+    assert.match(byPath(inventory, 'drafts/h-active').reason, /active task h-active/);
+    assert.match(byPath(inventory, 'drafts/unrelated').reason, /no matching task/);
+    assert.equal(byPath(inventory, 'drafts/unrelated/node_modules'), undefined);
+
+    const applied = reclaimWorktrees({ cwd: root, confirm: inventory.token });
+    assert.equal(applied.failed.length, 0, JSON.stringify(applied.failed));
+    assert.equal(existsSync(files('h-done')), false);
+    assert.ok(existsSync(files('h-active')));
+    assert.equal(existsSync(join(doneDraft, 'verify-1', 'web', 'node_modules')), false);
+    assert.equal(existsSync(join(doneDraft, 'verify-1', 'web', '.next')), false);
+    assert.ok(existsSync(join(doneDraft, 'verify-1', 'web', 'page.tsx')));
+    assert.ok(existsSync(join(doneDraft, 'verify-1', 'result.json')));
+    assert.ok(existsSync(join(doneDraft, 'checkout', 'node_modules')));
+    assert.ok(existsSync(join(drafts, 'unrelated', 'node_modules')));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('inventory explains ported work, keeps retired-mode tasks visible, and reports legacy MR branches', () => {
+  const { root, code, task } = fixture();
+  try {
+    const ported = task('h-ported', { state: 'COMPLETE' });
+    git(code, ['checkout', '-q', 'master']);
+    writeFileSync(join(code, 'other.txt'), 'other team\n');
+    git(code, ['add', 'other.txt']);
+    git(code, ['commit', '-q', '-m', 'other team']);
+    git(code, ['cherry-pick', git(ported.worktree, ['rev-parse', 'HEAD'])]);
+    git(code, ['push', '-q', 'origin', 'master']);
+    git(code, ['fetch', '-q', 'origin']);
+    const legacy = task('h-legacy', { state: 'COMPLETE' });
+    const legacyFile = join(root, '.cc-nexs', 'hotfixes', 'h-legacy', 'progress.json');
+    const record = JSON.parse(readFileSync(legacyFile, 'utf8'));
+    Object.assign(record, { mode: 'full', state: 'SPRINT_11_FIX' });
+    writeFileSync(legacyFile, `${JSON.stringify(record, null, 2)}\n`);
+    git(code, ['push', '-q', 'origin', `${git(legacy.worktree, ['rev-parse', 'HEAD'])}:refs/heads/cc-nexs-mr-code-${'a'.repeat(40)}`]);
+
+    const inventory = inventoryWorktrees({ cwd: root });
+    assert.match(byPath(inventory, 'h-ported/code').reason, /all 1 commit\(s\) are patch-equivalent in origin\/master/);
+    assert.match(byPath(inventory, 'h-legacy/code').reason, /active task h-legacy \(SPRINT_11_FIX\); legacy full-mode task, run reconcile h-legacy/);
+    const branch = inventory.entries.find((entry) => entry.kind === 'remote-branch');
+    assert.equal(branch.action, 'keep');
+    assert.equal(branch.display, `origin/cc-nexs-mr-code-${'a'.repeat(40)} (code)`);
+    assert.match(branch.reason, /legacy cc-nexs MR branch not merged into origin\/master/);
+    const applied = reclaimWorktrees({ cwd: root, confirm: inventory.token });
+    assert.equal(applied.removed.length, 0);
+    assert.match(git(code, ['ls-remote', '--heads', 'origin', 'cc-nexs-mr-*']), /cc-nexs-mr-code-/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -9,6 +9,7 @@ import { transitionState } from './progress-io.mjs';
 import { readProgressV2 } from './progress-v2.mjs';
 import { nextStep } from './state-machine.mjs';
 import { resolveTestReleasePolicy } from './test-release.mjs';
+import { taskFilesDir } from './verify-artifacts.mjs';
 
 /** Build the nextStep() input that commands/run.md describes, from authoritative progress and config. */
 export function buildWorkflowSnapshot({ cwd = process.cwd(), featureId, progressPath = null, noAutoTestRelease = false } = {}) {
@@ -84,7 +85,9 @@ export function buildWorkflowSnapshot({ cwd = process.cwd(), featureId, progress
 export function featureStatus(options = {}) {
   const snapshot = buildWorkflowSnapshot(options);
   const milestones = deliveryMilestones(readProgressV2(snapshot.progressFile));
-  return { kind: 'feature-status', ...snapshot, milestones, next: nextStep(snapshot.input) };
+  let taskFiles = null;
+  try { taskFiles = taskFilesDir(findWorkspaceRoot(options.cwd || process.cwd(), snapshot.progressFile), snapshot.feature.id); } catch {}
+  return { kind: 'feature-status', ...snapshot, milestones, taskFiles, next: nextStep(snapshot.input) };
 }
 
 /** Distance to delivery for the current candidate; attempts of an older candidate do not count. */

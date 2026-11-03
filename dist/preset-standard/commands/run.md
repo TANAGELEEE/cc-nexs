@@ -150,6 +150,10 @@ Repeat until terminal or stopped:
 
 A stop returns orchestration control; it is not a tool lock. The user-authorized parent session may still inspect status, prepare documents or deployment, and use Git/SQL/SSH as separately authorized.
 
+### Task files
+
+Files the Orchestrator creates for a task (helper scripts, driver requests and receipts, logs, screenshots) live in `.cc-nexs/runtime/tasks/<id>/`; `cc-nexs status` prints the path. Rebuildable copies (source exports, dependency installs, build output) go only in its `scratch/` and are removed when the step that needed them ends, unless they hold the current failure's evidence. Do not create task files in `.tmp/`, `.cc-nexs/drafts/`, another volume, or a second copy of a candidate worktree; check integration-only conflicts in the recorded conflict worktree. Durable conclusions belong in the plan or BUG document. `reclaim-worktrees` removes the directory once the task is complete.
+
 Release attempts are immutable. Invoke `/cc-nexs:release-test` once per candidate fingerprint; `pending` is resumed without another integration or trigger, and only a deliberate failed-attempt retry uses `--retry`. A verification-only limitation never rolls back a successful test merge/deployment.
 
 ### Shared release safety boundary

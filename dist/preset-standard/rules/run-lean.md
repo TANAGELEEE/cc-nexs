@@ -84,6 +84,8 @@ Only after the release driver records success with pipeline, deployment, and exa
 - If Web is approved as `local`, start only its recorded exact candidate worktree with the approved command, inject the deployed backend-java test endpoint/environment revision as API base, verify the combined flow, and always clean up the local process.
 - Execute and structurally close every deferred check id.
 
+A test failure starts one repair round for all reported failures. Before a new test attempt, the repair must pass locally: a frontend-only fix is reproduced and confirmed with a `browser:` row or targeted test against the deployed test backend, and a backend fix with its targeted tests. Redeploy only once the round's fixes pass locally; a deployment is not the check for a fix that can run locally.
+
 Unavailable browser, endpoint, login, MFA/CAPTCHA, or another verification capability after deployment calls `record-test-verification --manual-required --evidence "<missing capability and recovery step>"`. This enters `TEST_DEPLOYED_NEEDS_MANUAL_VERIFY`, preserves deployment evidence, and lets the same attempt later record `--passed`. A manual run that records an actual blocked product result must route to test-fix, never wait forever in the manual state.
 
 Missing test URLs/browser/login/bucket/CORS/IAM evidence cannot block the merge. A production-like URL, unsafe candidate, credential leak, missing deploy branch, or absent `release.test.driver` remains a delivery blocker; an absent `workflow.local_verify.driver` is handled by the direct-evidence fallback above.

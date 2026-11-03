@@ -37,6 +37,7 @@ Models:     <next role → matched rule / profile / model / effort / feature ove
 
 📍 Delivery milestones
    <Milestones line from the CLI status: done / pending / blocked with the blocking attempt>
+   <Task files line from the CLI status: where this task's Orchestrator files and scratch belong>
 
 🔢 Counters
    Review revisions:  <n>/<threshold>

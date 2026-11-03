@@ -546,6 +546,20 @@ export function checkBaseReadiness({ repo, repositoryId, sourceCommit, targetBra
   return { ...result, status: 'ready', sensitive: changes.sensitive };
 }
 
+// How a head relates to a base: contained by ancestry, every commit present as
+// an equivalent patch (cherry-picked or ported), or still carrying work. Squash
+// merges and partial ports land in the last two; only a person can tell which
+// unmatched commits are superseded, so nothing here deletes anything.
+export function classifyMergedWork({ repo, head, baseBranch, fetch = true }) {
+  const base = fetch ? fetchBase(repo, baseBranch) : `refs/remotes/origin/${assertSegment(baseBranch, 'base branch')}`;
+  if (!refExists(repo, base)) return { status: 'unknown', reason: `origin/${baseBranch} is not available` };
+  if (isAncestor(repo, head, base)) return { status: 'merged', relation: 'ancestor' };
+  const lines = git(repo, ['cherry', base, head]).split('\n').filter(Boolean);
+  const missing = lines.filter((line) => line.startsWith('+')).map((line) => line.slice(2));
+  if (lines.length && !missing.length) return { status: 'merged', relation: 'patch-equivalent', commits: lines.length };
+  return { status: 'unmerged', commits: lines.length, equivalent: lines.length - missing.length, missing };
+}
+
 export function resolveTestIntegrationConflict({ repo, worktree, targetBranch, sourceCommit, targetBefore }) {
   assertSegment(targetBranch, 'test branch');
   const commonDir = path => realpathSync(git(path, ['rev-parse', '--path-format=absolute', '--git-common-dir']));
