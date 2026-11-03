@@ -4,6 +4,8 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-11-03
+
 ### Added
 
 - The reference GitLab drivers work without API tokens. The Test driver with `--receipts <dir>` returns `awaiting_receipt` with an exact `record-receipt` command and turns what the signed-in GitLab pipeline or operations publication page shows into release evidence; a recorded pipeline identity never changes. The MR driver with `--receipts <dir>` resolves an MR that push options cannot create or report from a URL recorded with `record-mr`.
