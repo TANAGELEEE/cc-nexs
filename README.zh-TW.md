@@ -4,6 +4,8 @@
 
 > 多角色 + 狀態機驅動的 Claude Code / Codex / Pi 開發流程框架。原始碼用 monorepo 維護，釋出產物按各執行時的原生擴充套件機制分發。
 
+![cc-nexs Lean 工作流程](./docs/assets/cc-nexs-workflow.svg)
+
 ## 這是什麼
 
 把開發流程 SOP 拆成兩層：

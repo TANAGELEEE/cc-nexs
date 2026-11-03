@@ -4,6 +4,8 @@
 
 > A multi-role, state-machine-driven development workflow framework for Claude Code / Codex / Pi. The source is maintained as a monorepo, and release artifacts are distributed through each runtime's native extension mechanism.
 
+![cc-nexs Lean workflow](./docs/assets/cc-nexs-workflow.svg)
+
 ## What This Is
 
 The development workflow SOP is split into two layers:
