@@ -4,6 +4,24 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-03
+
+### Added
+
+- `finalize-docs <id>` creates the final docs candidate of a `COMPLETE` task, integrates it through the same route as code (MR driver or non-force push), and removes the docs worktree, branches and candidate ref after remote proof. It refuses before committing when the docs worktree holds files outside the archived paths, and a rerun resumes a pending docs MR.
+- `base-preflight <id>` checks each configured base read-only before Gateway B. A base that can no longer take the candidate unchanged moves the task to `BASE_CHANGED` (Hotfix: `HOTFIX_BASE_CHANGED`) so it is synchronized before anyone is asked to approve it.
+
+### Changed
+
+- **Protected-base MRs come from the feature branch.** With `release.base.driver` configured, the MR source is the assigned feature or Hotfix branch at the exact approved candidate. The controller no longer creates a synthetic merge commit or a `cc-nexs-mr-<repo>-<commit>` branch. Sensitive-path checks run on a local merged tree that is never pushed, and the proof records that tree.
+- **Driver contract.** `ensure_merge_request` now receives `{repository, sourceBranch, sourceCommit, targetBranch, targetBefore}` without `integrationCommit`. The driver pushes `sourceCommit` to `sourceBranch` (non-force) and finds or creates the MR. Drivers that validated the old branch name or merge parents must be updated.
+- A merge is proven only when the target merged the candidate itself (first-parent chain or direct parent of a first-parent merge). A source that moved beyond the candidate is `MR_SOURCE_DRIFT`. After proof the remote feature branch is deleted.
+
+### Fixed
+
+- A release-base rerun after the MR merged recorded the MR as still pending and overwrote `target_before`. Reruns now keep the first `target_before` and MR and add the merge commit and its relation.
+- The final docs candidate cleared the archived task's release approval and Review evidence, so a `COMPLETE` archive showed `release.approved=false`. It now keeps them.
+
 ## [0.10.0] - 2026-11-02
 
 ### Added
