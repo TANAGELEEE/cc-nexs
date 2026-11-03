@@ -10,6 +10,7 @@ import { pathToFileURL } from 'node:url';
 import { approveFeatureGate } from './approval-command.mjs';
 import { preflightBaseRelease, runBaseRelease } from './base-release.mjs';
 import { finalizeDocs } from './docs-finalize.mjs';
+import { reconcileTask } from './task-reconcile.mjs';
 import { assertHotfixCandidate, startHotfix } from './hotfix-control.mjs';
 import { initializeHotfix } from './hotfix-init.mjs';
 import { reviseHotfix } from './hotfix-revision.mjs';
@@ -46,6 +47,17 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
     return reclaimWorktrees({ cwd, ...options });
   }
   if (command === 'status') return featureStatus({ cwd, ...parseStatusOptions(args) });
+  if (command === 'reconcile') {
+    const confirmAt = args.findIndex((token) => token === '--confirm' || token.startsWith('--confirm='));
+    let confirm = null;
+    const rest = [...args];
+    if (confirmAt >= 0) {
+      const token = rest[confirmAt];
+      confirm = token.includes('=') ? token.slice(token.indexOf('=') + 1) : requireValue(rest, confirmAt + 1, '--confirm');
+      rest.splice(confirmAt, token.includes('=') ? 1 : 2);
+    }
+    return reconcileTask({ cwd, ...parseFeatureOptions(rest), confirm });
+  }
   if (command === 'advance') return advanceFeatureState({ cwd, ...parseAdvanceOptions(args) });
   if (command === 'init-hotfix') return initializeHotfix({ cwd, ...parseHotfixLifecycleOptions(args, true) });
   if (command === 'revise-hotfix') return reviseHotfix({ cwd, ...parseHotfixLifecycleOptions(args, false) });
@@ -420,7 +432,20 @@ function printResult(result) {
     console.log(`Action: ${next.action}${next.role ? ` (role: ${next.role})` : ''}${next.stop ? ' [stop]' : ''}`);
     if (next.circuitBreaker) console.log(`Circuit breaker: ${next.circuitBreaker}${next.bug ? ` (${next.bug})` : ''}`);
     console.log(`Milestones: ${result.milestones.map((item) => `${item.id}=${item.status}${item.detail ? ` (${item.detail})` : ''}`).join(', ')}`);
+    if (result.taskFiles) console.log(`Task files: ${result.taskFiles} (rebuildable copies only in scratch/)`);
     console.log(`Progress: ${result.progressFile}`);
+    return;
+  }
+  if (result.kind === 'task-reconcile') {
+    console.log(`cc-nexs reconcile ${result.status}: ${result.feature.id} ${result.feature.slug} (${result.state}${result.legacy ? ', legacy mode' : ''})`);
+    for (const item of result.repositories) {
+      const detail = item.status === 'merged' ? `${item.relation}${item.commits ? `, ${item.commits} commit(s)` : ''}`
+        : item.reason || `${item.equivalent ?? 0} of ${item.commits ?? 0} commit(s) patch-equivalent, ${item.missing?.length ?? 0} not found`;
+      console.log(`  ${item.repository}: ${item.status} in origin/${item.baseBranch || '?'} (${detail})`);
+    }
+    if (result.reason) console.log(`Reason: ${result.reason}`);
+    if (result.status === 'ready') console.log(`Record COMPLETE after review: cc-nexs reconcile ${result.feature.id} --confirm ${result.token}`);
+    if (result.status === 'reconciled') console.log('Next: archive docs if needed, then reclaim-worktrees');
     return;
   }
   if (result.kind === 'plan-amendment') {
@@ -584,6 +609,7 @@ function printUsage() {
   console.error('  cc-nexs advance <feature-id> --from <state> --to <state> [--reason <text>] [--progress <path>]');
   console.error('  cc-nexs resolve-test-conflict <feature-id> [--progress <path>]');
   console.error('  cc-nexs reclaim-worktrees [--sizes] [--confirm <token>]');
+  console.error('  cc-nexs reconcile <feature-id> [--confirm <token>] [--progress <path>]');
   console.error('  cc-nexs switch-test-target --request <json-file>');
   console.error('  cc-nexs revise-hotfix <bug-key> --reason <text> --authorization-evidence <text> [--promote-lean] [--progress <path>]');
   console.error('  cc-nexs approve-plan <feature-id> [--approver <name>] [--progress <path>]');

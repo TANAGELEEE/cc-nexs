@@ -4,9 +4,16 @@ import { existsSync, lstatSync, readFileSync, readdirSync, rmSync } from 'node:f
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
 import { loadWorkspaceConfig } from './config-loader.mjs';
-import { cleanupMergedWorktree, isWorktreeRegistered, removeIntegrationWorktree } from './git-custodian.mjs';
+import { classifyMergedWork, cleanupMergedWorktree, isWorktreeRegistered, removeIntegrationWorktree } from './git-custodian.mjs';
 import { readProgressV2 } from './progress-v2.mjs';
-import { classifyVerifyArtifacts, verifyArtifactRoot } from './verify-artifacts.mjs';
+import {
+  classifyLegacyDrafts,
+  classifyTaskFiles,
+  classifyVerifyArtifacts,
+  legacyDraftsRoot,
+  taskFilesRoot,
+  verifyArtifactRoot,
+} from './verify-artifacts.mjs';
 
 function git(cwd, args) {
   return execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -45,13 +52,24 @@ export function findWorkspaceRoot(cwd) {
   }
 }
 
-function readTasks(root, workspace) {
+// Progress from a retired mode no longer validates, yet its worktrees and state
+// still decide what may be reclaimed, so it is read as legacy, never skipped.
+export function readTaskProgress(file) {
+  try { return { progress: readProgressV2(file), legacy: false }; } catch {}
+  let progress;
+  try { progress = JSON.parse(readFileSync(file, 'utf8')); } catch { return null; }
+  if (!progress?.feature?.id || typeof progress.state !== 'string') return null;
+  return { progress, legacy: true };
+}
+
+export function readTasks(root, workspace) {
   const byWorktree = new Map();
   const byFeature = new Map();
   for (const file of discoverProgressFiles(root, workspace)) {
-    let progress;
-    try { progress = readProgressV2(file); } catch { continue; }
-    const task = { id: progress.feature?.id, state: progress.state, active: progress.state !== 'COMPLETE', progress };
+    const read = readTaskProgress(file);
+    if (!read) continue;
+    const { progress, legacy } = read;
+    const task = { id: progress.feature?.id, state: progress.state, active: progress.state !== 'COMPLETE', progress, legacy, file };
     if (task.id) byFeature.set(task.id, task);
     for (const [repositoryId, assignment] of Object.entries(progress.repositories || {})) {
       if (!assignment?.worktree) continue;
@@ -108,7 +126,8 @@ function classifyWorktree({ workspace, tasks, worktree, repositoryId }) {
   }
   const task = tasks.byWorktree.get(resolve(worktree));
   if (task?.active) {
-    const hint = /BASE_MERGE_BLOCKED$/.test(task.state) ? '; rerun release-base to finish cleanup' : '';
+    const hint = task.legacy ? `; legacy ${task.progress.mode || 'unknown'}-mode task, run reconcile ${task.id} once its work is merged`
+      : /BASE_MERGE_BLOCKED$/.test(task.state) ? '; rerun release-base to finish cleanup' : '';
     return { ...entry, action: 'keep', reason: `active task ${task.id} (${task.state})${hint}` };
   }
   // A fresh worktree sits on its base tip and would look merged; only completed tasks prove it is done.
@@ -121,13 +140,49 @@ function classifyWorktree({ workspace, tasks, worktree, repositoryId }) {
   const head = git(worktree, ['rev-parse', 'HEAD']);
   // Uses the last fetched base; reclaim re-fetches and re-proves before removal.
   if (!isAncestor(repository.absolute_path, head, base)) {
-    return { ...entry, branch, head, action: 'keep', reason: `not merged into origin/${baseBranch} (squash merges are not detected)` };
+    return { ...entry, branch, head, action: 'keep', reason: unmergedReason(repository.absolute_path, head, baseBranch) };
   }
   return {
     ...entry, branch, head, baseBranch, action: 'reclaim',
     candidateRef: task.assignment?.candidate?.ref || null,
     reason: `task ${task.id} complete and merged`,
   };
+}
+
+function unmergedReason(repo, head, baseBranch) {
+  let work;
+  try { work = classifyMergedWork({ repo, head, baseBranch, fetch: false }); } catch { return `not merged into origin/${baseBranch}`; }
+  if (work.status === 'merged') return `not merged by ancestry, but all ${work.commits} commit(s) are patch-equivalent in origin/${baseBranch}; confirm and delete the branch manually`;
+  if (work.status === 'unmerged' && work.commits) return `not merged into origin/${baseBranch}; ${work.equivalent} of ${work.commits} commit(s) patch-equivalent, ${work.missing.length} not found`;
+  return `not merged into origin/${baseBranch}`;
+}
+
+// Temporary MR branches from releases before 0.11.0 are reported, never deleted.
+function legacyMergeRequestBranches(workspace) {
+  const entries = [];
+  const seen = new Set();
+  for (const repository of workspace.repositories) {
+    if (seen.has(repository.absolute_path) || !existsSync(join(repository.absolute_path, '.git'))) continue;
+    seen.add(repository.absolute_path);
+    let listing;
+    try {
+      listing = execFileSync('git', ['-C', repository.absolute_path, 'ls-remote', '--heads', 'origin', 'cc-nexs-mr-*'], {
+        encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 20000, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      }).trim();
+    } catch { continue; }
+    for (const line of listing.split('\n').filter(Boolean)) {
+      const [sha, ref] = line.split(/\s+/);
+      const branch = ref.replace(/^refs\/heads\//, '');
+      let known = true;
+      try { git(repository.absolute_path, ['cat-file', '-e', `${sha}^{commit}`]); } catch { known = false; }
+      const reason = !known ? 'legacy cc-nexs MR branch; not fetched locally, inspect manually'
+        : isAncestor(repository.absolute_path, sha, `refs/remotes/origin/${repository.base_branch}`)
+          ? `legacy cc-nexs MR branch merged into origin/${repository.base_branch}; delete with git push origin --delete ${branch}`
+          : `legacy cc-nexs MR branch not merged into origin/${repository.base_branch}; ${unmergedReason(repository.absolute_path, sha, repository.base_branch)}`;
+      entries.push({ kind: 'remote-branch', path: repository.absolute_path, repository: repository.id, branch, head: sha, action: 'keep', reason, display: `origin/${branch} (${repository.id})` });
+    }
+  }
+  return entries;
 }
 
 function classifyTestConflict({ workspace, tasks, worktree, featureId, attemptId, repositoryId }) {
@@ -159,11 +214,18 @@ export function inventoryWorktrees({ cwd = process.cwd(), sizes = false } = {}) 
     }
   }
   entries.push(...classifyVerifyArtifacts({ root, tasks }));
+  entries.push(...classifyTaskFiles({ root, tasks }));
+  entries.push(...classifyLegacyDrafts({ root, tasks }));
+  entries.push(...legacyMergeRequestBranches(workspace));
   for (const entry of entries) {
-    entry.display = relative(root, entry.path) || '.';
-    if (sizes) entry.bytes = sizeOf(entry.path);
+    entry.display ??= relative(root, entry.path) || '.';
+    if (sizes && entry.kind !== 'remote-branch') entry.bytes = sizeOf(entry.path);
   }
-  return { kind: 'worktree-inventory', root, workspace, conflictRoot, verifyRoot: verifyArtifactRoot(root), entries, token: planToken(entries) };
+  return {
+    kind: 'worktree-inventory', root, workspace, conflictRoot,
+    verifyRoot: verifyArtifactRoot(root), taskFilesRoot: taskFilesRoot(root), draftsRoot: legacyDraftsRoot(root),
+    entries, token: planToken(entries),
+  };
 }
 
 // Preflight needs no confirmation because it removes only rebuildable scratch, never logs or worktrees.
@@ -203,7 +265,9 @@ export function reclaimWorktrees({ cwd = process.cwd(), confirm = null, sizes = 
         removeIntegrationWorktree({ repo: entry.repo, worktree: entry.path, root: inventory.conflictRoot });
       } else {
         const within = entry.kind === 'test-conflict' ? inventory.conflictRoot
-          : entry.kind.startsWith('verify-') ? inventory.verifyRoot : inventory.workspace.worktree_root;
+          : entry.kind.startsWith('verify-') ? inventory.verifyRoot
+            : entry.kind === 'task-files' ? inventory.taskFilesRoot
+              : entry.kind === 'draft-cache' ? inventory.draftsRoot : inventory.workspace.worktree_root;
         const rel = relative(within, entry.path);
         if (!rel || rel.startsWith('..') || isAbsolute(rel)) throw new Error(`[cc-nexs] unsafe reclaim path: ${entry.path}`);
         rmSync(entry.path, { recursive: true, force: true });
@@ -217,6 +281,7 @@ export function reclaimWorktrees({ cwd = process.cwd(), confirm = null, sizes = 
   pruneEmptyParents(inventory.workspace.worktree_root, 1);
   pruneEmptyParents(inventory.conflictRoot, 2);
   pruneEmptyParents(inventory.verifyRoot, 1);
+  pruneEmptyParents(inventory.taskFilesRoot, 1);
   return { ...inventory, kind: 'worktree-reclaim', applied: true, removed, failed };
 }
 

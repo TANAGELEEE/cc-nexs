@@ -161,6 +161,11 @@ export function transitionState(path, { from, to, reason = '' }) {
       type: 'state.transition', from, to, reason, actor: 'orchestrator',
     });
   }
+  return transitionMarkdown(path, { from, to, reason });
+}
+
+// Updates only the human-readable progress.md; callers own the JSON event.
+export function transitionMarkdown(path, { from, to, reason = '' }) {
   const text = readFileSync(path, 'utf-8');
   const keys = detectKeys(text);
   const ts = new Date().toISOString();

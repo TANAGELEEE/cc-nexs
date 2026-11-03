@@ -17,6 +17,7 @@ Only for `mode=lean` with an approved plan. Read the plan task DAG and dispatch 
 - The Orchestrator validates each child's paths; after all implementation waves for the same repository are complete, call Git Custodian once to form a single candidate — do not repeatedly commit candidates per task/wave. The feature branch for each repository is fixed as `feature/<id>-<slug>`.
 - Do not keep chasing the latest base. Use Custodian prepare only when overlapping paths, conflicts, or known contract dependencies require synchronization; re-verify the changed candidate. Non-overlapping base updates are integrated by release-base and do not change an accepted candidate.
 - `review-fix` handles only P0/P1 numbers from the consolidated Review; `test-fix` handles only test-environment failures; incidental refactoring is forbidden.
+- `test-fix` repairs every failure in the Verifier's report in one round and returns local evidence for each: a frontend-only fix is confirmed in a local browser or targeted test against the deployed test backend before it is redeployed.
 - `gateway-b-fix` handles only the ACs and allowed paths of the current Gateway B implementation request in `plan.md`; if requirement/AC/approved-plan changes are found, stop and switch to a scope request.
 
 Fast-track constraints:

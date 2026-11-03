@@ -150,6 +150,82 @@ export function classifyVerifyArtifacts({ root, tasks }) {
   return entries;
 }
 
+// Orchestrator-owned files for one task: scripts, requests, logs, screenshots.
+// Anything rebuildable (source exports, dependency installs, builds) goes in
+// scratch/. The whole directory is reclaimable once the task is complete.
+export function taskFilesRoot(root) {
+  return join(root, '.cc-nexs', 'runtime', 'tasks');
+}
+
+export function taskFilesDir(root, featureId) {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(String(featureId || ''))) throw new Error(`[cc-nexs] invalid task id: ${featureId}`);
+  return join(taskFilesRoot(root), String(featureId));
+}
+
+export function classifyTaskFiles({ root, tasks }) {
+  const base = taskFilesRoot(root);
+  if (!existsSync(base)) return [];
+  const entries = [];
+  for (const entry of readdirSync(base, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const path = join(base, entry.name);
+    const task = tasks.byFeature.get(entry.name);
+    const keep = (reason) => entries.push({ kind: 'task-files', path, action: 'keep', reason });
+    if (!task) keep('no task state found; inspect manually');
+    else if (task.active) keep(`active task ${entry.name} (${task.state})`);
+    else if (dirtySourceIn(path)) keep('uncommitted source in task files; inspect manually');
+    else entries.push({ kind: 'task-files', path, action: 'reclaim', reason: `task ${entry.name} complete` });
+  }
+  return entries;
+}
+
+// Dependency and build caches are rebuildable wherever they sit. Directories a
+// workflow created outside the managed roots are otherwise unknown content, so
+// only their caches are reclaimed and the rest is reported for a person.
+const CACHE_DIRS = new Set(['node_modules', '.next', '.turbo', '.nuxt', '.svelte-kit', '.parcel-cache']);
+const CACHE_SEARCH_DEPTH = 6;
+
+function findCaches(dir, depth = 0, out = []) {
+  let entries;
+  try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return out; }
+  if (entries.some((entry) => entry.name === '.git')) return out;
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
+    const path = join(dir, entry.name);
+    if (CACHE_DIRS.has(entry.name)) out.push(path);
+    else if (depth < CACHE_SEARCH_DEPTH) findCaches(path, depth + 1, out);
+  }
+  return out;
+}
+
+export function legacyDraftsRoot(root) {
+  return join(root, '.cc-nexs', 'drafts');
+}
+
+export function classifyLegacyDrafts({ root, tasks }) {
+  const base = legacyDraftsRoot(root);
+  if (!existsSync(base)) return [];
+  const byName = new Map();
+  for (const task of tasks.byFeature.values()) {
+    const slug = task.progress?.feature?.slug;
+    byName.set(String(task.id), task);
+    if (slug) { byName.set(slug, task); byName.set(`${task.id}-${slug}`, task); }
+  }
+  const entries = [];
+  for (const entry of readdirSync(base, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const path = join(base, entry.name);
+    const task = byName.get(entry.name);
+    if (!task) { entries.push({ kind: 'legacy-drafts', path, action: 'keep', reason: 'not managed by cc-nexs and no matching task; inspect manually' }); continue; }
+    if (task.active) { entries.push({ kind: 'legacy-drafts', path, action: 'keep', reason: `active task ${task.id} (${task.state})` }); continue; }
+    for (const cache of findCaches(path)) {
+      entries.push({ kind: 'draft-cache', path: cache, action: 'reclaim', reason: `task ${task.id} complete; rebuildable cache` });
+    }
+    entries.push({ kind: 'legacy-drafts', path, action: 'keep', reason: `task ${task.id} complete; other content is not managed by cc-nexs, inspect manually` });
+  }
+  return entries;
+}
+
 export function freeBytesAt(path) {
   const stats = statfsSync(path);
   return stats.bavail * stats.bsize;
