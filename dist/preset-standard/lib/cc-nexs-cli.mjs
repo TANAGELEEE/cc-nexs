@@ -610,7 +610,10 @@ function printResult(result) {
       console.log(`Repository: ${repo.id} ${repo.sourceCommit} -> ${repo.delivery === 'local' ? `local:${repo.worktree}` : repo.targetBranch}`);
     }
     if (result.attempt) console.log(`Attempt: ${result.attempt.id}`);
-    if (['deploying', 'awaiting_receipt'].includes(result.attempt?.status)) console.log('CI/CD: deploying; resume this exact attempt with release-test --resume');
+    if (['deploying', 'awaiting_receipt'].includes(result.attempt?.status)) {
+      console.log('CI/CD: deploying; resume this exact attempt with release-test --resume');
+      if (result.attempt.reason) console.log(`Waiting for: ${result.attempt.reason}`);
+    }
     if (result.verificationPrerequisites?.ready === false) {
       console.log(`Post-deploy verification prerequisites pending: ${result.verificationPrerequisites.missing.join(', ')}`);
     }

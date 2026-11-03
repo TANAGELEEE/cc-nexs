@@ -41,6 +41,29 @@ release:
       args: [tools/gitlab-test-release-driver.mjs, --repo, web=web, --deploy-job, "^deploy-test$"]
 ```
 
+## Without API tokens
+
+Some GitLab installations do not allow personal or project tokens. Both drivers
+still work:
+
+- The MR driver creates MRs through push options, which need only Git access.
+  Pass `--receipts .cc-nexs/runtime/merge-requests`; when an MR cannot be created
+  or reported that way, the failure prints a `record-mr` command for the URL you
+  find in the signed-in GitLab page.
+- The Test driver with `--receipts .cc-nexs/runtime/tasks` never calls the API.
+  Each waiting attempt prints a `record-receipt` command. Open the pipeline in the
+  signed-in GitLab page or your operations publication page, then record the
+  pipeline, its status, and for a finished deployment the deploy job and the
+  deployed commit. The controller checks that commit contains the integration.
+
+```yaml
+release:
+  test:
+    driver:
+      command: node
+      args: [tools/gitlab-test-release-driver.mjs, --receipts, .cc-nexs/runtime/tasks]
+```
+
 ## Environment
 
 | Variable | Use |

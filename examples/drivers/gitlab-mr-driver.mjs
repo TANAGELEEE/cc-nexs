@@ -10,11 +10,15 @@
 //
 //   node gitlab-mr-driver.mjs --repo web=web --repo api=services/api [--title "Merge {branch}"]
 //
-// Environment: GITLAB_TOKEN (api scope; needed only to find or create an MR through
-// the API), GITLAB_API_URL (default https://<remote host>/api/v4), GITLAB_PROJECT
-// (project path override when the remote URL is not a GitLab URL).
+// Environment: GITLAB_TOKEN (api scope; optional, used only to find or create an MR
+// through the API), GITLAB_API_URL (default https://<remote host>/api/v4),
+// GITLAB_PROJECT (project path override when the remote URL is not a GitLab URL).
+// Without a token the normal path still works through push options; for the rare
+// MR they cannot create, pass --receipts <dir> and record the URL found in a
+// signed-in browser with `record-mr` (the failure message prints the command).
 import { execFileSync, spawnSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const FIELDS = ['operation', 'repository', 'sourceBranch', 'sourceCommit', 'targetBranch', 'targetBefore'];
@@ -29,13 +33,15 @@ function fail(message) {
 function parseArgs(argv) {
   const repos = {};
   let title = 'Merge {branch}';
+  let receipts = null;
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index + 1];
     if (argv[index] === '--repo' && value?.includes('=')) { const [id, path] = value.split(/=(.*)/s); repos[id] = path; index += 1; }
     else if (argv[index] === '--title' && value) { title = value; index += 1; }
+    else if (argv[index] === '--receipts' && value) { receipts = value; index += 1; }
     else fail(`unknown argument: ${argv[index]}`);
   }
-  return { repos, title };
+  return { repos, title, receipts };
 }
 
 async function readRequest() {
@@ -58,6 +64,47 @@ export function gitlabProject(remote) {
   return match ? { host: match[1], path: match[2] } : null;
 }
 
+// Without an API token, the one MR that push options could not create or
+// report is found or opened in a signed-in browser and its URL recorded here.
+function mrReceiptFile(root, repository, branch) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(repository)) fail(`unsafe repository id: ${repository}`);
+  return join(resolve(process.cwd(), root), repository, `${encodeURIComponent(branch)}.json`);
+}
+
+function recordedMergeRequest({ receipts, request }) {
+  if (!receipts) return null;
+  const file = mrReceiptFile(receipts, request.repository, request.sourceBranch);
+  if (!existsSync(file)) return null;
+  const record = JSON.parse(readFileSync(file, 'utf8'));
+  if (record.sourceCommit !== request.sourceCommit || record.targetBranch !== request.targetBranch) return null;
+  return record.url;
+}
+
+function browserFallback({ receipts, request, why }) {
+  const script = relative(process.cwd(), process.argv[1]) || process.argv[1];
+  const recorded = recordedMergeRequest({ receipts, request });
+  if (recorded) return recorded;
+  fail(`${why}. Find or open the merge request ${request.sourceBranch} -> ${request.targetBranch} in the signed-in GitLab page, then run: node ${script} record-mr --receipts ${receipts || '<dir>'} --repository ${request.repository} --source-branch ${request.sourceBranch} --source-commit ${request.sourceCommit} --target-branch ${request.targetBranch} --url <merge request URL>; rerun release-base afterwards`);
+}
+
+function recordMergeRequest(argv) {
+  const values = {};
+  for (let index = 0; index < argv.length; index += 2) {
+    if (!argv[index]?.startsWith('--') || argv[index + 1] === undefined) fail(`invalid record-mr argument: ${argv[index]}`);
+    values[argv[index].slice(2)] = argv[index + 1];
+  }
+  for (const field of ['receipts', 'repository', 'source-branch', 'source-commit', 'target-branch', 'url']) {
+    if (!values[field]?.trim()) fail(`record-mr requires --${field}`);
+  }
+  if (!SHA.test(values['source-commit'])) fail('--source-commit must be the full candidate commit');
+  if (!/^https?:\/\/\S+\/-\/merge_requests\/\d+$/.test(values.url)) fail('--url must be the merge request page');
+  const file = mrReceiptFile(values.receipts, values.repository, values['source-branch']);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(`${file}.tmp`, `${JSON.stringify({ sourceBranch: values['source-branch'], sourceCommit: values['source-commit'], targetBranch: values['target-branch'], url: values.url, recorded_at: new Date().toISOString() }, null, 2)}\n`);
+  renameSync(`${file}.tmp`, file);
+  console.log(JSON.stringify({ recorded: values.url, file }));
+}
+
 async function api(base, method, path, body) {
   const token = process.env.GITLAB_TOKEN;
   if (!token) fail('GITLAB_TOKEN is required to find or create the merge request through the API');
@@ -71,7 +118,8 @@ async function api(base, method, path, body) {
 }
 
 async function main() {
-  const { repos, title } = parseArgs(process.argv.slice(2));
+  if (process.argv[2] === 'record-mr') return recordMergeRequest(process.argv.slice(3));
+  const { repos, title, receipts } = parseArgs(process.argv.slice(2));
   const request = await readRequest();
   if (!repos[request.repository]) fail(`no --repo mapping for ${request.repository}`);
   const repo = resolve(process.cwd(), repos[request.repository]);
@@ -94,6 +142,10 @@ async function main() {
   }
   const current = git('ls-remote', '--heads', 'origin', `refs/heads/${request.sourceBranch}`).split(/\s+/)[0] || '';
   if (current === request.sourceCommit) {
+    if (!process.env.GITLAB_TOKEN) {
+      console.log(JSON.stringify({ status: 'pending', url: browserFallback({ receipts, request, why: `origin/${request.sourceBranch} already holds the candidate, so push options cannot create the merge request` }) }));
+      return;
+    }
     const open = (await api(apiBase, 'GET', query('opened')))[0]
       || await api(apiBase, 'POST', `${project}/merge_requests`, { source_branch: request.sourceBranch, target_branch: request.targetBranch, title: mrTitle, remove_source_branch: true });
     console.log(JSON.stringify({ status: 'pending', url: open.web_url }));
@@ -109,7 +161,10 @@ async function main() {
   if (push.status !== 0) fail(`push failed: ${push.stderr.trim()}`);
   const printed = `${push.stdout}\n${push.stderr}`.match(/https?:\/\/\S+\/-\/merge_requests\/\d+/);
   if (printed) { console.log(JSON.stringify({ status: 'pending', url: printed[0] })); return; }
-  if (!process.env.GITLAB_TOKEN) fail('pushed the candidate but the server printed no merge request URL; set GITLAB_TOKEN so it can be found or created');
+  if (!process.env.GITLAB_TOKEN) {
+    console.log(JSON.stringify({ status: 'pending', url: browserFallback({ receipts, request, why: 'pushed the candidate but the server printed no merge request URL' }) }));
+    return;
+  }
   // Push options were not honored (older server or option disabled): use the API.
   const open = (await api(apiBase, 'GET', query('opened')))[0]
     || await api(apiBase, 'POST', `${project}/merge_requests`, { source_branch: request.sourceBranch, target_branch: request.targetBranch, title: mrTitle, remove_source_branch: true });
