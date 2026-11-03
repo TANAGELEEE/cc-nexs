@@ -192,6 +192,7 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
   const closureAttempts = Number(workflow.review?.closure_attempts || 0);
   const gatewayBDeltaAttempts = Number(workflow.review?.gateway_b_delta_attempts || 0);
   const testReleaseStatus = workflow.test_release?.status || 'idle';
+  const derivedPending = workflow.derived_binding?.status === 'pending';
 
   if (TERMINAL.has(state)) return { next: state, role: null, action: 'noop' };
   if (state === 'REVIEW_CLOSURE_BLOCKED') {
@@ -257,7 +258,7 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
     case 'REVIEW_CLOSURE':
       return { next: 'PARSE_REVIEW_CLOSURE', role: null, action: 'parse_review_conclusion' };
     case 'CANDIDATE_READY':
-      if (fastTrack && testReleaseStatus === 'verified' && reviewStatus === 'passed') {
+      if (fastTrack && testReleaseStatus === 'verified' && reviewStatus === 'passed' && !derivedPending) {
         return { next: 'RELEASE_PENDING_HUMAN', role: null, action: 'await_release_approval', stop: true };
       }
       return { next: 'TEST_RELEASE', role: null, action: 'continue' };
@@ -295,6 +296,9 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
     case 'TEST_VERIFY_FAILED':
       return { next: 'TEST_FIXING', role: developer, action: 'fix_test' };
     case 'TEST_VERIFIED':
+      // Deferred derived data is generated once the source passes Test, and that
+      // final candidate gets its own local check, Review and Test attempt.
+      if (derivedPending) return { next: 'TEST_FIXING', role: developer, action: 'bind_derived' };
       if (fastTrack && reviewExact && reviewStatus === 'blocked') {
         return { next: 'CONSOLIDATED_REVIEW', role: null, action: 'continue' };
       }

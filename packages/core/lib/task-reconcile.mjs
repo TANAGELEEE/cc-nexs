@@ -8,6 +8,7 @@ import { findWorkspaceRoot } from './candidate-context.mjs';
 import { loadWorkspaceConfig } from './config-loader.mjs';
 import { classifyMergedWork } from './git-custodian.mjs';
 import { transitionMarkdown, transitionState } from './progress-io.mjs';
+import { recordReconciledBase } from './progress-v2.mjs';
 import { readTaskProgress } from './worktree-reclaim.mjs';
 
 // Records COMPLETE for a task whose work already reached its bases outside the
@@ -55,6 +56,7 @@ export function reconcileTask({ cwd = process.cwd(), featureId, progressPath = n
     if (existsSync(markdown)) transitionMarkdown(markdown, { from: progress.state, to: 'COMPLETE', reason });
   } else {
     if (!existsSync(markdown)) throw new Error(`[cc-nexs] progress.md not found beside ${progressFile}`);
+    recordReconciledBase(progressFile, { repositories });
     transitionState(markdown, { from: progress.state, to: 'COMPLETE', reason });
   }
   return { ...result, status: 'reconciled', from: progress.state, state: 'COMPLETE', repositories };

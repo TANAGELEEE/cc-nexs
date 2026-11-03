@@ -7,11 +7,13 @@ import test from 'node:test';
 
 import {
   assertCandidateExcludesTestHistory,
+  assertDedicatedTargetFree,
   checkBaseReadiness,
   cleanupMergedWorktree,
   commitCandidate,
   createWorkspaceWorktrees,
   finalizeMergedWorktree,
+  classifyMergedWork,
   integrateCandidateToTest,
   isSensitiveBasePath,
   isWorktreeRegistered,
@@ -631,4 +633,38 @@ test('a deployed revision proves the integration when it is that commit or a lat
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('a dedicated Test target accepts its own integrations and refuses foreign work', () => {
+  const fixture = mrFixture('cc-nexs-dedicated-');
+  try {
+    const { root, origin, repo, source } = fixture;
+    git(repo, ['push', 'origin', 'origin/main:refs/heads/test02']);
+    const check = (ownCommits = []) => assertDedicatedTargetFree({ repo, targetBranch: 'test02', baseBranch: 'main', sourceCommit: source, ownCommits });
+    assert.equal(check().free, true);
+    const result = integrateCandidateToTest({ repo, repositoryId: 'api', candidateRef: 'refs/cc-nexs/candidates/07-demo/api', targetBranch: 'test02' });
+    assert.throws(() => check(), /TARGET_OCCUPIED: origin\/test02 carries 1 commit/);
+    assert.equal(check([result.integrationCommit]).free, true);
+    const other = join(root, 'other');
+    git(root, ['clone', origin, other]); configure(other); git(other, ['checkout', 'test02']);
+    writeFileSync(join(other, 'theirs.txt'), 'another feature'); git(other, ['add', '.']); git(other, ['commit', '-m', 'their feature']); git(other, ['push', 'origin', 'test02']);
+    assert.throws(() => check([result.integrationCommit]), /TARGET_OCCUPIED: origin\/test02 carries 1 commit/);
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+});
+
+test('merged-work classification separates ancestry, ported patches and remaining work', () => {
+  const fixture = mrFixture('cc-nexs-merged-work-');
+  try {
+    const { root, origin, repo, source } = fixture;
+    assert.equal(classifyMergedWork({ repo, head: source, baseBranch: 'main' }).status, 'unmerged');
+    const other = join(root, 'other');
+    git(root, ['clone', origin, other]); configure(other); git(other, ['checkout', 'main']);
+    writeFileSync(join(other, 'unrelated.txt'), 'x'); git(other, ['add', '.']); git(other, ['commit', '-m', 'unrelated']);
+    git(other, ['fetch', join(root, 'repo'), 'feature/07-demo']);
+    git(other, ['cherry-pick', 'FETCH_HEAD']); git(other, ['push', 'origin', 'main']);
+    assert.deepEqual(classifyMergedWork({ repo, head: source, baseBranch: 'main' }), { status: 'merged', relation: 'patch-equivalent', commits: 1 });
+    git(other, ['fetch', join(root, 'repo'), 'feature/07-demo']);
+    git(other, ['merge', '--no-edit', 'FETCH_HEAD']); git(other, ['push', 'origin', 'main']);
+    assert.deepEqual(classifyMergedWork({ repo, head: source, baseBranch: 'main' }), { status: 'merged', relation: 'ancestor' });
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
 });

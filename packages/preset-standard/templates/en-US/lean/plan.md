@@ -35,7 +35,7 @@ Each code repository must keep one machine-parseable policy line; `deploy` must 
 |---|---|---|---|---|---|
 | LV-001 | AC-001 | lint/typecheck/targeted test/browser |  |  |  |
 
-Local verification is a fast check before deployment; acceptance in test is the main gate. Frontend changes run lint, type check, and targeted tests, with a `browser: <start command> @ <page path>` row for each affected page; backend changes run targeted tests. CI runs the full production build, so add it here only when the change touches build configuration, dependencies, lockfiles, route generation, or publishing.
+Local verification is a fast check before deployment; acceptance in test is the main gate. Frontend changes run lint, type check, and targeted tests, with a `browser: <start command> @ <page path>` row for each affected page; backend changes run targeted tests. CI runs the full production build, so add it here only when the change touches build configuration, dependencies, lockfiles, route generation, or publishing. When the test environment relaxes a production check (strict build, publication or translation validation), add the production-strict command for the affected area here: Test cannot prove it.
 
 ## Test Environment Acceptance Matrix
 
@@ -49,7 +49,8 @@ Local verification is a fast check before deployment; acceptance in test is the 
 - Admission conditions and real sample result (from current sources and real output, without publishing):
 ## Pre-authorized Test Operations
 - Test environment operations (action, target, rollback; not asked again after Gateway A):
-- Test integration policy (derived paths and the command that regenerates them; write "none" if there is none):
+- Test integration policy (derived paths, and per path either the command that regenerates them or "keep the Test side" when Test does not consume the candidate's values; write "none" if there is none):
+- derived_binding: each-candidate / before-final-test (keep one; before-final-test leaves derived paths at their base values until the source passes Test, then generates them once for a final Test attempt)
 ## Risks and Release
 - risk_tier: pending
 - Risk assessment basis:
@@ -98,6 +99,10 @@ Local verification is a fast check before deployment; acceptance in test is the 
 
 | AC-ID | 本地证据 | Test 证据 | 结果 |
 |---|---|---|---|
+
+## Post-release
+
+Steps after the base merge that this release does not perform (production deploy, data or index rebuild, notifications). Write one `- [ ] step` line per step, or "none"; tick each when done. `cc-nexs status` lists the open ones.
 
 ## Plan Changes
 

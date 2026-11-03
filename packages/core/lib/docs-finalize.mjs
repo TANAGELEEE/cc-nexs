@@ -13,6 +13,7 @@ import {
   promoteCandidateViaMergeRequest,
 } from './git-custodian.mjs';
 import { readProgressV2 } from './progress-v2.mjs';
+import { pendingPostRelease } from './workflow-snapshot.mjs';
 
 const LEAN_DOCS = ['requirements.md', 'plan.md', 'config.json', 'progress.md', 'progress.json'];
 const LEGACY_HOTFIX_DOCS = ['hotfix.md', 'config.json', 'progress.md', 'progress.json'];
@@ -39,7 +40,7 @@ export function finalizeDocs({ cwd = process.cwd(), featureId, progressPath = nu
   const baseBranch = assignment.base_branch || repository.base_branch;
   const featureKey = progress.mode === 'hotfix' ? progress.feature.id : `${progress.feature.id}-${progress.feature.slug}`;
   const candidateRef = `refs/cc-nexs/candidates/${featureKey}/${docsId}`;
-  const result = { kind: 'docs-finalize', feature: progress.feature, repository: docsId, branch: assignment.branch, progressFile };
+  const result = { kind: 'docs-finalize', feature: progress.feature, repository: docsId, branch: assignment.branch, progressFile, postRelease: pendingPostRelease(progressFile) };
 
   let created = false;
   if (!refExists(repo, candidateRef)) {

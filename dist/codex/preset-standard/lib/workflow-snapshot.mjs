@@ -6,7 +6,7 @@ import { findWorkspaceRoot } from './candidate-context.mjs';
 import { loadConfig } from './config-loader.mjs';
 import { configuredPluginRoot } from './config-root.mjs';
 import { transitionState } from './progress-io.mjs';
-import { readProgressV2 } from './progress-v2.mjs';
+import { appendProgressEvent, readProgressV2 } from './progress-v2.mjs';
 import { nextStep } from './state-machine.mjs';
 import { resolveTestReleasePolicy } from './test-release.mjs';
 import { taskFilesDir } from './verify-artifacts.mjs';
@@ -64,6 +64,9 @@ export function buildWorkflowSnapshot({ cwd = process.cwd(), featureId, progress
       status: progress.delivery?.base?.status || 'idle',
       attempt: progress.delivery?.base?.attempts?.length || 0,
     },
+    derived_binding: progress.gates?.plan?.binding?.derived_binding === 'before-final-test'
+      ? { mode: 'before-final-test', status: progress.events.some((event) => event.type === 'derived.bound') ? 'bound' : 'pending' }
+      : null,
   };
   const modeConfig = config.preset?.modes?.[mode];
   return {
@@ -87,7 +90,29 @@ export function featureStatus(options = {}) {
   const milestones = deliveryMilestones(readProgressV2(snapshot.progressFile));
   let taskFiles = null;
   try { taskFiles = taskFilesDir(findWorkspaceRoot(options.cwd || process.cwd(), snapshot.progressFile), snapshot.feature.id); } catch {}
-  return { kind: 'feature-status', ...snapshot, milestones, taskFiles, next: nextStep(snapshot.input) };
+  const postRelease = pendingPostRelease(snapshot.progressFile);
+  return { kind: 'feature-status', ...snapshot, milestones, taskFiles, postRelease, next: nextStep(snapshot.input) };
+}
+
+// Steps the plan lists for after the base merge (production deploy, data
+// rebuild). They are reported, not tracked as states: COMPLETE means merged.
+export function postReleaseItems(markdown) {
+  const lines = String(markdown).replace(/\r\n/g, '\n').split('\n');
+  const start = lines.findIndex((line) => /^##\s+(Post-release|上线后|上線後)/i.test(line));
+  if (start < 0) return [];
+  const items = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^#{1,2}\s/.test(line)) break;
+    const match = line.match(/^\s*-\s*\[( |x|X)\]\s+(.+)$/);
+    if (match) items.push({ done: match[1] !== ' ', text: match[2].trim() });
+  }
+  return items;
+}
+
+export function pendingPostRelease(progressFile) {
+  const plan = join(dirname(progressFile), 'plan.md');
+  if (!existsSync(plan)) return [];
+  try { return postReleaseItems(readFileSync(plan, 'utf8')).filter((item) => !item.done).map((item) => item.text); } catch { return []; }
 }
 
 /** Distance to delivery for the current candidate; attempts of an older candidate do not count. */
@@ -115,8 +140,13 @@ export function deliveryMilestones(progress) {
 }
 
 /** CLI form of the run loop's persist step: move from the captured state to effectiveNext exactly once. */
+const MAX_REASON_LENGTH = 300;
+
 export function advanceFeatureState({ cwd = process.cwd(), featureId, progressPath = null, from, to, reason = '' } = {}) {
   if (!from || !to) throw new Error('advance requires --from <state> and --to <state>');
+  if (String(reason).length > MAX_REASON_LENGTH) {
+    throw new Error(`[cc-nexs] advance --reason must be at most ${MAX_REASON_LENGTH} characters of plain sentences; put details in the plan`);
+  }
   if (from === to) throw new Error(`[cc-nexs] advance target equals the current state ${from}; nothing to persist`);
   const status = featureStatus({ cwd, featureId, progressPath });
   const markdown = join(dirname(status.progressFile), 'progress.md');
@@ -139,4 +169,23 @@ function readFeatureConfig(progressFile) {
   if (!existsSync(file)) return {};
   try { return JSON.parse(readFileSync(file, 'utf8')); }
   catch { throw new Error(`[cc-nexs] invalid feature config: ${file}`); }
+}
+
+// Marks that the bind_derived round generated the deferred derived paths into
+// the current candidate; later rounds regenerate them like any other source.
+export function recordDerivedBinding({ cwd = process.cwd(), featureId, progressPath = null } = {}) {
+  if (!featureId) throw new Error('feature id is required');
+  const progressFile = resolveFeatureProgress({ cwd, featureId, progressPath });
+  const progress = readProgressV2(progressFile);
+  if (progress.mode !== 'lean' || progress.gates?.plan?.binding?.derived_binding !== 'before-final-test') {
+    throw new Error('[cc-nexs] the approved plan does not defer derived bindings (derived_binding: before-final-test)');
+  }
+  const result = { kind: 'derived-binding', feature: progress.feature, progressFile };
+  if (progress.events.some((event) => event.type === 'derived.bound')) return { ...result, status: 'bound', alreadyRecorded: true };
+  if (progress.state !== 'TEST_FIXING') throw new Error(`[cc-nexs] record-derived-binding requires the TEST_FIXING bind_derived round, found ${progress.state}`);
+  const candidates = Object.fromEntries(Object.entries(progress.repositories || {})
+    .filter(([, assignment]) => assignment?.candidate?.ref)
+    .map(([id, assignment]) => [id, assignment.candidate.ref]));
+  appendProgressEvent(progressFile, { type: 'derived.bound', data: { candidates } });
+  return { ...result, status: 'bound' };
 }

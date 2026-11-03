@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { resolveTestConflict } from './test-conflict.mjs';
-import { syncReleaseBase } from './base-sync.mjs';
+import { finishBaseSync, syncReleaseBase } from './base-sync.mjs';
 import { switchTestTarget } from './test-target.mjs';
 
 import { readFileSync } from 'node:fs';
@@ -11,6 +11,7 @@ import { approveFeatureGate } from './approval-command.mjs';
 import { preflightBaseRelease, runBaseRelease } from './base-release.mjs';
 import { finalizeDocs } from './docs-finalize.mjs';
 import { reconcileTask } from './task-reconcile.mjs';
+import { taskStats } from './task-stats.mjs';
 import { assertHotfixCandidate, startHotfix } from './hotfix-control.mjs';
 import { initializeHotfix } from './hotfix-init.mjs';
 import { reviseHotfix } from './hotfix-revision.mjs';
@@ -24,7 +25,7 @@ import { recordEnvironmentVerification } from './test-verification-control.mjs';
 import { migrateFeatureConfig } from './feature-config.mjs';
 import { modelGateway } from './model-gateway.mjs';
 import { formatInventory, reclaimWorktrees } from './worktree-reclaim.mjs';
-import { advanceFeatureState, featureStatus } from './workflow-snapshot.mjs';
+import { advanceFeatureState, featureStatus, recordDerivedBinding } from './workflow-snapshot.mjs';
 
 export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   const [command, ...args] = argv;
@@ -59,6 +60,8 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
     return reconcileTask({ cwd, ...parseFeatureOptions(rest), confirm });
   }
   if (command === 'advance') return advanceFeatureState({ cwd, ...parseAdvanceOptions(args) });
+  if (command === 'record-derived-binding') return recordDerivedBinding({ cwd, ...parseFeatureOptions(args) });
+  if (command === 'stats') return taskStats({ cwd, ...parseFeatureOptions(args) });
   if (command === 'init-hotfix') return initializeHotfix({ cwd, ...parseHotfixLifecycleOptions(args, true) });
   if (command === 'revise-hotfix') return reviseHotfix({ cwd, ...parseHotfixLifecycleOptions(args, false) });
   if (command === 'release-test') {
@@ -66,6 +69,16 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   }
   if (command === 'resolve-test-conflict') return resolveTestConflict({ cwd, ...parseFeatureOptions(args) });
   if (command === 'sync-base') return syncReleaseBase({ cwd, ...parseFeatureOptions(args) });
+  if (command === 'finish-base-sync') {
+    const paths = [];
+    const rest = [];
+    for (let index = 0; index < args.length; index += 1) {
+      if (args[index] === '--path') paths.push(requireValue(args, ++index, '--path'));
+      else if (args[index].startsWith('--path=')) paths.push(args[index].slice('--path='.length));
+      else rest.push(args[index]);
+    }
+    return finishBaseSync({ cwd, ...parseFeatureOptions(rest), paths });
+  }
   if (command === 'release-base') {
     return runBaseRelease({ cwd, ...parseFeatureOptions(args) });
   }
@@ -415,7 +428,7 @@ function requireValue(args, index, option) {
 }
 
 function printResult(result) {
-  if (['test-target', 'base-sync'].includes(result.kind)) { console.log(JSON.stringify(result, null, 2)); return; }
+  if (['test-target', 'base-sync', 'base-sync-finished', 'derived-binding'].includes(result.kind)) { console.log(JSON.stringify(result, null, 2)); return; }
   if (['hotfix-init', 'hotfix-revision'].includes(result.kind)) {
     console.log(`cc-nexs ${result.kind}: ${result.feature.id}${result.resumed ? ' (resumed)' : ''}`);
     console.log(`BUG: ${result.document}`);
@@ -433,7 +446,18 @@ function printResult(result) {
     if (next.circuitBreaker) console.log(`Circuit breaker: ${next.circuitBreaker}${next.bug ? ` (${next.bug})` : ''}`);
     console.log(`Milestones: ${result.milestones.map((item) => `${item.id}=${item.status}${item.detail ? ` (${item.detail})` : ''}`).join(', ')}`);
     if (result.taskFiles) console.log(`Task files: ${result.taskFiles} (rebuildable copies only in scratch/)`);
+    if (result.postRelease?.length) console.log(`Post-release pending: ${result.postRelease.join('; ')}`);
     console.log(`Progress: ${result.progressFile}`);
+    return;
+  }
+  if (result.kind === 'task-stats') {
+    const s = result.stats;
+    const hours = (value) => `${(value / 60).toFixed(1)}h`;
+    console.log(`cc-nexs stats: ${result.feature.id} ${result.feature.slug} (${result.state})`);
+    console.log(`Time: elapsed ${hours(s.elapsed_minutes)}, active ${hours(s.active_minutes)} (gaps over 2h excluded)`);
+    console.log(`Test: ${s.test_attempts} attempt(s), ${s.test_deployments} deployed, ${s.test_conflict_attempts} with merge conflicts (${hours(s.conflict_minutes)}), ${s.test_target_advances} target advance(s), deploy wait ${hours(s.deploy_wait_minutes)}`);
+    console.log(`Human approvals: ${Object.entries(s.human_approvals).map(([gate, n]) => `${gate} ${n}`).join(', ') || 'none'}; plan reviews ${s.plan_reviews}, amendments ${s.plan_amendments}`);
+    console.log(`Candidates: ${s.candidates}; local verification ${s.local_verifications.passed} passed, ${s.local_verifications.failed} failed; base attempts ${s.base_attempts}`);
     return;
   }
   if (result.kind === 'task-reconcile') {
@@ -533,6 +557,7 @@ function printResult(result) {
     if (result.sourceCommit) console.log(`Docs candidate: ${result.sourceCommit}`);
     if (result.mergeRequest?.url) console.log(`Merge request: ${result.mergeRequest.url}`);
     if (result.status === 'pending') console.log('Next: rerun finalize-docs after the merge request is merged');
+    if (result.postRelease?.length) console.log(`Post-release pending (not done by this release): ${result.postRelease.join('; ')}`);
     return;
   }
   if (result.kind === 'base-release') {
@@ -607,6 +632,8 @@ function printUsage() {
   console.error('Usage:');
   console.error('  cc-nexs status <feature-id> [--no-auto-test-release] [--progress <path>]');
   console.error('  cc-nexs advance <feature-id> --from <state> --to <state> [--reason <text>] [--progress <path>]');
+  console.error('  cc-nexs record-derived-binding <feature-id> [--progress <path>]');
+  console.error('  cc-nexs stats <feature-id> [--progress <path>]');
   console.error('  cc-nexs resolve-test-conflict <feature-id> [--progress <path>]');
   console.error('  cc-nexs reclaim-worktrees [--sizes] [--confirm <token>]');
   console.error('  cc-nexs reconcile <feature-id> [--confirm <token>] [--progress <path>]');
@@ -627,6 +654,7 @@ function printUsage() {
   console.error('  cc-nexs request-release-changes <feature-id> --type <evidence|implementation|scope> --feedback <text> [--ac <id>] [--path <path>] [--progress <path>]');
   console.error('  cc-nexs release-base <feature-id> [--progress <path>]');
   console.error('  cc-nexs base-preflight <feature-id> [--progress <path>]');
+  console.error('  cc-nexs finish-base-sync <feature-id> [--path <repo>:<path>] [--progress <path>]');
   console.error('  cc-nexs finalize-docs <feature-id> [--progress <path>]');
   console.error('  cc-nexs render-plan <feature-id> [--progress <path>]');
   console.error('  cc-nexs migrate-feature-config <feature-id> [--dry-run] [--bind-plan-risk] [--progress <path>]');
