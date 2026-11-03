@@ -114,6 +114,7 @@ test('reference Test release driver reports pipelines from the API and accepts a
   git(repo, ['push', '-q', 'origin', 'HEAD:refs/heads/test']);
   const pipelines = new Map();
   const jobs = new Map();
+  const bridges = new Map();
   const played = [];
   const gitlab = await fakeGitlab((call) => {
     const base = '/api/v4/projects/group%2Fapi';
@@ -124,6 +125,8 @@ test('reference Test release driver reports pipelines from the API and accepts a
     if (one) return pipelines.get(Number(one[1]));
     const list = call.path.match(/\/pipelines\/(\d+)\/jobs$/);
     if (list) return jobs.get(Number(list[1])) || [];
+    const bridgeList = call.path.match(/\/pipelines\/(\d+)\/bridges$/);
+    if (bridgeList) return bridges.get(Number(bridgeList[1])) || [];
     const play = call.path.match(/\/jobs\/(\d+)\/play$/);
     if (call.method === 'POST' && play) { played.push(Number(play[1])); return { id: Number(play[1]) }; }
     return undefined;
@@ -139,7 +142,9 @@ test('reference Test release driver reports pipelines from the API and accepts a
   pipelines.set(11, { id: 11, sha: integration, status: 'manual', web_url: 'https://gitlab.example.com/p/11' });
   jobs.set(11, [{ id: 101, name: 'qa-gate', status: 'manual' }, { id: 102, name: 'deploy-test', status: 'created' }]);
   const pending = await run('gitlab-test-release-driver.mjs', args, payload('release_test_status'), options);
-  assert.deepEqual(pending.json, { status: 'pending', pipeline: { api: { id: '11', url: 'https://gitlab.example.com/p/11' } } });
+  assert.equal(pending.json.status, 'pending');
+  assert.deepEqual(pending.json.pipeline, { api: { id: '11', url: 'https://gitlab.example.com/p/11' } });
+  assert.match(pending.json.reason, /waiting for deploy-test \(created\)/);
   assert.deepEqual(played, [101]);
 
   pipelines.set(11, { ...pipelines.get(11), status: 'canceled' });
@@ -150,10 +155,48 @@ test('reference Test release driver reports pipelines from the API and accepts a
   assert.equal(superseded.json.status, 'succeeded');
   assert.deepEqual(superseded.json.pipeline, previous.pipeline);
   assert.deepEqual(superseded.json.environment_revision, { api: later });
-  assert.deepEqual(superseded.json.deployment, { environment: 'test', jobs: { api: { id: '202', url: 'https://gitlab.example.com/j/202', pipeline: '12' } } });
+  assert.deepEqual(superseded.json.deployment, { environment: 'test', jobs: { api: [{ id: '202', name: 'deploy-test', url: 'https://gitlab.example.com/j/202', pipeline: '12' }] } });
 
   pipelines.set(11, { ...pipelines.get(11), status: 'failed' });
   const failed = await run('gitlab-test-release-driver.mjs', args, payload('release_test_status', previous), options);
   assert.equal(failed.json.status, 'failed');
   assert.match(failed.json.reason, /pipeline 11 failed/);
+
+  const missing = await run('gitlab-test-release-driver.mjs', args, payload('release_test_status', previous), { cwd: root, env: { ...options.env, GITLAB_TOKEN: '' } });
+  assert.equal(missing.code, 0, missing.stderr);
+  assert.deepEqual(missing.json, { status: 'awaiting_receipt', reason: 'GITLAB_TOKEN is not set; store it and run release-test --resume' });
+});
+
+test('reference Test release driver waits for every deploy job in child pipelines', async () => {
+  const { root, repo, commit } = repository();
+  const integration = commit('integration.txt');
+  git(repo, ['push', '-q', 'origin', 'HEAD:refs/heads/test']);
+  const pipelines = new Map([[21, { id: 21, sha: integration, status: 'manual', web_url: 'https://gitlab.example.com/p/21' }]]);
+  const jobs = new Map([
+    [21, [{ id: 301, name: 'monorepo-generate', status: 'success' }]],
+    [22, [{ id: 401, name: 'app-a-部署-测试环境', status: 'success', web_url: 'https://gitlab.example.com/j/401' }, { id: 402, name: 'app-b-部署-测试环境', status: 'manual', web_url: 'https://gitlab.example.com/j/402' }]],
+  ]);
+  const gitlab = await fakeGitlab((call) => {
+    const base = '/api/v4/projects/group%2Fapi';
+    if (call.path === `${base}/pipelines`) return [...pipelines.values()].filter((item) => item.sha === call.query.sha);
+    const one = call.path.match(/\/pipelines\/(\d+)$/);
+    if (one) return pipelines.get(Number(one[1]));
+    const list = call.path.match(/\/pipelines\/(\d+)\/jobs$/);
+    if (list) return jobs.get(Number(list[1])) || [];
+    if (call.path === `${base}/pipelines/21/bridges`) return [{ id: 302, name: 'monorepo-pipeline', downstream_pipeline: { id: 22, status: 'manual' } }];
+    if (/\/bridges$/.test(call.path)) return [];
+    return undefined;
+  });
+  const options = { cwd: root, env: { GITLAB_API_URL: gitlab.base, GITLAB_PROJECT: 'group/api', GITLAB_TOKEN: 'test-token' } };
+  const payload = { schema_version: 1, operation: 'release_test_status', environment: 'test', attempt: 'test-release-1', integrations: { api: { sourceCommit: integration, targetBranch: 'test', integrationCommit: integration } }, previous: {} };
+  const args = ['--repo', 'api=api', '--deploy-job', '-部署-测试环境$'];
+  const waiting = await run('gitlab-test-release-driver.mjs', args, payload, options);
+  assert.equal(waiting.json.status, 'pending');
+  assert.match(waiting.json.reason, /waiting for app-b-部署-测试环境 \(manual\)/);
+  pipelines.set(21, { ...pipelines.get(21), status: 'success' });
+  jobs.set(22, jobs.get(22).map((job) => ({ ...job, status: 'success' })));
+  const done = await run('gitlab-test-release-driver.mjs', args, { ...payload, previous: { pipeline: waiting.json.pipeline } }, options);
+  assert.equal(done.json.status, 'succeeded');
+  assert.deepEqual(done.json.deployment.jobs.api.map((job) => [job.id, job.pipeline]), [['401', '22'], ['402', '22']]);
+  assert.deepEqual(done.json.environment_revision, { api: integration });
 });
