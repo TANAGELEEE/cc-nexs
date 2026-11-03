@@ -1,0 +1,273 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1440" viewBox="0 0 1200 1440" font-family="'JetBrains Mono','SFMono-Regular',Menlo,Consolas,monospace">
+<defs>
+<pattern id="hatch-4ade80" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="4" fill="#4ade80" opacity="0.25"/><rect width="2" height="2" fill="#4ade80" opacity="0.85"/><rect x="2" y="2" width="2" height="2" fill="#4ade80" opacity="0.85"/></pattern>
+<pattern id="hatch-f0883e" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="4" fill="#f0883e" opacity="0.25"/><rect width="2" height="2" fill="#f0883e" opacity="0.85"/><rect x="2" y="2" width="2" height="2" fill="#f0883e" opacity="0.85"/></pattern>
+<pattern id="hatch-a99cf5" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="4" fill="#a99cf5" opacity="0.25"/><rect width="2" height="2" fill="#a99cf5" opacity="0.85"/><rect x="2" y="2" width="2" height="2" fill="#a99cf5" opacity="0.85"/></pattern>
+<pattern id="hatch-7aa2f7" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="4" fill="#7aa2f7" opacity="0.25"/><rect width="2" height="2" fill="#7aa2f7" opacity="0.85"/><rect x="2" y="2" width="2" height="2" fill="#7aa2f7" opacity="0.85"/></pattern>
+<style>
+.on{opacity:0;animation:on 27s linear infinite}
+@keyframes on{0%{opacity:0}0.22%{opacity:0}0.89%{opacity:1}10.22%{opacity:1}10.89%{opacity:0}100%{opacity:0}}
+.grow{transform-box:fill-box;transform-origin:left center;animation:grow 27s ease-out infinite}
+@keyframes grow{0%{transform:scaleX(0)}6.67%{transform:scaleX(1)}100%{transform:scaleX(1)}}
+.flow{stroke-dasharray:3 7;animation:flow 1.2s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-20}}
+.blink{animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+</style></defs>
+<rect width="1200" height="1440" fill="#16181e"/>
+<rect x="0" y="0" width="1200" height="44" fill="#1b1e25"/>
+<circle cx="24" cy="22" r="7" fill="#ff5f57"/>
+<circle cx="46" cy="22" r="7" fill="#febc2e"/>
+<circle cx="68" cy="22" r="7" fill="#28c840"/>
+<text x="600" y="27" fill="#6b7280" font-size="13" text-anchor="middle">~/project — zsh — /cc-nexs:run 01 — lean</text>
+<text x="60" y="80" fill="#f3f4f6" font-size="14" font-weight="700">CC-NEXS STATE MACHINE</text>
+<text x="388" y="80" fill="#6b7280" font-size="13">·</text>
+<text x="410" y="80" fill="#f0883e" font-size="14" font-weight="700">PLAN · CHALLENGED</text>
+<text x="638" y="80" fill="#6b7280" font-size="13">·</text>
+<text x="660" y="80" fill="#4ade80" font-size="14" font-weight="700">BUILD · PARALLEL</text>
+<text x="878" y="80" fill="#6b7280" font-size="13">·</text>
+<text x="900" y="80" fill="#a99cf5" font-size="14" font-weight="700">HUMAN · 2 GATES</text>
+<rect x="160" y="98" width="9" height="9" fill="#a99cf5"/>
+<text x="176" y="107" fill="#6b7280" font-size="12">human · gateways</text>
+<rect x="360" y="98" width="9" height="9" fill="#7aa2f7"/>
+<text x="376" y="107" fill="#6b7280" font-size="12">controller · /cc-nexs:run</text>
+<rect x="620" y="98" width="9" height="9" fill="#f0883e"/>
+<text x="636" y="107" fill="#6b7280" font-size="12">planner · reviewers</text>
+<rect x="840" y="98" width="9" height="9" fill="#4ade80"/>
+<text x="856" y="107" fill="#6b7280" font-size="12">developers · verifier</text>
+<line x1="20" y1="124" x2="1180" y2="124" stroke="#2b2f39"/>
+<rect x="20" y="144" width="290" height="1046" fill="none" stroke="#a99cf5" stroke-width="1.4" stroke-dasharray="7 5" rx="2"/>
+<text x="36" y="172" fill="#a99cf5" font-size="15" font-weight="700">Human · on gate</text>
+<text x="36" y="194" fill="#a99cf5" font-size="13">/cc-nexs:approve-plan</text>
+<text x="36" y="216" fill="#6b7280" font-size="13">the run stops for you at:</text>
+<rect class="on" style="animation-delay:6s" x="29" y="225" width="272" height="36" fill="#a99cf5" fill-opacity="0.09" stroke="#a99cf5" stroke-width="2" rx="3"/>
+<rect x="32" y="228" width="266" height="30" fill="#2a2640" stroke="#a99cf5" stroke-width="1.4" rx="2"/>
+<text x="46" y="248" fill="#f3f4f6" font-size="13" font-weight="700">◆ Gateway A · plan</text>
+<text x="36" y="284" fill="#d7dae0" font-size="13">reads requirements + plan</text>
+<text x="36" y="304" fill="#d7dae0" font-size="13">every AC → task · local</text>
+<text x="36" y="324" fill="#d7dae0" font-size="13">          · test check</text>
+<text x="36" y="350" fill="#6b7280" font-size="13">risk tier is bound here:</text>
+<text x="36" y="372" fill="#f3f4f6" font-size="13" font-weight="700">» low/medium → fast-track</text>
+<text x="36" y="392" fill="#f3f4f6" font-size="13" font-weight="700">» high → review-first lane</text>
+<text x="36" y="446" fill="#6b7280" font-size="13">· scope change</text>
+<text x="36" y="470" fill="#d7dae0" font-size="13">returns to the Planner,</text>
+<text x="36" y="490" fill="#d7dae0" font-size="13">a fresh plan review,</text>
+<text x="36" y="510" fill="#d7dae0" font-size="13">then Gateway A again</text>
+<rect class="on" style="animation-delay:24s" x="29" y="541" width="272" height="36" fill="#a99cf5" fill-opacity="0.09" stroke="#a99cf5" stroke-width="2" rx="3"/>
+<rect x="32" y="544" width="266" height="30" fill="#2a2640" stroke="#a99cf5" stroke-width="1.4" rx="2"/>
+<text x="46" y="564" fill="#f3f4f6" font-size="13" font-weight="700">◆ Gateway B · release</text>
+<text x="36" y="600" fill="#d7dae0" font-size="13">/cc-nexs:approve-release</text>
+<text x="36" y="620" fill="#d7dae0" font-size="13">/cc-nexs:request-release-</text>
+<text x="36" y="640" fill="#d7dae0" font-size="13">  changes → back to dev</text>
+<text x="36" y="666" fill="#6b7280" font-size="13">exact candidate only</text>
+<line x1="36" y1="716" x2="294" y2="716" stroke="#a99cf5" stroke-dasharray="3 5" opacity="0.5"/>
+<text x="36" y="746" fill="#f0883e" font-size="14" font-weight="700">Compound · off-loop</text>
+<text x="36" y="768" fill="#f0883e" font-size="13">/cc-nexs:compound &lt;id&gt;</text>
+<text x="36" y="792" fill="#6b7280" font-size="13">writes only on a strong signal:</text>
+<text x="36" y="816" fill="#f3f4f6" font-size="13" font-weight="700">» delta closure needed</text>
+<text x="36" y="836" fill="#f3f4f6" font-size="13" font-weight="700">» ≥ 3 test attempts</text>
+<text x="36" y="856" fill="#f3f4f6" font-size="13" font-weight="700">» plan assumption overturned</text>
+<text x="36" y="876" fill="#f3f4f6" font-size="13" font-weight="700">» same BUG fixed twice</text>
+<text x="36" y="916" fill="#d7dae0" font-size="13">→ docs/solutions/&lt;topic&gt;.md</text>
+<text x="36" y="936" fill="#6b7280" font-size="13">Planner greps it next time</text>
+<text x="36" y="1150" fill="#6b7280" font-size="13">never writes code</text>
+<text x="36" y="1172" fill="#6b7280" font-size="13">explicit trigger only</text>
+<rect class="on" style="animation-delay:0s" x="517" y="141" width="486" height="122" fill="#f0883e" fill-opacity="0.09" stroke="#f0883e" stroke-width="2" rx="3"/>
+<rect x="520" y="144" width="480" height="116" fill="none" stroke="#f0883e" stroke-width="1.4" stroke-dasharray="7 5" rx="2"/>
+<text x="760" y="172" fill="#f0883e" font-size="15" font-weight="700" text-anchor="middle">Lean Planner · /cc-nexs:plan</text>
+<text x="760" y="198" fill="#f3f4f6" font-size="13" font-weight="700" text-anchor="middle">requirements.md + plan.md</text>
+<text x="760" y="224" fill="#d7dae0" font-size="13" text-anchor="middle"><tspan fill="#f0883e">risk </tspan><tspan fill="#f0883e">██</tspan><tspan fill="#6b7280">▒▒</tspan><tspan fill="#f0883e"> medium</tspan></text>
+<text x="760" y="248" fill="#6b7280" font-size="12" text-anchor="middle">greps docs/solutions/ · reads source · no code</text>
+<path class="flow" d="M760 260 L760 300" fill="none" stroke="#f0883e" stroke-width="1.4" opacity="0.8"/>
+<circle r="3.2" fill="#f0883e"><animateMotion dur="1s" repeatCount="indefinite" path="M760 260 L760 300"/></circle>
+<polygon points="755,295 765,295 760,302" fill="#f0883e"/>
+<path class="flow" d="M298 926 L326 926 L326 202 L520 202" fill="none" stroke="#f0883e" stroke-width="1.4" opacity="0.35"/>
+<circle r="3.2" fill="#f0883e"><animateMotion dur="4s" repeatCount="indefinite" path="M298 926 L326 926 L326 202 L520 202"/></circle>
+<rect class="on" style="animation-delay:3s" x="357" y="303" width="806" height="202" fill="#4ade80" fill-opacity="0.09" stroke="#4ade80" stroke-width="2" rx="3"/>
+<rect x="360" y="306" width="800" height="196" fill="none" stroke="#4ade80" stroke-width="1.4" stroke-dasharray="7 5" rx="2"/>
+<text x="384" y="336" fill="#4ade80" font-size="15" font-weight="700">LEAN PLAN REVIEWER · independent session</text>
+<text x="1040" y="336" fill="#6b7280" font-size="13" text-anchor="end">revisions</text>
+<text x="1136" y="336" fill="#f3f4f6" font-size="15" font-weight="700" text-anchor="end">0 / 1</text>
+<text x="384" y="384" fill="#f3f4f6" font-size="13" font-weight="700">AC → task</text>
+<rect x="600" y="372" width="300" height="14" fill="#2b2f39"/>
+<rect class="grow" style="animation-delay:3s" x="600" y="372" width="300" height="14" fill="#4ade80"/>
+<rect class="grow" style="animation-delay:3s" x="900" y="372" width="0" height="14" fill="url(#hatch-4ade80)"/>
+<text x="930" y="384" fill="#4ade80" font-size="13" font-weight="700">1.00 traced</text>
+<text x="384" y="418" fill="#f3f4f6" font-size="13" font-weight="700">AC → local check</text>
+<rect x="600" y="406" width="300" height="14" fill="#2b2f39"/>
+<rect class="grow" style="animation-delay:3s" x="600" y="406" width="270" height="14" fill="#4ade80"/>
+<rect class="grow" style="animation-delay:3s" x="870" y="406" width="29.999999999999993" height="14" fill="url(#hatch-4ade80)"/>
+<text x="930" y="418" fill="#4ade80" font-size="13" font-weight="700">0.90 traced</text>
+<text x="384" y="452" fill="#f3f4f6" font-size="13" font-weight="700">AC → test check</text>
+<rect x="600" y="440" width="300" height="14" fill="#2b2f39"/>
+<rect class="grow" style="animation-delay:3s" x="600" y="440" width="165" height="14" fill="#f0883e"/>
+<rect class="grow" style="animation-delay:3s" x="765" y="440" width="60" height="14" fill="url(#hatch-f0883e)"/>
+<text x="930" y="452" fill="#f0883e" font-size="13" font-weight="700">P1 → revise</text>
+<text x="384" y="484" fill="#4ade80" font-size="12">P0/P1 → block · one revision</text>
+<text x="1136" y="484" fill="#f0883e" font-size="12" text-anchor="end">P2/P3 → recorded</text>
+<path class="flow" d="M760 502 L760 540" fill="none" stroke="#4ade80" stroke-width="1.4" opacity="0.8"/>
+<circle r="3.2" fill="#4ade80"><animateMotion dur="1s" repeatCount="indefinite" path="M760 502 L760 540"/></circle>
+<polygon points="755,535 765,535 760,542" fill="#4ade80"/>
+<rect class="on" style="animation-delay:6s" x="357" y="543" width="806" height="68" fill="#a99cf5" fill-opacity="0.09" stroke="#a99cf5" stroke-width="2" rx="3"/>
+<rect x="360" y="546" width="800" height="62" fill="none" stroke="#a99cf5" stroke-width="1.4" stroke-dasharray="7 5" rx="2"/>
+<text x="760" y="572" fill="#a99cf5" font-size="14" font-weight="700" text-anchor="middle">GATEWAY A · PLAN_PENDING_HUMAN → PLAN_APPROVED</text>
+<text x="760" y="594" fill="#6b7280" font-size="12" text-anchor="middle">human approves the exact scope · bars plans with untraced AC</text>
+<path class="flow" d="M298 243 L340 243 L340 577 L360 577" fill="none" stroke="#a99cf5" stroke-width="1.4" opacity="0.6"/>
+<circle r="3.2" fill="#a99cf5"><animateMotion dur="2.4s" repeatCount="indefinite" path="M298 243 L340 243 L340 577 L360 577"/></circle>
+<path d="M760 608 L760 630 M490 630 L1030 630 M490 630 L490 650 M1030 630 L1030 650" fill="none" stroke="#6b7280" stroke-dasharray="3 5"/>
+<path class="flow" d="M760 608 L760 650" fill="none" stroke="#4ade80" stroke-width="1.4" opacity="0.8"/>
+<circle r="3.2" fill="#4ade80"><animateMotion dur="1s" repeatCount="indefinite" path="M760 608 L760 650"/></circle>
+<rect class="on" style="animation-delay:9s" x="357" y="653" width="266" height="166" fill="#4ade80" fill-opacity="0.09" stroke="#4ade80" stroke-width="2" rx="3"/>
+<rect x="360" y="656" width="260" height="160" fill="none" stroke="#4ade80" stroke-width="1.4" stroke-dasharray="7 5" rx="2"/>
+<text x="490" y="686" fill="#f3f4f6" font-size="14" font-weight="700" text-anchor="middle">developer · web</text>
+<text x="490" y="710" fill="#4ade80" font-size="12" text-anchor="middle">Lean Developer · medium</text>
+<text x="490" y="746" fill="#6b7280" font-size="13" text-anchor="middle">worktree feat/01-web</text>
+<text x="490" y="768" fill="#6b7280" font-size="13" text-anchor="middle">edits + tests</text>
+<text x="490" y="800" fill="#4ade80" font-size="13" text-anchor="middle">[<tspan class="blink">●</tspan> running]</text>
+<rect class="on" style="animation-delay:9s" x="627" y="653" width="266" height="166" fill="#4ade80" fill-opacity="0.09" stroke="#4ade80" stroke-width="2" rx="3"/>
+<rect x="630" y="656" width="260" height="160" fill="none" stroke="#4ade80" stroke-width="1.4" stroke-dasharray="7 5" rx="2"/>
+<text x="760" y="686" fill="#f3f4f6" font-size="14" font-weight="700" text-anchor="middle">developer · api</text>
+<text x="760" y="710" fill="#4ade80" font-size="12" text-anchor="middle">Lean Developer · medium</text>
+<text x="760" y="746" fill="#6b7280" font-size="13" text-anchor="middle">worktree feat/01-api</text>
+<text x="760" y="768" fill="#6b7280" font-size="13" text-anchor="middle">edits + tests</text>
+<text x="760" y="800" fill="#4ade80" font-size="13" text-anchor="middle">[<tspan class="blink">●</tspan> running]</text>
+<rect class="on" style="animation-delay:12s" x="897" y="653" width="266" height="166" fill="#4ade80" fill-opacity="0.09" stroke="#4ade80" stroke-width="2" rx="3"/>
+<rect x="900" y="656" width="260" height="160" fill="none" stroke="#4ade80" stroke-width="1.4" stroke-dasharray="7 5" rx="2"/>
+<text x="1030" y="686" fill="#f3f4f6" font-size="14" font-weight="700" text-anchor="middle">local checks</text>
+<text x="1030" y="710" fill="#4ade80" font-size="12" text-anchor="middle">IMPLEMENTING → LOCAL_VERIFYING</text>
+<text x="1030" y="746" fill="#6b7280" font-size="13" text-anchor="middle">build · start · smoke</text>
+<text x="1030" y="768" fill="#6b7280" font-size="13" text-anchor="middle">pass | deferred_to_test</text>
+<text x="1030" y="800" fill="#4ade80" font-size="13" text-anchor="middle">[<tspan class="blink">●</tspan> running]</text>
+<polygon points="898,731 898,741 905,736" fill="#4ade80"/>
+<path class="flow" d="M890 736 L898 736" fill="none" stroke="#4ade80" stroke-width="1.4" opacity="0.8"/>
+<path d="M490 816 L490 836 M1030 816 L1030 836 M490 836 L1030 836 M760 836 L760 862" fill="none" stroke="#6b7280" stroke-dasharray="3 5"/>
+<path class="flow" d="M760 816 L760 862" fill="none" stroke="#4ade80" stroke-width="1.4" opacity="0.8"/>
+<circle r="3.2" fill="#4ade80"><animateMotion dur="1s" repeatCount="indefinite" path="M760 816 L760 862"/></circle>
+<polygon points="755,857 765,857 760,864" fill="#4ade80"/>
+<rect class="on" style="animation-delay:15s" x="357" y="865" width="401" height="116" fill="#f0883e" fill-opacity="0.09" stroke="#f0883e" stroke-width="2" rx="3"/>
+<rect x="360" y="868" width="395" height="110" fill="none" stroke="#f0883e" stroke-width="1.4" stroke-dasharray="7 5" rx="2"/>
+<text x="557" y="896" fill="#f0883e" font-size="14" font-weight="700" text-anchor="middle">test release · CI</text>
+<text x="557" y="920" fill="#f3f4f6" font-size="13" font-weight="700" text-anchor="middle">freeze exact candidate</text>
+<text x="557" y="942" fill="#6b7280" font-size="13" text-anchor="middle">merge → test · trigger CI/deploy</text>
+<text x="557" y="964" fill="#f0883e" font-size="12" text-anchor="middle">TEST_RELEASE</text>
+<rect class="on" style="animation-delay:18s" x="762" y="865" width="401" height="116" fill="#4ade80" fill-opacity="0.09" stroke="#4ade80" stroke-width="2" rx="3"/>
+<rect x="765" y="868" width="395" height="110" fill="none" stroke="#4ade80" stroke-width="1.4" stroke-dasharray="7 5" rx="2"/>
+<text x="962" y="896" fill="#4ade80" font-size="14" font-weight="700" text-anchor="middle">Lean Verifier · test env</text>
+<text x="962" y="920" fill="#f3f4f6" font-size="13" font-weight="700" text-anchor="middle">black-box acceptance matrix</text>
+<text x="962" y="942" fill="#6b7280" font-size="13" text-anchor="middle">browser · login · MFA after deploy</text>
+<text x="962" y="964" fill="#4ade80" font-size="12" text-anchor="middle">missing tool → manual_required</text>
+<path class="flow" d="M755 923 L763 923" fill="none" stroke="#f0883e" stroke-width="1.4" opacity="0.8"/>
+<polygon points="758,918 758,928 765,923" fill="#f0883e"/>
+<path class="flow" d="M760 978 L760 1010" fill="none" stroke="#4ade80" stroke-width="1.4" opacity="0.8"/>
+<circle r="3.2" fill="#4ade80"><animateMotion dur="1s" repeatCount="indefinite" path="M760 978 L760 1010"/></circle>
+<polygon points="755,1005 765,1005 760,1012" fill="#4ade80"/>
+<rect class="on" style="animation-delay:21s" x="437" y="1013" width="646" height="82" fill="#f0883e" fill-opacity="0.09" stroke="#f0883e" stroke-width="2" rx="3"/>
+<rect x="440" y="1016" width="640" height="76" fill="none" stroke="#f0883e" stroke-width="1.4" stroke-dasharray="7 5" rx="2"/>
+<text x="760" y="1044" fill="#f0883e" font-size="14" font-weight="700" text-anchor="middle">Lean Reviewer · one consolidated Review</text>
+<text x="760" y="1070" fill="#6b7280" font-size="13" text-anchor="middle">base...candidate diff · all repos · ≤ 1 delta closure</text>
+<path class="flow" d="M760 1092 L760 1116" fill="none" stroke="#f0883e" stroke-width="1.4" opacity="0.8"/>
+<circle r="3.2" fill="#f0883e"><animateMotion dur="1s" repeatCount="indefinite" path="M760 1092 L760 1116"/></circle>
+<polygon points="755,1111 765,1111 760,1118" fill="#f0883e"/>
+<rect class="on" style="animation-delay:24s" x="477" y="1119" width="566" height="74" fill="#f0883e" fill-opacity="0.09" stroke="#f0883e" stroke-width="2" rx="3"/>
+<rect x="480" y="1122" width="560" height="68" fill="none" stroke="#f0883e" stroke-width="1.4" stroke-dasharray="7 5" rx="2"/>
+<text x="760" y="1150" fill="#f0883e" font-size="15" font-weight="700" text-anchor="middle">Gateway B → base merge → COMPLETE</text>
+<text x="760" y="1174" fill="#6b7280" font-size="12" text-anchor="middle">RELEASE_PENDING_HUMAN · exact candidate · then compound</text>
+<path class="flow" d="M298 559 L332 559 L332 1156 L480 1156" fill="none" stroke="#a99cf5" stroke-width="1.4" opacity="0.6"/>
+<circle r="3.2" fill="#a99cf5"><animateMotion dur="3s" repeatCount="indefinite" path="M298 559 L332 559 L332 1156 L480 1156"/></circle>
+<text x="760" y="1226" fill="#d7dae0" font-size="15" text-anchor="middle"><tspan fill="#f3f4f6" font-weight="700">Plan</tspan> <tspan fill="#f0883e" font-weight="700">once</tspan><tspan fill="#f3f4f6" font-weight="700">. Review</tspan> <tspan fill="#4ade80" font-weight="700">once</tspan><tspan fill="#f3f4f6" font-weight="700">. Humans own</tspan> <tspan fill="#a99cf5" font-weight="700">both gates</tspan><tspan fill="#f3f4f6" font-weight="700">.</tspan></text>
+<text x="40" y="1262" fill="#6b7280" font-size="12">— session log</text>
+<line x1="150" y1="1258" x2="800" y2="1258" stroke="#2b2f39"/>
+<text x="40" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:3s">  10:02:11</text>
+<text x="150" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:3s">planner</text>
+<text x="300" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:3s">plan.md · 4 AC · 6 tasks · 2 repos</text>
+<text x="1160" y="1290" fill="#6b7280" font-size="13" text-anchor="end" class="on" style="animation-delay:3s">risk=medium  fast-track</text>
+<text x="40" y="1316" fill="#6b7280" font-size="13" class="on" style="animation-delay:0s">› 10:02:11</text>
+<text x="150" y="1316" fill="#4ade80" font-size="13" font-weight="700" class="on" style="animation-delay:0s">planner</text>
+<text x="300" y="1316" fill="#d7dae0" font-size="13" class="on" style="animation-delay:0s">plan.md · 4 AC · 6 tasks · 2 repos</text>
+<text x="1160" y="1316" fill="#4ade80" font-size="13" text-anchor="end" class="on" style="animation-delay:0s">risk=medium  fast-track</text>
+<text x="40" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:6s">  10:04:37</text>
+<text x="150" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:6s">plan-review</text>
+<text x="300" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:6s">AC-3 has no test check</text>
+<text x="1160" y="1290" fill="#6b7280" font-size="13" text-anchor="end" class="on" style="animation-delay:6s">P1 → 1 revision</text>
+<text x="40" y="1316" fill="#6b7280" font-size="13" class="on" style="animation-delay:3s">› 10:04:37</text>
+<text x="150" y="1316" fill="#4ade80" font-size="13" font-weight="700" class="on" style="animation-delay:3s">plan-review</text>
+<text x="300" y="1316" fill="#d7dae0" font-size="13" class="on" style="animation-delay:3s">AC-3 has no test check</text>
+<text x="1160" y="1316" fill="#f0883e" font-size="13" text-anchor="end" class="on" style="animation-delay:3s">P1 → 1 revision</text>
+<text x="40" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:9s">  10:05:02</text>
+<text x="150" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:9s">gateway A</text>
+<text x="300" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:9s">waiting for /cc-nexs:approve-plan 01</text>
+<text x="1160" y="1290" fill="#6b7280" font-size="13" text-anchor="end" class="on" style="animation-delay:9s">PLAN_PENDING_HUMAN</text>
+<text x="40" y="1316" fill="#6b7280" font-size="13" class="on" style="animation-delay:6s">› 10:05:02</text>
+<text x="150" y="1316" fill="#4ade80" font-size="13" font-weight="700" class="on" style="animation-delay:6s">gateway A</text>
+<text x="300" y="1316" fill="#d7dae0" font-size="13" class="on" style="animation-delay:6s">waiting for /cc-nexs:approve-plan 01</text>
+<text x="1160" y="1316" fill="#a99cf5" font-size="13" text-anchor="end" class="on" style="animation-delay:6s">PLAN_PENDING_HUMAN</text>
+<text x="40" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:12s">  10:07:40</text>
+<text x="150" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:12s">developer×2</text>
+<text x="300" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:12s">web + api in parallel worktrees</text>
+<text x="1160" y="1290" fill="#6b7280" font-size="13" text-anchor="end" class="on" style="animation-delay:12s">IMPLEMENTING</text>
+<text x="40" y="1316" fill="#6b7280" font-size="13" class="on" style="animation-delay:9s">› 10:07:40</text>
+<text x="150" y="1316" fill="#4ade80" font-size="13" font-weight="700" class="on" style="animation-delay:9s">developer×2</text>
+<text x="300" y="1316" fill="#d7dae0" font-size="13" class="on" style="animation-delay:9s">web + api in parallel worktrees</text>
+<text x="1160" y="1316" fill="#4ade80" font-size="13" text-anchor="end" class="on" style="animation-delay:9s">IMPLEMENTING</text>
+<text x="40" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:15s">  10:21:15</text>
+<text x="150" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:15s">local</text>
+<text x="300" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:15s">web smoke ok · api start deferred_to_test</text>
+<text x="1160" y="1290" fill="#6b7280" font-size="13" text-anchor="end" class="on" style="animation-delay:15s">LOCAL_VERIFYING</text>
+<text x="40" y="1316" fill="#6b7280" font-size="13" class="on" style="animation-delay:12s">› 10:21:15</text>
+<text x="150" y="1316" fill="#4ade80" font-size="13" font-weight="700" class="on" style="animation-delay:12s">local</text>
+<text x="300" y="1316" fill="#d7dae0" font-size="13" class="on" style="animation-delay:12s">web smoke ok · api start deferred_to_test</text>
+<text x="1160" y="1316" fill="#4ade80" font-size="13" text-anchor="end" class="on" style="animation-delay:12s">LOCAL_VERIFYING</text>
+<text x="40" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:18s">  10:22:03</text>
+<text x="150" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:18s">controller</text>
+<text x="300" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:18s">candidate frozen · merged to test · CI #4182</text>
+<text x="1160" y="1290" fill="#6b7280" font-size="13" text-anchor="end" class="on" style="animation-delay:18s">TEST_RELEASE</text>
+<text x="40" y="1316" fill="#6b7280" font-size="13" class="on" style="animation-delay:15s">› 10:22:03</text>
+<text x="150" y="1316" fill="#4ade80" font-size="13" font-weight="700" class="on" style="animation-delay:15s">controller</text>
+<text x="300" y="1316" fill="#d7dae0" font-size="13" class="on" style="animation-delay:15s">candidate frozen · merged to test · CI #4182</text>
+<text x="1160" y="1316" fill="#f0883e" font-size="13" text-anchor="end" class="on" style="animation-delay:15s">TEST_RELEASE</text>
+<text x="40" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:21s">  10:31:48</text>
+<text x="150" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:21s">verifier</text>
+<text x="300" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:21s">AC 1–4 pass on deployed test</text>
+<text x="1160" y="1290" fill="#6b7280" font-size="13" text-anchor="end" class="on" style="animation-delay:21s">TEST_VERIFIED</text>
+<text x="40" y="1316" fill="#6b7280" font-size="13" class="on" style="animation-delay:18s">› 10:31:48</text>
+<text x="150" y="1316" fill="#4ade80" font-size="13" font-weight="700" class="on" style="animation-delay:18s">verifier</text>
+<text x="300" y="1316" fill="#d7dae0" font-size="13" class="on" style="animation-delay:18s">AC 1–4 pass on deployed test</text>
+<text x="1160" y="1316" fill="#4ade80" font-size="13" text-anchor="end" class="on" style="animation-delay:18s">TEST_VERIFIED</text>
+<text x="40" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:24s">  10:36:20</text>
+<text x="150" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:24s">reviewer</text>
+<text x="300" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:24s">one Review · 0 P0/P1 · 2 P2 recorded</text>
+<text x="1160" y="1290" fill="#6b7280" font-size="13" text-anchor="end" class="on" style="animation-delay:24s">CONSOLIDATED_REVIEW</text>
+<text x="40" y="1316" fill="#6b7280" font-size="13" class="on" style="animation-delay:21s">› 10:36:20</text>
+<text x="150" y="1316" fill="#4ade80" font-size="13" font-weight="700" class="on" style="animation-delay:21s">reviewer</text>
+<text x="300" y="1316" fill="#d7dae0" font-size="13" class="on" style="animation-delay:21s">one Review · 0 P0/P1 · 2 P2 recorded</text>
+<text x="1160" y="1316" fill="#f0883e" font-size="13" text-anchor="end" class="on" style="animation-delay:21s">CONSOLIDATED_REVIEW</text>
+<text x="40" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:0s">  10:40:09</text>
+<text x="150" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:0s">gateway B</text>
+<text x="300" y="1290" fill="#6b7280" font-size="13" class="on" style="animation-delay:0s">approve-release → base merge</text>
+<text x="1160" y="1290" fill="#6b7280" font-size="13" text-anchor="end" class="on" style="animation-delay:0s">COMPLETE</text>
+<text x="40" y="1316" fill="#6b7280" font-size="13" class="on" style="animation-delay:24s">› 10:40:09</text>
+<text x="150" y="1316" fill="#4ade80" font-size="13" font-weight="700" class="on" style="animation-delay:24s">gateway B</text>
+<text x="300" y="1316" fill="#d7dae0" font-size="13" class="on" style="animation-delay:24s">approve-release → base merge</text>
+<text x="1160" y="1316" fill="#a99cf5" font-size="13" text-anchor="end" class="on" style="animation-delay:24s">COMPLETE</text>
+<line x1="20" y1="1338" x2="1180" y2="1338" stroke="#2b2f39"/>
+<text x="40" y="1374" fill="#d7dae0" font-size="14"><tspan fill="#4ade80">~/project $</tspan> <tspan fill="#f3f4f6" font-weight="700">/cc-nexs:run 01</tspan> <tspan fill="#6b7280">--mode lean</tspan></text>
+<rect class="blink" x="378" y="1361" width="8" height="16" fill="#d7dae0"/>
+<text x="40" y="1412" fill="#6b7280" font-size="12">state: [</text>
+<text x="98" y="1412" fill="#f3f4f6" font-size="12" font-weight="700" class="on" style="animation-delay:0s">PLANNING</text>
+<text x="98" y="1412" fill="#f3f4f6" font-size="12" font-weight="700" class="on" style="animation-delay:3s">PLAN_REVIEWING</text>
+<text x="98" y="1412" fill="#f3f4f6" font-size="12" font-weight="700" class="on" style="animation-delay:6s">PLAN_PENDING_HUMAN</text>
+<text x="98" y="1412" fill="#f3f4f6" font-size="12" font-weight="700" class="on" style="animation-delay:9s">IMPLEMENTING</text>
+<text x="98" y="1412" fill="#f3f4f6" font-size="12" font-weight="700" class="on" style="animation-delay:12s">LOCAL_VERIFYING</text>
+<text x="98" y="1412" fill="#f3f4f6" font-size="12" font-weight="700" class="on" style="animation-delay:15s">TEST_RELEASE</text>
+<text x="98" y="1412" fill="#f3f4f6" font-size="12" font-weight="700" class="on" style="animation-delay:18s">TEST_VERIFYING</text>
+<text x="98" y="1412" fill="#f3f4f6" font-size="12" font-weight="700" class="on" style="animation-delay:21s">CONSOLIDATED_REVIEW</text>
+<text x="98" y="1412" fill="#f3f4f6" font-size="12" font-weight="700" class="on" style="animation-delay:24s">COMPLETE</text>
+<text x="235.75" y="1412" fill="#6b7280" font-size="12">]</text>
+<text x="265.75" y="1412" fill="#6b7280" font-size="12">roles: [</text>
+<text x="323.75" y="1412" fill="#f3f4f6" font-size="12" font-weight="700">5</text>
+<text x="331" y="1412" fill="#6b7280" font-size="12">]</text>
+<text x="361" y="1412" fill="#6b7280" font-size="12">runtimes: [</text>
+<text x="440.75" y="1412" fill="#f3f4f6" font-size="12" font-weight="700">claude · codex · pi</text>
+<text x="578.5" y="1412" fill="#6b7280" font-size="12">]</text>
+<text x="1160" y="1412" fill="#6b7280" font-size="12" text-anchor="end">[27s LOOP]</text>
+</svg>
