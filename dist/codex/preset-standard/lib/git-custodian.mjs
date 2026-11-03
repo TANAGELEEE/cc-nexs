@@ -170,7 +170,7 @@ export function createWorkspaceWorktrees(workspace, {
   }
 }
 
-export function commitCandidate({ repositoryId, repo, worktree, branch, featureKey, paths, message, progressFile = null }) {
+export function commitCandidate({ repositoryId, repo, worktree, branch, featureKey, paths, message, progressFile = null, finalDocs = false }) {
   assertSegment(repositoryId, 'repository id');
   if (!Array.isArray(paths) || paths.length === 0) throw new Error('[cc-nexs] candidate paths are required');
   const registered = git(repo, ['worktree', 'list', '--porcelain']);
@@ -201,7 +201,7 @@ export function commitCandidate({ repositoryId, repo, worktree, branch, featureK
       recordRepositoryCandidatePrepared(progressFile, repositoryId, {
         candidateRef,
         staged: staged.split('\n'),
-      });
+      }, { finalDocs });
       git(worktree, ['add', '--', progressRel]);
       staged = git(worktree, ['diff', '--cached', '--name-only']);
     }
@@ -218,7 +218,7 @@ export function commitCandidate({ repositoryId, repo, worktree, branch, featureK
     recordRepositoryCandidatePrepared(progressFile, repositoryId, {
       candidateRef,
       staged: staged.split('\n'),
-    });
+    }, { finalDocs });
   }
   return { branch, commit, candidateRef, staged: staged.split('\n') };
 }
@@ -293,6 +293,36 @@ export function resolveDeployedRevision({ repo, targetBranch, revision, integrat
   return { revision: deployed, relation: deployed === integrationCommit ? 'exact' : 'contains' };
 }
 
+// Paths the target changed since the candidate's merge-base. Overlap means the
+// tested candidate cannot be released unchanged; sensitive paths need an
+// integration check of the merged tree before the candidate's evidence can stand.
+function assessTargetChanges({ repo, sourceCommit, targetBefore, checkSensitive = true }) {
+  const common = git(repo, ['merge-base', sourceCommit, targetBefore]);
+  const paths = (commit) => git(repo, ['diff', '--name-only', '--no-renames', '-z', common, commit]).split('\0').filter(Boolean);
+  const candidatePaths = new Set(paths(sourceCommit));
+  const targetPaths = paths(targetBefore);
+  return {
+    overlap: targetPaths.filter((path) => candidatePaths.has(path)),
+    sensitive: checkSensitive ? targetPaths.filter(isSensitiveBasePath) : [],
+  };
+}
+
+function overlapError(targetBranch) {
+  return new Error(`[cc-nexs] BASE_CHANGED: origin/${targetBranch} overlaps candidate paths; resolve and verify the affected changes before release`);
+}
+
+function sensitiveError(targetBranch, sensitive) {
+  return new Error(`[cc-nexs] BASE_CHANGED: origin/${targetBranch} changed shared runtime or contract paths (${sensitive.join(', ')}); sync and re-verify automatically before release`);
+}
+
+function assertBranchName(name) {
+  if (typeof name !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(name)
+    || name.includes('..') || name.includes('//') || name.endsWith('/') || name.endsWith('.lock')) {
+    throw new Error(`[cc-nexs] invalid branch name: ${name}`);
+  }
+  return name;
+}
+
 export function integrateCandidateToTest({
   repo,
   repositoryId,
@@ -301,8 +331,6 @@ export function integrateCandidateToTest({
   targetBranch,
   requireTargetAncestor = false,
   requireDisjointTargetChanges = false,
-  mergeRequest = null,
-  previousIntegration = null,
   verifyIntegration = null,
   preserveConflicts = false,
   conflictWorktree = null,
@@ -330,17 +358,10 @@ export function integrateCandidateToTest({
   }
   let sensitive = [];
   if (requireDisjointTargetChanges && !isAncestor(repo, targetBefore, sourceCommit)) {
-    const common = git(repo, ['merge-base', sourceCommit, targetBefore]);
-    const paths = (commit) => git(repo, ['diff', '--name-only', '--no-renames', '-z', common, commit]).split('\0').filter(Boolean);
-    const candidatePaths = new Set(paths(sourceCommit));
-    const targetPaths = paths(targetBefore);
-    if (targetPaths.some((path) => candidatePaths.has(path))) {
-      throw new Error(`[cc-nexs] BASE_CHANGED: origin/${targetBranch} overlaps candidate paths; resolve and verify the affected changes before release`);
-    }
-    sensitive = targetPaths.filter(isSensitiveBasePath);
-    if (sensitive.length && !verifyIntegration) {
-      throw new Error(`[cc-nexs] BASE_CHANGED: origin/${targetBranch} changed shared runtime or contract paths (${sensitive.join(', ')}); sync and re-verify automatically before release`);
-    }
+    const changes = assessTargetChanges({ repo, sourceCommit, targetBefore });
+    if (changes.overlap.length) throw overlapError(targetBranch);
+    sensitive = changes.sensitive;
+    if (sensitive.length && !verifyIntegration) throw sensitiveError(targetBranch, sensitive);
   }
   const tempRoot = conflictWorktree ? null : mkdtempSync(join(tmpdir(), `cc-nexs-test-release-${repositoryId}-`));
   const integrationWorktree = conflictWorktree || join(tempRoot, 'worktree');
@@ -363,32 +384,10 @@ export function integrateCandidateToTest({
       try { git(integrationWorktree, ['merge', '--abort']); } catch {}
       throw new Error(`[cc-nexs] ${requireDisjointTargetChanges ? 'BASE_CHANGED: ' : ''}candidate ${candidateRef} conflicts with latest origin/${targetBranch}`);
     }
-    const integrationCommit = previousIntegration?.merge_request && previousIntegration.source_commit === sourceCommit && previousIntegration.target_before === targetBefore
-      ? previousIntegration.integration_commit : git(integrationWorktree, ['rev-parse', 'HEAD']);
-    let integrationVerification = null;
-    if (sensitive.length) {
-      integrationVerification = verifyIntegration({ repository: repositoryId, sourceCommit, targetBefore, integrationCommit, worktree: integrationWorktree, sensitivePaths: sensitive });
-      if (integrationVerification?.status !== 'passed'
-        || integrationVerification.integrationCommit !== integrationCommit
-        || typeof integrationVerification.proof !== 'string' || !integrationVerification.proof.trim()) {
-        throw new Error('[cc-nexs] BASE_CHANGED: integration checks did not prove the exact merged candidate; sync and re-verify');
-      }
-      if (git(integrationWorktree, ['rev-parse', 'HEAD']) !== integrationCommit || git(integrationWorktree, ['status', '--porcelain'])) throw new Error('[cc-nexs] integration verifier modified the merged candidate');
-    }
-    if (mergeRequest) {
-      const sourceBranch = `cc-nexs-mr-${repositoryId}-${integrationCommit}`;
-      // The driver pushes sourceBranch itself: a controller push first would make the driver's
-      // push a no-op, and GitLab ignores merge_request.* push options on an unchanged ref.
-      const receipt = mergeRequest({ repository: repositoryId, sourceBranch, sourceCommit, integrationCommit, targetBranch, targetBefore });
-      if (!receipt || !['pending', 'merged'].includes(receipt.status) || typeof receipt.url !== 'string' || !/^https?:\/\//.test(receipt.url)) throw new Error('[cc-nexs] invalid MR receipt');
-      const remote = fetchBase(repo, targetBranch);
-      const remoteCommit = git(repo, ['rev-parse', remote]);
-      const merged = isAncestor(repo, integrationCommit, remoteCommit);
-      if (receipt.status === 'merged' && !merged) throw new Error('[cc-nexs] MR receipt has no remote ancestry proof');
-      const pushed = git(repo, ['ls-remote', '--heads', 'origin', `refs/heads/${sourceBranch}`]).split(/\s+/)[0];
-      if (!merged && pushed !== integrationCommit) throw new Error(`[cc-nexs] MR driver did not push origin/${sourceBranch} at ${integrationCommit}`);
-      return { repository: repositoryId, sourceCommit, targetBranch, targetBefore, integrationCommit, remoteCommit, pending: !merged, mergeRequest: receipt, integrationVerification };
-    }
+    const integrationCommit = git(integrationWorktree, ['rev-parse', 'HEAD']);
+    const integrationVerification = sensitive.length
+      ? runIntegrationVerification({ verifyIntegration, repositoryId, sourceCommit, targetBefore, integrationCommit, worktree: integrationWorktree, sensitive })
+      : null;
     try {
       git(integrationWorktree, ['push', 'origin', `${integrationCommit}:refs/heads/${targetBranch}`]);
     } catch (error) {
@@ -419,6 +418,132 @@ export function integrateCandidateToTest({
     }
     if (tempRoot && !keepWorktree) rmSync(tempRoot, { recursive: true, force: true });
   }
+}
+
+function runIntegrationVerification({ verifyIntegration, repositoryId, sourceCommit, targetBefore, integrationCommit, worktree, sensitive }) {
+  const verification = verifyIntegration({ repository: repositoryId, sourceCommit, targetBefore, integrationCommit, worktree, sensitivePaths: sensitive });
+  if (verification?.status !== 'passed'
+    || verification.integrationCommit !== integrationCommit
+    || typeof verification.proof !== 'string' || !verification.proof.trim()) {
+    throw new Error('[cc-nexs] BASE_CHANGED: integration checks did not prove the exact merged candidate; sync and re-verify');
+  }
+  if (git(worktree, ['rev-parse', 'HEAD']) !== integrationCommit || git(worktree, ['status', '--porcelain'])) {
+    throw new Error('[cc-nexs] integration verifier modified the merged candidate');
+  }
+  return { ...verification, integrationTree: git(worktree, ['rev-parse', 'HEAD^{tree}']) };
+}
+
+// Checks a merge of the candidate onto targetBefore in a throwaway worktree. The
+// merge commit never leaves this machine; the merge request merges the candidate
+// itself, and the proof is bound to the verified tree.
+function verifyMergedTree({ repo, repositoryId, sourceCommit, targetBefore, sensitive, verifyIntegration }) {
+  const tempRoot = mkdtempSync(join(tmpdir(), `cc-nexs-base-check-${repositoryId}-`));
+  const worktree = join(tempRoot, 'worktree');
+  let registered = false;
+  try {
+    git(repo, ['worktree', 'add', '--detach', worktree, targetBefore]);
+    registered = true;
+    try {
+      git(worktree, ['merge', '--no-ff', '--no-edit', sourceCommit], { env: gitIdentityEnv(resolveGitIdentity(repo)) });
+    } catch {
+      try { git(worktree, ['merge', '--abort']); } catch {}
+      throw new Error(`[cc-nexs] BASE_CHANGED: candidate ${sourceCommit} conflicts with origin target ${targetBefore}`);
+    }
+    const integrationCommit = git(worktree, ['rev-parse', 'HEAD']);
+    return runIntegrationVerification({ verifyIntegration, repositoryId, sourceCommit, targetBefore, integrationCommit, worktree, sensitive });
+  } finally {
+    if (registered) {
+      try { git(repo, ['worktree', 'remove', '--force', worktree]); } catch {}
+      try { git(repo, ['worktree', 'prune']); } catch {}
+    }
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+}
+
+// Proves the target merged the approved candidate itself: either the candidate
+// is on the target's first-parent chain (fast-forward) or a first-parent commit
+// has it as a direct parent (merge commit). A target that contains the candidate
+// only through other commits merged something beyond what was approved.
+export function proveCandidateMerge({ repo, remoteCommit, sourceCommit }) {
+  if (remoteCommit === sourceCommit) return { mergeCommit: sourceCommit, relation: 'fast-forward' };
+  const lines = git(repo, ['rev-list', '--first-parent', '--parents', remoteCommit, '--not', sourceCommit]).split('\n').filter(Boolean).reverse();
+  for (const line of lines) {
+    const [commit, firstParent, ...otherParents] = line.split(' ');
+    if (firstParent === sourceCommit) return { mergeCommit: sourceCommit, relation: 'fast-forward' };
+    if (otherParents.includes(sourceCommit)) return { mergeCommit: commit, relation: 'merge' };
+  }
+  throw new Error(`[cc-nexs] MR_SOURCE_DRIFT: ${remoteCommit} contains approved candidate ${sourceCommit} only through other commits; the merged source was not the approved candidate`);
+}
+
+// Protected-base delivery: the merge request's source is the assigned feature
+// branch at the exact approved candidate, so the reviewed head is the tested
+// commit. The server creates the merge commit; nothing synthetic is pushed.
+export function promoteCandidateViaMergeRequest({
+  repo,
+  repositoryId,
+  branch,
+  candidateRef,
+  expectedSourceCommit = null,
+  targetBranch,
+  mergeRequest,
+  verifyIntegration = null,
+  checkSensitive = true,
+}) {
+  assertSegment(repositoryId, 'repository id');
+  assertSegment(targetBranch, 'base branch');
+  assertBranchName(branch);
+  if (typeof mergeRequest !== 'function') throw new Error('[cc-nexs] merge request driver is required');
+  const sourceCommit = resolveCandidateCommit({ repo, candidateRef });
+  if (expectedSourceCommit !== null && sourceCommit !== expectedSourceCommit) {
+    throw new Error(`[cc-nexs] candidate ref changed during base release for ${repositoryId}`);
+  }
+  const targetBefore = git(repo, ['rev-parse', fetchBase(repo, targetBranch)]);
+  const base = { repository: repositoryId, sourceCommit, sourceBranch: branch, targetBranch, targetBefore };
+  if (isAncestor(repo, sourceCommit, targetBefore)) {
+    return { ...base, ...proveCandidateMerge({ repo, remoteCommit: targetBefore, sourceCommit }), remoteCommit: targetBefore, pending: false, integrationVerification: null };
+  }
+  let integrationVerification = null;
+  if (!isAncestor(repo, targetBefore, sourceCommit)) {
+    const changes = assessTargetChanges({ repo, sourceCommit, targetBefore, checkSensitive });
+    if (changes.overlap.length) throw overlapError(targetBranch);
+    if (changes.sensitive.length) {
+      if (!verifyIntegration) throw sensitiveError(targetBranch, changes.sensitive);
+      integrationVerification = verifyMergedTree({ repo, repositoryId, sourceCommit, targetBefore, sensitive: changes.sensitive, verifyIntegration });
+    }
+  }
+  // The driver pushes the candidate to the branch itself: GitLab ignores
+  // merge_request.* push options when the pushed ref does not change.
+  const receipt = mergeRequest({ repository: repositoryId, sourceBranch: branch, sourceCommit, targetBranch, targetBefore });
+  if (!receipt || !['pending', 'merged'].includes(receipt.status) || typeof receipt.url !== 'string' || !/^https?:\/\//.test(receipt.url)) {
+    throw new Error('[cc-nexs] invalid MR receipt');
+  }
+  const remoteCommit = git(repo, ['rev-parse', fetchBase(repo, targetBranch)]);
+  if (isAncestor(repo, sourceCommit, remoteCommit)) {
+    return { ...base, ...proveCandidateMerge({ repo, remoteCommit, sourceCommit }), remoteCommit, pending: false, mergeRequest: { ...receipt, status: 'merged' }, integrationVerification };
+  }
+  if (receipt.status === 'merged') throw new Error('[cc-nexs] MR receipt has no remote ancestry proof');
+  const pushed = git(repo, ['ls-remote', '--heads', 'origin', `refs/heads/${branch}`]).split(/\s+/)[0] || '';
+  if (pushed !== sourceCommit) {
+    throw new Error(`[cc-nexs] MR_SOURCE_DRIFT: origin/${branch} is ${pushed || 'absent'}, expected approved candidate ${sourceCommit}; the driver must push exactly the candidate`);
+  }
+  return { ...base, remoteCommit, pending: true, mergeRequest: receipt, integrationVerification };
+}
+
+// Read-only check that a tested candidate can still be released unchanged. It
+// runs before Gateway B is requested so a changed base is synchronized before
+// anyone is asked to approve a candidate that would be rejected.
+export function checkBaseReadiness({ repo, repositoryId, sourceCommit, targetBranch, sensitiveChecksAvailable = false }) {
+  assertSegment(repositoryId, 'repository id');
+  const targetBefore = git(repo, ['rev-parse', fetchBase(repo, targetBranch)]);
+  const result = { repository: repositoryId, targetBranch, targetBefore, sourceCommit };
+  if (isAncestor(repo, sourceCommit, targetBefore)) return { ...result, status: 'merged' };
+  if (isAncestor(repo, targetBefore, sourceCommit)) return { ...result, status: 'ready', sensitive: [] };
+  const changes = assessTargetChanges({ repo, sourceCommit, targetBefore });
+  if (changes.overlap.length) return { ...result, status: 'base_changed', reason: overlapError(targetBranch).message, overlap: changes.overlap };
+  if (changes.sensitive.length && !sensitiveChecksAvailable) {
+    return { ...result, status: 'base_changed', reason: sensitiveError(targetBranch, changes.sensitive).message, sensitive: changes.sensitive };
+  }
+  return { ...result, status: 'ready', sensitive: changes.sensitive };
 }
 
 export function resolveTestIntegrationConflict({ repo, worktree, targetBranch, sourceCommit, targetBefore }) {

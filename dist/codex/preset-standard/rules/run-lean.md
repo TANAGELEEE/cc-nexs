@@ -110,7 +110,7 @@ Fast-track specifically routes a locally ready candidate directly through `CANDI
 
 At `PLAN_PENDING_HUMAN`, print requirements scope, affected repositories, task waves, local/test validation matrices, risk/lane/release summary, the plan review result with any open P0/P1 findings, model profiles, and temporary HTML from `/cc-nexs:render-plan`; then stop for `/cc-nexs:approve-plan <id>`.
 
-At `RELEASE_PENDING_HUMAN`, print candidate commits, consolidated Review result, local fingerprint, test attempt/environment revision, deferred-check closure, AC coverage, and base targets; then stop for `/cc-nexs:approve-release <id>`. Approval authorizes the exact next base integration, non-force only.
+Before stopping at `RELEASE_PENDING_HUMAN`, run `node <plugin-root>/lib/cc-nexs-cli.mjs base-preflight <id>`. When it reports `base_changed` the task is already `BASE_CHANGED`: continue `sync_base` instead of asking for an approval release-base would reject. At `RELEASE_PENDING_HUMAN`, print candidate commits, consolidated Review result, local fingerprint, test attempt/environment revision, deferred-check closure, AC coverage, and base targets; then stop for `/cc-nexs:approve-release <id>`. Approval authorizes the exact next base integration, non-force only.
 
 Changes at Gateway B must use `/cc-nexs:request-release-changes <id> --type=... --feedback=...`; never edit code while remaining at the gate:
 
@@ -136,4 +136,4 @@ Use `scope` instead when the repair adds or edits an AC, crosses a stated non-go
 
 ## Base release and completion
 
-After exact Gateway B approval, transition to `BASE_MERGING`, invoke `/cc-nexs:release-base`, and automatically continue `sync_base` on changed-base/conflict results; protected-branch failures still require PR/MR handoff. Integrate only the bound code candidates. After success record `COMPLETE`, then Git Custodian creates the final five-file docs candidate (`requirements.md`, `plan.md`, `config.json`, `progress.md`, `progress.json`), integrates docs last, proves remote ancestry, and cleans feature worktrees/refs. Do not write docs after that final candidate.
+After exact Gateway B approval, transition to `BASE_MERGING`, invoke `/cc-nexs:release-base`, and automatically continue `sync_base` on changed-base/conflict results; protected-branch failures still require PR/MR handoff. Integrate only the bound code candidates. Protected bases merge through the configured MR driver from the assigned feature branch at the exact candidate; a pending MR stays `BASE_MERGING` and release-base is rerun. After success record `COMPLETE`, then run `node <plugin-root>/lib/cc-nexs-cli.mjs finalize-docs <id>`: it creates the final five-file docs candidate (`requirements.md`, `plan.md`, `config.json`, `progress.md`, `progress.json`), integrates docs last, proves remote ancestry, and cleans the docs worktree and branches. Rerun it while it reports `pending`. Do not write docs after that final candidate.

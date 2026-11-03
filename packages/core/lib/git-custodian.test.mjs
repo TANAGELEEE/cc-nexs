@@ -7,6 +7,7 @@ import test from 'node:test';
 
 import {
   assertCandidateExcludesTestHistory,
+  checkBaseReadiness,
   cleanupMergedWorktree,
   commitCandidate,
   createWorkspaceWorktrees,
@@ -15,6 +16,8 @@ import {
   isSensitiveBasePath,
   isWorktreeRegistered,
   prepareFeatureForMerge,
+  promoteCandidateViaMergeRequest,
+  proveCandidateMerge,
   resolveDeployedRevision,
 } from './git-custodian.mjs';
 import { createProgressV2, readProgressV2, recordRepositoryAssignments, writeProgressV2 } from './progress-v2.mjs';
@@ -377,45 +380,129 @@ test('automatic base sync preserves conflicts on the development branch without 
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('MR success text cannot replace remote ancestry proof', () => {
-  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-mr-proof-'));
+function mrFixture(prefix) {
+  const root = mkdtempSync(join(tmpdir(), prefix));
+  const origin = join(root, 'remote.git');
+  const repo = join(root, 'repo');
+  git(root, ['init', '--bare', origin]); git(root, ['clone', origin, repo]); configure(repo);
+  git(repo, ['checkout', '-b', 'main']);
+  writeFileSync(join(repo, 'base.txt'), 'base'); git(repo, ['add', '.']); git(repo, ['commit', '-m', 'base']); git(repo, ['push', 'origin', 'main']);
+  git(repo, ['checkout', '-b', 'feature/07-demo']);
+  writeFileSync(join(repo, 'change.txt'), 'feature'); git(repo, ['add', '.']); git(repo, ['commit', '-m', 'feature']);
+  const source = git(repo, ['rev-parse', 'HEAD']);
+  git(repo, ['update-ref', 'refs/cc-nexs/candidates/07-demo/api', source]);
+  const options = { repo, repositoryId: 'api', branch: 'feature/07-demo', candidateRef: 'refs/cc-nexs/candidates/07-demo/api', targetBranch: 'main' };
+  const pushingDriver = (url = 'https://git.example/mr/7') => (payload) => {
+    git(repo, ['push', 'origin', `${payload.sourceCommit}:refs/heads/${payload.sourceBranch}`]);
+    return { status: 'pending', url };
+  };
+  // Stands in for the server merge button: a merge commit whose second parent is the MR head.
+  const serverMerge = (head) => {
+    const server = join(root, `server-${Math.random().toString(16).slice(2)}`);
+    git(root, ['clone', origin, server]); configure(server);
+    git(server, ['checkout', 'main']);
+    git(server, ['merge', '--no-ff', '--no-edit', head]);
+    git(server, ['push', 'origin', 'main']);
+    return git(server, ['rev-parse', 'HEAD']);
+  };
+  return { root, origin, repo, source, options, pushingDriver, serverMerge };
+}
+
+test('MR delivery uses the feature branch at the exact candidate and creates no synthetic merge', () => {
+  const fixture = mrFixture('cc-nexs-mr-feature-');
   try {
-    const origin = join(root, 'remote.git');
-    const repo = join(root, 'repo');
-    git(root, ['init', '--bare', origin]); git(root, ['clone', origin, repo]); configure(repo);
-    git(repo, ['checkout', '-b', 'main']);
-    writeFileSync(join(repo, 'base.txt'), 'base'); git(repo, ['add', '.']); git(repo, ['commit', '-m', 'base']); git(repo, ['push', 'origin', 'main']);
-    git(repo, ['checkout', '-b', 'feature']);
-    writeFileSync(join(repo, 'change.txt'), 'feature'); git(repo, ['add', '.']); git(repo, ['commit', '-m', 'feature']);
-    git(repo, ['update-ref', 'refs/cc-nexs/candidates/test/api', 'HEAD']);
-    assert.throws(() => integrateCandidateToTest({ repo, repositoryId: 'api', candidateRef: 'refs/cc-nexs/candidates/test/api', targetBranch: 'main', requireDisjointTargetChanges: true, mergeRequest: () => ({ status: 'merged', url: 'https://git.example/mr/1' }) }), /no remote ancestry proof/);
-    assert.throws(() => git(repo, ['show', 'origin/main:change.txt']));
-  } finally { rmSync(root, { recursive: true, force: true }); }
+    const { repo, source, options } = fixture;
+    const base = git(repo, ['rev-parse', 'origin/main']);
+    let payload;
+    const result = promoteCandidateViaMergeRequest({ ...options, mergeRequest: (request) => { payload = request; return fixture.pushingDriver()(request); } });
+    assert.deepEqual(Object.keys(payload).sort(), ['repository', 'sourceBranch', 'sourceCommit', 'targetBefore', 'targetBranch']);
+    assert.equal(payload.sourceBranch, 'feature/07-demo');
+    assert.equal(payload.sourceCommit, source);
+    assert.equal(result.pending, true);
+    assert.equal(git(repo, ['ls-remote', '--heads', 'origin', 'refs/heads/feature/07-demo']).split(/\s+/)[0], source);
+    assert.equal(git(repo, ['rev-parse', 'origin/main']), base);
+    assert.equal(git(repo, ['ls-remote', '--heads', 'origin', 'cc-nexs-mr-*']), '');
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
 });
 
-test('MR driver owns the source branch push so push-option MR creation is not a no-op', () => {
-  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-mr-push-'));
+test('MR delivery rejects an unpushed or moved source and receipt text without remote ancestry', () => {
+  const fixture = mrFixture('cc-nexs-mr-drift-');
   try {
-    const origin = join(root, 'remote.git');
-    const repo = join(root, 'repo');
-    git(root, ['init', '--bare', origin]); git(root, ['clone', origin, repo]); configure(repo);
-    git(repo, ['checkout', '-b', 'main']);
-    writeFileSync(join(repo, 'base.txt'), 'base'); git(repo, ['add', '.']); git(repo, ['commit', '-m', 'base']); git(repo, ['push', 'origin', 'main']);
-    const base = git(repo, ['rev-parse', 'HEAD']);
-    git(repo, ['checkout', '-b', 'feature']);
-    writeFileSync(join(repo, 'change.txt'), 'feature'); git(repo, ['add', '.']); git(repo, ['commit', '-m', 'feature']);
-    git(repo, ['update-ref', 'refs/cc-nexs/candidates/test/api', 'HEAD']);
-    const options = { repo, repositoryId: 'api', candidateRef: 'refs/cc-nexs/candidates/test/api', targetBranch: 'main', requireDisjointTargetChanges: true };
-    assert.throws(() => integrateCandidateToTest({ ...options, mergeRequest: () => ({ status: 'pending', url: 'https://git.example/mr/1' }) }), /MR driver did not push/);
-    const result = integrateCandidateToTest({ ...options, mergeRequest: (payload) => {
-      assert.equal(git(repo, ['ls-remote', '--heads', 'origin', `refs/heads/${payload.sourceBranch}`]), '');
-      git(repo, ['push', 'origin', `${payload.integrationCommit}:refs/heads/${payload.sourceBranch}`]);
-      return { status: 'pending', url: 'https://git.example/mr/2' };
+    const { repo, options } = fixture;
+    assert.throws(() => promoteCandidateViaMergeRequest({ ...options, mergeRequest: () => ({ status: 'pending', url: 'https://git.example/mr/1' }) }), /MR_SOURCE_DRIFT: origin\/feature\/07-demo is absent/);
+    assert.throws(() => promoteCandidateViaMergeRequest({ ...options, mergeRequest: () => ({ status: 'merged', url: 'https://git.example/mr/1' }) }), /no remote ancestry proof/);
+    writeFileSync(join(repo, 'extra.txt'), 'unapproved'); git(repo, ['add', '.']); git(repo, ['commit', '-m', 'extra']);
+    git(repo, ['push', 'origin', 'HEAD:refs/heads/feature/07-demo']);
+    assert.throws(() => promoteCandidateViaMergeRequest({ ...options, mergeRequest: () => ({ status: 'pending', url: 'https://git.example/mr/1' }) }), /MR_SOURCE_DRIFT: origin\/feature\/07-demo is [0-9a-f]{40}, expected approved candidate/);
+    assert.throws(() => git(repo, ['show', 'origin/main:change.txt']));
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+});
+
+test('merged MR is proven by a server merge commit or fast-forward of the exact candidate', () => {
+  const fixture = mrFixture('cc-nexs-mr-merged-');
+  try {
+    const { repo, source, options } = fixture;
+    promoteCandidateViaMergeRequest({ ...options, mergeRequest: fixture.pushingDriver() });
+    const mergeCommit = fixture.serverMerge(source);
+    const merged = promoteCandidateViaMergeRequest({ ...options, mergeRequest: fixture.pushingDriver() });
+    assert.equal(merged.pending, false);
+    assert.equal(merged.relation, 'merge');
+    assert.equal(merged.mergeCommit, mergeCommit);
+    assert.deepEqual(proveCandidateMerge({ repo, remoteCommit: source, sourceCommit: source }), { mergeCommit: source, relation: 'fast-forward' });
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+});
+
+test('a merged MR head that moved beyond the approved candidate is refused', () => {
+  const fixture = mrFixture('cc-nexs-mr-moved-');
+  try {
+    const { repo, options } = fixture;
+    writeFileSync(join(repo, 'extra.txt'), 'unapproved'); git(repo, ['add', '.']); git(repo, ['commit', '-m', 'extra']);
+    git(repo, ['push', 'origin', 'HEAD:refs/heads/feature/07-demo']);
+    fixture.serverMerge(git(repo, ['rev-parse', 'HEAD']));
+    assert.throws(() => promoteCandidateViaMergeRequest({ ...options, mergeRequest: fixture.pushingDriver() }), /MR_SOURCE_DRIFT: .* only through other commits/);
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+});
+
+test('MR delivery keeps the overlap and sensitive-path guards and binds integration checks to the merged tree', () => {
+  const fixture = mrFixture('cc-nexs-mr-guards-');
+  try {
+    const { root, origin, repo, options } = fixture;
+    const other = join(root, 'other');
+    git(root, ['clone', origin, other]); configure(other); git(other, ['checkout', 'main']);
+    writeFileSync(join(other, 'package.json'), '{"name":"fixture"}'); git(other, ['add', '.']); git(other, ['commit', '-m', 'dependency']); git(other, ['push', 'origin', 'main']);
+    let calls = 0;
+    const driver = (request) => { calls += 1; return fixture.pushingDriver()(request); };
+    assert.throws(() => promoteCandidateViaMergeRequest({ ...options, mergeRequest: driver }), /BASE_CHANGED: .*shared runtime or contract paths \(package\.json\)/);
+    assert.equal(calls, 0);
+    const result = promoteCandidateViaMergeRequest({ ...options, mergeRequest: driver, verifyIntegration: (payload) => {
+      assert.equal(git(payload.worktree, ['show', 'HEAD:change.txt']), 'feature');
+      return { status: 'passed', integrationCommit: payload.integrationCommit, proof: 'merged tree checks passed' };
     } });
-    assert.equal(result.pending, true);
-    assert.equal(result.mergeRequest.url, 'https://git.example/mr/2');
-    assert.equal(git(repo, ['rev-parse', 'origin/main']), base);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+    assert.equal(result.integrationVerification.status, 'passed');
+    assert.match(result.integrationVerification.integrationTree, /^[0-9a-f]{40}$/);
+    assert.equal(git(repo, ['worktree', 'list', '--porcelain']).split('\n').filter((line) => line.startsWith('worktree ')).length, 1);
+    writeFileSync(join(other, 'change.txt'), 'upstream'); git(other, ['add', '.']); git(other, ['commit', '-m', 'overlap']); git(other, ['push', 'origin', 'main']);
+    assert.throws(() => promoteCandidateViaMergeRequest({ ...options, mergeRequest: driver, verifyIntegration: () => ({}) }), /BASE_CHANGED: origin\/main overlaps candidate paths/);
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+});
+
+test('base readiness reports drift before Gateway B without mutating refs', () => {
+  const fixture = mrFixture('cc-nexs-readiness-');
+  try {
+    const { root, origin, repo, source } = fixture;
+    const check = (extra = {}) => checkBaseReadiness({ repo, repositoryId: 'api', sourceCommit: source, targetBranch: 'main', ...extra });
+    assert.equal(check().status, 'ready');
+    const other = join(root, 'other');
+    git(root, ['clone', origin, other]); configure(other); git(other, ['checkout', 'main']);
+    writeFileSync(join(other, 'package.json'), '{}'); git(other, ['add', '.']); git(other, ['commit', '-m', 'dependency']); git(other, ['push', 'origin', 'main']);
+    assert.equal(check().status, 'base_changed');
+    assert.equal(check({ sensitiveChecksAvailable: true }).status, 'ready');
+    writeFileSync(join(other, 'change.txt'), 'upstream'); git(other, ['add', '.']); git(other, ['commit', '-m', 'overlap']); git(other, ['push', 'origin', 'main']);
+    const drift = check({ sensitiveChecksAvailable: true });
+    assert.equal(drift.status, 'base_changed');
+    assert.deepEqual(drift.overlap, ['change.txt']);
+    assert.equal(git(repo, ['rev-parse', 'refs/cc-nexs/candidates/07-demo/api']), source);
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
 });
 
 test('exact merged-tree checks permit disjoint sensitive base changes without moving the tested ref', () => {

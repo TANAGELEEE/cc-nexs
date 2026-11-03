@@ -14,6 +14,7 @@ import {
   recordConsolidatedReview,
   recordLocalVerification,
   recordRepositoryCandidate,
+  recordRepositoryCandidatePrepared,
   recordRepositoryAssignments,
   recordTestIntegration,
   recordTestVerification,
@@ -623,6 +624,30 @@ test('a deployed test revision that contains the integration is accepted only wi
     const attempt = readProgressV2(file).delivery.test.attempts.at(-1);
     assert.deepEqual(attempt.environment_revision, { api: laterTip });
     assert.deepEqual(attempt.environment_revision_proof, { api: 'contains' });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the final docs candidate keeps a released task\'s evidence; any other candidate still invalidates it', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-progress-'));
+  const file = join(root, 'progress.json');
+  try {
+    const progress = createProgressV2({ featureId: '01', featureSlug: 'demo', preset: 'preset-standard', repositories: ['docs', 'api'] });
+    progress.gates.release = { approved: true, binding: { candidate_fingerprint: 'f'.repeat(64) } };
+    progress.review = { ...progress.review, status: 'passed', candidate_fingerprint: 'f'.repeat(64) };
+    writeProgressV2(file, progress);
+    const candidate = { candidateRef: 'refs/cc-nexs/candidates/01-demo/docs', staged: ['doc/01.demo/progress.json'] };
+    assert.throws(() => recordRepositoryCandidatePrepared(file, 'docs', candidate, { finalDocs: true }), /requires COMPLETE after a succeeded base release/);
+    const released = readProgressV2(file);
+    released.state = 'COMPLETE';
+    released.delivery.base = { status: 'succeeded', attempts: [] };
+    writeProgressV2(file, released);
+    recordRepositoryCandidatePrepared(file, 'docs', candidate, { finalDocs: true });
+    assert.equal(readProgressV2(file).gates.release.approved, true);
+    assert.equal(readProgressV2(file).review.status, 'passed');
+    recordRepositoryCandidatePrepared(file, 'api', { candidateRef: 'refs/cc-nexs/candidates/01-demo/api', staged: ['a.txt'] });
+    assert.equal(readProgressV2(file).gates.release.approved, false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

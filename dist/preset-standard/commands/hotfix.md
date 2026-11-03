@@ -72,7 +72,7 @@ After normal acceptance, display the scope hash, candidate commits, local eviden
 
 Gateway B's `evidence` comments only append to the document; `implementation` comments invalidate the current evidence, and verification is repeated after the fix. After approval, merge only the same candidate into the configured base. `test -> base`, force push, or re-selecting a candidate from test is prohibited. When base only has updates to non-overlapping paths, keep the accepted candidate unchanged and let release-base integrate them, without re-running the test or approval. Overlapping paths or known cross-file contract dependencies must be handled and verified before release; the absence of textual conflicts cannot be treated as proof of semantic independence.
 
-It is complete only when `HOTFIX_BASE_MERGING -> COMPLETE` and the remote ancestry check passes. The final docs candidate of a new Hotfix contains only this BUG document, with machine state kept in `.cc-nexs/hotfixes/<key>/`; old tasks retain their original set of archived files. Docs are merged last, and the worktree/branch/ref are cleaned up safely. Production release still requires the explicit authorization specified by the organization.
+It is complete only when `HOTFIX_BASE_MERGING -> COMPLETE` and the remote ancestry check passes. The final docs candidate of a new Hotfix contains only this BUG document, with machine state kept in `.cc-nexs/hotfixes/<key>/`; old tasks retain their original set of archived files. Docs are merged last with `finalize-docs <id>`, which cleans the docs worktree/branch/ref after remote proof. Production release still requires the explicit authorization specified by the organization.
 
 ## 4. Same-Fault Revision and Lean Escalation
 

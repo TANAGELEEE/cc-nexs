@@ -12,12 +12,7 @@ export function resolveCandidateContext({ cwd = process.cwd(), featureId, progre
   const progressFile = resolveFeatureProgress({ cwd, featureId, progressPath });
   const workspaceRoot = findWorkspaceRoot(cwd, progressFile);
   const workspace = loadWorkspaceConfig({ projectRoot: workspaceRoot });
-  const pluginRoot = process.env.CC_NEXS_PLUGIN_ROOT
-    || process.env.CLAUDE_PLUGIN_ROOT
-    || process.env.CODEX_PLUGIN_ROOT
-    || process.env.PLUGIN_ROOT
-    || null;
-  const config = loadConfig({ projectRoot: workspaceRoot, ...(pluginRoot && { presetRoot: pluginRoot }) });
+  const config = loadCandidateConfig(workspaceRoot);
   const progress = readProgressV2(progressFile);
   const workspaceById = new Map(workspace.repositories.map((repository) => [repository.id, repository]));
   const repositories = [];
@@ -49,6 +44,15 @@ export function resolveCandidateContext({ cwd = process.cwd(), featureId, progre
     repositories,
     source: Object.fromEntries(repositories.map((item) => [item.id, item.sourceCommit])),
   };
+}
+
+export function loadCandidateConfig(workspaceRoot) {
+  const pluginRoot = process.env.CC_NEXS_PLUGIN_ROOT
+    || process.env.CLAUDE_PLUGIN_ROOT
+    || process.env.CODEX_PLUGIN_ROOT
+    || process.env.PLUGIN_ROOT
+    || null;
+  return loadConfig({ projectRoot: workspaceRoot, ...(pluginRoot && { presetRoot: pluginRoot }) });
 }
 
 export function findWorkspaceRoot(cwd, progressFile = null) {

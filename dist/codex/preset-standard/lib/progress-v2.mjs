@@ -595,19 +595,24 @@ export function recordRepositoryCandidate(file, repository, candidate, { expecte
 // Record candidate identity before the commit is created. The immutable Git ref
 // is the commit authority; persisting the resulting SHA after a docs commit
 // would modify progress.json again and leave that worktree permanently dirty.
-export function recordRepositoryCandidatePrepared(file, repository, candidate, { expectedRevision = null } = {}) {
+export function recordRepositoryCandidatePrepared(file, repository, candidate, { expectedRevision = null, finalDocs = false } = {}) {
   const progress = readProgressV2(file);
   if (expectedRevision !== null && progress.revision !== expectedRevision) {
     throw new Error(`[cc-nexs] stale progress revision: expected ${expectedRevision}, found ${progress.revision}`);
   }
   assertCandidateMutationAllowed(progress);
+  if (finalDocs && (progress.state !== 'COMPLETE' || progress.delivery?.base?.status !== 'succeeded')) {
+    throw new Error('[cc-nexs] the final docs candidate requires COMPLETE after a succeeded base release');
+  }
   if (!progress.repositories[repository]) throw new Error(`[cc-nexs] repository is not assigned: ${repository}`);
   progress.repositories[repository].candidate = {
     commit: null,
     ref: candidate.candidateRef,
     paths: candidate.staged,
   };
-  invalidateLeanCandidateEvidence(progress);
+  // The final docs candidate archives a released task; its code evidence and
+  // release approval are the record being archived, not stale evidence.
+  if (!finalDocs) invalidateLeanCandidateEvidence(progress);
   const timestamp = new Date().toISOString();
   progress.revision += 1;
   progress.updated_at = timestamp;

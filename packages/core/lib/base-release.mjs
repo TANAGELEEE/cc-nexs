@@ -6,8 +6,10 @@ import { dirname, join, resolve } from 'node:path';
 import { resolveCandidateContext } from './candidate-context.mjs';
 import {
   assertCandidateExcludesTestHistory,
+  checkBaseReadiness,
   cleanupMergedWorktree,
   integrateCandidateToTest,
+  promoteCandidateViaMergeRequest,
 } from './git-custodian.mjs';
 import {
   beginBaseRelease,
@@ -102,37 +104,24 @@ function executeBaseRelease(context) {
     source: context.source,
     expectedRevision: context.progress.revision,
   });
+  const mergeRequest = mergeRequestDriver(context.config, context.workspaceRoot);
+  const verifyIntegration = integrationVerifyDriver(context.config, context.workspaceRoot);
   try {
     for (const item of context.repositories) {
-      const result = integrateCandidateToTest({
+      const options = {
         repo: item.repository.absolute_path,
         repositoryId: item.id,
         candidateRef: item.assignment.candidate.ref,
         expectedSourceCommit: item.sourceCommit,
         targetBranch: baseTargets[item.id],
-        requireDisjointTargetChanges: true,
-        verifyIntegration: context.config.mergedRelease?.base?.verify_driver ? payload => {
-          const driver = context.config.mergedRelease.base.verify_driver;
-          return JSON.parse(execFileSync(driver.command, driver.args || [], { cwd: context.workspaceRoot, encoding: 'utf8', timeout: 120000, input: JSON.stringify({ operation: 'verify_base_integration', ...payload }) }));
-        } : null,
-        previousIntegration: attempt.integrations[item.id],
-        mergeRequest: context.config.mergedRelease?.base?.driver ? payload => {
-          const driver = context.config.mergedRelease.base.driver;
-          return JSON.parse(execFileSync(driver.command, driver.args || [], { cwd: context.workspaceRoot, encoding: 'utf8', timeout: 120000, input: JSON.stringify({ operation: 'ensure_merge_request', ...payload }) }));
-        } : null,
-      });
-      recordBaseIntegration(context.progressFile, {
-        attemptId: attempt.id,
-        repository: item.id,
-        integration: {
-          integration_verification: result.integrationVerification || null,
-          source_commit: result.sourceCommit,
-          target_branch: result.targetBranch,
-          target_before: result.targetBefore,
-          integration_commit: result.pending ? result.integrationCommit : result.remoteCommit || result.integrationCommit,
-          merge_request: result.mergeRequest || attempt.integrations[item.id]?.merge_request || null,
-        },
-      });
+        verifyIntegration,
+      };
+      const result = mergeRequest
+        ? promoteCandidateViaMergeRequest({ ...options, branch: item.assignment.branch, mergeRequest })
+        : integrateCandidateToTest({ ...options, requireDisjointTargetChanges: true });
+      const previous = attempt.integrations[item.id] || null;
+      const integration = baseIntegrationRecord(result, previous);
+      if (integration) recordBaseIntegration(context.progressFile, { attemptId: attempt.id, repository: item.id, integration });
       if (result.pending) {
         return { kind: 'base-release', status: 'running', feature: context.progress.feature, attempt: readProgressV2(context.progressFile).delivery.base.attempts.at(-1), progressFile: context.progressFile };
       }
@@ -162,6 +151,83 @@ function executeBaseRelease(context) {
     attempt: progress.delivery.base.attempts.at(-1),
     docsFinalizationRequired: Boolean(context.workspace.docs_repository),
     progressFile: context.progressFile,
+  };
+}
+
+// States where a tested candidate waits for, or is about to request, Gateway B.
+const PREFLIGHT_STATES = {
+  lean: new Set(['CANDIDATE_READY', 'TEST_VERIFIED', 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY', 'RELEASE_PENDING_HUMAN']),
+  hotfix: new Set(['HOTFIX_TEST_VERIFIED', 'HOTFIX_TEST_DEPLOYED_NEEDS_MANUAL_VERIFY', 'HOTFIX_RELEASE_PENDING_HUMAN']),
+};
+
+// Read-only base check run before Gateway B is requested. A base that can no
+// longer take the candidate unchanged moves the task to BASE_CHANGED so sync
+// happens before the human is asked, not after they approve.
+export function preflightBaseRelease({ cwd = process.cwd(), featureId, progressPath = null } = {}) {
+  const context = resolveCandidateContext({ cwd, featureId, progressPath, includeDocs: false });
+  const sensitiveChecksAvailable = Boolean(context.config.mergedRelease?.base?.verify_driver);
+  const results = context.repositories.map((item) => checkBaseReadiness({
+    repo: item.repository.absolute_path,
+    repositoryId: item.id,
+    sourceCommit: item.sourceCommit,
+    targetBranch: item.assignment.base_branch || item.repository.base_branch,
+    sensitiveChecksAvailable,
+  }));
+  const drift = results.filter((item) => item.status === 'base_changed');
+  const { progress } = context;
+  let state = progress.state;
+  if (drift.length && PREFLIGHT_STATES[progress.mode]?.has(state)) {
+    const to = progress.mode === 'hotfix' ? 'HOTFIX_BASE_CHANGED' : 'BASE_CHANGED';
+    transitionState(join(dirname(context.progressFile), 'progress.md'), {
+      from: state,
+      to,
+      reason: `base preflight before Gateway B: ${drift.map((item) => `${item.repository}: ${item.reason}`).join('; ')}`,
+    });
+    state = to;
+  }
+  return {
+    kind: 'base-preflight',
+    feature: progress.feature,
+    status: drift.length ? 'base_changed' : 'ready',
+    state,
+    results,
+    progressFile: context.progressFile,
+  };
+}
+
+export function mergeRequestDriver(config, workspaceRoot) {
+  const driver = config.mergedRelease?.base?.driver;
+  if (!driver) return null;
+  return (payload) => JSON.parse(execFileSync(driver.command, driver.args || [], {
+    cwd: workspaceRoot, encoding: 'utf8', timeout: 120000,
+    input: JSON.stringify({ operation: 'ensure_merge_request', ...payload }),
+  }));
+}
+
+export function integrationVerifyDriver(config, workspaceRoot) {
+  const driver = config.mergedRelease?.base?.verify_driver;
+  if (!driver) return null;
+  return (payload) => JSON.parse(execFileSync(driver.command, driver.args || [], {
+    cwd: workspaceRoot, encoding: 'utf8', timeout: 120000,
+    input: JSON.stringify({ operation: 'verify_base_integration', ...payload }),
+  }));
+}
+
+// A rerun must not rewrite what the first integration recorded: the original
+// target_before and MR stay, and only the outcome (merge commit, status) is added.
+function baseIntegrationRecord(result, previous) {
+  if (result.alreadyIntegrated && previous) return null;
+  const mergeRequest = result.mergeRequest || previous?.merge_request || null;
+  return {
+    source_commit: result.sourceCommit,
+    ...(result.sourceBranch && { source_branch: result.sourceBranch }),
+    target_branch: result.targetBranch,
+    target_before: previous?.target_before || result.targetBefore,
+    integration_commit: result.pending ? null : result.mergeCommit || result.remoteCommit || result.integrationCommit,
+    merge_relation: result.pending ? null : result.relation || (result.alreadyIntegrated ? 'already-contained' : 'merge'),
+    remote_commit: result.remoteCommit || null,
+    merge_request: mergeRequest && { ...mergeRequest, status: result.pending ? 'pending' : 'merged' },
+    integration_verification: result.integrationVerification || previous?.integration_verification || null,
   };
 }
 
