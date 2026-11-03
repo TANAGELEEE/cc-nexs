@@ -4,6 +4,20 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-03
+
+### Added
+
+- Task files: Orchestrator-created files for a task belong in `.cc-nexs/runtime/tasks/<id>/`, with rebuildable copies (source exports, dependency installs, builds) only in its `scratch/`. `cc-nexs status` prints the path, and `reclaim-worktrees` removes the directory once the task is complete.
+- `reconcile <id> [--confirm <token>]` records `COMPLETE` for a task whose work reached its bases outside the controller, such as a task from a retired mode or a manual merge. Every assigned code repository must prove its candidate, or branch commits beyond the recorded base, are in the base by ancestry or as equivalent patches, and the user confirms the exact plan shown. It never archives docs or deletes branches.
+
+### Changed
+
+- `reclaim-worktrees` also removes dependency and build caches (`node_modules`, `.next` and similar) in legacy `.cc-nexs/drafts/<task>/` directories of complete tasks. Other draft content and Git checkouts are reported for manual inspection.
+- Progress from a retired mode is read as an active legacy task with a `reconcile` hint instead of being skipped. Unmerged branches report how many commits are patch-equivalent in the base. Leftover `cc-nexs-mr-*` branches from releases before 0.11.0 are listed with their merge status; remote branches are still never deleted.
+- Lean and Hotfix Verifiers keep running every executable check after a failure and report all failures together.
+- A Lean test repair fixes every reported failure in one round and passes locally (a `browser:` row or targeted test against the deployed test backend for frontend fixes) before the next deployment.
+
 ## [0.11.0] - 2026-11-03
 
 ### Added
