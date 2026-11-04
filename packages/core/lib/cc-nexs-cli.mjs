@@ -93,6 +93,7 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   if (command === 'record-plan-review') {
     const options = parseReviewOptions(args);
     if (options.closure || options.gatewayBDelta) throw new Error('record-plan-review does not accept delta review flags');
+    if (options.documentFindings) throw new Error('record-plan-review does not accept --document-findings');
     return recordLeanPlanReview({ cwd, featureId: options.featureId, progressPath: options.progressPath, status: options.status, blockingFindings: options.blockingFindings });
   }
   if (command === 'amend-plan') return requestPlanAmendment({ cwd, ...parseAmendmentOptions(args) });
@@ -311,13 +312,16 @@ function parseAmendmentOptions(args) {
 
 function parseReviewOptions(args) {
   const positional = [];
-  const options = { featureId: null, progressPath: null, closure: false, gatewayBDelta: false, blockingFindings: [] };
+  const options = { featureId: null, progressPath: null, closure: false, gatewayBDelta: false, blockingFindings: [], documentFindings: false, notReproduced: [] };
   let passed = false;
   let blocked = false;
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index];
     if (token === '--passed') passed = true;
     else if (token === '--blocked') blocked = true;
+    else if (token === '--document-findings') options.documentFindings = true;
+    else if (token === '--not-reproduced') options.notReproduced.push(requireValue(args, ++index, token));
+    else if (token.startsWith('--not-reproduced=')) options.notReproduced.push(token.slice('--not-reproduced='.length));
     else if (token === '--closure') options.closure = true;
     else if (token === '--gateway-b-delta') options.gatewayBDelta = true;
     else if (token === '--progress') options.progressPath = requireValue(args, ++index, token);
@@ -327,10 +331,17 @@ function parseReviewOptions(args) {
     else if (token.startsWith('-')) throw new Error(`unknown option: ${token}`);
     else positional.push(token);
   }
-  if (passed === blocked) throw new Error('record-review requires exactly one of --passed or --blocked');
   if (options.closure && options.gatewayBDelta) throw new Error('record-review accepts only one delta review type');
   options.featureId = positional[0] || null;
   if (positional.length > 1) throw new Error(`unexpected arguments: ${positional.slice(1).join(' ')}`);
+  if (options.documentFindings) {
+    if (passed || blocked || options.blockingFindings.length > 0) {
+      throw new Error('--document-findings derives the Review status; do not pass --passed, --blocked, or --finding');
+    }
+    return { ...options, status: null };
+  }
+  if (options.notReproduced.length > 0) throw new Error('--not-reproduced requires --document-findings');
+  if (passed === blocked) throw new Error('record-review requires exactly one of --passed or --blocked');
   if (passed && options.blockingFindings.length > 0) throw new Error('a passing Review cannot contain blocking findings');
   return { ...options, status: passed ? 'passed' : 'blocked' };
 }
@@ -647,7 +658,8 @@ function printUsage() {
   console.error('    [--test-exception --authorization-evidence <text> --reason <text> --environment-evidence <text> --rollback-evidence <text>]');
   console.error('  cc-nexs release-test <feature-id> [--resume | --retry] [--dry-run] [--hotfix] [--progress <path>]');
   console.error('  cc-nexs verify-local <feature-id> [--preflight|--passed|--failed|--deferred-to-test --evidence-json <json>] [--progress <path>]');
-  console.error('  cc-nexs record-review <feature-id> <--passed|--blocked> [--finding <P0/P1 text>] [--closure|--gateway-b-delta] [--progress <path>]');
+  console.error('  cc-nexs record-review <feature-id> --document-findings [--not-reproduced <finding-id>]... [--closure|--gateway-b-delta] [--progress <path>]');
+  console.error('  cc-nexs record-review <feature-id> <--passed|--blocked> [--finding <P0/P1 text>] [--closure|--gateway-b-delta] [--progress <path>]  (legacy)');
   console.error('  cc-nexs record-plan-review <feature-id> <--passed|--blocked> [--finding <P0/P1 text>] [--progress <path>]');
   console.error('  cc-nexs amend-plan <feature-id> --ac <id> --path <path> --reason <text> [--target <feature|test-integration>] [--progress <path>]');
   console.error('  cc-nexs record-amendment-review <feature-id> --amendment <id> <--passed|--blocked> [--finding <P0/P1 text>] [--progress <path>]');

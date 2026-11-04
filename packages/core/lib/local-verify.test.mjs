@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -118,6 +118,33 @@ test('Lean local verification invokes the configured driver and binds evidence t
     }];
     writeProgressV2(progressFile, invalidReviewEvidence);
     assert.throws(() => recordLeanReview({ cwd: root, featureId: '30', progressPath: progressFile, status: 'passed' }), /may contain only passed evidence/);
+
+    const documentReview = structuredClone(beforeReview);
+    documentReview.state = 'LOCAL_VERIFYING';
+    writeProgressV2(progressFile, documentReview);
+    const planText = readFileSync(join(docs, 'plan.md'), 'utf8');
+    const reviewBlock = (findings) => `${planText}\n## Review\n\n\`\`\`cc-nexs-review\n${JSON.stringify({ round: 'consolidated', candidate: { api: commit }, findings })}\n\`\`\`\n\n结论: NEEDS_REVISION\n`;
+    const proven = {
+      id: 'F-1', severity: 'P1', location: 'app.txt:1', anchor: 'AC-001', failure_scenario: 'smoke prints ready twice',
+      evidence: { kind: 'run', command: 'git show HEAD:app.txt', observed: 'ready\nready', expected: 'ready' },
+    };
+    const speculative = { ...proven, id: 'F-2', anchor: 'security', evidence: { kind: 'trace', refs: ['app.txt:1'] } };
+    writeFileSync(join(docs, 'plan.md'), reviewBlock([proven, speculative]));
+    assert.throws(
+      () => runCcNexsCommand(['record-review', '30', '--document-findings', '--passed', '--progress', progressFile], { cwd: root }),
+      /derives the Review status/,
+    );
+    const blockedReview = runCcNexsCommand(['record-review', '30', '--document-findings', '--progress', progressFile], { cwd: root });
+    assert.equal(blockedReview.review.status, 'blocked');
+    assert.deepEqual(blockedReview.review.blocking_findings, ['P1: F-1 app.txt:1 — smoke prints ready twice']);
+    assert.deepEqual(blockedReview.review.finding_counts, { blocking: 1, unproven: 1, advisory: 0, rejected: 0 });
+    assert.deepEqual(blockedReview.events.at(-1).data.finding_counts, { blocking: 1, unproven: 1, advisory: 0, rejected: 0 });
+
+    writeProgressV2(progressFile, { ...structuredClone(beforeReview), state: 'LOCAL_VERIFYING' });
+    const passedReview = recordLeanReview({ cwd: root, featureId: '30', progressPath: progressFile, documentFindings: true, notReproduced: ['F-1'] });
+    assert.equal(passedReview.review.status, 'passed');
+    assert.deepEqual(passedReview.review.findings.map((item) => item.class), ['unproven', 'unproven']);
+    writeFileSync(join(docs, 'plan.md'), planText);
 
     writeProgressV2(progressFile, structuredClone(beforeReview));
 
@@ -338,6 +365,16 @@ test('Lean local verification can defer an environment-only backend start to tes
     assert.throws(() => direct('passed', [{ ...passedEvidence, check: 'unrelated-test' }]), /must cover bound checks/);
     assert.throws(() => direct('passed', [{ ...passedEvidence, command: 'npm test unrelated' }]), /does not match the bound matrix/);
     assert.equal(direct('passed', [passedEvidence]).status, 'passed');
+    const hotfixText = readFileSync(join(docs, 'hotfix.md'), 'utf8');
+    writeFileSync(join(docs, 'hotfix.md'), `${hotfixText}\n## Focused Review\n\n\`\`\`cc-nexs-review\n${JSON.stringify({
+      round: 'consolidated',
+      candidate: { api: commit },
+      findings: [{ id: 'F-1', severity: 'P2', location: 'api/app.txt:1', anchor: 'regression', failure_scenario: 'log line wording changed', evidence: { kind: 'trace', refs: ['api/app.txt:1'] } }],
+    })}\n\`\`\`\n`);
+    writeProgressV2(progressFile, { ...readProgressV2(progressFile), state: 'HOTFIX_LOCAL_VERIFYING' });
+    const hotfixReview = recordLeanReview({ cwd: root, featureId: '31', progressPath: progressFile, documentFindings: true });
+    assert.equal(hotfixReview.review.status, 'passed');
+    assert.deepEqual(hotfixReview.review.finding_counts, { blocking: 0, unproven: 0, advisory: 1, rejected: 0 });
     writeFileSync(join(docs, 'hotfix.md'), '<!-- HOTFIX-SCOPE START -->\n- severity: P1\n<!-- HOTFIX-SCOPE END -->');
     assert.throws(() => direct('passed', [passedEvidence]), /hotfix|must be no/);
   } finally {

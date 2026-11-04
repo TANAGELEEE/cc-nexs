@@ -52,9 +52,9 @@ If `workflow.local_verify.driver` is present, use the driver; if there is no dri
 
 Once all levels pass locally, the work enters an independent centralized Review:
 ```text
-node <plugin-root>/lib/cc-nexs-cli.mjs record-review <id> --passed|--blocked [--finding "P0/P1 ..."]
+node <plugin-root>/lib/cc-nexs-cli.mjs record-review <id> --document-findings [--not-reproduced <finding-id>]...
 ```
-Review checks the complete candidate and invocation surface in one pass; after fixes, enter `HOTFIX_DELTA_REVIEW` and check the corresponding delta with `--closure`. Follow the state machine's existing circuit breakers; for scope revisions already authorized by the user, rebind per Section 4, and do not evade state by hand-editing counters or reopening numbers. P3 has no Review-exempt path.
+Review checks the complete candidate and invocation surface in one pass and ends with the `cc-nexs-review` block from `rules/review-findings.md`; the Orchestrator reruns each blocking command before recording, the controller derives the status, and unproven P0/P1 scenarios go to the Verifier as `probe:<finding-id>`. After fixes, enter `HOTFIX_DELTA_REVIEW` and check the corresponding delta with `--document-findings --closure`. Follow the state machine's existing circuit breakers; for scope revisions already authorized by the user, rebind per Section 4, and do not evade state by hand-editing counters or reopening numbers. P3 has no Review-exempt path.
 
 Each dispatch uses `resolveRoleRuntime(preset, role, runtime, {models: mergedModels, featureConfig, progress: progressV2})`. By default, Developer=`balanced`, Reviewer=`review`, and Verifier=`balanced`; the Reviewer for P0/P1 is automatically routed to `escalated`. The same model with higher effort/thinking, or a different model, is allowed; the hard constraint is session isolation. Explicit overrides in the feature `models.roles` take final precedence, and public defaults do not pin model IDs.
 

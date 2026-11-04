@@ -97,7 +97,7 @@ Missing test URLs/browser/login/bucket/CORS/IAM evidence cannot block the merge.
 
 ## Conclusion parsing and transitions
 
-Read only the final relevant conclusion line in `plan.md`, using `^结论:\s*(\S+)` for Review and `^测试结论:\s*(\S+)` for test plus preset i18n literals:
+Read only the final relevant conclusion line in `plan.md`, using `^结论:\s*(\S+)` for Review and `^测试结论:\s*(\S+)` for test plus preset i18n literals. For a code Review, the `review.status` that `record-review --document-findings` derives decides PASS or FAIL when it differs from the line:
 
 | Parse action | PASS / 通过 | FAIL / 阻塞 |
 |---|---|---|
@@ -107,7 +107,7 @@ Read only the final relevant conclusion line in `plan.md`, using `^结论:\s*(\S
 | `PARSE_GATEWAY_B_DELTA_REVIEW` | `CANDIDATE_READY` then new test attempt | `GATEWAY_B_DELTA_REVIEW_BLOCKED -> HUMAN_INTERVENTION` |
 | `PARSE_TEST_VERIFY` | `TEST_VERIFIED` | `TEST_VERIFY_FAILED` |
 
-After every Review parse, call `record-review` to bind the conclusion to the same candidate fingerprint as local verification. After test parse, call `record-test-verification` to bind the exact attempt/environment revision. Complete Review occurs once; repairs use one delta closure. A test-blocked repair also requires new local verification and delta Review before a new test attempt.
+After every Review, rerun its blocking commands and call `record-review --document-findings` to classify the `cc-nexs-review` block under `rules/review-findings.md` and bind the derived conclusion to the same candidate fingerprint as local verification. After test parse, call `record-test-verification` to bind the exact attempt/environment revision. Complete Review occurs once; repairs use one delta closure. A test-blocked repair also requires new local verification and delta Review before a new test attempt.
 
 Fast-track specifically routes a locally ready candidate directly through `CANDIDATE_READY -> TEST_RELEASE`; after `TEST_VERIFIED`, dispatch `review_tested_candidate`. The Review controller must prove the current verified attempt fingerprint equals the reviewed candidate. Standard lane reviews before `CANDIDATE_READY`.
 
@@ -115,7 +115,7 @@ Fast-track specifically routes a locally ready candidate directly through `CANDI
 
 At `PLAN_PENDING_HUMAN`, print requirements scope, affected repositories, task waves, local/test validation matrices, risk/lane/release summary, the plan review result with any open P0/P1 findings, model profiles, and temporary HTML from `/cc-nexs:render-plan`; then stop for `/cc-nexs:approve-plan <id>`.
 
-Before stopping at `RELEASE_PENDING_HUMAN`, run `node <plugin-root>/lib/cc-nexs-cli.mjs base-preflight <id>`. When it reports `base_changed` the task is already `BASE_CHANGED`: continue `sync_base` instead of asking for an approval release-base would reject. At `RELEASE_PENDING_HUMAN`, print candidate commits, consolidated Review result, local fingerprint, test attempt/environment revision, deferred-check closure, AC coverage, and base targets; then stop for `/cc-nexs:approve-release <id>`. Approval authorizes the exact next base integration, non-force only.
+Before stopping at `RELEASE_PENDING_HUMAN`, run `node <plugin-root>/lib/cc-nexs-cli.mjs base-preflight <id>`. When it reports `base_changed` the task is already `BASE_CHANGED`: continue `sync_base` instead of asking for an approval release-base would reject. At `RELEASE_PENDING_HUMAN`, print candidate commits, consolidated Review result with unproven/advisory/rejected finding counts and unproven summaries, local fingerprint, test attempt/environment revision, deferred-check closure, AC coverage, and base targets; then stop for `/cc-nexs:approve-release <id>`. Approval authorizes the exact next base integration, non-force only.
 
 Changes at Gateway B must use `/cc-nexs:request-release-changes <id> --type=... --feedback=...`; never edit code while remaining at the gate:
 

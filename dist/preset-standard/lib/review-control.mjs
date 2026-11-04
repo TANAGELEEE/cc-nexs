@@ -8,6 +8,7 @@ import { approvedPlanDeliveryLane, assertPlanApprovalCurrent, extractApprovalSco
 import { assertRecordedLocalVerification, extractLocalVerificationChecks } from './local-evidence.mjs';
 import { assertTestAttemptNotInvalidated, candidateFingerprint, readProgressV2, recordConsolidatedReview, recordPlanReview } from './progress-v2.mjs';
 import { resolveFeatureProgress } from './approval-command.mjs';
+import { readReviewFindings } from './finding-contract.mjs';
 
 export function recordLeanReview({
   cwd = process.cwd(),
@@ -17,7 +18,13 @@ export function recordLeanReview({
   closure = false,
   gatewayBDelta = false,
   blockingFindings = [],
+  documentFindings = false,
+  notReproduced = [],
 } = {}) {
+  if (documentFindings && (status || blockingFindings.length > 0)) {
+    throw new Error('[cc-nexs] --document-findings derives the Review status; do not pass --passed, --blocked, or --finding');
+  }
+  if (!documentFindings && notReproduced.length > 0) throw new Error('[cc-nexs] --not-reproduced requires --document-findings');
   const context = resolveCandidateContext({ cwd, featureId, progressPath });
   releaseScope(context.progress, context.progressFile);
   let leanDeliveryLane = 'standard';
@@ -57,10 +64,20 @@ export function recordLeanReview({
   }
   const localChecks = extractLocalVerificationChecks(releaseScope(context.progress, context.progressFile));
   assertRecordedLocalVerification(context.progress, { source: context.source, fingerprint: candidateFingerprint(context.source), expectedChecks: localChecks });
+  let findings = null;
+  if (documentFindings) {
+    const featureDir = dirname(context.progressFile);
+    const document = context.progress.mode === 'hotfix' ? resolveHotfixDocument(context.progress, featureDir) : join(featureDir, 'plan.md');
+    const round = gatewayBDelta ? 'gateway-b-delta' : closure ? 'closure' : 'consolidated';
+    findings = readReviewFindings(readFileSync(document, 'utf8'), { round, source: context.source, notReproduced });
+    blockingFindings = findings.blockingFindings;
+    status = blockingFindings.length > 0 ? 'blocked' : 'passed';
+  }
   return recordConsolidatedReview(context.progressFile, {
     source: context.source,
     status,
     blockingFindings,
+    findings,
     closure: context.progress.mode === 'hotfix' ? (closure || gatewayBDelta) : closure,
     gatewayBDelta: context.progress.mode === 'hotfix' ? false : gatewayBDelta,
     expectedRevision: context.progress.revision,

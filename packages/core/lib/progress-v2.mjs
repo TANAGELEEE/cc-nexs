@@ -921,6 +921,7 @@ export function recordConsolidatedReview(file, {
   source,
   status,
   blockingFindings = [],
+  findings = null,
   closure = false,
   gatewayBDelta = false,
   actor = 'lean-reviewer',
@@ -955,6 +956,7 @@ export function recordConsolidatedReview(file, {
     blocking_findings: blockingFindings,
     closure_attempts: (progress.review?.closure_attempts || 0) + (closure ? 1 : 0),
     gateway_b_delta_attempts: (progress.review?.gateway_b_delta_attempts || 0) + (gatewayBDelta ? 1 : 0),
+    ...(findings ? { findings: findings.classified, finding_counts: findings.counts } : {}),
     reviewed_at: new Date().toISOString(),
   };
   appendMutationEvent(progress, {
@@ -962,7 +964,7 @@ export function recordConsolidatedReview(file, {
       ? `review.gateway_b_delta_${status}`
       : closure ? `review.closure_${status}` : `review.consolidated_${status}`,
     actor,
-    data: { fingerprint, source, blocking_findings: blockingFindings },
+    data: { fingerprint, source, blocking_findings: blockingFindings, ...(findings ? { finding_counts: findings.counts } : {}) },
   });
   writeProgressV2(file, progress);
   return progress;
