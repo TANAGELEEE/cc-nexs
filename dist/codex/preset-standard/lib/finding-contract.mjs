@@ -1,6 +1,6 @@
 // Evidence-gated Review findings.
 //
-// Finders search the exact candidate in parallel, each through one lens, and return
+// The review panel's reviewers run the same brief on the exact candidate and return
 // their findings. A Judge in a fresh session reruns every P0/P1 command, merges
 // duplicates, and writes one fenced `cc-nexs-review` JSON block per Review round in
 // the bound review document (Lean plan.md or the Hotfix BUG document). The controller
@@ -11,22 +11,10 @@
 const BLOCK = /^```cc-nexs-review[ \t]*\r?\n([\s\S]*?)\r?\n```[ \t]*$/gm;
 const ROUNDS = new Set(['consolidated', 'closure', 'gateway-b-delta']);
 const ANCHOR = /^(?:AC-[A-Za-z0-9_-]+|contract|data|security|regression|evidence-mismatch)$/;
-const LENSES = new Set(['correctness', 'contracts-data', 'security', 'delta']);
 const VERDICTS = new Set(['confirmed', 'refuted', 'plausible']);
-const REQUIRED_LENSES = {
-  low: [],
-  medium: ['correctness', 'contracts-data'],
-  high: ['correctness', 'contracts-data', 'security'],
-  critical: ['correctness', 'contracts-data', 'security'],
-};
 
 function text(value) {
   return typeof value === 'string' && value.trim().length > 0;
-}
-
-export function requiredFinderLenses(riskTier) {
-  if (!(riskTier in REQUIRED_LENSES)) throw new Error(`[cc-nexs] unknown risk tier for Review finders: ${riskTier}`);
-  return REQUIRED_LENSES[riskTier];
 }
 
 export function extractReviewBlock(documentText) {
@@ -39,8 +27,12 @@ export function extractReviewBlock(documentText) {
   }
 }
 
-function rejection(finding) {
+function rejection(finding, reviewerIds) {
   if (!finding || typeof finding !== 'object' || Array.isArray(finding)) return 'finding must be an object';
+  if (reviewerIds && finding.found_by !== undefined
+    && (!Array.isArray(finding.found_by) || finding.found_by.length === 0 || finding.found_by.some((id) => !reviewerIds.has(id)))) {
+    return 'found_by must name reviewers listed in the block';
+  }
   for (const field of ['id', 'location', 'failure_scenario']) {
     if (!text(finding[field])) return `missing ${field}`;
   }
@@ -79,12 +71,12 @@ function classify(finding, notReproducedIds) {
   return { class: 'blocking' };
 }
 
-export function classifyReviewFindings(findings, { notReproduced = [] } = {}) {
+export function classifyReviewFindings(findings, { notReproduced = [], reviewerIds = null } = {}) {
   if (!Array.isArray(findings)) throw new Error('[cc-nexs] review findings must be an array');
   const notReproducedIds = new Set(notReproduced);
   const seen = new Set();
   const classified = findings.map((finding) => {
-    let reason = rejection(finding);
+    let reason = rejection(finding, reviewerIds);
     if (!reason && seen.has(finding.id)) reason = 'duplicate id';
     if (reason) return { finding, class: 'rejected', reason };
     seen.add(finding.id);
@@ -101,19 +93,31 @@ export function classifyReviewFindings(findings, { notReproduced = [] } = {}) {
   };
 }
 
-function assertFinders(block, { round, riskTier }) {
-  const finders = block.finders;
-  if (!Array.isArray(finders) || finders.length === 0 || finders.some((lens) => !LENSES.has(lens))) {
-    throw new Error('[cc-nexs] review block must list its finders as correctness, contracts-data, security, or delta lenses');
+// A consolidated round lists the whole panel; a closure or Gateway B delta lists the
+// one reviewer that checked the fix.
+function assertReviewers(block, { round, panel }) {
+  const reviewers = block.reviewers;
+  if (!Array.isArray(reviewers) || reviewers.length === 0
+    || reviewers.some((item) => !item || !text(item.id) || !text(item.executor) || !text(item.model))) {
+    throw new Error('[cc-nexs] review block must list its reviewers as {id, executor, model}');
   }
-  if (round !== 'consolidated') return;
-  const missing = requiredFinderLenses(riskTier).filter((lens) => !finders.includes(lens));
-  if (missing.length > 0) {
-    throw new Error(`[cc-nexs] a ${riskTier} consolidated Review needs finders for ${missing.join(', ')}`);
+  const ids = reviewers.map((item) => item.id);
+  if (new Set(ids).size !== ids.length) throw new Error('[cc-nexs] review block lists a reviewer twice');
+  const byId = new Map(panel.map((item) => [item.id, item]));
+  for (const item of reviewers) {
+    const member = byId.get(item.id);
+    if (!member) throw new Error(`[cc-nexs] review block lists ${item.id}, which is not in review.panel`);
+    if (member.executor !== item.executor) throw new Error(`[cc-nexs] reviewer ${item.id} is ${member.executor} in review.panel, not ${item.executor}`);
+  }
+  if (round === 'consolidated') {
+    const missing = panel.filter((item) => !ids.includes(item.id)).map((item) => item.id);
+    if (missing.length) throw new Error(`[cc-nexs] the consolidated Review is missing panel reviewer(s) ${missing.join(', ')}`);
+  } else if (reviewers.length !== 1) {
+    throw new Error(`[cc-nexs] a ${round} Review uses exactly one reviewer`);
   }
 }
 
-export function readReviewFindings(documentText, { round, source, riskTier, notReproduced = [] }) {
+export function readReviewFindings(documentText, { round, source, panel, notReproduced = [] }) {
   const block = extractReviewBlock(documentText);
   if (!ROUNDS.has(block?.round)) throw new Error('[cc-nexs] review block round must be consolidated, closure, or gateway-b-delta');
   if (block.round !== round) {
@@ -124,8 +128,9 @@ export function readReviewFindings(documentText, { round, source, riskTier, notR
   if (actual !== expected) {
     throw new Error('[cc-nexs] review block candidate does not match the exact candidate commits');
   }
-  assertFinders(block, { round, riskTier });
-  return { ...classifyReviewFindings(block.findings ?? [], { notReproduced }), finders: block.finders };
+  assertReviewers(block, { round, panel });
+  const reviewerIds = new Set(block.reviewers.map((item) => item.id));
+  return { ...classifyReviewFindings(block.findings ?? [], { notReproduced, reviewerIds }), reviewers: block.reviewers };
 }
 
 export function hasReviewBlock(documentText) {

@@ -26,6 +26,7 @@ import { runTestRelease } from './test-release.mjs';
 import { recordEnvironmentVerification } from './test-verification-control.mjs';
 import { migrateFeatureConfig } from './feature-config.mjs';
 import { modelGateway } from './model-gateway.mjs';
+import { recordPanelReviewer, reviewPanelStatus, runPanelReviewer } from './review-panel.mjs';
 import { formatInventory, reclaimWorktrees } from './worktree-reclaim.mjs';
 import { advanceFeatureState, featureStatus, recordDerivedBinding } from './workflow-snapshot.mjs';
 
@@ -64,6 +65,9 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   if (command === 'advance') return advanceFeatureState({ cwd, ...parseAdvanceOptions(args) });
   if (command === 'record-derived-binding') return recordDerivedBinding({ cwd, ...parseFeatureOptions(args) });
   if (command === 'verify-guides') return candidateVerifyGuides({ cwd, ...parseFeatureOptions(args) });
+  if (command === 'review-panel') return reviewPanelStatus({ cwd, ...parseReviewerOptions(args) });
+  if (command === 'run-reviewer') return runPanelReviewer({ cwd, ...parseReviewerOptions(args) });
+  if (command === 'record-reviewer') return recordPanelReviewer({ cwd, ...parseReviewerOptions(args) });
   if (command === 'browser-provider') {
     const runtimeIndex = args.indexOf('--runtime');
     const runtime = runtimeIndex >= 0 ? requireValue(args, runtimeIndex + 1, '--runtime') : args.find((token) => token.startsWith('--runtime='))?.slice('--runtime='.length);
@@ -326,6 +330,23 @@ function parseFeatureMigrationOptions(args) {
   return options;
 }
 
+function parseReviewerOptions(args) {
+  const values = { '--runtime': 'runtime', '--reviewer': 'reviewerId', '--round': 'round', '--brief': 'briefFile', '--model': 'model', '--findings-file': 'findingsFile', '--progress': 'progressPath' };
+  const options = { progressPath: null };
+  const positional = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const token = args[index];
+    const equals = token.indexOf('=');
+    const flag = equals < 0 ? token : token.slice(0, equals);
+    if (values[flag]) options[values[flag]] = equals < 0 ? requireValue(args, ++index, flag) : token.slice(equals + 1);
+    else if (token.startsWith('-')) throw new Error(`unknown option: ${token}`);
+    else positional.push(token);
+  }
+  options.featureId = positional[0] || null;
+  if (positional.length > 1) throw new Error(`unexpected arguments: ${positional.slice(1).join(' ')}`);
+  return options;
+}
+
 function parseAmendmentOptions(args) {
   const lists = { '--ac': 'acs', '--path': 'paths', '--finding': 'blockingFindings' };
   const values = { '--reason': 'reason', '--target': 'target', '--amendment': 'amendmentId', '--progress': 'progressPath' };
@@ -484,7 +505,7 @@ function requireValue(args, index, option) {
 }
 
 function printResult(result) {
-  if (['test-target', 'base-sync', 'base-sync-finished', 'derived-binding'].includes(result.kind)) { console.log(JSON.stringify(result, null, 2)); return; }
+  if (['test-target', 'base-sync', 'base-sync-finished', 'derived-binding', 'review-panel', 'reviewer-result'].includes(result.kind)) { console.log(JSON.stringify(result, null, 2)); return; }
   if (['hotfix-init', 'hotfix-revision'].includes(result.kind)) {
     console.log(`cc-nexs ${result.kind}: ${result.feature.id}${result.resumed ? ' (resumed)' : ''}`);
     console.log(`BUG: ${result.document}`);
@@ -727,6 +748,9 @@ function printUsage() {
   console.error('  cc-nexs stats <feature-id> [--progress <path>]');
   console.error('  cc-nexs stats --all [--since <date>]');
   console.error('  cc-nexs verify-guides <feature-id> [--progress <path>]');
+  console.error('  cc-nexs review-panel <feature-id> [--runtime <claude|codex|pi>] [--round <consolidated|closure|gateway-b-delta>] [--progress <path>]');
+  console.error('  cc-nexs run-reviewer <feature-id> --reviewer <id> --brief <file> [--round <round>] [--progress <path>]');
+  console.error('  cc-nexs record-reviewer <feature-id> --reviewer <id> --model <model> --findings-file <file> [--round <round>] [--progress <path>]');
   console.error('  cc-nexs browser-provider --runtime <claude|codex|pi>');
   console.error('  cc-nexs test-account [--check] | test-account -- <command> [args...]');
   console.error('  cc-nexs resolve-test-conflict <feature-id> [--progress <path>]');
