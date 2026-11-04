@@ -43,7 +43,7 @@ workflow:
 
 ## Post-deployment Browser Acceptance
 
-- Claude Code: `chrome-devtools-mcp` is callable.
+- Claude Code: ego lite (`ego-browser` CLI) when its probe passes, otherwise `chrome-devtools-mcp`; `cc-nexs browser-provider --runtime claude` reports which.
 - Codex: reuse the currently logged-in in-app/Chrome session.
 - Pi: prefer installing and completing the ego lite onboarding plus the `ego-browser` skill; when on Windows or when ego lite is unavailable, install `@injaneity/pi-computer-use@0.4.3` and set `browser_use: true` and `headless: true` in `.pi/computer-use.json`. If neither is available, keep the completed test delivery and let verification enter `manual_required`.
 

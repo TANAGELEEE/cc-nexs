@@ -80,8 +80,8 @@ Apply the common delivery-safety preflight in `commands/run.md`, plus the approv
 
 Only after the release driver records success with pipeline, deployment, and exact environment revision evidence, run verification preflight:
 
-- Freeze one callable browser provider for the attempt: Claude Code `chrome-devtools-mcp`; Codex current in-app/Chrome signed-in session; Pi ego lite when its runtime probe passes, otherwise the dedicated headless `@injaneity/pi-computer-use@0.4.3` Verifier with effective `browser_use: true` and `headless: true`. Never expose two providers to one child.
-- Resolve deployed endpoints, restrict navigation to `release.test.allowed_hosts`, prove test—not production—and reuse existing login.
+- Freeze one callable browser provider for the attempt with `node <plugin-root>/lib/cc-nexs-cli.mjs browser-provider --runtime <claude|codex|pi>`: Claude Code and Pi use ego lite when its runtime probe passes, otherwise Claude Code uses `chrome-devtools-mcp` and Pi the dedicated headless `@injaneity/pi-computer-use@0.4.3` Verifier with effective `browser_use: true` and `headless: true`; Codex uses its current in-app/Chrome signed-in session. Never expose two providers to one child.
+- Resolve deployed endpoints, restrict navigation to `release.test.allowed_hosts`, prove test—not production. Sign in by reusing a session the provider browser already holds on the test host; otherwise, when `cc-nexs test-account --check` reports a ready `release.test.credential_ref`, sign in through a script run with `cc-nexs test-account -- <command>` that reads `CC_NEXS_TEST_USER`/`CC_NEXS_TEST_PASSWORD` from its environment, never typing or echoing the values; otherwise ask the human to sign in and record `manual_required` until they do.
 - If Web is approved as `local`, start only its recorded exact candidate worktree with the approved command, inject the deployed backend-java test endpoint/environment revision as API base, verify the combined flow, and always clean up the local process.
 - Execute and structurally close every deferred check id.
 

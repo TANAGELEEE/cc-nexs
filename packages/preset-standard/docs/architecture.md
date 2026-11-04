@@ -135,11 +135,11 @@ Browser is only a verification tool after a successful test merge/CI deployment;
 
 | Runtime | Capability |
 |---|---|
-| Claude Code | `chrome-devtools-mcp` |
+| Claude Code | ego lite preferred (`ego-browser` CLI); when unavailable, `chrome-devtools-mcp` |
 | Codex | The currently logged-in in-app/Chrome session |
 | Pi | Prefer ego lite (isolated task Space); when unavailable, use `@injaneity/pi-computer-use@0.4.3` (`headless: true`) |
 
-URLs may come from the versioned project config or a private overlay. URLs in project memory/instructions may only be used to discover candidates; automated flows must first add the host to `allowed_hosts`. Account credentials must not come from memory, Markdown, Git, or ordinary config; prefer reusing an existing login, and when necessary pass only an opaque `credential_ref` to an external secret provider.
+URLs may come from the versioned project config or a private overlay. URLs in project memory/instructions may only be used to discover candidates; automated flows must first add the host to `allowed_hosts`. Account credentials must not come from memory, Markdown, Git, or ordinary config; prefer reusing an existing login, and when necessary resolve only an opaque `credential_ref` (`env:<USER_VAR>,<PASSWORD_VAR>`, `dotenv:<untracked file>#<USER_VAR>,<PASSWORD_VAR>`, or `keychain:<service>/<account>`) through `cc-nexs test-account -- <command>`, which passes the values only to that command's environment.
 
 MFA, CAPTCHA, an expired login, an unavailable provider, a missing URL, or an unclear environment identity will be recorded as `manual_required` after deployment; a completed test delivery is preserved unchanged, and once the missing evidence is supplied, work can resume from the same attempt.
 

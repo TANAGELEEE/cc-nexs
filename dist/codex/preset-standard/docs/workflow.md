@@ -59,7 +59,7 @@ Runtime browser capabilities:
 
 | Runtime | Provider |
 |---|---|
-| Claude Code | `chrome-devtools-mcp` |
+| Claude Code | ego lite preferred (`ego-browser` CLI); when unavailable, `chrome-devtools-mcp` |
 | Codex | Current in-app/Chrome login session |
 | Pi | ego lite preferred (isolated task Space); when unavailable, `@injaneity/pi-computer-use@0.4.3` (`headless: true`) |
 

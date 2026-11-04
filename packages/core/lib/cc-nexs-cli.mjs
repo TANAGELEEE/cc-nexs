@@ -13,6 +13,7 @@ import { finalizeDocs } from './docs-finalize.mjs';
 import { reconcileTask } from './task-reconcile.mjs';
 import { taskStats, workspaceStats } from './task-stats.mjs';
 import { candidateVerifyGuides } from './verify-guide.mjs';
+import { browserProviderStatus, testAccount } from './test-session.mjs';
 import { assertHotfixCandidate, startHotfix } from './hotfix-control.mjs';
 import { initializeHotfix } from './hotfix-init.mjs';
 import { reviseHotfix } from './hotfix-revision.mjs';
@@ -63,6 +64,16 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   if (command === 'advance') return advanceFeatureState({ cwd, ...parseAdvanceOptions(args) });
   if (command === 'record-derived-binding') return recordDerivedBinding({ cwd, ...parseFeatureOptions(args) });
   if (command === 'verify-guides') return candidateVerifyGuides({ cwd, ...parseFeatureOptions(args) });
+  if (command === 'browser-provider') {
+    const runtimeIndex = args.indexOf('--runtime');
+    const runtime = runtimeIndex >= 0 ? requireValue(args, runtimeIndex + 1, '--runtime') : args.find((token) => token.startsWith('--runtime='))?.slice('--runtime='.length);
+    return browserProviderStatus({ cwd, runtime });
+  }
+  if (command === 'test-account') {
+    const separator = args.indexOf('--');
+    if (separator < 0 && args.length > 0 && !(args.length === 1 && args[0] === '--check')) throw new Error('usage: test-account [--check] | test-account -- <command> [args...]');
+    return testAccount({ cwd, command: separator >= 0 ? args.slice(separator + 1) : [] });
+  }
   if (command === 'stats') {
     if (args.includes('--all')) return workspaceStats({ cwd, ...parseWorkspaceStatsOptions(args) });
     return taskStats({ cwd, ...parseFeatureOptions(args) });
@@ -507,6 +518,18 @@ function printResult(result) {
     console.log(`Candidates: ${s.candidates}; local verification ${s.local_verifications.passed} passed, ${s.local_verifications.failed} failed; base attempts ${s.base_attempts}`);
     return;
   }
+  if (result.kind === 'browser-provider') {
+    console.log(result.provider
+      ? `cc-nexs browser provider (${result.runtime}): ${result.provider}${result.fallback ? ` (fallback: ${result.reason})` : ''}`
+      : `cc-nexs browser provider (${result.runtime}): none available (${result.reason}); record manual_required`);
+    return;
+  }
+  if (result.kind === 'test-account') {
+    if (!result.configured) console.log(`cc-nexs test account: not configured. ${result.message}`);
+    else if (result.ran) console.log(`cc-nexs test account: ran ${result.ran} with the account from ${result.source}`);
+    else console.log(`cc-nexs test account: ${result.ready ? 'ready' : 'incomplete'} from ${result.source} (user ${result.user}, password ${result.password})`);
+    return;
+  }
   if (result.kind === 'verify-guides') {
     console.log(`cc-nexs verify guides: ${result.feature.id} ${result.feature.slug}`);
     for (const item of result.repositories) {
@@ -704,6 +727,8 @@ function printUsage() {
   console.error('  cc-nexs stats <feature-id> [--progress <path>]');
   console.error('  cc-nexs stats --all [--since <date>]');
   console.error('  cc-nexs verify-guides <feature-id> [--progress <path>]');
+  console.error('  cc-nexs browser-provider --runtime <claude|codex|pi>');
+  console.error('  cc-nexs test-account [--check] | test-account -- <command> [args...]');
   console.error('  cc-nexs resolve-test-conflict <feature-id> [--progress <path>]');
   console.error('  cc-nexs reclaim-worktrees [--sizes] [--confirm <token>]');
   console.error('  cc-nexs reconcile <feature-id> [--confirm <token>] [--progress <path>]');
