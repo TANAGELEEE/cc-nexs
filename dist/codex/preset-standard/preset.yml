@@ -268,7 +268,8 @@ release:
     browser:
       required: true
       session_strategy: reuse
-      claude_provider: chrome-devtools-mcp
+      claude_provider: ego-lite
+      claude_fallback: chrome-devtools-mcp
       codex_provider: current-browser-session
       pi_provider: ego-lite
       pi_fallback:

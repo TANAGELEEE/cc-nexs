@@ -27,6 +27,8 @@ Choose where the guide lives; the layout below the chosen directory is the same 
 
 Resolve `<repository-id>` from the workspace configuration and read that repository's main checkout. The reader is a Verifier that has never seen the app, reading cold in the middle of a task: write exact commands and stable handles, not examples or placeholders.
 
+The Verifier drives the app with its runtime's own agent browser (`cc-nexs browser-provider --runtime <claude|codex|pi>`: ego lite, `chrome-devtools-mcp`, or the Codex in-app/Chrome session) and judges what it sees, so it catches visual and interaction defects a script would miss. Write journeys as steps a person or agent follows in any of those browsers. Ship a script only for the Doctor and for API probes that need exact request/response proof; never one script per feature or journey, and do not generate test suites. The repository's own test suites stay local checks, not the Verifier's method.
+
 Two rules hold for every file this command writes:
 
 - **No secrets.** Never write a password, token, cookie, API key, or private credential value. Name the environment variable, secret store entry, or login step that supplies it. Before handing over, search the written files for credential-like values and remove any you find.
@@ -37,8 +39,9 @@ Two rules hold for every file this command writes:
 Answer these from the code, its scripts, and its docs; ask the user only what cannot be observed:
 
 - **Surface**: what a user or client touches (web UI, API, CLI, worker). Pick the primary one and note the rest.
-- **Environments**: how it starts locally (the repository's own dev command, ports, env vars, seed data, test users), and how the deployed test environment is reached (base URLs and hosts from the workspace `release.test` configuration; never credentials).
-- **Drive**: what can exercise it programmatically. Existing harnesses first (Playwright or Cypress specs, API clients, scripts); otherwise browser automation for web, HTTP for services, a PTY for CLIs.
+- **Environments**: how it starts locally (the repository's own dev command, ports, env vars, seed data), and how the deployed test environment is reached (base URLs and hosts from the workspace `release.test` configuration; never credentials).
+- **Sign-in**: how a user signs in, and what proves a session is signed in. Verifiers reuse a session the browser already holds; otherwise they use the workspace `release.test.credential_ref` through `cc-nexs test-account`. Record which account properties a journey needs (role, plan, credits, data) as preconditions, never the account itself.
+- **Drive**: the user path through the UI with stable handles; for services, the HTTP requests; for CLIs, the commands.
 - **Observe**: what proves behavior (screenshots, response bodies, logs, exit codes, rows written, messages sent).
 - **Isolate**: whether two instances can run side by side. If not, say so; refusing to double-drive a shared instance beats corrupting someone's session.
 
@@ -50,22 +53,23 @@ If the checkout does not start as-is, fix the start-up only when the fix is loca
 
 - **Launch**: the exact local start command and how to tell it is usable (not merely that a port answers), from an empty data directory including migrations and seed data; and how to target the deployed test environment instead.
 - **Doctor**: one read-only check that answers "is this instance worth driving?" (process up, expected revision, port owned by this run, auth valid). A Verifier runs it first, and again whenever something looks off.
-- **Drive**: the recipe with real selectors, routes, and commands from this repository. Prefer stable handles (ARIA labels, data attributes, route paths, API paths) over coordinates.
-- **Evidence**: what to capture for a proof, where it goes (outside the repository), and the standard it must meet: the real user path, not internal setters or test-only endpoints; the action and the resulting state; side effects (rows, files, messages) alongside what is visible; mocks only where a production boundary already isolates the external system.
+- **Sign-in**: how to tell the browser is already signed in on the test host, the login page and its handles, and that the Verifier signs in with `cc-nexs test-account -- <command>` when no session exists (the command reads `CC_NEXS_TEST_USER`/`CC_NEXS_TEST_PASSWORD`; nothing is typed or printed). If neither works, the Verifier asks the human to sign in.
+- **Drive**: the journeys as numbered steps with real routes, stable handles (ARIA labels, roles, data attributes, ids), and the visible state after each important step. Prefer handles over coordinates. Name the API calls a step triggers when they prove the result.
+- **Evidence**: what to capture for a proof, where it goes (outside the repository), and the standard it must meet: the real user path, not internal setters or test-only endpoints; a screenshot of each journey's end state, checked for broken layout, error, empty, or loading states, and console errors; the backing API response; side effects (rows, files, messages) alongside what is visible; mocks only where a production boundary already isolates the external system.
 - **Cleanup**: how to stop what the run started. Kill only what you started, never by process name. Cleanup keeps the evidence.
-- **Helpers**: any script the guide ships, executable, with its invocation shown.
+- **Helpers**: the Doctor script and any API probe, executable, with the invocation shown. No journey scripts.
 
 ## 3. Seed the feature map
 
-Write `features/README.md` as an index and one file per user-facing feature, starting with the three to five most used (from routes, menus, commands, or docs). Each feature file answers, from the user's point of view: what it is and its sub-features, how to reach it, how to drive it with the recipe above, the observable end state that proves it works, and gotchas. If seed data lacks a precondition a journey needs, the journey reports that failure and the reason goes under gotchas; never weaken the journey to make it pass.
+Write `features/README.md` as an index and one file per user-facing feature, starting with the three to five most used (from routes, menus, commands, or docs). Each feature file answers, from the user's point of view: what it is and its sub-features, the account preconditions it needs, how to reach it, the journey as numbered browser steps, the observable end state (what the page shows and what must not appear) that proves it works, and gotchas. If seed data lacks a precondition a journey needs, the journey reports that failure and the reason goes under gotchas; never weaken the journey to make it pass.
 
 ## 4. Prove it before handing it over
 
-Run the guide end to end once: launch (or target test), doctor, drive one mapped feature, capture evidence, clean up, then confirm the evidence still exists. Fix what fails and clean up after every failed attempt. A guide that was never executed is a draft. If you proved it somewhere other than its real target, list the steps that target still needs.
+Run the guide end to end once with your own agent browser: launch (or target test), doctor, sign in, drive one mapped feature, capture evidence, clean up, then confirm the evidence still exists. Fix what fails and clean up after every failed attempt. A guide that was never executed is a draft. If you proved it somewhere other than its real target, list the steps that target still needs.
 
 ## `--refresh`
 
-Audit an existing guide (at the location the same option selects) against the current code: read each feature file against the code it describes, then make one live pass that drives every mapped feature. Change only the guide's own files. End with exactly one outcome: `clean` (full coverage, nothing changed), `changed` (the corrections made), or `blocked` (the blocker). A product defect the live pass finds is reported, never fixed here.
+Audit an existing guide (at the location the same option selects) against the current code: read each feature file against the code it describes, then make one live pass that drives every mapped feature. Convert any journey script the guide ships into written steps and remove the script. Change only the guide's own files. End with exactly one outcome: `clean` (full coverage, nothing changed), `changed` (the corrections made), or `blocked` (the blocker). A product defect the live pass finds is reported, never fixed here.
 
 ## Handing over
 

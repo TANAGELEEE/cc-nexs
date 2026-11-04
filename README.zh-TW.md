@@ -254,7 +254,7 @@ pnpm install:local:pi
 
 Pi 不呼叫 Codex CLI。生成的 Pi skills 設定 `disable-model-invocation: true`，從系統提示中隱藏，只能透過 `/cc-nexs:*` 或 `/skill:cc-nexs-*` 顯式呼叫。Lean 各角色從 cc-nexs profile 解析 `model`、`thinking` 和 `fallback_models`；`cc_nexs_dispatch` 將其傳給每個子進程，Reviewer 可用不同模型，也可用相同模型但更高 thinking。主模型不可用時只按 fallback 順序重試失敗任務。從 0.8.x 升級：cc-nexs 已不再使用 `pi-subagents`；`.pi/settings.json` 中 `fallbackModels` override 的清理方式見 [Pi P2 支援](./docs/pi-plugin.md#install)。`.pi/settings.json` 只保留 Pi 認證與 `enabledModels` 範圍。Pi 在 test merge/CI 完成後才選擇瀏覽器 provider：優先 ego lite，不可用時選擇獨立的 computer-use Verifier，並要求有效配置為 `browser_use: true`、`headless: true`。同一 child 不會同時獲得兩套 provider；兩者都不可用或登入態失效時，已部署 candidate 保持不變，verification 進入可恢復的 `manual_required`。詳見 [Pi P2 支援](./docs/pi-plugin.md)。
 
-Claude Code 自動環境驗收使用 `chrome-devtools-mcp`；Codex 複用當前已登入的 in-app/Chrome 會話。三端都只在部署後訪問 `release.test.allowed_hosts`，瀏覽器、登入/MFA 或驗收 URL 缺失只會產生 `manual_required`，不會阻止 test merge/CI。不得從專案 memory、Markdown 或 Git 讀取明文賬號密碼，必要登入只允許透過 opaque `credential_ref` 對接外部 secret provider。
+自動環境驗收使用各 runtime 自己的瀏覽器：Claude Code 與 Pi 在 ego lite 可用時用 ego lite（否則 Claude Code 用 `chrome-devtools-mcp`、Pi 用 headless computer-use Verifier），Codex 複用當前已登入的 in-app/Chrome 會話。Verifier 先複用瀏覽器已登入的會話；沒有時才用 `release.test.credential_ref`（`env:`、未追蹤檔案的 `dotenv:` 或 `keychain:`）透過 `cc-nexs test-account -- <命令>` 登入，不會印出帳密。三端都只在部署後訪問 `release.test.allowed_hosts`，瀏覽器、登入/MFA 或驗收 URL 缺失只會產生 `manual_required`，不會阻止 test merge/CI。不得從專案 memory、Markdown 或 Git 讀取明文賬號密碼，必要登入只允許透過 opaque `credential_ref` 對接外部 secret provider。
 
 ### Claude Code 從 GitHub 裝（其他機器 / 協作者）
 
