@@ -132,8 +132,8 @@ Keep each request row synchronized with progress. A newer request marks the prio
 More paths are not a human decision. Gateway A approves criteria and boundaries, so a repair that needs extra implementation, dependency, generated, or test-integration paths to close an approved AC continues without asking:
 
 1. The Orchestrator records it from `IMPLEMENTING`, a local failure, `REVIEW_FIXING`, `TEST_MERGE_CONFLICT`, `TEST_VERIFY_FAILED`, or `TEST_FIXING`: `node <plugin-root>/lib/cc-nexs-cli.mjs amend-plan <id> --ac <AC> --path <path> --reason <why> [--target feature|test-integration]`. Collect the whole known path closure into one amendment rather than one per file.
-2. Dispatch an independent `lean-plan-reviewer` on that amendment only, then run `record-amendment-review <id> --amendment <A-n> --passed|--blocked [--finding "P1: ..."]`.
-3. Passed: the Developer may touch those paths and the current state continues. Blocked: use the `scope` request.
+2. The controller activates an ordinary `feature` amendment at once (`review: final-review`): the candidate's consolidated Review checks those paths with the rest of the diff. Do not dispatch a reviewer for it, and do not stop the Developer for it.
+3. A `test-integration` amendment, or one whose paths are sensitive (schema, migration, auth, permission, secret, payment, deployment, CI), stays `pending_review`: dispatch an independent `lean-plan-reviewer` on that amendment only, then run `record-amendment-review <id> --amendment <A-n> --passed|--blocked [--finding "P1: ..."]`. Passed: the Developer may touch those paths and the current state continues. Blocked: use the `scope` request.
 
 The ledger lives in `plan_amendments` and the plan's change log, outside `APPROVAL-SCOPE`, so the Gateway A binding and existing evidence stay valid; a new candidate still needs its own local verification, Review, and test evidence.
 

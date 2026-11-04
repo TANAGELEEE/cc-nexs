@@ -1,7 +1,7 @@
 import { dirname, join } from 'node:path';
 
 import { resolveFeatureProgress } from './approval-command.mjs';
-import { assertPlanApprovalCurrent, requirementAcIds } from './plan-contract.mjs';
+import { assertPlanApprovalCurrent, isSensitivePlanPath, requirementAcIds } from './plan-contract.mjs';
 import { readProgressV2, recordPlanAmendment, recordPlanAmendmentReview } from './progress-v2.mjs';
 import { appendPlanAmendment, syncPlanAmendmentStatus } from './release-change-docs.mjs';
 
@@ -13,7 +13,10 @@ export function requestPlanAmendment({ cwd = process.cwd(), featureId, progressP
   const known = new Set(requirementAcIds(featureDir));
   const unknown = acs.filter((id) => !known.has(id));
   if (unknown.length) throw new Error(`[cc-nexs] amendments cover approved ACs only; a new criterion is a scope change: ${unknown.join(', ')}`);
-  const { progress, amendment } = recordPlanAmendment(progressFile, { acs, paths, reason, target, expectedRevision: before.revision });
+  // Ordinary same-AC paths are checked by the candidate's final Review; only test
+  // integration work and sensitive paths wait for an independent amendment review.
+  const independentReview = target === 'test-integration' || paths.some(isSensitivePlanPath);
+  const { progress, amendment } = recordPlanAmendment(progressFile, { acs, paths, reason, target, independentReview, expectedRevision: before.revision });
   appendPlanAmendment(join(featureDir, 'plan.md'), amendment);
   return { kind: 'plan-amendment', feature: progress.feature, amendment, state: progress.state, progressFile };
 }
