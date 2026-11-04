@@ -294,8 +294,9 @@ export function resolveDeployedRevision({ repo, targetBranch, revision, integrat
 }
 
 // Paths the target changed since the candidate's merge-base. Overlap means the
-// tested candidate cannot be released unchanged; sensitive paths need an
-// integration check of the merged tree before the candidate's evidence can stand.
+// tested candidate cannot be released unchanged. Disjoint sensitive paths do not
+// block: a configured verify driver checks the merged tree, otherwise they are
+// recorded and left to the base branch's own CI.
 function assessTargetChanges({ repo, sourceCommit, targetBefore, checkSensitive = true }) {
   const common = git(repo, ['merge-base', sourceCommit, targetBefore]);
   const paths = (commit) => git(repo, ['diff', '--name-only', '--no-renames', '-z', common, commit]).split('\0').filter(Boolean);
@@ -309,10 +310,6 @@ function assessTargetChanges({ repo, sourceCommit, targetBefore, checkSensitive 
 
 function overlapError(targetBranch) {
   return new Error(`[cc-nexs] BASE_CHANGED: origin/${targetBranch} overlaps candidate paths; resolve and verify the affected changes before release`);
-}
-
-function sensitiveError(targetBranch, sensitive) {
-  return new Error(`[cc-nexs] BASE_CHANGED: origin/${targetBranch} changed shared runtime or contract paths (${sensitive.join(', ')}); sync and re-verify automatically before release`);
 }
 
 function assertBranchName(name) {
@@ -361,7 +358,6 @@ export function integrateCandidateToTest({
     const changes = assessTargetChanges({ repo, sourceCommit, targetBefore });
     if (changes.overlap.length) throw overlapError(targetBranch);
     sensitive = changes.sensitive;
-    if (sensitive.length && !verifyIntegration) throw sensitiveError(targetBranch, sensitive);
   }
   const tempRoot = conflictWorktree ? null : mkdtempSync(join(tmpdir(), `cc-nexs-test-release-${repositoryId}-`));
   const integrationWorktree = conflictWorktree || join(tempRoot, 'worktree');
@@ -385,7 +381,7 @@ export function integrateCandidateToTest({
       throw new Error(`[cc-nexs] ${requireDisjointTargetChanges ? 'BASE_CHANGED: ' : ''}candidate ${candidateRef} conflicts with latest origin/${targetBranch}`);
     }
     const integrationCommit = git(integrationWorktree, ['rev-parse', 'HEAD']);
-    const integrationVerification = sensitive.length
+    const integrationVerification = sensitive.length && verifyIntegration
       ? runIntegrationVerification({ verifyIntegration, repositoryId, sourceCommit, targetBefore, integrationCommit, worktree: integrationWorktree, sensitive })
       : null;
     try {
@@ -410,6 +406,7 @@ export function integrateCandidateToTest({
       remoteCommit,
       alreadyIntegrated: false,
       integrationVerification,
+      ...(sensitive.length && !verifyIntegration && { unverifiedSensitivePaths: sensitive }),
     };
   } finally {
     if (registered && !keepWorktree) {
@@ -503,12 +500,14 @@ export function promoteCandidateViaMergeRequest({
     return { ...base, ...proveCandidateMerge({ repo, remoteCommit: targetBefore, sourceCommit }), remoteCommit: targetBefore, pending: false, integrationVerification: null };
   }
   let integrationVerification = null;
+  let unverifiedSensitivePaths = [];
   if (!isAncestor(repo, targetBefore, sourceCommit)) {
     const changes = assessTargetChanges({ repo, sourceCommit, targetBefore, checkSensitive });
     if (changes.overlap.length) throw overlapError(targetBranch);
-    if (changes.sensitive.length) {
-      if (!verifyIntegration) throw sensitiveError(targetBranch, changes.sensitive);
+    if (changes.sensitive.length && verifyIntegration) {
       integrationVerification = verifyMergedTree({ repo, repositoryId, sourceCommit, targetBefore, sensitive: changes.sensitive, verifyIntegration });
+    } else {
+      unverifiedSensitivePaths = changes.sensitive;
     }
   }
   // The driver pushes the candidate to the branch itself: GitLab ignores
@@ -519,20 +518,20 @@ export function promoteCandidateViaMergeRequest({
   }
   const remoteCommit = git(repo, ['rev-parse', fetchBase(repo, targetBranch)]);
   if (isAncestor(repo, sourceCommit, remoteCommit)) {
-    return { ...base, ...proveCandidateMerge({ repo, remoteCommit, sourceCommit }), remoteCommit, pending: false, mergeRequest: { ...receipt, status: 'merged' }, integrationVerification };
+    return { ...base, ...proveCandidateMerge({ repo, remoteCommit, sourceCommit }), remoteCommit, pending: false, mergeRequest: { ...receipt, status: 'merged' }, integrationVerification, ...(unverifiedSensitivePaths.length && { unverifiedSensitivePaths }) };
   }
   if (receipt.status === 'merged') throw new Error('[cc-nexs] MR receipt has no remote ancestry proof');
   const pushed = git(repo, ['ls-remote', '--heads', 'origin', `refs/heads/${branch}`]).split(/\s+/)[0] || '';
   if (pushed !== sourceCommit) {
     throw new Error(`[cc-nexs] MR_SOURCE_DRIFT: origin/${branch} is ${pushed || 'absent'}, expected approved candidate ${sourceCommit}; the driver must push exactly the candidate`);
   }
-  return { ...base, remoteCommit, pending: true, mergeRequest: receipt, integrationVerification };
+  return { ...base, remoteCommit, pending: true, mergeRequest: receipt, integrationVerification, ...(unverifiedSensitivePaths.length && { unverifiedSensitivePaths }) };
 }
 
 // Read-only check that a tested candidate can still be released unchanged. It
 // runs before Gateway B is requested so a changed base is synchronized before
 // anyone is asked to approve a candidate that would be rejected.
-export function checkBaseReadiness({ repo, repositoryId, sourceCommit, targetBranch, sensitiveChecksAvailable = false }) {
+export function checkBaseReadiness({ repo, repositoryId, sourceCommit, targetBranch }) {
   assertSegment(repositoryId, 'repository id');
   const targetBefore = git(repo, ['rev-parse', fetchBase(repo, targetBranch)]);
   const result = { repository: repositoryId, targetBranch, targetBefore, sourceCommit };
@@ -540,9 +539,6 @@ export function checkBaseReadiness({ repo, repositoryId, sourceCommit, targetBra
   if (isAncestor(repo, targetBefore, sourceCommit)) return { ...result, status: 'ready', sensitive: [] };
   const changes = assessTargetChanges({ repo, sourceCommit, targetBefore });
   if (changes.overlap.length) return { ...result, status: 'base_changed', reason: overlapError(targetBranch).message, overlap: changes.overlap };
-  if (changes.sensitive.length && !sensitiveChecksAvailable) {
-    return { ...result, status: 'base_changed', reason: sensitiveError(targetBranch, changes.sensitive).message, sensitive: changes.sensitive };
-  }
   return { ...result, status: 'ready', sensitive: changes.sensitive };
 }
 

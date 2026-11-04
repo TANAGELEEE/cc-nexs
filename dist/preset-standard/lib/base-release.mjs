@@ -165,13 +165,11 @@ const PREFLIGHT_STATES = {
 // happens before the human is asked, not after they approve.
 export function preflightBaseRelease({ cwd = process.cwd(), featureId, progressPath = null } = {}) {
   const context = resolveCandidateContext({ cwd, featureId, progressPath, includeDocs: false });
-  const sensitiveChecksAvailable = Boolean(context.config.mergedRelease?.base?.verify_driver);
   const results = context.repositories.map((item) => checkBaseReadiness({
     repo: item.repository.absolute_path,
     repositoryId: item.id,
     sourceCommit: item.sourceCommit,
     targetBranch: item.assignment.base_branch || item.repository.base_branch,
-    sensitiveChecksAvailable,
   }));
   const drift = results.filter((item) => item.status === 'base_changed');
   const { progress } = context;
@@ -228,6 +226,7 @@ function baseIntegrationRecord(result, previous) {
     remote_commit: result.remoteCommit || null,
     merge_request: mergeRequest && { ...mergeRequest, status: result.pending ? 'pending' : 'merged' },
     integration_verification: result.integrationVerification || previous?.integration_verification || null,
+    ...((result.unverifiedSensitivePaths || previous?.unverified_sensitive_paths) && { unverified_sensitive_paths: result.unverifiedSensitivePaths || previous.unverified_sensitive_paths }),
   };
 }
 

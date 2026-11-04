@@ -74,6 +74,10 @@ function acIds(lines) {
 // schema/data, auth/permission/secret, payment, and infrastructure/deployment changes.
 const AUTO_PLAN_SENSITIVE_PATH = /migration|schema|\.sql$|auth|permission|security|secret|credential|iam|payment|billing|terraform|helm|k8s|kubernetes|deploy|docker|\.gitlab-ci|\.github\/workflows/i;
 
+export function isSensitivePlanPath(path) {
+  return AUTO_PLAN_SENSITIVE_PATH.test(path);
+}
+
 export function sensitivePlanPaths(planText) {
   const rows = tableRows(extractApprovalScope(planText), 'T');
   const paths = rows.flatMap((line) => (line.split('|')[4] || '').split(/[\s,，、;；]+/))

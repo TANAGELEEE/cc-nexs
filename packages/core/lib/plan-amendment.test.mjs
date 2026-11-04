@@ -49,7 +49,7 @@ function createApprovedFeature(state = 'TEST_VERIFY_FAILED', plan = PLAN) {
 
 const amend = (feature, overrides = {}) => requestPlanAmendment({
   cwd: feature.root, featureId: '01', progressPath: feature.progressPath,
-  acs: ['AC-001'], paths: ['src/b.ts'], reason: 'caller chain', ...overrides,
+  acs: ['AC-001'], paths: ['src/auth/b.ts'], reason: 'caller chain', ...overrides,
 });
 
 test('a same-AC amendment extends paths without moving the Gateway A binding', () => {
@@ -59,10 +59,22 @@ test('a same-AC amendment extends paths without moving the Gateway A binding', (
   assert.equal(amendment.id, 'A-1');
   assert.equal(amendment.status, 'pending_review');
   const plan = readFileSync(join(feature.dir, 'plan.md'), 'utf8');
-  assert.match(plan, /\| A-1 \[feature\] AC-001: caller chain \(src\/b\.ts\) \| no \| pending_review \|/);
+  assert.match(plan, /\| A-1 \[feature\] AC-001: caller chain \(src\/auth\/b\.ts\) \| no \| pending_review \|/);
   assert.equal(planApprovalBinding(feature.dir).combined_sha256, before);
   assert.equal(readProgressV2(feature.progressPath).state, 'TEST_VERIFY_FAILED');
   assert.doesNotThrow(() => assertPlanApprovalCurrent(readProgressV2(feature.progressPath), feature.dir));
+});
+
+test('ordinary same-AC paths activate at once and are left to the final Review', () => {
+  const feature = createApprovedFeature('IMPLEMENTING');
+  const { amendment } = amend(feature, { paths: ['web:src/middleware.ts', 'web:public/logo.png'] });
+  assert.equal(amendment.status, 'active');
+  assert.equal(amendment.review, 'final-review');
+  assert.match(readFileSync(join(feature.dir, 'plan.md'), 'utf8'), /\| A-1 \[feature\] .* \| no \| active \|/);
+  assert.equal(amend(feature, { paths: ['web:src/app.ts'] }).amendment.id, 'A-2', 'an active amendment does not hold up the next one');
+  assert.equal(amend(feature, { paths: ['web:src/lib/permissions.ts'] }).amendment.status, 'pending_review');
+  const integration = createApprovedFeature('TEST_MERGE_CONFLICT');
+  assert.equal(amend(integration, { paths: ['web:src/app.ts'], target: 'test-integration' }).amendment.status, 'pending_review');
 });
 
 test('an amendment never edits a change-log heading inside the approval scope', () => {

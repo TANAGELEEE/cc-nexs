@@ -147,7 +147,8 @@ test('Lean local verification invokes the configured driver and binds evidence t
     documentReview.state = 'LOCAL_VERIFYING';
     writeProgressV2(progressFile, documentReview);
     const planText = readFileSync(join(docs, 'plan.md'), 'utf8');
-    const reviewBlock = (findings) => `${planText}\n## Review\n\n\`\`\`cc-nexs-review\n${JSON.stringify({ round: 'consolidated', candidate: { api: commit }, finders: ['correctness', 'contracts-data', 'security'], findings })}\n\`\`\`\n\n结论: NEEDS_REVISION\n`;
+    const reviewers = [{ id: 'r1', executor: 'native', model: 'test-model' }];
+    const reviewBlock = (findings) => `${planText}\n## Review\n\n\`\`\`cc-nexs-review\n${JSON.stringify({ round: 'consolidated', candidate: { api: commit }, reviewers, findings })}\n\`\`\`\n\n结论: NEEDS_REVISION\n`;
     const proven = {
       id: 'F-1', severity: 'P1', location: 'app.txt:1', anchor: 'AC-001', failure_scenario: 'smoke prints ready twice',
       evidence: { kind: 'run', command: 'git show HEAD:app.txt', observed: 'ready\nready', expected: 'ready' },
@@ -159,12 +160,19 @@ test('Lean local verification invokes the configured driver and binds evidence t
       () => runCcNexsCommand(['record-review', '30', '--document-findings', '--passed', '--progress', progressFile], { cwd: root }),
       /derives the Review status/,
     );
+    assert.throws(() => runCcNexsCommand(['record-review', '30', '--document-findings', '--progress', progressFile], { cwd: root }), /reviewer r1 has no stored consolidated result/);
+    const reviewerFile = join(root, 'r1-findings.json');
+    writeFileSync(reviewerFile, JSON.stringify({ findings: [proven, speculative] }));
+    assert.throws(() => runCcNexsCommand(['record-reviewer', '30', '--reviewer', 'r2', '--model', 'test-model', '--findings-file', reviewerFile, '--progress', progressFile], { cwd: root }), /r2 .*is not in review.panel/);
+    assert.equal(runCcNexsCommand(['record-reviewer', '30', '--reviewer', 'r1', '--model', 'other-model', '--findings-file', reviewerFile, '--progress', progressFile], { cwd: root }).findings, 2);
+    assert.throws(() => runCcNexsCommand(['record-review', '30', '--document-findings', '--progress', progressFile], { cwd: root }), /r1 ran on other-model, but the review block says test-model/);
+    runCcNexsCommand(['record-reviewer', '30', '--reviewer', 'r1', '--model', 'test-model', '--findings-file', reviewerFile, '--progress', progressFile], { cwd: root });
     const blockedReview = runCcNexsCommand(['record-review', '30', '--document-findings', '--progress', progressFile], { cwd: root });
     assert.equal(blockedReview.review.status, 'blocked');
     assert.deepEqual(blockedReview.review.blocking_findings, ['P1: F-1 app.txt:1 — smoke prints ready twice']);
     assert.deepEqual(blockedReview.review.finding_counts, { blocking: 1, unproven: 1, refuted: 0, advisory: 0, rejected: 0 });
     assert.deepEqual(blockedReview.events.at(-1).data.finding_counts, { blocking: 1, unproven: 1, refuted: 0, advisory: 0, rejected: 0 });
-    assert.deepEqual(blockedReview.review.finders, ['correctness', 'contracts-data', 'security']);
+    assert.deepEqual(blockedReview.review.reviewers, reviewers);
     assert.throws(
       () => recordLeanReview({ cwd: root, featureId: '30', progressPath: progressFile, status: 'passed' }),
       /record it with --document-findings/,
@@ -399,10 +407,13 @@ test('Lean local verification can defer an environment-only backend start to tes
     writeFileSync(join(docs, 'hotfix.md'), `${hotfixText}\n## Focused Review\n\n\`\`\`cc-nexs-review\n${JSON.stringify({
       round: 'consolidated',
       candidate: { api: commit },
-      finders: ['correctness', 'contracts-data'],
+      reviewers: [{ id: 'r1', executor: 'native', model: 'test-model' }],
       findings: [{ id: 'F-1', severity: 'P2', location: 'api/app.txt:1', anchor: 'regression', failure_scenario: 'log line wording changed', evidence: { kind: 'trace', refs: ['api/app.txt:1'] } }],
     })}\n\`\`\`\n`);
     writeProgressV2(progressFile, { ...readProgressV2(progressFile), state: 'HOTFIX_LOCAL_VERIFYING' });
+    const hotfixFindings = join(root, 'hotfix-r1.json');
+    writeFileSync(hotfixFindings, '[]');
+    runCcNexsCommand(['record-reviewer', '31', '--reviewer', 'r1', '--model', 'test-model', '--findings-file', hotfixFindings, '--progress', progressFile], { cwd: root });
     const hotfixReview = recordLeanReview({ cwd: root, featureId: '31', progressPath: progressFile, documentFindings: true });
     assert.equal(hotfixReview.review.status, 'passed');
     assert.deepEqual(hotfixReview.review.finding_counts, { blocking: 0, unproven: 0, refuted: 0, advisory: 1, rejected: 0 });

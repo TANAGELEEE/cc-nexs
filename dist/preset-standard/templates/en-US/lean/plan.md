@@ -86,7 +86,7 @@ Local verification is a fast check before deployment; acceptance in test is the 
 
 ## Consolidated Review
 - Reviewed fingerprint:
-- Finder lenses:
+- Reviewers (panel members and models):
 - Blockers (run-proven P0/P1 confirmed by the Judge rerun):
 - Unproven (sent to test verification as probes):
 - P2/P3, refuted, and rejected:

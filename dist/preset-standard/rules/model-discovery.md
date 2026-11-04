@@ -11,7 +11,8 @@ independent sessions, existing model overrides and release gates unchanged.
 - Codex CLI executor (including Claude-hosted legacy review roles): run
   `node <plugin-root>/lib/model-discovery.mjs codex`; this queries `model/list`
   through app-server without inference. Do not run a nested Codex inference CLI
-  from a Codex native role.
+  from a Codex native role. A configured CLI panel reviewer is the exception: the
+  Orchestrator runs it with `run-reviewer`, which records the model the CLI reports.
 - Pi: call `cc_nexs_models` for the current session registry. Outside that session,
   `node <plugin-root>/lib/model-discovery.mjs pi` queries the Pi RPC catalog.
   Extension-added models can differ between these catalogs; session registry wins.

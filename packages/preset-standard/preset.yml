@@ -1,5 +1,5 @@
 name: preset-standard
-version: 0.15.1
+version: 0.16.0
 description: General multi-role development SOP with Lean requirements and Hotfix repairs; no language, framework, repository, or organization conventions are bound.
 language: en-US
 
@@ -83,6 +83,8 @@ roles:
 # Runtime adaptation is capability-based, never tied to a literal model id.
 # Claude Code keeps all Lean and Hotfix roles in isolated Claude subagents.
 # Codex maps every role to an independent native agent and never invokes Claude Code or nested Codex CLI.
+# The one exception on every runtime is a `review.panel` reviewer the project configures
+# with a CLI executor (codex-cli, claude-cli, agy-cli, dsh-cli, pi-cli); see rules/review-findings.md.
 runtimes:
   claude:
     model_policy: inherit

@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { classifyReviewFindings, extractReviewBlock, readReviewFindings, requiredFinderLenses } from './finding-contract.mjs';
+import { classifyReviewFindings, extractReviewBlock, readReviewFindings } from './finding-contract.mjs';
+
+const panel = [{ id: 'r1', executor: 'native' }, { id: 'r2', executor: 'codex-cli' }];
+const both = [{ id: 'r1', executor: 'native', model: 'opus' }, { id: 'r2', executor: 'codex-cli', model: 'gpt-6-astra' }];
 
 const run = { kind: 'run', command: 'node --test api/limit.test.mjs', observed: 'expected 429, got 200', expected: '429' };
 
@@ -94,34 +97,39 @@ test('only a Judge rerun that confirms the failure lets a run finding block', ()
   assert.deepEqual(result.blockingFindings, []);
 });
 
-test('a consolidated Review needs the finder lenses its risk tier requires', () => {
+test('a consolidated Review lists every panel reviewer; a closure lists one', () => {
   const source = { api: 'abc123' };
-  const block = (finders, round = 'consolidated') => document({ round, candidate: source, finders, findings: [] });
-  assert.deepEqual(requiredFinderLenses('low'), []);
-  assert.equal(readReviewFindings(block(['correctness']), { round: 'consolidated', source, riskTier: 'low' }).counts.blocking, 0);
-  assert.throws(() => readReviewFindings(block(['correctness']), { round: 'consolidated', source, riskTier: 'medium' }), /medium consolidated Review needs finders for contracts-data/);
-  assert.throws(() => readReviewFindings(block(['correctness', 'contracts-data']), { round: 'consolidated', source, riskTier: 'high' }), /needs finders for security/);
-  assert.deepEqual(readReviewFindings(block(['correctness', 'contracts-data', 'security']), { round: 'consolidated', source, riskTier: 'critical' }).finders, ['correctness', 'contracts-data', 'security']);
-  assert.equal(readReviewFindings(block(['delta'], 'closure'), { round: 'closure', source, riskTier: 'high' }).counts.blocking, 0);
-  assert.throws(() => readReviewFindings(block(undefined), { round: 'consolidated', source, riskTier: 'low' }), /must list its finders/);
-  assert.throws(() => readReviewFindings(block(['style']), { round: 'consolidated', source, riskTier: 'low' }), /must list its finders/);
-  assert.throws(() => requiredFinderLenses('auto'), /unknown risk tier/);
+  const block = (reviewers, round = 'consolidated', findings = []) => document({ round, candidate: source, reviewers, findings });
+  const read = (text, round = 'consolidated') => readReviewFindings(text, { round, source, panel });
+  assert.deepEqual(read(block(both)).reviewers, both);
+  assert.throws(() => read(block(both.slice(0, 1))), /missing panel reviewer\(s\) r2/);
+  assert.throws(() => read(block([...both, { id: 'r3', executor: 'native', model: 'x' }])), /r3, which is not in review.panel/);
+  assert.throws(() => read(block([{ ...both[0] }, { ...both[1], executor: 'claude-cli' }])), /r2 is codex-cli in review.panel/);
+  assert.throws(() => read(block([both[0], both[0]])), /reviewer twice/);
+  assert.throws(() => read(block([{ id: 'r1', executor: 'native' }, both[1]])), /\{id, executor, model\}/);
+  assert.throws(() => read(block(undefined)), /must list its reviewers/);
+  assert.equal(read(block(both.slice(1), 'closure'), 'closure').counts.blocking, 0);
+  assert.throws(() => read(block(both, 'closure'), 'closure'), /closure Review uses exactly one reviewer/);
+
+  const agreed = read(block(both, 'consolidated', [finding({ found_by: ['r1', 'r2'] }), finding({ id: 'F-2', found_by: ['r9'] })]));
+  assert.deepEqual(agreed.classified.map((item) => item.class), ['blocking', 'rejected']);
+  assert.match(agreed.classified[1].reason, /found_by must name reviewers listed/);
 });
 
 test('the last review block must match the round and the exact candidate', () => {
   const source = { api: 'abc123', web: 'def456' };
-  const options = (round, candidate = source) => ({ round, source: candidate, riskTier: 'low' });
-  const text = document({ round: 'consolidated', candidate: { web: 'def456', api: 'abc123' }, finders: ['correctness'], findings: [finding()] });
+  const options = (round, candidate = source) => ({ round, source: candidate, panel });
+  const text = document({ round: 'consolidated', candidate: { web: 'def456', api: 'abc123' }, reviewers: both, findings: [finding()] });
   assert.equal(readReviewFindings(text, options('consolidated')).counts.blocking, 1);
   assert.throws(() => readReviewFindings(text, options('closure')), /for consolidated, but this record is closure/);
   assert.throws(() => readReviewFindings(text, options('consolidated', { api: 'abc123' })), /does not match the exact candidate/);
 
-  const closure = text + document({ round: 'closure', candidate: source, finders: ['delta'], findings: [] });
+  const closure = text + document({ round: 'closure', candidate: source, reviewers: both.slice(0, 1), findings: [] });
   assert.deepEqual(readReviewFindings(closure, options('closure')).counts, { blocking: 0, unproven: 0, refuted: 0, advisory: 0, rejected: 0 });
 });
 
 test('missing or invalid review blocks fail closed', () => {
   assert.throws(() => extractReviewBlock('# Plan\n\n结论: PASS\n'), /no `cc-nexs-review` block/);
   assert.throws(() => extractReviewBlock('```cc-nexs-review\n{ nope\n```\n'), /not valid JSON/);
-  assert.throws(() => readReviewFindings(document({ round: 'final', candidate: {}, findings: [] }), { round: 'consolidated', source: {}, riskTier: 'low' }), /round must be/);
+  assert.throws(() => readReviewFindings(document({ round: 'final', candidate: {}, findings: [] }), { round: 'consolidated', source: {}, panel }), /round must be/);
 });

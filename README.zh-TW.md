@@ -23,7 +23,21 @@
 
 新增預設按 [docs/extending-presets.md](./docs/extending-presets.md) 操作。模式和角色選擇見 `preset-standard` 的 [docs/role-map.md](./packages/preset-standard/docs/role-map.md)。
 
-`preset-standard` 新需求使用 Lean。計劃由 Planner 產出，或由使用者在各 runtime 的 plan mode 寫好後以 `/cc-nexs:plan <編號> --from <檔案>` 交給 Planner 只做格式整理。low/medium 計劃直接到 Gateway A 由人審；high/critical 計劃先由獨立的 Plan Reviewer 對照需求與程式碼做事實核查，被阻塞的計劃只修訂一次。每條驗收標準都必須對應任務、本地檢查和 test 檢查，否則 Gateway A 拒絕批准；以 `--auto-plan` 初始化的需求，只有 fast-track、low/medium 且不觸及敏感路徑的計劃才會不停頓地通過 Gateway A。程式碼 Review 由多個 Finder 按視角並行搜查（correctness；medium 起加 contracts-data；high 起加 security），再由沒參與搜查的 Judge 逐條復跑 P0/P1 命令：只有確認跑得出來的失敗才阻塞，未證實的風險變成 test 環境驗收的 probe，並列在 Gateway B。驗收是主要關卡：Verifier 依各倉 `.cc-nexs/verify/` 的驗證指南與功能地圖驅動真實系統（`/cc-nexs:verify-skill`），驗收矩陣可拆成互不相干的部分時，可由多個 Verifier 分片並行，結果由控制器合併。滿足 low/medium、複用既有能力、無新表結構/基礎設施/破壞性契約的小需求預設走 fast-track：計劃批准後按 worktree/feature branch 並行實現，能本地完成的 build/start/smoke 立即完成；例如 backend-java 無法本地啟動時，記錄結構化 `deferred_to_test` 證據後繼續，不再反覆嘗試。隨後凍結精確 candidate，先合入 test 並觸發 CI/部署，再在部署環境驗收（web 可本地啟動並連線已部署的 test backend），最後做一次集中 Review 並停在 Gateway B。瀏覽器、登入/MFA 與驗收頁面 URL 都只屬於部署後 verification；缺少能力時進入可恢復的 `manual_required`，不會阻塞或回滾 test merge/CI。高風險 Lean 使用 Review-first standard lane，並升級 Plan Reviewer 與 Reviewer；無法作為一個計劃整體審核與驗收的需求，拆成多個分別批准的 Lean 需求。
+`preset-standard` 新需求使用 Lean。計劃由 Planner 產出，或由使用者在各 runtime 的 plan mode 寫好後以 `/cc-nexs:plan <編號> --from <檔案>` 交給 Planner 只做格式整理。low/medium 計劃直接到 Gateway A 由人審；high/critical 計劃先由獨立的 Plan Reviewer 對照需求與程式碼做事實核查，被阻塞的計劃只修訂一次。每條驗收標準都必須對應任務、本地檢查和 test 檢查，否則 Gateway A 拒絕批准；以 `--auto-plan` 初始化的需求，只有 fast-track、low/medium 且不觸及敏感路徑的計劃才會不停頓地通過 Gateway A。程式碼 Review 由設定的 review panel 執行：每位 reviewer 拿到同一份 brief（把這次改動弄壞，每個發現都要用實際執行證明），各自用自己的模型並行審查。reviewer 可以是原生子代理，也可以是其他 agent CLI（`codex-cli`、`claude-cli`、`agy-cli`、`dsh-cli`、`pi-cli`），所以在 Claude Code 或 Codex 裡也能加入其他廠商的模型；panel 配幾個就是幾位，`review.skills` 列出的 skill 用來控制審查重點。再由沒參與審查的 Judge 逐條復跑 P0/P1 命令，保留任何一位 reviewer 被證實的發現：只有確認跑得出來的失敗才阻塞，未證實的風險變成 test 環境驗收的 probe，並列在 Gateway B。驗收是主要關卡：Verifier 依各倉 `.cc-nexs/verify/` 的驗證指南與功能地圖驅動真實系統（`/cc-nexs:verify-skill`），驗收矩陣可拆成互不相干的部分時，可由多個 Verifier 分片並行，結果由控制器合併。滿足 low/medium、複用既有能力、無新表結構/基礎設施/破壞性契約的小需求預設走 fast-track：計劃批准後按 worktree/feature branch 並行實現，能本地完成的 build/start/smoke 立即完成；例如 backend-java 無法本地啟動時，記錄結構化 `deferred_to_test` 證據後繼續，不再反覆嘗試。隨後凍結精確 candidate，先合入 test 並觸發 CI/部署，再在部署環境驗收（web 可本地啟動並連線已部署的 test backend），最後做一次集中 Review 並停在 Gateway B。瀏覽器、登入/MFA 與驗收頁面 URL 都只屬於部署後 verification；缺少能力時進入可恢復的 `manual_required`，不會阻塞或回滾 test merge/CI。高風險 Lean 使用 Review-first standard lane，並升級 Plan Reviewer 與 Reviewer；無法作為一個計劃整體審核與驗收的需求，拆成多個分別批准的 Lean 需求。
+
+review panel 寫在 `cc-nexs.config.yml` 或 `.cc-nexs/overlay.yml`；沒有設定時，由一位原生 reviewer 沿用 Reviewer 角色的路由：
+
+```yaml
+review:
+  panel:
+    - id: r1
+      profile: review          # 原生子代理，使用模型 profile
+    - id: gpt
+      executor: codex-cli      # codex-cli | claude-cli | agy-cli | dsh-cli | pi-cli
+      model: gpt-6-astra
+  skills:
+    - .cc-nexs/review-skills/api-contracts
+```
 
 Lean/Hotfix 模型採用風險驅動路由。有效優先順序是：公開 preset < 私有 overlay < 專案 `cc-nexs.config.yml.models` < feature profiles/routing < 命中的 routing rules < feature `models.roles` 顯式覆蓋。新 feature 模板不再生成 `models.roles`，因此日常專案配置會真正生效。
 
@@ -359,7 +373,7 @@ Hotfix 直接建立 `hotfix/<key>` 和 `.worktrees/<key>/<repo>/`。有關聯需
 
 當前版本只保留 Lean 需求與 Hotfix 修復：Lean fast-track 在本地不可驗證項留存 `deferred_to_test` 後，優先完成確定性 test merge/CI；跨端瀏覽器驗證只發生在部署後，能力不足可人工恢復，不回滾已經完成的交付。
 
-需要跨廠商對抗審核（例如 Claude 規劃、Codex 審核）時，請改用獨立的 `nexs-sop` skill；cc-nexs 的所有角色都在當前 runtime 內派發，透過各角色的模型 profile 拉開差異。
+除了專案在 `review.panel` 列出的 CLI reviewer，cc-nexs 的所有角色都在當前 runtime 內派發。這些 reviewer 各自獨立審同一份 brief，不互相辯論；需要跨廠商的規劃加審核流程時，請改用獨立的 `nexs-sop` skill。
 
 ## License
 

@@ -4,6 +4,15 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-04
+
+### Changed
+
+- Code Review runs the configured review panel: every reviewer gets the same brief (break this change, prove each finding with a run) instead of one lens each, and the Judge keeps every verified finding from any reviewer. `review.panel` sets the reviewers (one entry is one reviewer; none configured is one native reviewer on the Reviewer role's routing), and `review.skills` lists files every reviewer reads first. A reviewer is a native subagent or an agent CLI (`codex-cli`, `claude-cli`, `agy-cli`, `dsh-cli`, `pi-cli`); new `review-panel`, `run-reviewer`, and `record-reviewer` commands store each reviewer's findings, and `record-review` checks that the whole panel reported on the models listed.
+- A tested candidate is released unchanged when the base only changed disjoint sensitive paths (dependency, configuration, DTO, contract); the paths are recorded as `unverified_sensitive_paths` and left to the base branch's CI. Overlap and conflicts still return the task to `BASE_CHANGED`.
+- Same-AC amendments with ordinary paths in the same repository activate at once and are checked by the final Review; the Developer no longer stops for them. Test-integration amendments and sensitive paths still get an independent review.
+- The Planner keeps local checks to the affected tests, lint/type checks, and a run of the changed page or endpoint, leaving Test merge-tree builds and packaging proofs to CI; the plan reviewer no longer blocks on requests for stronger checks than an AC needs.
+
 ## [0.15.1] - 2026-11-04
 
 ### Fixed

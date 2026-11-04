@@ -4,12 +4,26 @@ import { dirname, join } from 'node:path';
 
 import { resolveCandidateContext } from './candidate-context.mjs';
 import { assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
-import { approvedPlanDeliveryLane, approvedPlanRiskTier, assertPlanApprovalCurrent, extractApprovalScope, planApprovalBinding } from './plan-contract.mjs';
+import { approvedPlanDeliveryLane, assertPlanApprovalCurrent, extractApprovalScope, planApprovalBinding } from './plan-contract.mjs';
 import { assertRecordedLocalVerification, extractLocalVerificationChecks } from './local-evidence.mjs';
 import { assertTestAttemptNotInvalidated, candidateFingerprint, readProgressV2, recordConsolidatedReview, recordPlanReview } from './progress-v2.mjs';
 import { resolveFeatureProgress } from './approval-command.mjs';
 import { hasReviewBlock, readReviewFindings } from './finding-contract.mjs';
-import { hotfixRiskTier } from './model-routing.mjs';
+import { readReviewerResult, resolveReviewPanel } from './review-panel.mjs';
+
+// Every reviewer the Judge lists must have stored its own findings for this round and
+// candidate, on the model the block names.
+function assertReviewerResults(context, round, reviewers) {
+  const fingerprint = candidateFingerprint(context.source);
+  for (const reviewer of reviewers) {
+    const result = readReviewerResult({ workspaceRoot: context.workspaceRoot, featureId: context.progress.feature.id, round, reviewerId: reviewer.id });
+    if (!result) {
+      throw new Error(`[cc-nexs] reviewer ${reviewer.id} has no stored ${round} result; run it with run-reviewer (CLI) or record it with record-reviewer (native)`);
+    }
+    if (result.fingerprint !== fingerprint) throw new Error(`[cc-nexs] reviewer ${reviewer.id}'s stored result is for another candidate`);
+    if (result.model !== reviewer.model) throw new Error(`[cc-nexs] reviewer ${reviewer.id} ran on ${result.model}, but the review block says ${reviewer.model}`);
+  }
+}
 
 export function recordLeanReview({
   cwd = process.cwd(),
@@ -74,10 +88,9 @@ export function recordLeanReview({
   }
   if (documentFindings) {
     const round = gatewayBDelta ? 'gateway-b-delta' : closure ? 'closure' : 'consolidated';
-    const riskTier = context.progress.mode === 'hotfix'
-      ? hotfixRiskTier(context.progress.hotfix?.severity) || 'high'
-      : approvedPlanRiskTier(context.progress, featureDir) || 'high';
-    findings = readReviewFindings(documentText, { round, source: context.source, riskTier, notReproduced });
+    const panel = resolveReviewPanel(context.config.mergedReview);
+    findings = readReviewFindings(documentText, { round, source: context.source, panel, notReproduced });
+    assertReviewerResults(context, round, findings.reviewers);
     blockingFindings = findings.blockingFindings;
     status = blockingFindings.length > 0 ? 'blocked' : 'passed';
   }

@@ -105,7 +105,7 @@
 ## 集中 Review
 
 - Reviewed fingerprint：
-- Finder 视角：
+- Reviewer（panel 成员与模型）：
 - 阻塞项（实际跑出并经 Judge 复跑确认的 P0/P1）：
 - 未证实项（交给 test 验收的 probe）：
 - P2/P3、已驳回与格式不合格项：

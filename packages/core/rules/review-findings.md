@@ -4,24 +4,29 @@ A Review proves defects; it does not argue risks. Only a failure a user would hi
 
 ## Roles in one Review round
 
-- **Finders** search the exact candidate in parallel, each in a fresh session through one lens, and return their findings as JSON in their final message. They write nothing.
-- **The Judge** is one fresh session that did not find anything. It reruns every P0/P1 `run` command, merges findings that share a root cause, sets a verdict on each P0/P1, and writes the single `cc-nexs-review` block plus the human summary and conclusion line into the assigned document (Lean `plan.md`, Hotfix BUG document).
+- **Reviewers** are the members of `review.panel`. Every reviewer gets the same brief, scope, and exact candidate: break this change, and prove each finding with a run against the real code. There are no assigned lenses; a reviewer covers acceptance criteria, logic, callers, contracts and data, error and recovery paths, and security reachable through the candidate. Reviewers run independently, in parallel, and write nothing to the candidate.
+- **The Judge** is one fresh session that did not review. It reruns every P0/P1 `run` command, keeps every verified finding from any reviewer (not one reviewer's list, and no voting), merges findings that share a root cause into one with every reviewer in `found_by`, sets a verdict on each P0/P1, and writes the single `cc-nexs-review` block plus the human summary and conclusion line into the assigned document (Lean `plan.md`, Hotfix BUG document).
 
-Finders and the Judge are the same Reviewer role (`lean-reviewer` or `hotfix-reviewer`) with a different assignment, so they use the Reviewer's model routing.
+The panel is configuration, not risk routing. One entry means one reviewer, several mean several, and with no `review.panel` the round has one native reviewer on the Reviewer role's routing:
 
-| Risk tier (Lean plan, or Hotfix severity P3/P2 → low/medium, P1 → high, P0 → critical) | Finder lenses for a consolidated Review |
-|---|---|
-| low | one Finder: `correctness` (covering every lens briefly) |
-| medium | `correctness`, `contracts-data` |
-| high, critical | `correctness`, `contracts-data`, `security` |
+```yaml
+review:
+  panel:
+    - id: r1                  # native: a subagent of the host runtime
+      profile: review         #   model from a model profile, or `model:` (+ `effort:`)
+    - id: gpt
+      executor: codex-cli     # codex-cli | claude-cli | agy-cli | dsh-cli | pi-cli
+      model: <model id>       #   passed to the CLI; omit for the CLI's default
+      effort: high
+  skills:                     # optional: files every reviewer reads first
+    - .cc-nexs/review-skills/api-contracts
+```
 
-A closure or Gateway B delta uses one `delta` Finder that reruns the original findings and checks only regressions the fix introduced; it does not open new discovery.
+A CLI reviewer runs another agent CLI non-interactively in the workspace, so a Claude Code or Codex host can include another vendor's model. `dsh-cli` uses the signed-in account and takes `provider`/`model` (or `provider/model`) and an optional `dsh_profile` (default `headless`). Every CLI reviewer uses the credentials that CLI is already signed in with; cc-nexs passes none. `timeout_seconds` (default 1800) bounds a CLI reviewer.
 
-Lenses:
+Skills steer what reviewers emphasize. Each entry is a skill directory (its `SKILL.md`) or a Markdown file, relative to the workspace.
 
-- `correctness`: acceptance criteria, logic, existing callers and regressions.
-- `contracts-data`: frontend/backend/API contracts and DTOs, persistence, transactions, concurrency, error and recovery paths, deployment and rollback.
-- `security`: permissions, authentication, secrets, and injection reachable through the candidate.
+A closure or Gateway B delta uses one reviewer, the first panel member, which reruns the original findings and checks only regressions the fix introduced; it does not open new discovery.
 
 ## Blocking standard
 
@@ -44,7 +49,10 @@ The Judge ends the Review section with exactly one fenced block, after the prose
 {
   "round": "consolidated",
   "candidate": { "<repo-id>": "<exact candidate commit>" },
-  "finders": ["correctness", "contracts-data"],
+  "reviewers": [
+    { "id": "r1", "executor": "native", "model": "<model the reviewer ran on>" },
+    { "id": "gpt", "executor": "codex-cli", "model": "<model the CLI reported>" }
+  ],
   "findings": [
     {
       "id": "F-1",
@@ -53,7 +61,7 @@ The Judge ends the Review section with exactly one fenced block, after the prose
       "anchor": "AC-003",
       "failure_scenario": "<input/state> -> <wrong observable result>",
       "evidence": { "kind": "run", "command": "<exact command>", "observed": "<output that shows the failure>", "expected": "<output the AC or contract requires>" },
-      "found_by": ["correctness"],
+      "found_by": ["r1", "gpt"],
       "judge": { "verdict": "confirmed", "rerun": "<output of the Judge's rerun>" }
     }
   ]
@@ -63,19 +71,24 @@ The Judge ends the Review section with exactly one fenced block, after the prose
 
 - `round`: `consolidated`, `closure`, or `gateway-b-delta`, matching the Review being recorded.
 - `candidate`: every repository commit of the exact candidate the parent injected, nothing else.
-- `finders`: the lenses that actually ran this round.
+- `reviewers`: every reviewer of this round with its executor and the model it ran on, exactly as `review-panel` reports their stored results; a consolidated round lists the whole panel, a closure or delta lists its one reviewer.
+- `found_by`: the reviewer ids that reported the finding; a finding several reviewers reported independently lists all of them.
 - `anchor`: an approved `AC-…` id, `contract`, `data`, `security`, `regression`, or `evidence-mismatch`.
 - `evidence.kind`: `run` with `command`, `observed`, and `expected`; or `trace` with `refs` (file:line or evidence ids) for findings no run demonstrated.
 - `judge.verdict`: `confirmed` (the rerun shows the failure), `refuted` (the rerun shows correct behavior, or the claim is false), or `plausible` (the rerun is inconclusive). Set it on every P0/P1 finding.
 - Finding ids are unique within the block; a closure keeps the original ids for findings it rechecks.
 
-The controller reads only the last block, checks the candidate and the finder lenses the risk tier requires, and derives the Review status: confirmed run-proven P0/P1 and unrefuted `evidence-mismatch` findings block; other P0/P1 findings are unproven or refuted; P2/P3 are advisory; malformed findings are rejected without blocking. The conclusion line must agree with that rule.
+The controller reads only the last block, checks the candidate, checks that the reviewers match `review.panel` and that each one stored its own result for this round and candidate on the model listed, and derives the Review status: confirmed run-proven P0/P1 and unrefuted `evidence-mismatch` findings block; other P0/P1 findings are unproven or refuted; P2/P3 are advisory; malformed findings are rejected without blocking. The conclusion line must agree with that rule.
 
 ## Parent Orchestrator
 
-1. Dispatch the Finders for the bound risk tier in parallel, each with the Review inputs, the exact candidate commits, and its lens.
-2. Dispatch one Judge with the same inputs and every Finder's returned findings. The Judge writes the document.
-3. Record the round:
+1. Run `node <plugin-root>/lib/cc-nexs-cli.mjs review-panel <id> --runtime <claude|codex|pi> [--round closure|gateway-b-delta]`. It lists the round's reviewers with their executor and model, the role and rules files, the skills, and the brief file path.
+2. Write the brief file: the Review inputs and exact candidate commits, the paths of the role file, `rules/review-findings.md`, and every skill to read first, and the instruction to reply with only `{"findings": [...]}`. Every reviewer gets this same brief.
+3. Start every reviewer in parallel:
+   - native: dispatch the Reviewer role as an independent subagent on the model `review-panel` lists (role routing when it says so) with the brief, then save its reply to a file and run `record-reviewer <id> --reviewer <rid> --model <model it ran on> --findings-file <file> [--round ...]`;
+   - CLI: `node <plugin-root>/lib/cc-nexs-cli.mjs run-reviewer <id> --reviewer <rid> --brief <brief file> [--round ...]`. It stores the findings and the model the CLI reports, and discards the result if the reviewer changed a candidate worktree.
+4. Dispatch one Judge (a fresh Reviewer-role session) with the same inputs and every stored reviewer result. The Judge writes the document.
+5. Record the round:
 
 ```text
 node <plugin-root>/lib/cc-nexs-cli.mjs record-review <id> --document-findings [--closure|--gateway-b-delta]

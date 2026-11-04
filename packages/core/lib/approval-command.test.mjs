@@ -735,8 +735,8 @@ test('base release integrates a newer non-conflicting base without invalidating 
   });
 });
 
-for (const changedPath of ['candidate.txt', 'package.json', 'go.mod']) {
-test(`base release refuses overlapping or sensitive paths (${changedPath}) without mutating candidate or test evidence`, () => {
+test('base release refuses overlapping paths without mutating candidate or test evidence', () => {
+  const changedPath = 'candidate.txt';
   const fixture = createEnvironmentBlockedCandidate('lean', '26-overlap');
   withPresetEnv(fixture, () => {
     approveFeatureGate({ cwd: fixture.root, featureId: '26-overlap', gate: 'release', approver: 'Owner', testException });
@@ -748,7 +748,7 @@ test(`base release refuses overlapping or sensitive paths (${changedPath}) witho
     fixture.git(fixture.repo, ['commit', '-m', 'overlapping change']);
     fixture.git(fixture.repo, ['push', 'origin', 'main']);
     const remoteBefore = fixture.git(fixture.repo, ['rev-parse', 'origin/main']);
-    assert.throws(() => runBaseRelease({ cwd: fixture.root, featureId: '26-overlap' }), /BASE_CHANGED.*(overlaps|shared runtime or contract)/);
+    assert.throws(() => runBaseRelease({ cwd: fixture.root, featureId: '26-overlap' }), /BASE_CHANGED.*overlaps/);
     const blocked = readProgressV2(fixture.progressFile);
     assert.equal(blocked.state, 'BASE_CHANGED');
     assert.deepEqual(blocked.delivery.test, approved.delivery.test);
@@ -756,7 +756,25 @@ test(`base release refuses overlapping or sensitive paths (${changedPath}) witho
     assert.equal(fixture.git(fixture.repo, ['rev-parse', 'origin/main']), remoteBefore);
   });
 });
-}
+
+test('base release keeps the tested candidate when the base only changed disjoint sensitive paths', () => {
+  const fixture = createEnvironmentBlockedCandidate('lean', '26-sensitive');
+  withPresetEnv(fixture, () => {
+    approveFeatureGate({ cwd: fixture.root, featureId: '26-sensitive', gate: 'release', approver: 'Owner', testException });
+    const approved = readProgressV2(fixture.progressFile);
+    approved.state = 'BASE_MERGING';
+    writeProgressV2(fixture.progressFile, approved);
+    writeFileSync(join(fixture.repo, 'package.json'), '{"name":"other"}\n');
+    fixture.git(fixture.repo, ['add', 'package.json']);
+    fixture.git(fixture.repo, ['commit', '-m', 'unrelated dependency change']);
+    fixture.git(fixture.repo, ['push', 'origin', 'main']);
+    assert.equal(runBaseRelease({ cwd: fixture.root, featureId: '26-sensitive' }).status, 'succeeded');
+    const released = readProgressV2(fixture.progressFile);
+    assert.deepEqual(released.delivery.test, approved.delivery.test);
+    assert.deepEqual(released.delivery.base.attempts.at(-1).integrations.api.unverified_sensitive_paths, ['package.json']);
+    fixture.git(fixture.repo, ['merge-base', '--is-ancestor', fixture.source.api, 'origin/main']);
+  });
+});
 
 test('base release refuses a candidate that merged the test branch', () => {
   const fixture = createEnvironmentBlockedCandidate('lean', '26-test-history', { mergeTest: true });

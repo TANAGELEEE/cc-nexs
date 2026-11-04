@@ -652,7 +652,7 @@ const AMENDMENT_STATES = new Set([
 
 // Paths needed to close an already-approved AC stay outside the Gateway A hash; a
 // reviewed ledger entry extends them without replacing the human approval.
-export function recordPlanAmendment(file, { acs, paths, reason, target = 'feature', actor = 'orchestrator', expectedRevision = null }) {
+export function recordPlanAmendment(file, { acs, paths, reason, target = 'feature', independentReview = true, actor = 'orchestrator', expectedRevision = null }) {
   if (!['feature', 'test-integration'].includes(target)) throw new Error('[cc-nexs] amendment target must be feature or test-integration');
   if (typeof reason !== 'string' || !reason.trim()) throw new Error('[cc-nexs] amendment requires a reason');
   if (!Array.isArray(acs) || acs.length === 0) throw new Error('[cc-nexs] amendment requires at least one approved AC');
@@ -678,7 +678,8 @@ export function recordPlanAmendment(file, { acs, paths, reason, target = 'featur
     acs: [...acs],
     paths: [...new Set(paths)],
     reason: reason.trim(),
-    status: 'pending_review',
+    status: independentReview ? 'pending_review' : 'active',
+    review: independentReview ? 'independent' : 'final-review',
     from_state: progress.state,
     requested_by: actor,
     requested_at: new Date().toISOString(),
@@ -960,7 +961,7 @@ export function recordConsolidatedReview(file, {
     blocking_findings: blockingFindings,
     closure_attempts: (progress.review?.closure_attempts || 0) + (closure ? 1 : 0),
     gateway_b_delta_attempts: (progress.review?.gateway_b_delta_attempts || 0) + (gatewayBDelta ? 1 : 0),
-    ...(findings ? { findings: findings.classified, finding_counts: findings.counts, finders: findings.finders } : {}),
+    ...(findings ? { findings: findings.classified, finding_counts: findings.counts, reviewers: findings.reviewers } : {}),
     reviewed_at: new Date().toISOString(),
   };
   appendMutationEvent(progress, {
@@ -968,7 +969,7 @@ export function recordConsolidatedReview(file, {
       ? `review.gateway_b_delta_${status}`
       : closure ? `review.closure_${status}` : `review.consolidated_${status}`,
     actor,
-    data: { fingerprint, source, blocking_findings: blockingFindings, ...(findings ? { finding_counts: findings.counts, finders: findings.finders } : {}) },
+    data: { fingerprint, source, blocking_findings: blockingFindings, ...(findings ? { finding_counts: findings.counts, reviewers: findings.reviewers } : {}) },
   });
   writeProgressV2(file, progress);
   return progress;
