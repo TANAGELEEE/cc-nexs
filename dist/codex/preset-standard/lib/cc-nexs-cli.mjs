@@ -511,8 +511,8 @@ function printResult(result) {
     console.log(`cc-nexs verify guides: ${result.feature.id} ${result.feature.slug}`);
     for (const item of result.repositories) {
       console.log(item.path
-        ? `${item.id}@${item.commit.slice(0, 12)}: ${item.path} (${item.source}); features ${item.features.join(', ') || 'none'}`
-        : `${item.id}@${item.commit.slice(0, 12)}: no verification guide (run /cc-nexs:verify-skill ${item.id} [--workspace])`);
+        ? `${item.id}@${item.commit.slice(0, 12)}: ${item.source} guide; read with: ${item.read}; features ${item.features.join(', ') || 'none'}`
+        : `${item.id}@${item.commit.slice(0, 12)}: no verification guide (run /cc-nexs:verify-skill ${item.id} [--docs|--workspace])`);
     }
     return;
   }

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import { acceptanceCheckIds, insertVerificationSection, mergeShardResults, renderShardedVerification } from './verification-shards.mjs';
-import { readVerifyGuide, readWorkspaceVerifyGuide, workspaceVerifyDir } from './verify-guide.mjs';
+import { readDocsVerifyGuide, readVerifyGuide, readWorkspaceVerifyGuide, workspaceVerifyDir } from './verify-guide.mjs';
 
 const shard = (name, result, checks) => ({ shard: name, result, checks, evidence: checks.map((check) => ({ check, result: result === 'blocked' ? 'failed' : 'passed', proof: `${check} proof` })) });
 
@@ -88,6 +88,40 @@ test('a workspace guide lives outside the repository under .cc-nexs/verify/<repo
     writeFileSync(join(dir, 'features', 'notes.txt'), 'ignored\n');
     assert.deepEqual(readWorkspaceVerifyGuide(root, 'web'), { path: join(root, '.cc-nexs', 'verify', 'web', 'README.md'), features: ['checkout'] });
     assert.deepEqual(readWorkspaceVerifyGuide(root, 'backend-java'), { path: null, features: [] });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a docs-repository guide is read from the committed base, preferring origin/<base>', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-docs-guide-'));
+  const docs = join(root, 'docs');
+  const git = (...args) => execFileSync('git', ['-C', docs, ...args], { encoding: 'utf8' }).trim();
+  try {
+    mkdirSync(docs, { recursive: true });
+    git('init', '-q', '-b', 'master');
+    git('config', 'user.name', 'Docs Test');
+    git('config', 'user.email', 'docs@example.com');
+    writeFileSync(join(docs, 'README.md'), '# Docs\n');
+    git('add', '.');
+    git('commit', '-qm', 'base');
+    assert.equal(readDocsVerifyGuide(docs, 'master', 'web'), null);
+
+    mkdirSync(join(docs, '.cc-nexs/verify/web/features'), { recursive: true });
+    writeFileSync(join(docs, '.cc-nexs/verify/web/README.md'), '# Verify web\n');
+    writeFileSync(join(docs, '.cc-nexs/verify/web/features/search.md'), '# Search\n');
+    assert.equal(readDocsVerifyGuide(docs, 'master', 'web'), null, 'uncommitted guides are not used');
+    git('add', '.');
+    git('commit', '-qm', 'guide');
+    const local = readDocsVerifyGuide(docs, 'master', 'web');
+    assert.equal(local.ref, 'master');
+    assert.deepEqual(local.features, ['search']);
+    assert.equal(local.guide, '.cc-nexs/verify/web/README.md');
+    assert.equal(readDocsVerifyGuide(docs, 'master', 'backend-java'), null);
+
+    git('update-ref', 'refs/remotes/origin/master', 'HEAD~1');
+    assert.equal(readDocsVerifyGuide(docs, 'master', 'web'), null, 'origin/<base> wins and has no guide yet');
+    assert.equal(readDocsVerifyGuide(docs, 'missing', 'web'), null);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

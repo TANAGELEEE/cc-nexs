@@ -1,8 +1,8 @@
 ---
-description: "Create or refresh a code repository's verification guide and feature map, in the repository under .cc-nexs/verify/ or with --workspace in the workspace, so every Verifier drives the real app the same way. Bypass command; does not enter the state machine."
+description: "Create or refresh a code repository's verification guide and feature map, in the repository, in the docs repository (--docs), or in the workspace (--workspace), so every Verifier drives the real app the same way. Bypass command; does not enter the state machine."
 disable-model-invocation: true
 allowed-tools: "Read, Write, Edit, Glob, Grep, Bash"
-argument-hint: "<repository-id> [--workspace] [--refresh]"
+argument-hint: "<repository-id> [--docs|--workspace] [--refresh]"
 ---
 
 # /cc-nexs:verify-skill
@@ -15,7 +15,15 @@ Verification is the main gate, so each code repository needs a scripted, repeata
 <repo>/.cc-nexs/verify/features/<feature>.md   one file per feature
 ```
 
-With `--workspace`, write the same files to `<workspace>/.cc-nexs/verify/<repository-id>/` instead (`README.md` and `features/`), outside every repository. Use it when the team keeps these files out of the code repository: the guide is then local to that workspace, unversioned, and not bound to the candidate commit. A guide in the candidate commit wins over a workspace guide.
+Choose where the guide lives; the layout below the chosen directory is the same (`README.md` and `features/`):
+
+| Option | Location | Versioned | Read by Verifiers from |
+|---|---|---|---|
+| (default) | `<repo>/.cc-nexs/verify/` | with the code | the exact candidate commit |
+| `--docs` | `<docs-repo>/.cc-nexs/verify/<repository-id>/` (the workspace `docs_repository`) | in the docs repository | its committed base branch (`origin/<base>`, else `<base>`) |
+| `--workspace` | `<workspace>/.cc-nexs/verify/<repository-id>/` | no, local only | the workspace directory |
+
+`verify-guides` uses the first guide it finds in that order: candidate commit, docs repository, workspace. Use `--docs` when the team keeps these files out of the code repository but wants them shared and versioned; `--workspace` for a single machine. A docs or workspace guide is not bound to the candidate commit, so refresh it when a change alters how the app starts or is driven.
 
 Resolve `<repository-id>` from the workspace configuration and read that repository's main checkout. The reader is a Verifier that has never seen the app, reading cold in the middle of a task: write exact commands and stable handles, not examples or placeholders.
 
@@ -57,8 +65,8 @@ Run the guide end to end once: launch (or target test), doctor, drive one mapped
 
 ## `--refresh`
 
-Audit an existing guide (in the repository, or with `--workspace` in the workspace) against the current code: read each feature file against the code it describes, then make one live pass that drives every mapped feature. Change only the guide's own files. End with exactly one outcome: `clean` (full coverage, nothing changed), `changed` (the corrections made), or `blocked` (the blocker). A product defect the live pass finds is reported, never fixed here.
+Audit an existing guide (at the location the same option selects) against the current code: read each feature file against the code it describes, then make one live pass that drives every mapped feature. Change only the guide's own files. End with exactly one outcome: `clean` (full coverage, nothing changed), `changed` (the corrections made), or `blocked` (the blocker). A product defect the live pass finds is reported, never fixed here.
 
 ## Handing over
 
-Do not commit, branch, or push. List the files written, the proof from step 4, and the result of the secret search. Confirm the repository's `git status` shows no files from this run other than `.cc-nexs/verify/` (none at all with `--workspace`). For a repository guide, tell the user to merge `.cc-nexs/verify/` into the base branch: feature worktrees are created from the base, and Verifiers read the guide from the exact candidate commit. A workspace guide needs no merge. `node <plugin-root>/lib/cc-nexs-cli.mjs verify-guides <id>` shows which guide each candidate repository uses.
+Do not commit, branch, or push. List the files written, the proof from step 4, and the result of the secret search. Confirm the code repository's `git status` shows no files from this run other than `.cc-nexs/verify/` (none at all with `--docs` or `--workspace`). For a repository guide, tell the user to merge `.cc-nexs/verify/` into the base branch: feature worktrees are created from the base, and Verifiers read the guide from the exact candidate commit. For a docs guide, tell the user to commit `.cc-nexs/verify/<repository-id>/` to the docs repository's base branch and push it; uncommitted docs guides are not used. A workspace guide needs no merge. `node <plugin-root>/lib/cc-nexs-cli.mjs verify-guides <id>` shows which guide each candidate repository uses.

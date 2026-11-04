@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-verify-skill
-description: "/cc-nexs:verify-skill Codex mirror skill. Use when $cc-nexs-verify-skill is explicitly invoked. Create or refresh a code repository's verification guide and feature map, in the repository under .cc-nexs/verify/ or with --workspace in the workspace, so every Verifier drives the real app the same way. Bypass command; does not enter the state machine."
+description: "/cc-nexs:verify-skill Codex mirror skill. Use when $cc-nexs-verify-skill is explicitly invoked. Create or refresh a code repository's verification guide and feature map, in the repository, in the docs repository (--docs), or in the workspace (--workspace), so every Verifier drives the real app the same way. Bypass command; does not enter the state machine."
 ---
 
 # /cc-nexs:verify-skill for Codex
