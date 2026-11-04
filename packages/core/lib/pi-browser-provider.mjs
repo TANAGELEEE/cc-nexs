@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -33,7 +33,7 @@ export function inspectPiBrowserCapability({
   };
 }
 
-export function inspectEgoLite({ execFile = execFileSync } = {}) {
+export function inspectEgoLite({ execFile = execFileSync, spawn = spawnSync } = {}) {
   try {
     const output = execFile('ego-browser', ['nodejs'], {
       encoding: 'utf8',
@@ -42,6 +42,11 @@ export function inspectEgoLite({ execFile = execFileSync } = {}) {
       timeout: 15_000,
     });
     if (output.includes('ego-browser ready')) {
+      return { provider: PI_PRIMARY_BROWSER_PROVIDER, ready: true, fallback: false };
+    }
+    // Without a terminal the embedded runtime writes script output to stderr.
+    const probe = spawn('ego-browser', ['nodejs', '-e', "console.log('ego-browser ready')"], { encoding: 'utf8', timeout: 15_000 });
+    if (probe.status === 0 && `${probe.stdout || ''}${probe.stderr || ''}`.includes('ego-browser ready')) {
       return { provider: PI_PRIMARY_BROWSER_PROVIDER, ready: true, fallback: false };
     }
     return { provider: PI_PRIMARY_BROWSER_PROVIDER, ready: false, reason: 'ego lite runtime probe returned unexpected output' };

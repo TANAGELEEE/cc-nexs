@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
+import { inspectEgoLite } from './pi-browser-provider.mjs';
 import { parseCredentialRef, resolveBrowserProvider, resolveCredential, testAccount } from './test-session.mjs';
 
 const egoReady = (command, args) => {
@@ -21,6 +22,9 @@ test('Claude prefers ego lite and falls back to chrome-devtools-mcp; Codex keeps
   assert.deepEqual(resolveBrowserProvider({ runtime: 'claude', browser: { claude_provider: 'chrome-devtools-mcp' }, execFile: egoReady }), { runtime: 'claude', provider: 'chrome-devtools-mcp', fallback: false });
   assert.equal(resolveBrowserProvider({ runtime: 'codex' }).provider, 'current-browser-session');
   assert.equal(resolveBrowserProvider({ runtime: 'pi', execFile: egoReady }).provider, 'ego-lite');
+  const silent = () => '';
+  assert.equal(inspectEgoLite({ execFile: silent, spawn: () => ({ status: 0, stdout: '', stderr: 'ego-browser ready\n' }) }).ready, true, 'stderr output without a terminal still proves ego lite');
+  assert.equal(inspectEgoLite({ execFile: silent, spawn: () => ({ status: 0, stdout: '', stderr: '' }) }).ready, false);
   assert.throws(() => resolveBrowserProvider({ runtime: 'cursor' }), /must be claude, codex, or pi/);
 });
 
