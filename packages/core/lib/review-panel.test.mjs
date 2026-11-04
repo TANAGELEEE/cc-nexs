@@ -24,6 +24,16 @@ test('the panel is exactly what is configured, and one native reviewer when noth
   assert.throws(() => resolveReviewPanel({ panel: [{ timeout_seconds: 0 }] }), /positive integer/);
 });
 
+test('review.panel can give each runtime its own reviewers', () => {
+  const review = { panel: { codex: [{ id: 'native' }, { id: 'gemini', executor: 'agy-cli', model: 'gemini-3.8-flash-high' }], claude: [{ id: 'native' }, { id: 'gpt', executor: 'codex-cli' }] } };
+  assert.deepEqual(resolveReviewPanel(review, 'codex').map((item) => [item.id, item.executor]), [['native', 'native'], ['gemini', 'agy-cli']]);
+  assert.deepEqual(resolveReviewPanel(review, 'claude').map((item) => item.executor), ['native', 'codex-cli']);
+  assert.deepEqual(resolveReviewPanel(review, 'pi'), [{ id: 'r1', executor: 'native' }], 'a runtime without its own list gets the default');
+  assert.deepEqual(resolveReviewPanel({ panel: [{ id: 'one' }] }, 'pi'), [{ id: 'one', executor: 'native' }], 'a plain list applies to every runtime');
+  assert.throws(() => resolveReviewPanel({ panel: { cursor: [] } }, 'codex'), /keys must be claude, codex, or pi: cursor/);
+  assert.throws(() => resolveReviewPanel(review, 'cursor'), /set per runtime; name the runtime/);
+});
+
 test('a native reviewer runs on its own model or profile, else on the role routing', () => {
   const models = { profiles: { escalated: { codex: { model: 'gpt-6-astra', effort: 'high' }, pi: { model: 'magpie/x', thinking: 'medium', fallback_models: ['y'] } } } };
   assert.equal(nativeReviewerModel({ id: 'r1' }, { runtime: 'codex', models }), null);
@@ -89,6 +99,7 @@ test('a CLI reviewer stores its findings, and is discarded when it touches the c
     assert.equal(seen.command, 'codex');
     assert.match(seen.input, /Read the review brief at .*brief\.md/);
     assert.deepEqual([record.model, record.findings.length], ['fixture-model-2026', 1], 'the model the CLI reports wins over the configured one');
+    assert.ok(['claude', 'codex', 'pi'].includes(record.runtime));
     assert.equal(readReviewerResult({ workspaceRoot: root, featureId: '40', round: 'consolidated', reviewerId: 'r2' }).fingerprint, record.fingerprint);
 
     const touches = () => { writeFileSync(join(repo, 'a.txt'), 'edited\n'); return { status: 0, stdout: '{"findings":[]}' }; };

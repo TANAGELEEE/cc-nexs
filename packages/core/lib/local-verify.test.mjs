@@ -19,6 +19,7 @@ import {
 } from './progress-v2.mjs';
 import { recordLeanReview } from './review-control.mjs';
 import { candidateVerifyGuides } from './verify-guide.mjs';
+import { detectRuntime } from './runtime-resolver.mjs';
 import { runCcNexsCommand } from './cc-nexs-cli.mjs';
 
 function git(cwd, args) {
@@ -167,6 +168,14 @@ test('Lean local verification invokes the configured driver and binds evidence t
     assert.equal(runCcNexsCommand(['record-reviewer', '30', '--reviewer', 'r1', '--model', 'other-model', '--findings-file', reviewerFile, '--progress', progressFile], { cwd: root }).findings, 2);
     assert.throws(() => runCcNexsCommand(['record-review', '30', '--document-findings', '--progress', progressFile], { cwd: root }), /r1 ran on other-model, but the review block says test-model/);
     runCcNexsCommand(['record-reviewer', '30', '--reviewer', 'r1', '--model', 'test-model', '--findings-file', reviewerFile, '--progress', progressFile], { cwd: root });
+    const ownRuntime = detectRuntime();
+    const savedRuntime = process.env.CC_NEXS_RUNTIME;
+    process.env.CC_NEXS_RUNTIME = ownRuntime === 'codex' ? 'pi' : 'codex';
+    try {
+      assert.throws(() => runCcNexsCommand(['record-review', '30', '--document-findings', '--progress', progressFile], { cwd: root }), new RegExp(`came from the ${ownRuntime} panel`));
+    } finally {
+      if (savedRuntime === undefined) delete process.env.CC_NEXS_RUNTIME; else process.env.CC_NEXS_RUNTIME = savedRuntime;
+    }
     const blockedReview = runCcNexsCommand(['record-review', '30', '--document-findings', '--progress', progressFile], { cwd: root });
     assert.equal(blockedReview.review.status, 'blocked');
     assert.deepEqual(blockedReview.review.blocking_findings, ['P1: F-1 app.txt:1 — smoke prints ready twice']);

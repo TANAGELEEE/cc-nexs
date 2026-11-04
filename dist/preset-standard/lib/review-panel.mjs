@@ -2,6 +2,8 @@
 //
 // `review.panel` lists the reviewers; one entry means one reviewer, several mean
 // several, and nothing configured means one native reviewer on the role's routing.
+// The list applies to every runtime, or `review.panel.<claude|codex|pi>` gives each
+// runtime its own list (a runtime without one gets the default).
 // A native reviewer is a subagent of the host runtime (its model from a profile or
 // an explicit model). A CLI reviewer runs another agent CLI non-interactively, so a
 // Claude Code or Codex host can include another vendor's model:
@@ -20,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 
 import { resolveCandidateContext } from './candidate-context.mjs';
 import { candidateFingerprint } from './progress-v2.mjs';
+import { detectRuntime } from './runtime-resolver.mjs';
 import { taskFilesDir } from './verify-artifacts.mjs';
 
 const PLUGIN_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -27,10 +30,21 @@ const PLUGIN_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const REVIEWER_EXECUTORS = new Set(['native', 'codex-cli', 'claude-cli', 'agy-cli', 'dsh-cli', 'pi-cli']);
 export const REVIEW_ROUNDS = new Set(['consolidated', 'closure', 'gateway-b-delta']);
 const ID = /^[a-z0-9][a-z0-9-]{0,31}$/;
+const RUNTIMES = new Set(['claude', 'codex', 'pi']);
 const DEFAULT_TIMEOUT_SECONDS = 1800;
 
-export function resolveReviewPanel(review = {}) {
-  const entries = review.panel === undefined ? [{ id: 'r1', executor: 'native' }] : review.panel;
+function panelEntries(panel, runtime) {
+  if (panel === undefined || Array.isArray(panel)) return panel;
+  if (!panel || typeof panel !== 'object') throw new Error('[cc-nexs] review.panel must be a list, or a map of claude/codex/pi lists');
+  const unknown = Object.keys(panel).filter((key) => !RUNTIMES.has(key));
+  if (unknown.length) throw new Error(`[cc-nexs] review.panel keys must be claude, codex, or pi: ${unknown.join(', ')}`);
+  if (!RUNTIMES.has(runtime)) throw new Error(`[cc-nexs] review.panel is set per runtime; name the runtime (claude, codex, or pi), got ${runtime || '(none)'}`);
+  return panel[runtime];
+}
+
+export function resolveReviewPanel(review = {}, runtime = detectRuntime()) {
+  const configured = panelEntries(review.panel, runtime);
+  const entries = configured === undefined ? [{ id: 'r1', executor: 'native' }] : configured;
   if (!Array.isArray(entries) || entries.length === 0) throw new Error('[cc-nexs] review.panel must list at least one reviewer');
   const seen = new Set();
   return entries.map((entry, index) => {
@@ -216,7 +230,7 @@ function resultFile(workspaceRoot, featureId, round, reviewerId) {
   return join(reviewRunDir(workspaceRoot, featureId, round, reviewerId), 'result.json');
 }
 
-export function writeReviewerResult({ workspaceRoot, featureId, round, reviewer, model, source, findings }) {
+export function writeReviewerResult({ workspaceRoot, featureId, round, reviewer, model, source, findings, runtime = detectRuntime() }) {
   if (!Array.isArray(findings)) throw new Error('[cc-nexs] reviewer findings must be an array');
   if (typeof model !== 'string' || !model.trim()) throw new Error(`[cc-nexs] record the model reviewer ${reviewer.id} ran on`);
   const file = resultFile(workspaceRoot, featureId, round, reviewer.id);
@@ -225,6 +239,7 @@ export function writeReviewerResult({ workspaceRoot, featureId, round, reviewer,
     reviewer: reviewer.id,
     executor: reviewer.executor,
     model,
+    runtime,
     round,
     fingerprint: candidateFingerprint(source),
     source,
@@ -244,7 +259,7 @@ export function readReviewerResult({ workspaceRoot, featureId, round, reviewerId
 // Runs one CLI reviewer in the workspace and stores its findings. A reviewer that
 // changed any candidate worktree is discarded: its findings no longer describe the
 // candidate, and the change has to be looked at by a person.
-export function runCliReviewer({ workspaceRoot, featureId, round, reviewer, briefFile, source, worktrees, spawn = spawnSync, timeoutSeconds = DEFAULT_TIMEOUT_SECONDS }) {
+export function runCliReviewer({ workspaceRoot, featureId, round, reviewer, briefFile, source, worktrees, spawn = spawnSync, timeoutSeconds = DEFAULT_TIMEOUT_SECONDS, runtime = detectRuntime() }) {
   if (reviewer.executor === 'native') throw new Error(`[cc-nexs] ${reviewer.id} is a native reviewer; dispatch it as a subagent and record it with record-reviewer`);
   if (!existsSync(briefFile)) throw new Error(`[cc-nexs] review brief not found: ${briefFile}`);
   const runDir = reviewRunDir(workspaceRoot, featureId, round, reviewer.id);
@@ -269,12 +284,12 @@ export function runCliReviewer({ workspaceRoot, featureId, round, reviewer, brie
   });
   const findings = extractFindings(parsed.text);
   const model = parsed.model || reviewer.model || `${reviewer.executor} default`;
-  return writeReviewerResult({ workspaceRoot, featureId, round, reviewer, model, source, findings });
+  return writeReviewerResult({ workspaceRoot, featureId, round, reviewer, model, source, findings, runtime });
 }
 
-function panelContext({ cwd, featureId, progressPath }) {
+function panelContext({ cwd, featureId, progressPath, runtime }) {
   const context = resolveCandidateContext({ cwd, featureId, progressPath });
-  return { context, panel: resolveReviewPanel(context.config.mergedReview), featureKey: String(context.progress.feature.id) };
+  return { context, runtime, panel: resolveReviewPanel(context.config.mergedReview, runtime), featureKey: String(context.progress.feature.id) };
 }
 
 function round(value = 'consolidated') {
@@ -295,14 +310,15 @@ function candidateWorktrees(context) {
 
 // What the Orchestrator needs to run a round: who reviews, on which model, the role
 // and rule files and skills every brief points at, and what has been stored so far.
-export function reviewPanelStatus({ cwd = process.cwd(), featureId, progressPath = null, runtime = null, round: roundName } = {}) {
-  const { context, panel, featureKey } = panelContext({ cwd, featureId, progressPath });
+export function reviewPanelStatus({ cwd = process.cwd(), featureId, progressPath = null, runtime = detectRuntime(), round: roundName } = {}) {
+  const { context, panel, featureKey } = panelContext({ cwd, featureId, progressPath, runtime });
   const reviewRound = round(roundName);
   const role = context.progress.mode === 'hotfix' ? 'hotfix-reviewer' : 'lean-reviewer';
   const roleFile = join(PLUGIN_ROOT, 'agents', `${role}.md`);
   return {
     kind: 'review-panel',
     feature: context.progress.feature,
+    runtime,
     round: reviewRound,
     role,
     brief_inputs: {
@@ -318,7 +334,7 @@ export function reviewPanelStatus({ cwd = process.cwd(), featureId, progressPath
         id: reviewer.id,
         executor: reviewer.executor,
         ...(reviewer.executor === 'native'
-          ? { model: (runtime && nativeReviewerModel(reviewer, { runtime, models: context.config.mergedModels })) || 'role routing' }
+          ? { model: nativeReviewerModel(reviewer, { runtime, models: context.config.mergedModels }) || 'role routing' }
           : { model: reviewer.model || `${reviewer.executor} default`, ...(reviewer.effort && { effort: reviewer.effort }) }),
         stored: current ? { model: stored.model, findings: stored.findings.length } : null,
       };
@@ -326,22 +342,22 @@ export function reviewPanelStatus({ cwd = process.cwd(), featureId, progressPath
   };
 }
 
-export function runPanelReviewer({ cwd = process.cwd(), featureId, progressPath = null, reviewerId, round: roundName, briefFile } = {}) {
-  const { context, panel, featureKey } = panelContext({ cwd, featureId, progressPath });
+export function runPanelReviewer({ cwd = process.cwd(), featureId, progressPath = null, runtime = detectRuntime(), reviewerId, round: roundName, briefFile } = {}) {
+  const { context, panel, featureKey } = panelContext({ cwd, featureId, progressPath, runtime });
   const reviewer = member(panel, reviewerId);
   if (!briefFile) throw new Error('[cc-nexs] run-reviewer requires --brief <file>');
   const { file, record } = runCliReviewer({
     workspaceRoot: context.workspaceRoot, featureId: featureKey, round: round(roundName), reviewer,
     briefFile: resolve(cwd, briefFile), source: context.source, worktrees: candidateWorktrees(context),
-    timeoutSeconds: reviewer.timeout_seconds ?? DEFAULT_TIMEOUT_SECONDS,
+    timeoutSeconds: reviewer.timeout_seconds ?? DEFAULT_TIMEOUT_SECONDS, runtime,
   });
   return { kind: 'reviewer-result', reviewer: record.reviewer, executor: record.executor, model: record.model, findings: record.findings.length, file };
 }
 
 // A native reviewer's reply, saved by the Orchestrator. CLI reviewers store their own
 // results through run-reviewer, so they cannot be recorded by hand.
-export function recordPanelReviewer({ cwd = process.cwd(), featureId, progressPath = null, reviewerId, round: roundName, model, findingsFile } = {}) {
-  const { context, panel, featureKey } = panelContext({ cwd, featureId, progressPath });
+export function recordPanelReviewer({ cwd = process.cwd(), featureId, progressPath = null, runtime = detectRuntime(), reviewerId, round: roundName, model, findingsFile } = {}) {
+  const { context, panel, featureKey } = panelContext({ cwd, featureId, progressPath, runtime });
   const reviewer = member(panel, reviewerId);
   if (reviewer.executor !== 'native') throw new Error(`[cc-nexs] ${reviewer.id} is a ${reviewer.executor} reviewer; run it with run-reviewer`);
   if (!findingsFile) throw new Error('[cc-nexs] record-reviewer requires --findings-file <file>');
@@ -349,7 +365,7 @@ export function recordPanelReviewer({ cwd = process.cwd(), featureId, progressPa
   let findings;
   try { const parsed = JSON.parse(text); findings = Array.isArray(parsed) ? parsed : extractFindings(text); } catch { findings = extractFindings(text); }
   const { file, record } = writeReviewerResult({
-    workspaceRoot: context.workspaceRoot, featureId: featureKey, round: round(roundName), reviewer, model, source: context.source, findings,
+    workspaceRoot: context.workspaceRoot, featureId: featureKey, round: round(roundName), reviewer, model, source: context.source, findings, runtime,
   });
   return { kind: 'reviewer-result', reviewer: record.reviewer, executor: record.executor, model: record.model, findings: record.findings.length, file };
 }

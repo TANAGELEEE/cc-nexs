@@ -39,6 +39,8 @@ review:
     - .cc-nexs/review-skills/api-contracts
 ```
 
+To give each runtime its own reviewers, key the panel by runtime (`panel: { claude: [...], codex: [...], pi: [...] }`); a runtime without a list gets the single native reviewer.
+
 Lean/Hotfix models use risk-driven routing. The effective precedence is: public preset < private overlay < project `cc-nexs.config.yml.models` < feature profiles/routing < matched routing rules < explicit overrides in feature `models.roles`. New feature templates no longer generate `models.roles`, so everyday project configuration actually takes effect.
 
 Under `risk_tier:auto`, Lean takes its value from the plan risk bound at Gateway A, and Hotfix infers it from the bound P0/P1/P2/P3 severity. When a historical Gateway A lacks the risk field, the value is derived only from an approved scope whose hash matches exactly; if that cannot be proven, the tier is conservatively raised to `high` and never silently falls back to `medium`. The public rules automatically switch the Planner/Reviewer for Lean `high|critical` and the Reviewer for Hotfix P0/P1 to `escalated`. The public `escalated` profile remains provider-neutral `inherit + xhigh`; to switch to an actual high-capability model, a project should override the same-named profile in its private configuration:

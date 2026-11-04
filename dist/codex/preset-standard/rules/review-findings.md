@@ -22,6 +22,18 @@ review:
     - .cc-nexs/review-skills/api-contracts
 ```
 
+The list applies to every runtime. To give each runtime its own reviewers, key the panel by runtime; a runtime without a list gets the default single native reviewer:
+
+```yaml
+review:
+  panel:
+    claude: [{ id: claude }, { id: gpt, executor: codex-cli, model: <model id> }]
+    codex: [{ id: gpt }, { id: gemini, executor: agy-cli, model: <model id> }]
+    pi: [{ id: pi, profile: review }, { id: deepseek, model: <model id> }]
+```
+
+`review-panel`, `run-reviewer`, `record-reviewer`, and `record-review` pick the list for the runtime they run in (`--runtime` overrides it for `review-panel`), and a stored result only counts for the runtime that produced it.
+
 A CLI reviewer runs another agent CLI non-interactively in the workspace, so a Claude Code or Codex host can include another vendor's model. `dsh-cli` uses the signed-in account and takes `provider`/`model` (or `provider/model`) and an optional `dsh_profile` (default `headless`). Every CLI reviewer uses the credentials that CLI is already signed in with; cc-nexs passes none. `timeout_seconds` (default 1800) bounds a CLI reviewer.
 
 Skills steer what reviewers emphasize. Each entry is a skill directory (its `SKILL.md`) or a Markdown file, relative to the workspace.

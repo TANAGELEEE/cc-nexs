@@ -10,10 +10,11 @@ import { assertTestAttemptNotInvalidated, candidateFingerprint, readProgressV2, 
 import { resolveFeatureProgress } from './approval-command.mjs';
 import { hasReviewBlock, readReviewFindings } from './finding-contract.mjs';
 import { readReviewerResult, resolveReviewPanel } from './review-panel.mjs';
+import { detectRuntime } from './runtime-resolver.mjs';
 
 // Every reviewer the Judge lists must have stored its own findings for this round and
 // candidate, on the model the block names.
-function assertReviewerResults(context, round, reviewers) {
+function assertReviewerResults(context, round, reviewers, runtime) {
   const fingerprint = candidateFingerprint(context.source);
   for (const reviewer of reviewers) {
     const result = readReviewerResult({ workspaceRoot: context.workspaceRoot, featureId: context.progress.feature.id, round, reviewerId: reviewer.id });
@@ -21,6 +22,7 @@ function assertReviewerResults(context, round, reviewers) {
       throw new Error(`[cc-nexs] reviewer ${reviewer.id} has no stored ${round} result; run it with run-reviewer (CLI) or record it with record-reviewer (native)`);
     }
     if (result.fingerprint !== fingerprint) throw new Error(`[cc-nexs] reviewer ${reviewer.id}'s stored result is for another candidate`);
+    if (result.runtime && result.runtime !== runtime) throw new Error(`[cc-nexs] reviewer ${reviewer.id}'s stored result came from the ${result.runtime} panel, not ${runtime}`);
     if (result.model !== reviewer.model) throw new Error(`[cc-nexs] reviewer ${reviewer.id} ran on ${result.model}, but the review block says ${reviewer.model}`);
   }
 }
@@ -88,9 +90,10 @@ export function recordLeanReview({
   }
   if (documentFindings) {
     const round = gatewayBDelta ? 'gateway-b-delta' : closure ? 'closure' : 'consolidated';
-    const panel = resolveReviewPanel(context.config.mergedReview);
+    const runtime = detectRuntime();
+    const panel = resolveReviewPanel(context.config.mergedReview, runtime);
     findings = readReviewFindings(documentText, { round, source: context.source, panel, notReproduced });
-    assertReviewerResults(context, round, findings.reviewers);
+    assertReviewerResults(context, round, findings.reviewers, runtime);
     blockingFindings = findings.blockingFindings;
     status = blockingFindings.length > 0 ? 'blocked' : 'passed';
   }

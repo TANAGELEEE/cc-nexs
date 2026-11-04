@@ -4,6 +4,12 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-11-04
+
+### Added
+
+- `review.panel` can be keyed by runtime (`claude`, `codex`, `pi`) so each host uses its own reviewers; a runtime without a list gets the single native reviewer. Stored reviewer results record their runtime and only count for that runtime's panel.
+
 ## [0.16.0] - 2026-11-04
 
 ### Changed

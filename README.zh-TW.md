@@ -39,6 +39,8 @@ review:
     - .cc-nexs/review-skills/api-contracts
 ```
 
+要讓各 runtime 用不同的 reviewer，把 panel 按 runtime 分開寫（`panel: { claude: [...], codex: [...], pi: [...] }`）；沒有列出的 runtime 使用預設的一位原生 reviewer。
+
 Lean/Hotfix 模型採用風險驅動路由。有效優先順序是：公開 preset < 私有 overlay < 專案 `cc-nexs.config.yml.models` < feature profiles/routing < 命中的 routing rules < feature `models.roles` 顯式覆蓋。新 feature 模板不再生成 `models.roles`，因此日常專案配置會真正生效。
 
 `risk_tier:auto` 時，Lean 從 Gateway A 繫結的計劃風險取值，Hotfix 從繫結的 P0/P1/P2/P3 severity 推斷。歷史 Gateway A 缺少風險欄位時，只從 hash 完全匹配的已批准 scope 派生；無法證明則按 `high` 保守升檔，絕不靜默回落 `medium`。公開規則自動把 Lean `high|critical` 的 Planner/Reviewer、Hotfix P0/P1 的 Reviewer 切到 `escalated`。公開 `escalated` 仍是 provider-neutral 的 `inherit + xhigh`；專案要切換實際高能力模型，應在私有配置覆蓋同名 profile：
