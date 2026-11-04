@@ -42,6 +42,24 @@
       "additionalProperties": false,
       "properties": {
         "panel": {
+          "description": "A list for every runtime, or a map of claude/codex/pi lists.",
+          "oneOf": [
+            { "$ref": "#/properties/review/$defs/reviewers" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "claude": { "$ref": "#/properties/review/$defs/reviewers" },
+                "codex": { "$ref": "#/properties/review/$defs/reviewers" },
+                "pi": { "$ref": "#/properties/review/$defs/reviewers" }
+              }
+            }
+          ]
+        },
+        "skills": { "type": "array", "items": { "type": "string" }, "description": "Skill directories or Markdown files every reviewer reads first, relative to the workspace" }
+      },
+      "$defs": {
+        "reviewers": {
           "type": "array",
           "minItems": 1,
           "items": {
@@ -58,8 +76,7 @@
               "timeout_seconds": { "type": "integer", "minimum": 1 }
             }
           }
-        },
-        "skills": { "type": "array", "items": { "type": "string" }, "description": "Skill directories or Markdown files every reviewer reads first, relative to the workspace" }
+        }
       }
     },
     "release": {
