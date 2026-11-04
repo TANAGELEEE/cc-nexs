@@ -84,6 +84,8 @@
 
 ## 計劃審核
 
+- 審核方式：skipped（low/medium，由人在 Gateway A 審）/ 獨立事實核查（high/critical）
+- 計劃來源：Planner 起草 / 使用者 plan mode（--from）
 - 審核輪次：
 - P0/P1 阻塞項：
 - 非阻塞建議：
@@ -102,15 +104,21 @@
 ## 集中 Review
 
 - Reviewed fingerprint：
-- P0/P1 阻塞項：
-- P2/P3 非阻塞項：
+- Finder 視角：
+- 阻塞項（實際跑出並經 Judge 復跑確認的 P0/P1）：
+- 未證實項（交給 test 驗收的 probe）：
+- P2/P3、已駁回與格式不合格項：
 - 結論：待執行
+
+<!-- Judge 在本段結尾寫入唯一的 `cc-nexs-review` 區塊，格式見 rules/review-findings.md -->
 
 ## Review 閉環
 
-- 修復的問題編號：
+- 復跑的問題編號：
 - Delta fingerprint：
 - 結論：待執行
+
+<!-- 閉環同樣以 `cc-nexs-review` 區塊結尾，round 為 closure -->
 
 ## Test 環境驗收
 

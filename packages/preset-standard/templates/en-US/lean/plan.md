@@ -66,6 +66,8 @@ Local verification is a fast check before deployment; acceptance in test is the 
 
 ## Plan Review
 
+- Review mode: skipped (low/medium, reviewed by the human at Gateway A) / independent fact check (high/critical)
+- Plan source: Planner draft / user plan mode (--from)
 - Review round:
 - P0/P1 blocking items:
 - Non-blocking notes:
@@ -83,13 +85,19 @@ Local verification is a fast check before deployment; acceptance in test is the 
 
 ## Consolidated Review
 - Reviewed fingerprint:
-- P0/P1 blockers:
-- P2/P3 non-blockers:
+- Finder lenses:
+- Blockers (run-proven P0/P1 confirmed by the Judge rerun):
+- Unproven (sent to test verification as probes):
+- P2/P3, refuted, and rejected:
 - Conclusion: To be executed
+
+<!-- The Judge ends this section with the single `cc-nexs-review` block defined in rules/review-findings.md -->
 ## Review Closure
-- Fixed issue number:
+- Rerun finding ids:
 - Delta fingerprint:
 - Conclusion: Pending execution
+
+<!-- A closure also ends with a `cc-nexs-review` block whose round is closure -->
 ## Test Environment Acceptance
 
 | Attempt | Environment revision | AC Coverage | Result | Evidence Summary |

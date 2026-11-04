@@ -1,17 +1,32 @@
 // Evidence-gated Review findings.
 //
-// A Reviewer writes one fenced `cc-nexs-review` JSON block per Review round in the
-// bound review document (Lean plan.md or the Hotfix BUG document). The controller
-// classifies every finding; only a P0/P1 failure that a run demonstrated blocks.
-// Everything else is recorded and shown at Gateway B, so the test environment and
-// the human decide unproven risk instead of another automated Review round.
+// Finders search the exact candidate in parallel, each through one lens, and return
+// their findings. A Judge in a fresh session reruns every P0/P1 command, merges
+// duplicates, and writes one fenced `cc-nexs-review` JSON block per Review round in
+// the bound review document (Lean plan.md or the Hotfix BUG document). The controller
+// classifies every finding; only a P0/P1 failure that a run demonstrated and the Judge
+// rerun confirmed blocks. Everything else is recorded and shown at Gateway B, so the
+// test environment and the human decide unproven risk instead of another Review round.
 
 const BLOCK = /^```cc-nexs-review[ \t]*\r?\n([\s\S]*?)\r?\n```[ \t]*$/gm;
 const ROUNDS = new Set(['consolidated', 'closure', 'gateway-b-delta']);
 const ANCHOR = /^(?:AC-[A-Za-z0-9_-]+|contract|data|security|regression|evidence-mismatch)$/;
+const LENSES = new Set(['correctness', 'contracts-data', 'security', 'delta']);
+const VERDICTS = new Set(['confirmed', 'refuted', 'plausible']);
+const REQUIRED_LENSES = {
+  low: [],
+  medium: ['correctness', 'contracts-data'],
+  high: ['correctness', 'contracts-data', 'security'],
+  critical: ['correctness', 'contracts-data', 'security'],
+};
 
 function text(value) {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+export function requiredFinderLenses(riskTier) {
+  if (!(riskTier in REQUIRED_LENSES)) throw new Error(`[cc-nexs] unknown risk tier for Review finders: ${riskTier}`);
+  return REQUIRED_LENSES[riskTier];
 }
 
 export function extractReviewBlock(documentText) {
@@ -41,11 +56,27 @@ function rejection(finding) {
   } else {
     return 'evidence.kind must be run or trace';
   }
+  if (finding.judge !== undefined && (!VERDICTS.has(finding.judge?.verdict))) {
+    return 'judge.verdict must be confirmed, refuted, or plausible';
+  }
   return null;
 }
 
 function summary(finding) {
   return `${finding.severity}: ${finding.id} ${finding.location} — ${finding.failure_scenario}`;
+}
+
+function classify(finding, notReproducedIds) {
+  if (['P2', 'P3'].includes(finding.severity)) return { class: 'advisory' };
+  const verdict = finding.judge?.verdict;
+  if (verdict === 'refuted') return { class: 'refuted', reason: 'Judge rerun refuted the failure' };
+  if (finding.anchor === 'evidence-mismatch') return { class: 'blocking' };
+  if (finding.evidence.kind !== 'run') return { class: 'unproven', reason: 'no run demonstrated the failure' };
+  if (notReproducedIds.has(finding.id)) return { class: 'unproven', reason: 'Orchestrator rerun did not reproduce the failure' };
+  if (verdict !== 'confirmed' || !text(finding.judge?.rerun)) {
+    return { class: 'unproven', reason: 'the Judge did not confirm the failure with a rerun' };
+  }
+  return { class: 'blocking' };
 }
 
 export function classifyReviewFindings(findings, { notReproduced = [] } = {}) {
@@ -57,15 +88,11 @@ export function classifyReviewFindings(findings, { notReproduced = [] } = {}) {
     if (!reason && seen.has(finding.id)) reason = 'duplicate id';
     if (reason) return { finding, class: 'rejected', reason };
     seen.add(finding.id);
-    if (['P2', 'P3'].includes(finding.severity)) return { finding, class: 'advisory' };
-    if (finding.anchor === 'evidence-mismatch') return { finding, class: 'blocking' };
-    if (finding.evidence.kind !== 'run') return { finding, class: 'unproven', reason: 'no run demonstrated the failure' };
-    if (notReproducedIds.has(finding.id)) return { finding, class: 'unproven', reason: 'Orchestrator rerun did not reproduce the failure' };
-    return { finding, class: 'blocking' };
+    return { finding, ...classify(finding, notReproducedIds) };
   });
   const unknown = [...notReproducedIds].filter((id) => !seen.has(id));
   if (unknown.length > 0) throw new Error(`[cc-nexs] --not-reproduced names unknown finding ids: ${unknown.join(', ')}`);
-  const counts = { blocking: 0, unproven: 0, advisory: 0, rejected: 0 };
+  const counts = { blocking: 0, unproven: 0, refuted: 0, advisory: 0, rejected: 0 };
   for (const item of classified) counts[item.class] += 1;
   return {
     classified,
@@ -74,7 +101,19 @@ export function classifyReviewFindings(findings, { notReproduced = [] } = {}) {
   };
 }
 
-export function readReviewFindings(documentText, { round, source, notReproduced = [] }) {
+function assertFinders(block, { round, riskTier }) {
+  const finders = block.finders;
+  if (!Array.isArray(finders) || finders.length === 0 || finders.some((lens) => !LENSES.has(lens))) {
+    throw new Error('[cc-nexs] review block must list its finders as correctness, contracts-data, security, or delta lenses');
+  }
+  if (round !== 'consolidated') return;
+  const missing = requiredFinderLenses(riskTier).filter((lens) => !finders.includes(lens));
+  if (missing.length > 0) {
+    throw new Error(`[cc-nexs] a ${riskTier} consolidated Review needs finders for ${missing.join(', ')}`);
+  }
+}
+
+export function readReviewFindings(documentText, { round, source, riskTier, notReproduced = [] }) {
   const block = extractReviewBlock(documentText);
   if (!ROUNDS.has(block?.round)) throw new Error('[cc-nexs] review block round must be consolidated, closure, or gateway-b-delta');
   if (block.round !== round) {
@@ -85,5 +124,10 @@ export function readReviewFindings(documentText, { round, source, notReproduced 
   if (actual !== expected) {
     throw new Error('[cc-nexs] review block candidate does not match the exact candidate commits');
   }
-  return classifyReviewFindings(block.findings ?? [], { notReproduced });
+  assertFinders(block, { round, riskTier });
+  return { ...classifyReviewFindings(block.findings ?? [], { notReproduced }), finders: block.finders };
+}
+
+export function hasReviewBlock(documentText) {
+  return [...String(documentText || '').matchAll(BLOCK)].length > 0;
 }
