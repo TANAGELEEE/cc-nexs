@@ -465,7 +465,7 @@ test('a merged MR head that moved beyond the approved candidate is refused', () 
   } finally { rmSync(fixture.root, { recursive: true, force: true }); }
 });
 
-test('MR delivery keeps the overlap and sensitive-path guards and binds integration checks to the merged tree', () => {
+test('MR delivery keeps the overlap guard, records unchecked sensitive paths, and binds integration checks to the merged tree', () => {
   const fixture = mrFixture('cc-nexs-mr-guards-');
   try {
     const { root, origin, repo, options } = fixture;
@@ -474,13 +474,16 @@ test('MR delivery keeps the overlap and sensitive-path guards and binds integrat
     writeFileSync(join(other, 'package.json'), '{"name":"fixture"}'); git(other, ['add', '.']); git(other, ['commit', '-m', 'dependency']); git(other, ['push', 'origin', 'main']);
     let calls = 0;
     const driver = (request) => { calls += 1; return fixture.pushingDriver()(request); };
-    assert.throws(() => promoteCandidateViaMergeRequest({ ...options, mergeRequest: driver }), /BASE_CHANGED: .*shared runtime or contract paths \(package\.json\)/);
-    assert.equal(calls, 0);
+    const unchecked = promoteCandidateViaMergeRequest({ ...options, mergeRequest: driver });
+    assert.equal(calls, 1);
+    assert.equal(unchecked.pending, true);
+    assert.deepEqual(unchecked.unverifiedSensitivePaths, ['package.json']);
     const result = promoteCandidateViaMergeRequest({ ...options, mergeRequest: driver, verifyIntegration: (payload) => {
       assert.equal(git(payload.worktree, ['show', 'HEAD:change.txt']), 'feature');
       return { status: 'passed', integrationCommit: payload.integrationCommit, proof: 'merged tree checks passed' };
     } });
     assert.equal(result.integrationVerification.status, 'passed');
+    assert.equal(result.unverifiedSensitivePaths, undefined);
     assert.match(result.integrationVerification.integrationTree, /^[0-9a-f]{40}$/);
     assert.equal(git(repo, ['worktree', 'list', '--porcelain']).split('\n').filter((line) => line.startsWith('worktree ')).length, 1);
     writeFileSync(join(other, 'change.txt'), 'upstream'); git(other, ['add', '.']); git(other, ['commit', '-m', 'overlap']); git(other, ['push', 'origin', 'main']);
@@ -497,17 +500,18 @@ test('base readiness reports drift before Gateway B without mutating refs', () =
     const other = join(root, 'other');
     git(root, ['clone', origin, other]); configure(other); git(other, ['checkout', 'main']);
     writeFileSync(join(other, 'package.json'), '{}'); git(other, ['add', '.']); git(other, ['commit', '-m', 'dependency']); git(other, ['push', 'origin', 'main']);
-    assert.equal(check().status, 'base_changed');
-    assert.equal(check({ sensitiveChecksAvailable: true }).status, 'ready');
+    const disjoint = check();
+    assert.equal(disjoint.status, 'ready', 'a disjoint sensitive change does not send a tested candidate back');
+    assert.deepEqual(disjoint.sensitive, ['package.json']);
     writeFileSync(join(other, 'change.txt'), 'upstream'); git(other, ['add', '.']); git(other, ['commit', '-m', 'overlap']); git(other, ['push', 'origin', 'main']);
-    const drift = check({ sensitiveChecksAvailable: true });
+    const drift = check();
     assert.equal(drift.status, 'base_changed');
     assert.deepEqual(drift.overlap, ['change.txt']);
     assert.equal(git(repo, ['rev-parse', 'refs/cc-nexs/candidates/07-demo/api']), source);
   } finally { rmSync(fixture.root, { recursive: true, force: true }); }
 });
 
-test('exact merged-tree checks permit disjoint sensitive base changes without moving the tested ref', () => {
+test('disjoint sensitive base changes integrate unchanged, through merged-tree checks when configured', () => {
   const root = mkdtempSync(join(tmpdir(), 'cc-nexs-integration-check-'));
   try {
     const repo = join(root, 'repo');
@@ -523,7 +527,6 @@ test('exact merged-tree checks permit disjoint sensitive base changes without mo
     git(repo, ['add', '.']); git(repo, ['commit', '-m', 'base dependency']); git(repo, ['push', 'origin', 'main']);
     const target = git(repo, ['rev-parse', 'HEAD']);
     const options = { repo, repositoryId: 'api', candidateRef: ref, targetBranch: 'main', requireDisjointTargetChanges: true };
-    assert.throws(() => integrateCandidateToTest(options), /BASE_CHANGED/);
     assert.throws(() => integrateCandidateToTest({ ...options, verifyIntegration: () => ({status:'passed', integrationCommit:source, proof:'wrong tree'}) }), /exact merged candidate/);
     assert.equal(git(repo, ['rev-parse', 'origin/main']), target);
     const result = integrateCandidateToTest({ ...options, verifyIntegration: payload => {
@@ -533,8 +536,17 @@ test('exact merged-tree checks permit disjoint sensitive base changes without mo
       return { status:'passed', integrationCommit:payload.integrationCommit, proof:'merged tree fixture checks passed' };
     }});
     assert.equal(result.integrationVerification.status, 'passed');
+    assert.equal(result.unverifiedSensitivePaths, undefined);
     assert.equal(git(repo, ['rev-parse', ref]), source);
     git(repo, ['merge-base', '--is-ancestor', source, 'origin/main']);
+
+    git(repo, ['checkout', 'feature']); writeFileSync(join(repo, 'fix2.txt'), 'fix2'); git(repo, ['add', '.']); git(repo, ['commit', '-m', 'fix2']);
+    git(repo, ['update-ref', ref, git(repo, ['rev-parse', 'HEAD'])]);
+    git(repo, ['checkout', 'main']); git(repo, ['pull', '-q', 'origin', 'main']); writeFileSync(join(repo, 'go.mod'), 'module fixture\n');
+    git(repo, ['add', '.']); git(repo, ['commit', '-m', 'base module']); git(repo, ['push', 'origin', 'main']);
+    const unchecked = integrateCandidateToTest(options);
+    assert.equal(unchecked.integrationVerification, null);
+    assert.deepEqual(unchecked.unverifiedSensitivePaths, ['go.mod', 'package.json']);
   } finally { rmSync(root, { recursive:true, force:true }); }
 });
 
