@@ -1,0 +1,57 @@
+---
+description: "Create or refresh a code repository's verification guide and feature map under .cc-nexs/verify/, so every Verifier drives the real app the same way. Bypass command; does not enter the state machine."
+disable-model-invocation: true
+allowed-tools: "Read, Write, Edit, Glob, Grep, Bash"
+argument-hint: "<repository-id> [--refresh]"
+---
+
+# /cc-nexs:verify-skill
+
+Verification is the main gate, so each code repository needs a scripted, repeatable way to drive the real app and prove behavior. This command writes that as plain Markdown inside the repository, readable by Claude Code, Codex, and Pi alike:
+
+```text
+<repo>/.cc-nexs/verify/README.md        how to launch, check, drive, prove, and clean up
+<repo>/.cc-nexs/verify/features/README.md   index of user-facing features
+<repo>/.cc-nexs/verify/features/<feature>.md   one file per feature
+```
+
+Resolve `<repository-id>` from the workspace configuration and work in that repository's main checkout. The reader is a Verifier that has never seen the app, reading cold in the middle of a task: write exact commands and stable handles, not examples or placeholders.
+
+## 1. Learn the repository, not the user
+
+Answer these from the code, its scripts, and its docs; ask the user only what cannot be observed:
+
+- **Surface**: what a user or client touches (web UI, API, CLI, worker). Pick the primary one and note the rest.
+- **Environments**: how it starts locally (the repository's own dev command, ports, env vars, seed data, test users), and how the deployed test environment is reached (base URLs and hosts from the workspace `release.test` configuration; never credentials).
+- **Drive**: what can exercise it programmatically. Existing harnesses first (Playwright or Cypress specs, API clients, scripts); otherwise browser automation for web, HTTP for services, a PTY for CLIs.
+- **Observe**: what proves behavior (screenshots, response bodies, logs, exit codes, rows written, messages sent).
+- **Isolate**: whether two instances can run side by side. If not, say so; refusing to double-drive a shared instance beats corrupting someone's session.
+
+If the checkout does not start as-is, fix the start-up only when the fix is local scaffolding (mark it as verification scaffolding and remove it in cleanup); otherwise report the blocker precisely and stop.
+
+## 2. Write the guide
+
+`README.md` has these sections, each grounded in what step 1 found:
+
+- **Launch**: the exact local start command and how to tell it is usable (not merely that a port answers), from an empty data directory including migrations and seed data; and how to target the deployed test environment instead.
+- **Doctor**: one read-only check that answers "is this instance worth driving?" (process up, expected revision, port owned by this run, auth valid). A Verifier runs it first, and again whenever something looks off.
+- **Drive**: the recipe with real selectors, routes, and commands from this repository. Prefer stable handles (ARIA labels, data attributes, route paths, API paths) over coordinates.
+- **Evidence**: what to capture for a proof and the standard it must meet: the real user path, not internal setters or test-only endpoints; the action and the resulting state; side effects (rows, files, messages) alongside what is visible; mocks only where a production boundary already isolates the external system.
+- **Cleanup**: how to stop what the run started. Kill only what you started, never by process name. Cleanup keeps the evidence.
+- **Helpers**: any script the guide ships, executable, with its invocation shown.
+
+## 3. Seed the feature map
+
+Write `features/README.md` as an index and one file per user-facing feature, starting with the three to five most used (from routes, menus, commands, or docs). Each feature file answers, from the user's point of view: what it is and its sub-features, how to reach it, how to drive it with the recipe above, the observable end state that proves it works, and gotchas. If seed data lacks a precondition a journey needs, the journey reports that failure and the reason goes under gotchas; never weaken the journey to make it pass.
+
+## 4. Prove it before handing it over
+
+Run the guide end to end once: launch (or target test), doctor, drive one mapped feature, capture evidence, clean up, then confirm the evidence still exists. Fix what fails and clean up after every failed attempt. A guide that was never executed is a draft. If you proved it somewhere other than its real target, list the steps that target still needs.
+
+## `--refresh`
+
+Audit an existing guide against the current code: read each feature file against the code it describes, then make one live pass that drives every mapped feature. Change only files under `.cc-nexs/verify/`. End with exactly one outcome: `clean` (full coverage, nothing changed), `changed` (the corrections made), or `blocked` (the blocker). A product defect the live pass finds is reported, never fixed here.
+
+## Handing over
+
+Do not commit, branch, or push. List the files written and the proof from step 4, and tell the user to merge `.cc-nexs/verify/` into the repository's base branch: feature worktrees are created from the base, and Verifiers read the guide from the exact candidate commit (`node <plugin-root>/lib/cc-nexs-cli.mjs verify-guides <id>`).

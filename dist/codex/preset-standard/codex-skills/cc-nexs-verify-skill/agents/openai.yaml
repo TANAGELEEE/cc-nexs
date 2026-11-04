@@ -1,0 +1,6 @@
+interface:
+  display_name: "/cc-nexs:verify-skill"
+  short_description: "Run /cc-nexs:verify-skill explicitly"
+  default_prompt: "Use $cc-nexs-verify-skill to run /cc-nexs:verify-skill."
+policy:
+  allow_implicit_invocation: false

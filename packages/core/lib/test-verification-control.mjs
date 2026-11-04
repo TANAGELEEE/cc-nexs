@@ -1,8 +1,13 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+
 import { resolveFeatureProgress } from './approval-command.mjs';
+import { extractApprovalScope } from './plan-contract.mjs';
 import { appendProgressEvent, readProgressV2, recordTestVerification } from './progress-v2.mjs';
 import { preflightTestRelease } from './test-release.mjs';
+import { acceptanceCheckIds, insertVerificationSection, mergeShardResults, renderShardedVerification } from './verification-shards.mjs';
 
-export function recordEnvironmentVerification({ cwd = process.cwd(), featureId, progressPath = null, status, attemptId = null, evidence = [] } = {}) {
+export function recordEnvironmentVerification({ cwd = process.cwd(), featureId, progressPath = null, status, attemptId = null, evidence = [], shards = null } = {}) {
   const progressFile = resolveFeatureProgress({ cwd, featureId, progressPath });
   const before = readProgressV2(progressFile);
   const context = preflightTestRelease({
@@ -35,12 +40,24 @@ export function recordEnvironmentVerification({ cwd = process.cwd(), featureId, 
     throw new Error(`[cc-nexs] test release attempt must be deployed before verification, found ${attempt.status}`);
   }
   if (!attempt.environment_revision) throw new Error('[cc-nexs] test verification requires an environment_revision');
+  const planFile = join(dirname(progressFile), 'plan.md');
+  if (shards) {
+    if (status || evidence.length > 0) throw new Error('[cc-nexs] sharded verification derives status and evidence; do not pass --passed, --blocked, --manual-required, or --evidence');
+    if (progress.mode !== 'lean') throw new Error('[cc-nexs] sharded verification applies to Lean only');
+    const merged = mergeShardResults(shards, { requiredChecks: acceptanceCheckIds(extractApprovalScope(readFileSync(planFile, 'utf8'))) });
+    status = merged.status;
+    evidence = merged.evidence;
+  }
   if (!Array.isArray(evidence) || evidence.length === 0) throw new Error('[cc-nexs] test verification requires at least one evidence item');
   const result = ['passed', 'blocked', 'manual_required'].includes(status) ? status : null;
   if (!result) throw new Error('[cc-nexs] verification status must be passed, blocked, or manual_required');
   assertVerificationBlocker(result, evidence);
   const actor = progress.mode === 'hotfix' ? 'hotfix-verifier' : progress.mode === 'lean' ? 'lean-verifier' : 'verifier';
   let after = recordTestVerification(progressFile, { attemptId: attempt.id, result, evidence, actor });
+  if (shards) {
+    const section = renderShardedVerification({ attemptId: attempt.id, environmentRevision: attempt.environment_revision, status: result, evidence });
+    writeFileSync(planFile, insertVerificationSection(readFileSync(planFile, 'utf8'), section));
+  }
   // Persist the next actionable state before returning, including on a forked run.
   const target = verificationResultState(progress.mode, result);
   if (target && after.state !== target) after = appendProgressEvent(progressFile, {

@@ -45,6 +45,7 @@ const P2_COMMANDS = [
   "verify-local",
   "plan",
   "execute",
+  "verify-skill",
 ] as const;
 
 function commandDescription(name: string): string {

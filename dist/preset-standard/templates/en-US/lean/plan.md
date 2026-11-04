@@ -6,6 +6,7 @@
 - Reusable implementation:
 - Affected repositories/modules:
 - Non-goals:
+- Affected features (.cc-nexs/verify/features/ entries, each with a TV regression smoke; "none" without a feature map):
 ## Technical Plan
 - Core design:
 - Frontend/backend/API contract:

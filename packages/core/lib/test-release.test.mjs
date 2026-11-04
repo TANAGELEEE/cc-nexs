@@ -359,6 +359,21 @@ test('test release integrates candidates, invokes structured driver, records evi
     assert.equal(readProgressV2(progressFile).delivery.test.attempts.length, 2);
     assert.ok(readProgressV2(progressFile).delivery.test.attempts[0].invalidated_at);
 
+    const shardJson = (name, result) => JSON.stringify({ shard: name, result, checks: [`smoke-${name}`], evidence: [{ check: `smoke-${name}`, result: result === 'blocked' ? 'failed' : 'passed', proof: `${name} smoke` }] });
+    assert.throws(
+      () => runCcNexsCommand(['record-test-verification', '05', '--passed', '--shard-json', shardJson('code', 'passed'), '--shard-json', shardJson('other', 'passed'), '--progress', progressFile], { cwd: root }),
+      /--shard-json derives status/,
+    );
+    const sharded = runCcNexsCommand([
+      'record-test-verification', '05', '--shard-json', shardJson('code', 'passed'), '--shard-json', shardJson('other', 'blocked'), '--progress', progressFile,
+    ], { cwd: root });
+    assert.equal(sharded.status, 'blocked');
+    assert.equal(readProgressV2(progressFile).state, 'TEST_VERIFY_FAILED');
+    const renderedPlan = readFileSync(join(reqDir, 'plan.md'), 'utf8');
+    assert.match(renderedPlan, new RegExp(`### ${completed.attempt.id} — sharded verification`));
+    assert.match(renderedPlan, /\| other \| smoke-other \| failed \| other smoke \|/);
+    assert.match(renderedPlan, /测试结论: 阻塞/);
+
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
