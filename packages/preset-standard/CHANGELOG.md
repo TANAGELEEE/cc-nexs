@@ -4,6 +4,26 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-04
+
+### Added
+
+- Review is split into parallel Finders and a Judge. Finders search the exact candidate through one lens each (`correctness`; `contracts-data` from medium risk; `security` from high risk, with Hotfix severity mapped to the same tiers) and return findings without writing; a Judge that did not search reruns every P0/P1 command, merges duplicates, and writes one `cc-nexs-review` block. `rules/review-findings.md` defines the contract for all runtimes.
+- `record-review --document-findings` derives the Review status from that block: only a P0/P1 failure demonstrated by a run and confirmed by the Judge rerun, or an unrefuted candidate/evidence mismatch, blocks. Trace-only findings are unproven, refuted findings are counted separately, P2/P3 are advisory, and malformed findings are rejected without blocking. The block must match the exact candidate, the round, and the finder lenses the risk tier requires.
+- Unproven user-observable findings go to the Verifier as `probe:<id>` checks when the Review runs before test, and Gateway B lists them.
+- `/cc-nexs:plan <id> --from <file>` takes a plan the user wrote in a runtime's plan mode; the Planner only normalizes it into requirements and approval scope.
+- `/cc-nexs:init --auto-plan` sets `auto_plan` in the feature config, and `approve-plan --auto` passes Gateway A only for a fast-track, low/medium plan whose plan review is not blocked and whose task paths avoid schema/migration, auth/permission/secret, payment, and infrastructure/deployment paths.
+- `/cc-nexs:verify-skill <repo> [--refresh]` writes or audits `.cc-nexs/verify/README.md` (launch, doctor, drive, evidence, cleanup) and a feature map in a code repository. `verify-guides <id>` lists each candidate repository's guide and feature entries from the exact candidate commit, and Verifiers drive the app through it.
+- `record-test-verification --shard-json` records parallel shard Verifiers: every TV row must be assigned, every assigned check needs evidence, any blocked shard blocks, and the controller writes one merged acceptance section into `plan.md`.
+- `stats --all [--since <date>]` aggregates every v2 Lean/Hotfix task in the workspace; task stats now separate auto and human approvals and skipped plan reviews, and count Review rounds, classified findings, and test verdicts.
+
+### Changed
+
+- The independent plan review runs for high/critical plans. A low/medium plan records `record-plan-review --skipped --reason`, bound to the plan hash; the controller refuses a skip for high/critical. The Plan Reviewer checks facts and must cite what a P0/P1 contradicts.
+- Plans name the affected feature-map entries, each with a TV regression smoke.
+- The Hotfix Reviewer can run checks and repros (Bash); Git mutation stays blocked by the existing hook.
+- Legacy `record-review --passed|--blocked --finding` is refused once the review document holds a `cc-nexs-review` block.
+
 ## [0.13.1] - 2026-11-03
 
 ### Added
