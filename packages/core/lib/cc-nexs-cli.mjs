@@ -11,7 +11,7 @@ import { approveFeatureGate } from './approval-command.mjs';
 import { preflightBaseRelease, runBaseRelease } from './base-release.mjs';
 import { finalizeDocs } from './docs-finalize.mjs';
 import { reconcileTask } from './task-reconcile.mjs';
-import { taskStats } from './task-stats.mjs';
+import { taskStats, workspaceStats } from './task-stats.mjs';
 import { assertHotfixCandidate, startHotfix } from './hotfix-control.mjs';
 import { initializeHotfix } from './hotfix-init.mjs';
 import { reviseHotfix } from './hotfix-revision.mjs';
@@ -61,7 +61,10 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   }
   if (command === 'advance') return advanceFeatureState({ cwd, ...parseAdvanceOptions(args) });
   if (command === 'record-derived-binding') return recordDerivedBinding({ cwd, ...parseFeatureOptions(args) });
-  if (command === 'stats') return taskStats({ cwd, ...parseFeatureOptions(args) });
+  if (command === 'stats') {
+    if (args.includes('--all')) return workspaceStats({ cwd, ...parseWorkspaceStatsOptions(args) });
+    return taskStats({ cwd, ...parseFeatureOptions(args) });
+  }
   if (command === 'init-hotfix') return initializeHotfix({ cwd, ...parseHotfixLifecycleOptions(args, true) });
   if (command === 'revise-hotfix') return reviseHotfix({ cwd, ...parseHotfixLifecycleOptions(args, false) });
   if (command === 'release-test') {
@@ -251,6 +254,18 @@ function parseFeatureOptions(args) {
   }
   options.featureId = positional[0] || null;
   if (positional.length > 1) throw new Error(`unexpected arguments: ${positional.slice(1).join(' ')}`);
+  return options;
+}
+
+function parseWorkspaceStatsOptions(args) {
+  const options = { since: null };
+  for (let index = 0; index < args.length; index += 1) {
+    const token = args[index];
+    if (token === '--all') continue;
+    if (token === '--since') options.since = requireValue(args, ++index, token);
+    else if (token.startsWith('--since=')) options.since = token.slice('--since='.length);
+    else throw new Error(`unexpected stats --all argument: ${token}`);
+  }
   return options;
 }
 
@@ -476,8 +491,19 @@ function printResult(result) {
     console.log(`cc-nexs stats: ${result.feature.id} ${result.feature.slug} (${result.state})`);
     console.log(`Time: elapsed ${hours(s.elapsed_minutes)}, active ${hours(s.active_minutes)} (gaps over 2h excluded)`);
     console.log(`Test: ${s.test_attempts} attempt(s), ${s.test_deployments} deployed, ${s.test_conflict_attempts} with merge conflicts (${hours(s.conflict_minutes)}), ${s.test_target_advances} target advance(s), deploy wait ${hours(s.deploy_wait_minutes)}`);
-    console.log(`Human approvals: ${Object.entries(s.human_approvals).map(([gate, n]) => `${gate} ${n}`).join(', ') || 'none'}; plan reviews ${s.plan_reviews}, amendments ${s.plan_amendments}`);
+    console.log(`Human approvals: ${Object.entries(s.human_approvals).map(([gate, n]) => `${gate} ${n}`).join(', ') || 'none'}; auto ${s.auto_approvals}; plan reviews ${s.plan_reviews} (skipped ${s.plan_review_skips}), amendments ${s.plan_amendments}`);
+    console.log(`Review: ${s.reviews.consolidated} consolidated, ${s.reviews.closure} closure, ${s.reviews.gateway_b_delta} Gateway B delta, ${s.reviews.blocked} blocked; findings ${Object.entries(s.findings).map(([key, n]) => `${key} ${n}`).join(', ')}`);
+    console.log(`Test verification: ${s.test_verifications.passed} passed, ${s.test_verifications.blocked} blocked, ${s.test_verifications.manual_required} manual`);
     console.log(`Candidates: ${s.candidates}; local verification ${s.local_verifications.passed} passed, ${s.local_verifications.failed} failed; base attempts ${s.base_attempts}`);
+    return;
+  }
+  if (result.kind === 'workspace-stats') {
+    for (const task of result.tasks) {
+      const s = task.stats;
+      console.log(`${task.mode} ${task.feature.id} ${task.feature.slug} (${task.state}): active ${(s.active_minutes / 60).toFixed(1)}h, plan reviews ${s.plan_reviews}/${s.plan_review_skips} skipped, reviews ${s.reviews.consolidated + s.reviews.closure + s.reviews.gateway_b_delta} (${s.reviews.blocked} blocked), test blocked ${s.test_verifications.blocked}`);
+    }
+    const m = result.summary;
+    console.log(`Total: ${m.tasks} task(s), ${m.completed} complete, median active ${(m.median_active_minutes / 60).toFixed(1)}h; plan reviews ${m.plan_reviews} (skipped ${m.plan_review_skips}), auto approvals ${m.auto_approvals}; reviews ${m.reviews} (${m.blocked_reviews} blocked); test verifications blocked ${m.test_verifications_blocked}; findings ${Object.entries(m.findings).map(([key, n]) => `${key} ${n}`).join(', ') || 'none'}; ${result.skipped} non-v2 progress file(s) skipped`);
     return;
   }
   if (result.kind === 'task-reconcile') {
@@ -657,6 +683,7 @@ function printUsage() {
   console.error('  cc-nexs advance <feature-id> --from <state> --to <state> [--reason <text>] [--progress <path>]');
   console.error('  cc-nexs record-derived-binding <feature-id> [--progress <path>]');
   console.error('  cc-nexs stats <feature-id> [--progress <path>]');
+  console.error('  cc-nexs stats --all [--since <date>]');
   console.error('  cc-nexs resolve-test-conflict <feature-id> [--progress <path>]');
   console.error('  cc-nexs reclaim-worktrees [--sizes] [--confirm <token>]');
   console.error('  cc-nexs reconcile <feature-id> [--confirm <token>] [--progress <path>]');

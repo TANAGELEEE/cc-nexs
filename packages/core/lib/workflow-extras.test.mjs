@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
+
+import { createProgressV2, writeProgressV2 } from './progress-v2.mjs';
 
 import { extractPlanDerivedBinding } from './plan-contract.mjs';
 import { nextStep } from './state-machine.mjs';
-import { computeTaskStats } from './task-stats.mjs';
+import { computeTaskStats, workspaceStats } from './task-stats.mjs';
 import { postReleaseItems } from './workflow-snapshot.mjs';
 
 const leanRoles = ['lean-planner', 'lean-plan-reviewer', 'lean-developer', 'lean-reviewer', 'lean-verifier'];
@@ -63,4 +68,53 @@ test('task stats separate active time, conflicts, deploy waits and human approva
   assert.equal(stats.deploy_wait_minutes, 15);
   assert.equal(stats.test_deployments, 1);
   assert.deepEqual(stats.local_verifications, { passed: 0, failed: 1 });
+});
+
+test('task stats count auto approvals, skipped plan reviews, Review rounds, findings, and test verdicts', () => {
+  const at = new Date(Date.UTC(2026, 10, 1)).toISOString();
+  let sequence = 0;
+  const event = (type, data = {}, extra = {}) => ({ id: `e${++sequence}`, sequence, timestamp: at, type, data, ...extra });
+  const counts = (blocking, unproven) => ({ finding_counts: { blocking, unproven, refuted: 0, advisory: 1, rejected: 0 } });
+  const stats = computeTaskStats({
+    created_at: at, updated_at: at,
+    events: [
+      event('plan.reviewed', { status: 'skipped' }),
+      event('gate.approved', { gate: 'plan' }, { actor: 'auto-plan' }),
+      event('review.consolidated_blocked', counts(1, 2)),
+      event('review.closure_passed', counts(0, 0)),
+      event('delivery.test.verification_blocked'),
+      event('delivery.test.verification_passed'),
+      event('gate.approved', { gate: 'release' }, { actor: 'Owner' }),
+    ],
+    delivery: { test: { attempts: [] }, base: { attempts: [] } },
+  });
+  assert.equal(stats.auto_approvals, 1);
+  assert.deepEqual(stats.human_approvals, { release: 1 });
+  assert.equal(stats.plan_reviews, 0);
+  assert.equal(stats.plan_review_skips, 1);
+  assert.deepEqual(stats.reviews, { consolidated: 1, closure: 1, gateway_b_delta: 0, blocked: 1 });
+  assert.deepEqual(stats.findings, { blocking: 1, unproven: 2, refuted: 0, advisory: 2, rejected: 0 });
+  assert.deepEqual(stats.test_verifications, { passed: 1, blocked: 1, manual_required: 0 });
+});
+
+test('workspace stats aggregate v2 tasks and skip feature worktrees and legacy files', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-stats-'));
+  try {
+    const write = (path, progress) => { mkdirSync(join(root, path), { recursive: true }); writeProgressV2(join(root, path, 'progress.json'), progress); };
+    const lean = createProgressV2({ featureId: '01', featureSlug: 'one', preset: 'preset-standard', mode: 'lean', repositories: [] });
+    lean.state = 'COMPLETE';
+    write('all-docs/doc/01.one', lean);
+    write('.worktrees/01-one/all-docs/doc/01.one', lean);
+    write('.cc-nexs/hotfixes/fix-a', createProgressV2({ featureId: 'fix-a', featureSlug: 'fix-a', preset: 'preset-standard', mode: 'hotfix', repositories: [] }));
+    mkdirSync(join(root, 'all-docs/doc/00.legacy'), { recursive: true });
+    writeFileSync(join(root, 'all-docs/doc/00.legacy/progress.json'), '{"current_state":"DONE"}');
+    const result = workspaceStats({ cwd: root });
+    assert.equal(result.summary.tasks, 2);
+    assert.equal(result.summary.completed, 1);
+    assert.equal(result.skipped, 1);
+    assert.equal(workspaceStats({ cwd: root, since: '2999-01-01' }).summary.tasks, 0);
+    assert.throws(() => workspaceStats({ cwd: root, since: 'soon' }), /--since must be a date/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
