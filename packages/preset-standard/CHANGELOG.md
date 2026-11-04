@@ -4,6 +4,23 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-04
+
+### Added
+
+- `browser-provider --runtime <claude|codex|pi>` freezes one Verifier browser per attempt: Claude Code and Pi prefer ego lite when its probe passes (Claude Code falls back to `chrome-devtools-mcp`, Pi to the headless computer-use Verifier), and Codex uses its in-app/Chrome session.
+- `release.test.credential_ref` resolves `env:<USER_VAR>,<PASSWORD_VAR>`, `dotenv:<untracked file>#<USER_VAR>,<PASSWORD_VAR>`, and `keychain:<service>/<account>`. `test-account --check` reports readiness without values, and `test-account -- <command>` passes the account to that command only, as `CC_NEXS_TEST_USER` and `CC_NEXS_TEST_PASSWORD`.
+
+### Changed
+
+- The preset defaults `release.test.browser.claude_provider` to `ego-lite` with `claude_fallback: chrome-devtools-mcp`.
+- Verifiers drive journeys themselves in the frozen browser, reuse its signed-in session before the configured account and ask the human last, screenshot each journey's end state and check layout, error/empty/loading states, and console errors, and report account preconditions (such as credits) as `manual_required`.
+- `/cc-nexs:verify-skill` writes journeys as browser steps with account preconditions, ships scripts only for the Doctor and API probes, and `--refresh` converts journey scripts into steps.
+
+### Fixed
+
+- The ego lite probe accepts the ready marker on stderr, where the embedded runtime writes without a terminal, so Pi and Claude Code no longer fall back when ego lite works.
+
 ## [0.14.1] - 2026-11-04
 
 ### Added
