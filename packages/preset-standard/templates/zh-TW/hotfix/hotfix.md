@@ -47,7 +47,7 @@
 
 ## 集中 Review
 
-P0/P1/P2/P3 均需獨立 Review。檔案數和變更行數僅作風險參考，不能證明沒有行為變化。記錄候選、阻塞項和修復 delta 的結論。
+P0/P1/P2/P3 均需獨立 Review。檔案數和變更行數僅作風險參考，不能證明沒有行為變化。記錄候選、阻塞項和修復 delta 的結論。只有實際跑出並經 Judge 復跑確認的 P0/P1 才阻塞；未證實項交給 test 驗收作 probe。本段以 `cc-nexs-review` 區塊結尾（rules/review-findings.md）。
 
 ## Test 環境驗收
 

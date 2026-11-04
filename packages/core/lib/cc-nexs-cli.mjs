@@ -11,7 +11,8 @@ import { approveFeatureGate } from './approval-command.mjs';
 import { preflightBaseRelease, runBaseRelease } from './base-release.mjs';
 import { finalizeDocs } from './docs-finalize.mjs';
 import { reconcileTask } from './task-reconcile.mjs';
-import { taskStats } from './task-stats.mjs';
+import { taskStats, workspaceStats } from './task-stats.mjs';
+import { candidateVerifyGuides } from './verify-guide.mjs';
 import { assertHotfixCandidate, startHotfix } from './hotfix-control.mjs';
 import { initializeHotfix } from './hotfix-init.mjs';
 import { reviseHotfix } from './hotfix-revision.mjs';
@@ -61,7 +62,11 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   }
   if (command === 'advance') return advanceFeatureState({ cwd, ...parseAdvanceOptions(args) });
   if (command === 'record-derived-binding') return recordDerivedBinding({ cwd, ...parseFeatureOptions(args) });
-  if (command === 'stats') return taskStats({ cwd, ...parseFeatureOptions(args) });
+  if (command === 'verify-guides') return candidateVerifyGuides({ cwd, ...parseFeatureOptions(args) });
+  if (command === 'stats') {
+    if (args.includes('--all')) return workspaceStats({ cwd, ...parseWorkspaceStatsOptions(args) });
+    return taskStats({ cwd, ...parseFeatureOptions(args) });
+  }
   if (command === 'init-hotfix') return initializeHotfix({ cwd, ...parseHotfixLifecycleOptions(args, true) });
   if (command === 'revise-hotfix') return reviseHotfix({ cwd, ...parseHotfixLifecycleOptions(args, false) });
   if (command === 'release-test') {
@@ -174,7 +179,7 @@ function parseStartHotfixOptions(args) {
 
 function parseTestVerificationOptions(args) {
   const positional = [];
-  const options = { featureId: null, progressPath: null, status: null, attemptId: null, evidence: [] };
+  const options = { featureId: null, progressPath: null, status: null, attemptId: null, evidence: [], shards: [] };
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index];
     if (token === '--passed') options.status = options.status ? 'invalid' : 'passed';
@@ -182,6 +187,8 @@ function parseTestVerificationOptions(args) {
     else if (token === '--manual-required') options.status = options.status ? 'invalid' : 'manual_required';
     else if (token === '--attempt') options.attemptId = requireValue(args, ++index, token);
     else if (token.startsWith('--attempt=')) options.attemptId = token.slice('--attempt='.length);
+    else if (token === '--shard-json') options.shards.push(parseEvidenceJson(requireValue(args, ++index, token)));
+    else if (token.startsWith('--shard-json=')) options.shards.push(parseEvidenceJson(token.slice('--shard-json='.length)));
     else if (token === '--evidence') options.evidence.push(requireValue(args, ++index, token));
     else if (token.startsWith('--evidence=')) options.evidence.push(token.slice('--evidence='.length));
     else if (token === '--evidence-json') options.evidence.push(parseEvidenceJson(requireValue(args, ++index, token)));
@@ -192,8 +199,14 @@ function parseTestVerificationOptions(args) {
     else positional.push(token);
   }
   options.featureId = positional[0] || null;
+  if (options.shards.length > 0) {
+    if (positional.length > 1) throw new Error(`unexpected arguments: ${positional.slice(1).join(' ')}`);
+    if (options.status || options.evidence.length > 0) throw new Error('--shard-json derives status and evidence; do not pass --passed, --blocked, --manual-required, or --evidence');
+    return { ...options, status: null };
+  }
+  delete options.shards;
   if (!['passed', 'blocked', 'manual_required'].includes(options.status)) {
-    throw new Error('record-test-verification requires exactly one of --passed, --blocked, or --manual-required');
+    throw new Error('record-test-verification requires exactly one of --passed, --blocked, or --manual-required, or two or more --shard-json results');
   }
   if (positional.length > 1) throw new Error(`unexpected arguments: ${positional.slice(1).join(' ')}`);
   return options;
@@ -251,6 +264,18 @@ function parseFeatureOptions(args) {
   }
   options.featureId = positional[0] || null;
   if (positional.length > 1) throw new Error(`unexpected arguments: ${positional.slice(1).join(' ')}`);
+  return options;
+}
+
+function parseWorkspaceStatsOptions(args) {
+  const options = { since: null };
+  for (let index = 0; index < args.length; index += 1) {
+    const token = args[index];
+    if (token === '--all') continue;
+    if (token === '--since') options.since = requireValue(args, ++index, token);
+    else if (token.startsWith('--since=')) options.since = token.slice('--since='.length);
+    else throw new Error(`unexpected stats --all argument: ${token}`);
+  }
   return options;
 }
 
@@ -476,8 +501,28 @@ function printResult(result) {
     console.log(`cc-nexs stats: ${result.feature.id} ${result.feature.slug} (${result.state})`);
     console.log(`Time: elapsed ${hours(s.elapsed_minutes)}, active ${hours(s.active_minutes)} (gaps over 2h excluded)`);
     console.log(`Test: ${s.test_attempts} attempt(s), ${s.test_deployments} deployed, ${s.test_conflict_attempts} with merge conflicts (${hours(s.conflict_minutes)}), ${s.test_target_advances} target advance(s), deploy wait ${hours(s.deploy_wait_minutes)}`);
-    console.log(`Human approvals: ${Object.entries(s.human_approvals).map(([gate, n]) => `${gate} ${n}`).join(', ') || 'none'}; plan reviews ${s.plan_reviews}, amendments ${s.plan_amendments}`);
+    console.log(`Human approvals: ${Object.entries(s.human_approvals).map(([gate, n]) => `${gate} ${n}`).join(', ') || 'none'}; auto ${s.auto_approvals}; plan reviews ${s.plan_reviews} (skipped ${s.plan_review_skips}), amendments ${s.plan_amendments}`);
+    console.log(`Review: ${s.reviews.consolidated} consolidated, ${s.reviews.closure} closure, ${s.reviews.gateway_b_delta} Gateway B delta, ${s.reviews.blocked} blocked; findings ${Object.entries(s.findings).map(([key, n]) => `${key} ${n}`).join(', ')}`);
+    console.log(`Test verification: ${s.test_verifications.passed} passed, ${s.test_verifications.blocked} blocked, ${s.test_verifications.manual_required} manual`);
     console.log(`Candidates: ${s.candidates}; local verification ${s.local_verifications.passed} passed, ${s.local_verifications.failed} failed; base attempts ${s.base_attempts}`);
+    return;
+  }
+  if (result.kind === 'verify-guides') {
+    console.log(`cc-nexs verify guides: ${result.feature.id} ${result.feature.slug}`);
+    for (const item of result.repositories) {
+      console.log(item.guide
+        ? `${item.id}@${item.commit.slice(0, 12)}: ${item.worktree}/${item.guide}; features ${item.features.join(', ') || 'none'}`
+        : `${item.id}@${item.commit.slice(0, 12)}: no verification guide (run /cc-nexs:verify-skill ${item.id})`);
+    }
+    return;
+  }
+  if (result.kind === 'workspace-stats') {
+    for (const task of result.tasks) {
+      const s = task.stats;
+      console.log(`${task.mode} ${task.feature.id} ${task.feature.slug} (${task.state}): active ${(s.active_minutes / 60).toFixed(1)}h, plan reviews ${s.plan_reviews}/${s.plan_review_skips} skipped, reviews ${s.reviews.consolidated + s.reviews.closure + s.reviews.gateway_b_delta} (${s.reviews.blocked} blocked), test blocked ${s.test_verifications.blocked}`);
+    }
+    const m = result.summary;
+    console.log(`Total: ${m.tasks} task(s), ${m.completed} complete, median active ${(m.median_active_minutes / 60).toFixed(1)}h; plan reviews ${m.plan_reviews} (skipped ${m.plan_review_skips}), auto approvals ${m.auto_approvals}; reviews ${m.reviews} (${m.blocked_reviews} blocked); test verifications blocked ${m.test_verifications_blocked}; findings ${Object.entries(m.findings).map(([key, n]) => `${key} ${n}`).join(', ') || 'none'}; ${result.skipped} non-v2 progress file(s) skipped`);
     return;
   }
   if (result.kind === 'task-reconcile') {
@@ -657,6 +702,8 @@ function printUsage() {
   console.error('  cc-nexs advance <feature-id> --from <state> --to <state> [--reason <text>] [--progress <path>]');
   console.error('  cc-nexs record-derived-binding <feature-id> [--progress <path>]');
   console.error('  cc-nexs stats <feature-id> [--progress <path>]');
+  console.error('  cc-nexs stats --all [--since <date>]');
+  console.error('  cc-nexs verify-guides <feature-id> [--progress <path>]');
   console.error('  cc-nexs resolve-test-conflict <feature-id> [--progress <path>]');
   console.error('  cc-nexs reclaim-worktrees [--sizes] [--confirm <token>]');
   console.error('  cc-nexs reconcile <feature-id> [--confirm <token>] [--progress <path>]');
@@ -675,6 +722,7 @@ function printUsage() {
   console.error('  cc-nexs start-hotfix <feature-id> [--level <P0|P1|P2|P3>] [--related <feature-id>] [--progress <path>]');
   console.error('  cc-nexs assert-hotfix-candidate <feature-id> [--progress <path>]');
   console.error('  cc-nexs record-test-verification <feature-id> <--passed|--blocked|--manual-required> --evidence <text> [--attempt <id>] [--progress <path>]');
+  console.error('  cc-nexs record-test-verification <feature-id> --shard-json <json> --shard-json <json>... [--attempt <id>] [--progress <path>]');
   console.error('  cc-nexs request-release-changes <feature-id> --type <evidence|implementation|scope> --feedback <text> [--ac <id>] [--path <path>] [--progress <path>]');
   console.error('  cc-nexs release-base <feature-id> [--progress <path>]');
   console.error('  cc-nexs base-preflight <feature-id> [--progress <path>]');

@@ -95,6 +95,7 @@ const PI_P2_COMMANDS = new Set([
   'verify-local',
   'plan',
   'execute',
+  'verify-skill',
 ]);
 const PI_ROLE_SOURCES = {
   'lean-planner': 'lean-planner.md',

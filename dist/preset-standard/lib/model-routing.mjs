@@ -7,6 +7,10 @@ const RISK_ORDER = new Map([
   ['critical', 3],
 ]);
 
+export function hotfixRiskTier(severity) {
+  return HOTFIX_RISK[String(severity || '').toUpperCase()] || null;
+}
+
 const HOTFIX_RISK = {
   P0: 'critical',
   P1: 'high',

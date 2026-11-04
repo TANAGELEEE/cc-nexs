@@ -4,11 +4,12 @@ import { dirname, join } from 'node:path';
 
 import { resolveCandidateContext } from './candidate-context.mjs';
 import { assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
-import { approvedPlanDeliveryLane, assertPlanApprovalCurrent, extractApprovalScope, planApprovalBinding } from './plan-contract.mjs';
+import { approvedPlanDeliveryLane, approvedPlanRiskTier, assertPlanApprovalCurrent, extractApprovalScope, planApprovalBinding } from './plan-contract.mjs';
 import { assertRecordedLocalVerification, extractLocalVerificationChecks } from './local-evidence.mjs';
 import { assertTestAttemptNotInvalidated, candidateFingerprint, readProgressV2, recordConsolidatedReview, recordPlanReview } from './progress-v2.mjs';
 import { resolveFeatureProgress } from './approval-command.mjs';
-import { readReviewFindings } from './finding-contract.mjs';
+import { hasReviewBlock, readReviewFindings } from './finding-contract.mjs';
+import { hotfixRiskTier } from './model-routing.mjs';
 
 export function recordLeanReview({
   cwd = process.cwd(),
@@ -65,11 +66,18 @@ export function recordLeanReview({
   const localChecks = extractLocalVerificationChecks(releaseScope(context.progress, context.progressFile));
   assertRecordedLocalVerification(context.progress, { source: context.source, fingerprint: candidateFingerprint(context.source), expectedChecks: localChecks });
   let findings = null;
+  const featureDir = dirname(context.progressFile);
+  const document = context.progress.mode === 'hotfix' ? resolveHotfixDocument(context.progress, featureDir) : join(featureDir, 'plan.md');
+  const documentText = readFileSync(document, 'utf8');
+  if (!documentFindings && hasReviewBlock(documentText)) {
+    throw new Error('[cc-nexs] the review document has a `cc-nexs-review` block; record it with --document-findings instead of --passed/--blocked');
+  }
   if (documentFindings) {
-    const featureDir = dirname(context.progressFile);
-    const document = context.progress.mode === 'hotfix' ? resolveHotfixDocument(context.progress, featureDir) : join(featureDir, 'plan.md');
     const round = gatewayBDelta ? 'gateway-b-delta' : closure ? 'closure' : 'consolidated';
-    findings = readReviewFindings(readFileSync(document, 'utf8'), { round, source: context.source, notReproduced });
+    const riskTier = context.progress.mode === 'hotfix'
+      ? hotfixRiskTier(context.progress.hotfix?.severity) || 'high'
+      : approvedPlanRiskTier(context.progress, featureDir) || 'high';
+    findings = readReviewFindings(documentText, { round, source: context.source, riskTier, notReproduced });
     blockingFindings = findings.blockingFindings;
     status = blockingFindings.length > 0 ? 'blocked' : 'passed';
   }

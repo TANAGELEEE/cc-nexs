@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-lean-review
-description: "/cc-nexs:lean-review Pi P2 adapter skill. Invoke only through /cc-nexs:lean-review or /skill:cc-nexs-lean-review; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with each role in an isolated Pi process. Lean: one consolidated Review and at most one delta closure check."
+description: "/cc-nexs:lean-review Pi P2 adapter skill. Invoke only through /cc-nexs:lean-review or /skill:cc-nexs-lean-review; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with each role in an isolated Pi process. Lean: one consolidated Review by parallel Finders and a Judge, and at most one delta closure check."
 disable-model-invocation: true
 ---
 

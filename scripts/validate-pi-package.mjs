@@ -31,6 +31,7 @@ const expectedCommands = [
   'verify-local',
   'plan',
   'execute',
+  'verify-skill',
 ];
 const expectedRoles = [
   'lean-planner',

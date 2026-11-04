@@ -9,6 +9,7 @@
 - 可复用实现：
 - 影响仓库/模块：
 - 非目标：
+- 受影响功能（.cc-nexs/verify/features/ 条目，各配一条 TV 回归 smoke；无功能地图写“无”）：
 
 ## 技术方案
 
@@ -84,6 +85,8 @@
 
 ## 计划审核
 
+- 审核方式：skipped（low/medium，由人在 Gateway A 审）/ 独立事实核查（high/critical）
+- 计划来源：Planner 起草 / 用户 plan mode（--from）
 - 审核轮次：
 - P0/P1 阻塞项：
 - 非阻塞建议：
@@ -102,15 +105,21 @@
 ## 集中 Review
 
 - Reviewed fingerprint：
-- P0/P1 阻塞项：
-- P2/P3 非阻塞项：
+- Finder 视角：
+- 阻塞项（实际跑出并经 Judge 复跑确认的 P0/P1）：
+- 未证实项（交给 test 验收的 probe）：
+- P2/P3、已驳回与格式不合格项：
 - 结论：待执行
+
+<!-- Judge 在本段结尾写入唯一的 `cc-nexs-review` 区块，格式见 rules/review-findings.md -->
 
 ## Review 闭环
 
-- 修复的问题编号：
+- 复跑的问题编号：
 - Delta fingerprint：
 - 结论：待执行
+
+<!-- 闭环同样以 `cc-nexs-review` 区块结尾，round 为 closure -->
 
 ## Test 环境验收
 
