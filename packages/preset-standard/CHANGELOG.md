@@ -4,6 +4,12 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-11-04
+
+### Fixed
+
+- `/cc-nexs:verify-skill` requires helper scripts to read the account only from `CC_NEXS_TEST_USER`/`CC_NEXS_TEST_PASSWORD` and to run through `cc-nexs test-account --`, forbids reading credential files themselves and putting a credential or derived hash on a command line, describes accounts by properties instead of identity, and checks all of this before handing over; `--refresh` applies it to existing scripts.
+
 ## [0.15.0] - 2026-11-04
 
 ### Added
