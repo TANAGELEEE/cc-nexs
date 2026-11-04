@@ -269,7 +269,7 @@ Claude Code, Codex, and Pi share the same command semantics but use each runtime
 /cc-nexs:release-test [id]      # deterministically merge the complete candidate into test and call the release driver
 /cc-nexs:status [id]            # read-only status view
 /cc-nexs:build [--phase=...]      # select and run build/test commands from git diff
-/cc-nexs:verify-skill <repo> [--refresh] # write or audit the repo's .cc-nexs/verify/ guide and feature map
+/cc-nexs:verify-skill <repo> [--docs|--workspace] [--refresh] # write or audit the guide and feature map (repo, docs repo, or workspace .cc-nexs/verify/)
 cc-nexs stats --all [--since <date>]   # Review rounds, findings, plan reviews, and test verdicts across the workspace
 
 /cc-nexs:hotfix "symptom description" --repos=api  # hotfix/<key> + BUG document without consuming a requirement number

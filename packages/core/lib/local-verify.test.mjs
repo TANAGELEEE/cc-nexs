@@ -18,6 +18,7 @@ import {
   writeProgressV2,
 } from './progress-v2.mjs';
 import { recordLeanReview } from './review-control.mjs';
+import { candidateVerifyGuides } from './verify-guide.mjs';
 import { runCcNexsCommand } from './cc-nexs-cli.mjs';
 
 function git(cwd, args) {
@@ -95,6 +96,29 @@ test('Lean local verification invokes the configured driver and binds evidence t
     };
     const progressFile = join(docs, 'progress.json');
     writeProgressV2(progressFile, progress);
+
+    assert.deepEqual(candidateVerifyGuides({ cwd: root, featureId: '30', progressPath: progressFile }).repositories.map(({ id, source, path }) => ({ id, source, path })), [{ id: 'api', source: null, path: null }]);
+    mkdirSync(join(root, '.cc-nexs', 'verify', 'api', 'features'), { recursive: true });
+    writeFileSync(join(root, '.cc-nexs', 'verify', 'api', 'README.md'), '# Verify api\n');
+    writeFileSync(join(root, '.cc-nexs', 'verify', 'api', 'features', 'health.md'), '# Health\n');
+    const workspaceGuide = candidateVerifyGuides({ cwd: root, featureId: '30', progressPath: progressFile }).repositories[0];
+    assert.equal(workspaceGuide.source, 'workspace');
+    assert.equal(workspaceGuide.path, join(root, '.cc-nexs', 'verify', 'api', 'README.md'));
+    assert.deepEqual(workspaceGuide.features, ['health']);
+
+    const docsRoot = join(root, 'docs');
+    git(docsRoot, ['init', '-b', 'main']);
+    git(docsRoot, ['config', 'user.name', 'Test User']);
+    git(docsRoot, ['config', 'user.email', 'test@example.com']);
+    mkdirSync(join(docsRoot, '.cc-nexs', 'verify', 'api', 'features'), { recursive: true });
+    writeFileSync(join(docsRoot, '.cc-nexs', 'verify', 'api', 'README.md'), '# Verify api from docs\n');
+    writeFileSync(join(docsRoot, '.cc-nexs', 'verify', 'api', 'features', 'orders.md'), '# Orders\n');
+    git(docsRoot, ['add', '.cc-nexs']);
+    git(docsRoot, ['commit', '-m', 'verification guide']);
+    const docsGuide = candidateVerifyGuides({ cwd: root, featureId: '30', progressPath: progressFile }).repositories[0];
+    assert.equal(docsGuide.source, 'docs');
+    assert.deepEqual(docsGuide.features, ['orders']);
+    assert.match(docsGuide.read, /git -C .*docs show [0-9a-f]{40}:\.cc-nexs\/verify\/api\/README\.md/);
 
     const result = runLocalVerification({ cwd: root, featureId: '30', progressPath: progressFile });
     assert.equal(result.status, 'passed');

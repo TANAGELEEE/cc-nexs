@@ -4,6 +4,16 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-11-04
+
+### Added
+
+- Verification guides can live outside the code repository. `/cc-nexs:verify-skill <repo> --docs` writes the guide and feature map to the workspace docs repository under `.cc-nexs/verify/<repo>/` (shared and versioned once committed to its base branch), and `--workspace` writes them to `<workspace>/.cc-nexs/verify/<repo>/` (local only). `verify-guides` uses the first guide it finds: the candidate commit, then the docs repository's committed base (`origin/<base>`, else `<base>`), then the workspace; it prints the source and an exact read command.
+
+### Changed
+
+- `/cc-nexs:verify-skill` never writes credential values (it names the variable or secret store instead and searches its output before handing over), keeps screenshots and other evidence outside every repository, and confirms that `git status` shows nothing from the run besides the guide.
+
 ## [0.14.0] - 2026-11-04
 
 ### Added
