@@ -31,7 +31,8 @@ The Verifier drives the app with its runtime's own agent browser (`cc-nexs brows
 
 Two rules hold for every file this command writes:
 
-- **No secrets.** Never write a password, token, cookie, API key, or private credential value. Name the environment variable, secret store entry, or login step that supplies it. Before handing over, search the written files for credential-like values and remove any you find.
+- **No secrets.** Never write a password, token, cookie, API key, or private credential value. Name the environment variable, secret store entry, or login step that supplies it. Before handing over, search the written files for credential-like values and account identities, check that no script reads a credential source or puts a credential on a command line, and fix what you find.
+- **Accounts only through `cc-nexs test-account`.** A script that signs in reads the account only from `CC_NEXS_TEST_USER` and `CC_NEXS_TEST_PASSWORD`, and the guide runs it as `cc-nexs test-account -- <script>`; no script reads a credential file, keychain, or other variable itself. Never put a credential, or a value derived from it such as a password hash or token, on a command line (it shows in the process list): pass request bodies through stdin (for example `curl --data @-`) or a file under the evidence directory that cleanup removes. Describe the account a journey needs by its properties (role, plan, credits, data), not by its identity (no email, user id, or display name).
 - **Evidence stays outside the repository.** Screenshots, response bodies, logs, and other proof go under the system temporary directory (or another path outside every repository); the guide names that location pattern. Proof can contain real or test data and is never committed.
 
 ## 1. Learn the repository, not the user
@@ -57,7 +58,7 @@ If the checkout does not start as-is, fix the start-up only when the fix is loca
 - **Drive**: the journeys as numbered steps with real routes, stable handles (ARIA labels, roles, data attributes, ids), and the visible state after each important step. Prefer handles over coordinates. Name the API calls a step triggers when they prove the result.
 - **Evidence**: what to capture for a proof, where it goes (outside the repository), and the standard it must meet: the real user path, not internal setters or test-only endpoints; a screenshot of each journey's end state, checked for broken layout, error, empty, or loading states, and console errors; the backing API response; side effects (rows, files, messages) alongside what is visible; mocks only where a production boundary already isolates the external system.
 - **Cleanup**: how to stop what the run started. Kill only what you started, never by process name. Cleanup keeps the evidence.
-- **Helpers**: the Doctor script and any API probe, executable, with the invocation shown. No journey scripts.
+- **Helpers**: the Doctor script and any API probe, executable, with the invocation shown (through `cc-nexs test-account --` when it signs in). No journey scripts.
 
 ## 3. Seed the feature map
 
@@ -69,7 +70,7 @@ Run the guide end to end once with your own agent browser: launch (or target tes
 
 ## `--refresh`
 
-Audit an existing guide (at the location the same option selects) against the current code: read each feature file against the code it describes, then make one live pass that drives every mapped feature. Convert any journey script the guide ships into written steps and remove the script. Change only the guide's own files. End with exactly one outcome: `clean` (full coverage, nothing changed), `changed` (the corrections made), or `blocked` (the blocker). A product defect the live pass finds is reported, never fixed here.
+Audit an existing guide (at the location the same option selects) against the current code: read each feature file against the code it describes, then make one live pass that drives every mapped feature. Convert any journey script the guide ships into written steps and remove the script, and bring the remaining scripts under the account rules above. Change only the guide's own files. End with exactly one outcome: `clean` (full coverage, nothing changed), `changed` (the corrections made), or `blocked` (the blocker). A product defect the live pass finds is reported, never fixed here.
 
 ## Handing over
 
