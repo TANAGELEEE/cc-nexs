@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import { acceptanceCheckIds, insertVerificationSection, mergeShardResults, renderShardedVerification } from './verification-shards.mjs';
-import { readVerifyGuide } from './verify-guide.mjs';
+import { readVerifyGuide, readWorkspaceVerifyGuide, workspaceVerifyDir } from './verify-guide.mjs';
 
 const shard = (name, result, checks) => ({ shard: name, result, checks, evidence: checks.map((check) => ({ check, result: result === 'blocked' ? 'failed' : 'passed', proof: `${check} proof` })) });
 
@@ -73,5 +73,22 @@ test('verification guides and feature maps are read from the exact candidate com
     assert.deepEqual(readVerifyGuide(repo, withGuide), { guide: '.cc-nexs/verify/README.md', features: ['login', 'report-export'] });
   } finally {
     rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('a workspace guide lives outside the repository under .cc-nexs/verify/<repository-id>', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-workspace-guide-'));
+  try {
+    assert.deepEqual(readWorkspaceVerifyGuide(root, 'web'), { path: null, features: [] });
+    const dir = workspaceVerifyDir(root, 'web');
+    mkdirSync(join(dir, 'features'), { recursive: true });
+    writeFileSync(join(dir, 'README.md'), '# Verify web\n');
+    writeFileSync(join(dir, 'features', 'README.md'), '# Features\n');
+    writeFileSync(join(dir, 'features', 'checkout.md'), '# Checkout\n');
+    writeFileSync(join(dir, 'features', 'notes.txt'), 'ignored\n');
+    assert.deepEqual(readWorkspaceVerifyGuide(root, 'web'), { path: join(root, '.cc-nexs', 'verify', 'web', 'README.md'), features: ['checkout'] });
+    assert.deepEqual(readWorkspaceVerifyGuide(root, 'backend-java'), { path: null, features: [] });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });

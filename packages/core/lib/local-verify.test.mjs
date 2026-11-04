@@ -18,6 +18,7 @@ import {
   writeProgressV2,
 } from './progress-v2.mjs';
 import { recordLeanReview } from './review-control.mjs';
+import { candidateVerifyGuides } from './verify-guide.mjs';
 import { runCcNexsCommand } from './cc-nexs-cli.mjs';
 
 function git(cwd, args) {
@@ -95,6 +96,15 @@ test('Lean local verification invokes the configured driver and binds evidence t
     };
     const progressFile = join(docs, 'progress.json');
     writeProgressV2(progressFile, progress);
+
+    assert.deepEqual(candidateVerifyGuides({ cwd: root, featureId: '30', progressPath: progressFile }).repositories.map(({ id, source, path }) => ({ id, source, path })), [{ id: 'api', source: null, path: null }]);
+    mkdirSync(join(root, '.cc-nexs', 'verify', 'api', 'features'), { recursive: true });
+    writeFileSync(join(root, '.cc-nexs', 'verify', 'api', 'README.md'), '# Verify api\n');
+    writeFileSync(join(root, '.cc-nexs', 'verify', 'api', 'features', 'health.md'), '# Health\n');
+    const workspaceGuide = candidateVerifyGuides({ cwd: root, featureId: '30', progressPath: progressFile }).repositories[0];
+    assert.equal(workspaceGuide.source, 'workspace');
+    assert.equal(workspaceGuide.path, join(root, '.cc-nexs', 'verify', 'api', 'README.md'));
+    assert.deepEqual(workspaceGuide.features, ['health']);
 
     const result = runLocalVerification({ cwd: root, featureId: '30', progressPath: progressFile });
     assert.equal(result.status, 'passed');

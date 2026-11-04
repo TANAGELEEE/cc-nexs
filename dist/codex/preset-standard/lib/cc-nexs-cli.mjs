@@ -510,9 +510,9 @@ function printResult(result) {
   if (result.kind === 'verify-guides') {
     console.log(`cc-nexs verify guides: ${result.feature.id} ${result.feature.slug}`);
     for (const item of result.repositories) {
-      console.log(item.guide
-        ? `${item.id}@${item.commit.slice(0, 12)}: ${item.worktree}/${item.guide}; features ${item.features.join(', ') || 'none'}`
-        : `${item.id}@${item.commit.slice(0, 12)}: no verification guide (run /cc-nexs:verify-skill ${item.id})`);
+      console.log(item.path
+        ? `${item.id}@${item.commit.slice(0, 12)}: ${item.path} (${item.source}); features ${item.features.join(', ') || 'none'}`
+        : `${item.id}@${item.commit.slice(0, 12)}: no verification guide (run /cc-nexs:verify-skill ${item.id} [--workspace])`);
     }
     return;
   }

@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-verify-skill
-description: "/cc-nexs:verify-skill Pi P2 adapter skill. Invoke only through /cc-nexs:verify-skill or /skill:cc-nexs-verify-skill; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with each role in an isolated Pi process. Create or refresh a code repository's verification guide and feature map under .cc-nexs/verify/, so every Verifier drives the real app the same way. Bypass command; does not enter the state machine."
+description: "/cc-nexs:verify-skill Pi P2 adapter skill. Invoke only through /cc-nexs:verify-skill or /skill:cc-nexs-verify-skill; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with each role in an isolated Pi process. Create or refresh a code repository's verification guide and feature map, in the repository under .cc-nexs/verify/ or with --workspace in the workspace, so every Verifier drives the real app the same way. Bypass command; does not enter the state machine."
 disable-model-invocation: true
 ---
 

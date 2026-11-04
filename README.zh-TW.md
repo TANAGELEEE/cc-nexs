@@ -291,7 +291,7 @@ Claude Code、Codex 和 Pi 共享同一命令語義，但使用各執行時的�
 /cc-nexs:release-test [編號]      # 完整 candidate 確定性合入 test + 調 release driver
 /cc-nexs:status [編號]            # 只讀看狀態
 /cc-nexs:build [--phase=...]      # 按 git diff 自動選 build/test 命令並跑
-/cc-nexs:verify-skill <倉> [--refresh] # 產生或稽核該倉 .cc-nexs/verify/ 驗證指南與功能地圖
+/cc-nexs:verify-skill <倉> [--workspace] [--refresh] # 產生或稽核驗證指南與功能地圖（倉內 .cc-nexs/verify/，或 workspace 的 .cc-nexs/verify/<倉>/，不進倉）
 cc-nexs stats --all [--since <日期>]   # 彙總整個 workspace 的 Review 輪數、finding、計劃審核與 test 結果
 
 /cc-nexs:hotfix "現象描述" --repos=api  # hotfix/<key> + BUG 文件，不佔需求號
