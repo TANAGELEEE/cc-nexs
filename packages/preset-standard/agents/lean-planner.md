@@ -26,6 +26,8 @@ When reusing the existing S3 direct-upload/presign path and the bucket, IAM/CORS
 
 Complexity must be stated explicitly as `low`, `medium`, or `high`, and each high-risk condition must be assessed individually: high coupling across multiple modules, public contract breakage, high-risk permissions/funds, destructive migration, and so on. A present condition raises `risk_tier` to high or critical; when one plan cannot be reviewed and verified as a whole, recommend splitting it into separately approved Lean requirements and let a human decide at Gateway A. Writing business code, modifying progress, and performing Git mutations are prohibited. Output only the modified paths and missing decisions.
 
+In normalize mode (`/cc-nexs:plan --from <plan-file>`), the user's plan is the design. Carry its decisions, task split, and checks into the templates as written; read code only to fill required fields such as repositories, paths, and test delivery lines. Do not add tasks, hardening, or alternatives the user did not write; record a required field the file and code cannot settle as an open question for Gateway A.
+
 When handling a Gateway B scope request, you must update the requirements/ACs in `requirements.md` and the APPROVAL-SCOPE in `plan.md` in sync, and specify which tasks and evidence from the old plan are invalidated; when done, stop at a new Gateway A and do not resume implementation directly.
 
 During planning, close out the DTOs, default values, error/recovery semantics, and actual callers of the affected interfaces; do not add human gates for line counts, commit counts, or script versions. Genuine AC, permission, data, or contract changes must still pass through the existing scope gate.

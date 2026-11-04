@@ -47,13 +47,13 @@ Browser/URL/login limitations are post-deployment verification issues. Record `m
 | `PARSE_HOTFIX_DELTA_REVIEW` | `HOTFIX_CANDIDATE_READY` | `HOTFIX_DELTA_REVIEW_BLOCKED -> HUMAN_INTERVENTION` |
 | `PARSE_HOTFIX_TEST` | `HOTFIX_TEST_VERIFIED` | `HOTFIX_TEST_FAILED` |
 
-Read the final Review/Test conclusion from the assigned BUG document. `record-review` binds exact candidates; `record-test-verification` binds attempt and environment revision. Retain the existing single delta Review limit and test-failure circuit breaker; do not add quotas or reset counters by hand.
+Read the final Review/Test conclusion from the assigned BUG document. `record-review --document-findings` classifies the `cc-nexs-review` block under `rules/review-findings.md` and binds exact candidates; `record-test-verification` binds attempt and environment revision. Retain the existing single delta Review limit and test-failure circuit breaker; do not add quotas or reset counters by hand.
 
 For an authorized revision of the same fault's paths, severity, or verification matrix, use `revise-hotfix <id> --reason <text> --authorization-evidence <text>`. This rebinds scope in the original key/branch, invalidates current evidence and approval, and retains history. Existing user authorization is recorded without adding a new confirmation round. Contract/schema/permission expansion uses `--promote-lean`: create `<BUGstem>.lean/` beside the original BUG, migrate active state there, retain a local `progress.hotfix-history.json`, and return to Lean planning and Gateway A before implementation.
 
 ## Human gateway and completion
 
-Before stopping at `HOTFIX_RELEASE_PENDING_HUMAN`, run `node <plugin-root>/lib/cc-nexs-cli.mjs base-preflight <id>`; when it reports `base_changed` the task is already `HOTFIX_BASE_CHANGED`, so continue `sync_base` instead of asking. At `HOTFIX_RELEASE_PENDING_HUMAN`, show severity/scope hash, exact candidate, passed local evidence and independent Review, test attempt/environment revision, rollback proof, and base targets. Invoke `/cc-nexs:approve-release <id>` only with user authorization.
+Before stopping at `HOTFIX_RELEASE_PENDING_HUMAN`, run `node <plugin-root>/lib/cc-nexs-cli.mjs base-preflight <id>`; when it reports `base_changed` the task is already `HOTFIX_BASE_CHANGED`, so continue `sync_base` instead of asking. At `HOTFIX_RELEASE_PENDING_HUMAN`, show severity/scope hash, exact candidate, passed local evidence and independent Review with unproven finding summaries, test attempt/environment revision, rollback proof, and base targets. Invoke `/cc-nexs:approve-release <id>` only with user authorization.
 
 An explicitly authorized environment exception uses that same Gateway B: `approve-release --test-exception --authorization-evidence <text> --reason <text> --environment-evidence <text> --rollback-evidence <text>`. It requires the same candidate's passed local evidence and Review plus a real test deployment with `manual_required`. Preserve the unverified test fact. This exception authorizes configured base integration only, not production deployment; absent deployment, product test failure, and missing evidence remain blocking.
 

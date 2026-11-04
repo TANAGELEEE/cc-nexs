@@ -8,6 +8,7 @@ import { approvedPlanDeliveryLane, assertPlanApprovalCurrent, extractApprovalSco
 import { assertRecordedLocalVerification, extractLocalVerificationChecks } from './local-evidence.mjs';
 import { assertTestAttemptNotInvalidated, candidateFingerprint, readProgressV2, recordConsolidatedReview, recordPlanReview } from './progress-v2.mjs';
 import { resolveFeatureProgress } from './approval-command.mjs';
+import { readReviewFindings } from './finding-contract.mjs';
 
 export function recordLeanReview({
   cwd = process.cwd(),
@@ -17,7 +18,13 @@ export function recordLeanReview({
   closure = false,
   gatewayBDelta = false,
   blockingFindings = [],
+  documentFindings = false,
+  notReproduced = [],
 } = {}) {
+  if (documentFindings && (status || blockingFindings.length > 0)) {
+    throw new Error('[cc-nexs] --document-findings derives the Review status; do not pass --passed, --blocked, or --finding');
+  }
+  if (!documentFindings && notReproduced.length > 0) throw new Error('[cc-nexs] --not-reproduced requires --document-findings');
   const context = resolveCandidateContext({ cwd, featureId, progressPath });
   releaseScope(context.progress, context.progressFile);
   let leanDeliveryLane = 'standard';
@@ -57,22 +64,35 @@ export function recordLeanReview({
   }
   const localChecks = extractLocalVerificationChecks(releaseScope(context.progress, context.progressFile));
   assertRecordedLocalVerification(context.progress, { source: context.source, fingerprint: candidateFingerprint(context.source), expectedChecks: localChecks });
+  let findings = null;
+  if (documentFindings) {
+    const featureDir = dirname(context.progressFile);
+    const document = context.progress.mode === 'hotfix' ? resolveHotfixDocument(context.progress, featureDir) : join(featureDir, 'plan.md');
+    const round = gatewayBDelta ? 'gateway-b-delta' : closure ? 'closure' : 'consolidated';
+    findings = readReviewFindings(readFileSync(document, 'utf8'), { round, source: context.source, notReproduced });
+    blockingFindings = findings.blockingFindings;
+    status = blockingFindings.length > 0 ? 'blocked' : 'passed';
+  }
   return recordConsolidatedReview(context.progressFile, {
     source: context.source,
     status,
     blockingFindings,
+    findings,
     closure: context.progress.mode === 'hotfix' ? (closure || gatewayBDelta) : closure,
     gatewayBDelta: context.progress.mode === 'hotfix' ? false : gatewayBDelta,
     expectedRevision: context.progress.revision,
   });
 }
 
-export function recordLeanPlanReview({ cwd = process.cwd(), featureId, progressPath = null, status, blockingFindings = [] } = {}) {
+export function recordLeanPlanReview({ cwd = process.cwd(), featureId, progressPath = null, status, blockingFindings = [], reason = null } = {}) {
   const progressFile = resolveFeatureProgress({ cwd, featureId, progressPath });
   const progress = readProgressV2(progressFile);
   const binding = planApprovalBinding(dirname(progressFile), { requireRiskTier: true, requireDeliveryLane: true });
+  if (status === 'skipped' && !['low', 'medium'].includes(binding.risk_tier)) {
+    throw new Error(`[cc-nexs] a ${binding.risk_tier} plan requires an independent plan review; only low/medium plans may skip it`);
+  }
   const after = recordPlanReview(progressFile, {
-    planSha256: binding.combined_sha256, status, blockingFindings, expectedRevision: progress.revision,
+    planSha256: binding.combined_sha256, status, blockingFindings, reason, expectedRevision: progress.revision,
   });
   return { kind: 'plan-review', feature: after.feature, status, rounds: after.plan_review.rounds, state: after.state, progressFile };
 }

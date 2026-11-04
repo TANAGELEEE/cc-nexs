@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-plan
-description: "/cc-nexs:plan Pi P2 adapter skill. Invoke only through /cc-nexs:plan or /skill:cc-nexs-plan; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with each role in an isolated Pi process. Lean default-mode planning entry point. Parallel read-only research, producing a single requirements.md and plan.md, one independent plan review, and stopping at Gateway A."
+description: "/cc-nexs:plan Pi P2 adapter skill. Invoke only through /cc-nexs:plan or /skill:cc-nexs-plan; never auto-trigger from ordinary natural-language requests. Supports preset-standard lean (default) and standalone hotfix modes with each role in an isolated Pi process. Lean default-mode planning entry point. Drafts or normalizes requirements.md and plan.md, runs the independent plan review for high/critical plans, and stops at Gateway A unless --auto-plan authorized it."
 disable-model-invocation: true
 ---
 

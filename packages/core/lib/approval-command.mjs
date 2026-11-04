@@ -6,7 +6,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 import { transitionState } from './progress-io.mjs';
 import { approveProgressGate, assertTestAttemptNotInvalidated, readProgressV2 } from './progress-v2.mjs';
 import { assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
-import { assertPlanApprovalCurrent, assertRequirementTraceability, extractApprovalScope, planApprovalBinding } from './plan-contract.mjs';
+import { assertPlanApprovalCurrent, assertRequirementTraceability, extractApprovalScope, planApprovalBinding, sensitivePlanPaths } from './plan-contract.mjs';
 import { assertRecordedLocalVerification, extractLocalVerificationChecks } from './local-evidence.mjs';
 import { syncHotfixChangeStatuses, syncPlanChangeStatuses } from './release-change-docs.mjs';
 import { loadWorkspaceConfig } from './config-loader.mjs';
@@ -24,8 +24,10 @@ export function approveFeatureGate({
   approver = null,
   progressPath = null,
   testException = null,
+  auto = false,
 } = {}) {
   if (!featureId) throw new Error('feature id is required');
+  if (auto && gate !== 'plan') throw new Error('--auto is only valid for the plan gate');
   if (!GATES.has(gate)) throw new Error(`unsupported gate: ${gate || '(missing)'}`);
 
   const progressFile = resolveFeatureProgress({ cwd, featureId, progressPath });
@@ -37,7 +39,7 @@ export function approveFeatureGate({
     throw new Error(`feature mismatch: requested ${featureId}, found ${before.feature.id}`);
   }
 
-  const actor = approver || resolveGitApprover(dirname(progressFile));
+  const actor = auto ? 'auto-plan' : approver || resolveGitApprover(dirname(progressFile));
   if (gate === 'plan') {
     if (before.mode !== 'lean') throw new Error(`plan gate requires lean mode, found ${before.mode}`);
     const existing = before.gates.plan;
@@ -76,6 +78,7 @@ export function approveFeatureGate({
       throw new Error('[cc-nexs] Gateway A requires an independent plan review of the current plan; run /cc-nexs:plan <id> to review it');
     }
     binding.plan_review = { status: before.plan_review.status, rounds: before.plan_review.rounds, blocking_findings: before.plan_review.blocking_findings };
+    if (auto) binding.auto_plan = assertAutoPlanEligible({ binding, progress: before, progressFile, approver });
     if (!existing?.approved
       || existing?.binding?.combined_sha256 !== binding.combined_sha256
       || existing?.binding?.delivery_contract_version !== binding.delivery_contract_version
@@ -85,7 +88,7 @@ export function approveFeatureGate({
     transitionState(markdownFile, {
       from: 'PLAN_PENDING_HUMAN',
       to: 'PLAN_APPROVED',
-      reason: 'human approved lean plan',
+      reason: auto ? 'auto-approved fast-track plan under init --auto-plan authorization' : 'human approved lean plan',
     });
   } else if (gate === 'release') {
     const pendingState = before.mode === 'hotfix' ? 'HOTFIX_RELEASE_PENDING_HUMAN' : 'RELEASE_PENDING_HUMAN';
@@ -134,6 +137,30 @@ export function approveFeatureGate({
 
   const after = readProgressV2(progressFile);
   return approvalResult({ progressFile, progress: after, gate, approval: after.gates[gate], alreadyApproved: false });
+}
+
+// --auto-plan pre-authorizes Gateway A at init for small plans only. The checks are
+// deterministic so that an ineligible plan stops at the normal human Gateway A.
+function assertAutoPlanEligible({ binding, progress, progressFile, approver }) {
+  const reqDir = dirname(progressFile);
+  const reasons = [];
+  if (approver) reasons.push('--auto cannot be combined with --approver');
+  let config = {};
+  try {
+    config = JSON.parse(readFileSync(join(reqDir, 'config.json'), 'utf8'));
+  } catch (error) {
+    reasons.push(`config.json is unreadable: ${error.message}`);
+  }
+  if (config.auto_plan !== true) reasons.push('config.json auto_plan is not true (set by /cc-nexs:init --auto-plan)');
+  if (binding.delivery_lane !== 'fast-track') reasons.push(`delivery_lane is ${binding.delivery_lane}, not fast-track`);
+  if (!['low', 'medium'].includes(binding.risk_tier)) reasons.push(`risk_tier is ${binding.risk_tier}, not low or medium`);
+  if (!['passed', 'skipped'].includes(progress.plan_review?.status)) reasons.push(`plan review is ${progress.plan_review?.status || 'missing'}`);
+  const sensitive = sensitivePlanPaths(readFileSync(join(reqDir, 'plan.md'), 'utf8'));
+  if (sensitive.length > 0) reasons.push(`task paths need human review: ${sensitive.join(', ')}`);
+  if (reasons.length > 0) {
+    throw new Error(`[cc-nexs] plan is not eligible for --auto-plan; stop at Gateway A for human approval (${reasons.join('; ')})`);
+  }
+  return { authorization: 'init --auto-plan', checked: ['fast-track', 'low/medium risk', 'plan review not blocked', 'no sensitive task paths'] };
 }
 
 function assertLeanTestDeliveryContract({ binding, progress, progressFile }) {

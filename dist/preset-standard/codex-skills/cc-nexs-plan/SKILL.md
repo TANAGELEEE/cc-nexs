@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-plan
-description: "/cc-nexs:plan Codex mirror skill. Use when $cc-nexs-plan is explicitly invoked. Lean default-mode planning entry point. Parallel read-only research, producing a single requirements.md and plan.md, one independent plan review, and stopping at Gateway A."
+description: "/cc-nexs:plan Codex mirror skill. Use when $cc-nexs-plan is explicitly invoked. Lean default-mode planning entry point. Drafts or normalizes requirements.md and plan.md, runs the independent plan review for high/critical plans, and stops at Gateway A unless --auto-plan authorized it."
 ---
 
 # /cc-nexs:plan for Codex

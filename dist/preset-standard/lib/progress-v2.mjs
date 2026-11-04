@@ -889,10 +889,14 @@ export function recordPlanReview(file, {
   planSha256,
   status,
   blockingFindings = [],
+  reason = null,
   actor = 'lean-plan-reviewer',
   expectedRevision = null,
 } = {}) {
-  if (!['passed', 'blocked'].includes(status)) throw new Error(`[cc-nexs] invalid plan review status: ${status}`);
+  if (!['passed', 'blocked', 'skipped'].includes(status)) throw new Error(`[cc-nexs] invalid plan review status: ${status}`);
+  if (status === 'skipped' && (typeof reason !== 'string' || !reason.trim() || blockingFindings.length > 0)) {
+    throw new Error('[cc-nexs] a skipped plan review requires a reason and no findings');
+  }
   if (!/^[a-f0-9]{64}$/.test(planSha256 || '')) throw new Error('[cc-nexs] plan review requires the current plan hash');
   if (!Array.isArray(blockingFindings) || blockingFindings.some((item) => typeof item !== 'string' || !/^P[01]\b/.test(item))) {
     throw new Error('[cc-nexs] blocking plan review findings must be P0/P1 strings');
@@ -907,12 +911,12 @@ export function recordPlanReview(file, {
   if (!['PLANNING', 'PLAN_REVIEWING', 'PLAN_PENDING_HUMAN'].includes(progress.state)) {
     throw new Error(`[cc-nexs] plan review requires PLANNING, PLAN_REVIEWING, or PLAN_PENDING_HUMAN, found ${progress.state}`);
   }
-  const rounds = (progress.plan_review?.rounds || 0) + 1;
+  const rounds = (progress.plan_review?.rounds || 0) + (status === 'skipped' ? 0 : 1);
   const from = progress.state;
   const to = status === 'blocked' && rounds === 1 ? 'PLAN_REVIEW_BLOCKED' : 'PLAN_PENDING_HUMAN';
-  progress.plan_review = { status, plan_sha256: planSha256, rounds, blocking_findings: blockingFindings, reviewed_at: new Date().toISOString() };
+  progress.plan_review = { status, plan_sha256: planSha256, rounds, blocking_findings: blockingFindings, ...(reason && { reason }), reviewed_at: new Date().toISOString() };
   progress.state = to;
-  appendMutationEvent(progress, { type: 'plan.reviewed', actor, data: { status, plan_sha256: planSha256, rounds, blocking_findings: blockingFindings, from, to } });
+  appendMutationEvent(progress, { type: 'plan.reviewed', actor, data: { status, plan_sha256: planSha256, rounds, blocking_findings: blockingFindings, ...(reason && { reason }), from, to } });
   writeProgressV2(file, progress);
   return progress;
 }
@@ -921,6 +925,7 @@ export function recordConsolidatedReview(file, {
   source,
   status,
   blockingFindings = [],
+  findings = null,
   closure = false,
   gatewayBDelta = false,
   actor = 'lean-reviewer',
@@ -955,6 +960,7 @@ export function recordConsolidatedReview(file, {
     blocking_findings: blockingFindings,
     closure_attempts: (progress.review?.closure_attempts || 0) + (closure ? 1 : 0),
     gateway_b_delta_attempts: (progress.review?.gateway_b_delta_attempts || 0) + (gatewayBDelta ? 1 : 0),
+    ...(findings ? { findings: findings.classified, finding_counts: findings.counts } : {}),
     reviewed_at: new Date().toISOString(),
   };
   appendMutationEvent(progress, {
@@ -962,7 +968,7 @@ export function recordConsolidatedReview(file, {
       ? `review.gateway_b_delta_${status}`
       : closure ? `review.closure_${status}` : `review.consolidated_${status}`,
     actor,
-    data: { fingerprint, source, blocking_findings: blockingFindings },
+    data: { fingerprint, source, blocking_findings: blockingFindings, ...(findings ? { finding_counts: findings.counts } : {}) },
   });
   writeProgressV2(file, progress);
   return progress;
