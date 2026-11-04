@@ -84,12 +84,15 @@ export function recordLeanReview({
   });
 }
 
-export function recordLeanPlanReview({ cwd = process.cwd(), featureId, progressPath = null, status, blockingFindings = [] } = {}) {
+export function recordLeanPlanReview({ cwd = process.cwd(), featureId, progressPath = null, status, blockingFindings = [], reason = null } = {}) {
   const progressFile = resolveFeatureProgress({ cwd, featureId, progressPath });
   const progress = readProgressV2(progressFile);
   const binding = planApprovalBinding(dirname(progressFile), { requireRiskTier: true, requireDeliveryLane: true });
+  if (status === 'skipped' && !['low', 'medium'].includes(binding.risk_tier)) {
+    throw new Error(`[cc-nexs] a ${binding.risk_tier} plan requires an independent plan review; only low/medium plans may skip it`);
+  }
   const after = recordPlanReview(progressFile, {
-    planSha256: binding.combined_sha256, status, blockingFindings, expectedRevision: progress.revision,
+    planSha256: binding.combined_sha256, status, blockingFindings, reason, expectedRevision: progress.revision,
   });
   return { kind: 'plan-review', feature: after.feature, status, rounds: after.plan_review.rounds, state: after.state, progressFile };
 }

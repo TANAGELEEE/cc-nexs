@@ -4,7 +4,7 @@ Read this file only when resolved mode is `lean`. Common identity, safety, model
 
 ## Lifecycle and delivery lane
 
-`/cc-nexs:plan` owns `INIT -> PLANNING -> PLAN_REVIEWING -> PLAN_PENDING_HUMAN`, including the one independent plan review and at most one revision; run normally starts after `/cc-nexs:approve-plan` and must validate the current plan approval binding before dispatch.
+`/cc-nexs:plan` owns `INIT -> PLANNING -> PLAN_REVIEWING -> PLAN_PENDING_HUMAN`, including the one independent plan review of a high/critical plan and at most one revision; a low/medium plan records a skipped review bound to its hash and goes to Gateway A. Run normally starts after `/cc-nexs:approve-plan` (or its `--auto` form for a feature initialized with `--auto-plan`) and must validate the current plan approval binding before dispatch.
 
 Run implements the approved plan, records exact candidates, and invokes deterministic local verification. The approved `delivery_lane` selects ordering:
 
@@ -18,7 +18,7 @@ High/critical plans may not use fast-track. In either lane `/cc-nexs:approve-rel
 | role/action | command |
 |---|---|
 | `lean-planner / draft_plan, revise_plan, revise_plan_for_gateway_b` | `/cc-nexs:plan <id>` (normally completed before run; scope feedback revision is the exception) |
-| `lean-plan-reviewer / review_plan` | independent `agents/lean-plan-reviewer.md`, then `record-plan-review` |
+| `lean-plan-reviewer / review_plan` | high/critical: independent `agents/lean-plan-reviewer.md`, then `record-plan-review`; low/medium: `record-plan-review --skipped --reason <text>` |
 | `lean-developer / execute_plan` | `/cc-nexs:execute <id> --phase=implement` |
 | `lean-developer / fix_review` | `/cc-nexs:execute <id> --phase=review-fix` |
 | `lean-developer / fix_test` | `/cc-nexs:execute <id> --phase=test-fix` |

@@ -8,6 +8,7 @@
     "config_version": { "const": 2 },
     "mode": { "enum": ["lean", "hotfix"] },
     "risk_tier": { "enum": ["auto", "low", "medium", "high", "critical"] },
+    "auto_plan": { "type": "boolean", "description": "Set by /cc-nexs:init --auto-plan: an eligible fast-track plan passes Gateway A without stopping." },
     "models": {
       "type": "object",
       "properties": {

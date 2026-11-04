@@ -271,6 +271,65 @@ test('plan review sends only a blocked first round back to the Planner', () => {
   assert.match(record('--passed').stderr, /plan review requires PLANNING, PLAN_REVIEWING, or PLAN_PENDING_HUMAN/);
 });
 
+test('only a low or medium plan may skip the independent plan review', () => {
+  const fixture = createFeature({ id: '20k', mode: 'lean', state: 'PLANNING' });
+  const reset = readProgressV2(fixture.progressFile);
+  reset.plan_review = null;
+  writeProgressV2(fixture.progressFile, reset);
+  const cli = join(dirname(fileURLToPath(import.meta.url)), 'cc-nexs-cli.mjs');
+  const record = (...flags) => spawnSync(process.execPath, [cli, 'record-plan-review', '20k', '--progress', fixture.progressFile, ...flags], { cwd: fixture.root, encoding: 'utf8' });
+
+  assert.match(record('--skipped').stderr, /skipped plan review requires a reason/);
+  assert.match(record('--passed', '--reason', 'x').stderr, /--reason is only valid with --skipped/);
+  const skipped = record('--skipped', '--reason', 'user-authored medium plan; the human reviews it at Gateway A');
+  assert.equal(skipped.status, 0, skipped.stderr);
+  const saved = readProgressV2(fixture.progressFile);
+  assert.equal(saved.state, 'PLAN_PENDING_HUMAN');
+  assert.equal(saved.plan_review.status, 'skipped');
+  assert.equal(saved.plan_review.rounds, 0);
+  assert.equal(approveFeatureGate({ cwd: fixture.root, featureId: '20k', gate: 'plan', approver: 'Plan Owner' }).state, 'PLAN_APPROVED');
+
+  const high = createFeature({ id: '20h', mode: 'lean', state: 'PLANNING' });
+  writeLeanPlan(high.docs, ['| T-001 | AC-001 |', '| LV-001 | AC-001 |', '| TV-001 | AC-001 |', '- risk_tier: high', '- delivery_lane: standard', '- test_delivery.api: deploy']);
+  const refused = spawnSync(process.execPath, [cli, 'record-plan-review', '20h', '--progress', high.progressFile, '--skipped', '--reason', 'small'], { cwd: high.root, encoding: 'utf8' });
+  assert.match(refused.stderr, /a high plan requires an independent plan review/);
+  assert.match(spawnSync(process.execPath, [cli, 'record-review', '20h', '--progress', high.progressFile, '--skipped'], { cwd: high.root, encoding: 'utf8' }).stderr, /does not accept --skipped/);
+});
+
+test('approve-plan --auto passes Gateway A only for an eligible plan authorized at init', () => {
+  const fixture = createFeature({ id: '20u', mode: 'lean', state: 'PLAN_PENDING_HUMAN' });
+  const scope = (paths, risk = 'low', lane = 'fast-track') => ['| Task | AC | Repo | Paths |', '|---|---|---|---|', `| T-001 | AC-001 | api | ${paths} |`, '| LV-001 | AC-001 |', '| TV-001 | AC-001 |', `- risk_tier: ${risk}`, `- delivery_lane: ${lane}`, '- test_delivery.api: deploy'];
+  const auto = () => approveFeatureGate({ cwd: fixture.root, featureId: '20u', gate: 'plan', auto: true });
+  const config = join(fixture.docs, 'config.json');
+
+  writeLeanPlan(fixture.docs, scope('`api/src/report/export.ts`'));
+  markPlanReviewed(fixture);
+  writeFileSync(config, JSON.stringify({ config_version: 2, mode: 'lean', risk_tier: 'auto' }));
+  assert.throws(auto, /auto_plan is not true/);
+
+  writeFileSync(config, JSON.stringify({ config_version: 2, mode: 'lean', risk_tier: 'auto', auto_plan: true }));
+  writeLeanPlan(fixture.docs, scope('`api/src/report/export.ts`, `api/db/migration/V12__add_export.sql`'));
+  markPlanReviewed(fixture);
+  assert.throws(auto, /task paths need human review: api\/db\/migration\/V12__add_export.sql/);
+
+  writeLeanPlan(fixture.docs, scope('`api/src/report/export.ts`', 'medium', 'standard'));
+  markPlanReviewed(fixture);
+  assert.throws(auto, /delivery_lane is standard, not fast-track/);
+
+  writeLeanPlan(fixture.docs, scope('`api/src/report/export.ts`'));
+  markPlanReviewed(fixture, 'blocked');
+  assert.throws(auto, /plan review is blocked/);
+  assert.throws(() => approveFeatureGate({ cwd: fixture.root, featureId: '20u', gate: 'release', auto: true }), /only valid for the plan gate/);
+  assert.equal(readProgressV2(fixture.progressFile).state, 'PLAN_PENDING_HUMAN');
+
+  markPlanReviewed(fixture);
+  const approved = auto();
+  assert.equal(approved.state, 'PLAN_APPROVED');
+  const gate = readProgressV2(fixture.progressFile).gates.plan;
+  assert.equal(gate.approver, 'auto-plan');
+  assert.equal(gate.binding.auto_plan.authorization, 'init --auto-plan');
+});
+
 test('Lean Gateway A rejects incomplete or mistyped test delivery topology before approval', () => {
   const fixture = createFeature({ id: '20a', mode: 'lean', state: 'PLAN_PENDING_HUMAN' });
   const approve = () => approveFeatureGate({

@@ -2,7 +2,7 @@
 description: "Initialize a new requirement directory from a template. Automatically continues numbering from existing numbers under all-docs/doc/, and automatically generates a slug from the requirement description. By default, creates an independent git worktree in .worktrees/<id>-<slug>/, so multiple requirements can run in parallel."
 disable-model-invocation: true
 allowed-tools: "Read, Write, Edit, Bash, Glob, Skill"
-argument-hint: "<requirement description> [--mode=lean|hotfix] [--risk-tier=auto|low|medium|high|critical] [--id=<number>] [--slug=<short-name>] [--repos=a,b] [--brainstorm]"
+argument-hint: "<requirement description> [--mode=lean|hotfix] [--risk-tier=auto|low|medium|high|critical] [--id=<number>] [--slug=<short-name>] [--repos=a,b] [--brainstorm] [--auto-plan]"
 ---
 
 # /cc-nexs:init
@@ -20,6 +20,7 @@ Parameters:
 - `--slug=<short-name>` force the specified slug (overrides automatic generation)
 - `--repos=a,b` code repository worktrees to also create at initialization; the docs repository is always included. When not specified, only docs is created first; after the Planner confirms the affected repositories, the Custodian expands it.
 - `--brainstorm` applies only to Lean, and fills in requirements.md as needed; Hotfix directly fills in the BUG scope and does not enter requirements brainstorming
+- `--auto-plan` applies only to Lean: the user pre-authorizes Gateway A for this requirement. `/cc-nexs:plan` lets the Planner draft the plan and passes Gateway A without stopping only when the plan is fast-track, low/medium, not blocked by plan review, and touches no sensitive task path; any other plan stops at the normal Gateway A. Gateway B is unchanged.
 - Workspace mode always has the Git Custodian create an independent worktree for each repository matched in the workspace; there is no `--no-worktree` fallback that would pollute the current branch.
 
 ## Execution Steps
@@ -49,6 +50,11 @@ esac
 # 解析 --brainstorm flag（opt-in；不传则保留旧行为）
 BRAINSTORM=0
 echo "$@" | grep -qE -- '(^| )--brainstorm( |$)' && BRAINSTORM=1
+
+# 解析 --auto-plan flag（仅 Lean；预授权 Gateway A）
+AUTO_PLAN=0
+echo "$@" | grep -qE -- '(^| )--auto-plan( |$)' && AUTO_PLAN=1
+[ "$AUTO_PLAN" = "1" ] && [ "$MODE" = "hotfix" ] && { echo "❌ --auto-plan 仅适用于 lean"; exit 1; }
 
 RISK_COUNT=$(echo "$@" | grep -oE -- '--risk-tier=[^ ]*' | wc -l | tr -d ' ')
 [ "$RISK_COUNT" -gt 1 ] && { echo "❌ --risk-tier 只能出现一次"; exit 1; }
@@ -188,6 +194,7 @@ CFG="${REQ_DIR}/config.json"
 # 注意：BSD/macOS sed 不识别 \s，用 [[:space:]] 兼容
 sed "${SED_INPLACE[@]}" -E 's/("mode"[[:space:]]*:[[:space:]]*)"[^"]*"/\1"'"$MODE"'"/' "$CFG"
 sed "${SED_INPLACE[@]}" -E 's/("risk_tier"[[:space:]]*:[[:space:]]*)"[^"]*"/\1"'"$RISK_TIER"'"/' "$CFG"
+[ "$AUTO_PLAN" = "1" ] && node -e 'const fs=require("fs");const f=process.argv[1];const c=JSON.parse(fs.readFileSync(f,"utf8"));c.auto_plan=true;fs.writeFileSync(f,JSON.stringify(c,null,2)+"\n")' "$CFG"
 
 # progress.json v2 是权威状态；progress.md 仅作为人类可读视图。
 PROGRESS_JSON="${REQ_DIR}/progress.json"

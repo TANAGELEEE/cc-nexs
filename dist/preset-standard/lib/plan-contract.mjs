@@ -70,6 +70,18 @@ function acIds(lines) {
   return new Set(lines.flatMap((line) => line.match(/\bAC-\d+\b/g) || []));
 }
 
+// Paths that make a plan ineligible for --auto-plan, whatever risk the Planner declared:
+// schema/data, auth/permission/secret, payment, and infrastructure/deployment changes.
+const AUTO_PLAN_SENSITIVE_PATH = /migration|schema|\.sql$|auth|permission|security|secret|credential|iam|payment|billing|terraform|helm|k8s|kubernetes|deploy|docker|\.gitlab-ci|\.github\/workflows/i;
+
+export function sensitivePlanPaths(planText) {
+  const rows = tableRows(extractApprovalScope(planText), 'T');
+  const paths = rows.flatMap((line) => (line.split('|')[4] || '').split(/[\s,，、;；]+/))
+    .map((token) => token.replace(/^`+|`+$/g, '').trim())
+    .filter(Boolean);
+  return [...new Set(paths.filter((path) => AUTO_PLAN_SENSITIVE_PATH.test(path)))];
+}
+
 export function requirementAcIds(reqDir) {
   const requirements = readFileSync(join(reqDir, 'requirements.md'), 'utf8').replace(/\r\n/g, '\n');
   return [...new Set(tableRows(requirements, 'AC').map((line) => line.match(/AC-\d+/)[0]))];
