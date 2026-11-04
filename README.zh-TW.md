@@ -23,7 +23,7 @@
 
 新增預設按 [docs/extending-presets.md](./docs/extending-presets.md) 操作。模式和角色選擇見 `preset-standard` 的 [docs/role-map.md](./packages/preset-standard/docs/role-map.md)。
 
-`preset-standard` 新需求使用 Lean。計劃由 Planner 產出，或由使用者在各 runtime 的 plan mode 寫好後以 `/cc-nexs:plan <編號> --from <檔案>` 交給 Planner 只做格式整理。low/medium 計劃直接到 Gateway A 由人審；high/critical 計劃先由獨立的 Plan Reviewer 對照需求與程式碼做事實核查，被阻塞的計劃只修訂一次。每條驗收標準都必須對應任務、本地檢查和 test 檢查，否則 Gateway A 拒絕批准；以 `--auto-plan` 初始化的需求，只有 fast-track、low/medium 且不觸及敏感路徑的計劃才會不停頓地通過 Gateway A。程式碼 Review 只因實際跑出來的 P0/P1 失敗而阻塞；未證實的風險交給 test 環境驗收與 Gateway B。滿足 low/medium、複用既有能力、無新表結構/基礎設施/破壞性契約的小需求預設走 fast-track：計劃批准後按 worktree/feature branch 並行實現，能本地完成的 build/start/smoke 立即完成；例如 backend-java 無法本地啟動時，記錄結構化 `deferred_to_test` 證據後繼續，不再反覆嘗試。隨後凍結精確 candidate，先合入 test 並觸發 CI/部署，再在部署環境驗收（web 可本地啟動並連線已部署的 test backend），最後做一次集中 Review 並停在 Gateway B。瀏覽器、登入/MFA 與驗收頁面 URL 都只屬於部署後 verification；缺少能力時進入可恢復的 `manual_required`，不會阻塞或回滾 test merge/CI。高風險 Lean 使用 Review-first standard lane，並升級 Plan Reviewer 與 Reviewer；無法作為一個計劃整體審核與驗收的需求，拆成多個分別批准的 Lean 需求。
+`preset-standard` 新需求使用 Lean。計劃由 Planner 產出，或由使用者在各 runtime 的 plan mode 寫好後以 `/cc-nexs:plan <編號> --from <檔案>` 交給 Planner 只做格式整理。low/medium 計劃直接到 Gateway A 由人審；high/critical 計劃先由獨立的 Plan Reviewer 對照需求與程式碼做事實核查，被阻塞的計劃只修訂一次。每條驗收標準都必須對應任務、本地檢查和 test 檢查，否則 Gateway A 拒絕批准；以 `--auto-plan` 初始化的需求，只有 fast-track、low/medium 且不觸及敏感路徑的計劃才會不停頓地通過 Gateway A。程式碼 Review 由多個 Finder 按視角並行搜查（correctness；medium 起加 contracts-data；high 起加 security），再由沒參與搜查的 Judge 逐條復跑 P0/P1 命令：只有確認跑得出來的失敗才阻塞，未證實的風險變成 test 環境驗收的 probe，並列在 Gateway B。驗收是主要關卡：Verifier 依各倉 `.cc-nexs/verify/` 的驗證指南與功能地圖驅動真實系統（`/cc-nexs:verify-skill`），驗收矩陣可拆成互不相干的部分時，可由多個 Verifier 分片並行，結果由控制器合併。滿足 low/medium、複用既有能力、無新表結構/基礎設施/破壞性契約的小需求預設走 fast-track：計劃批准後按 worktree/feature branch 並行實現，能本地完成的 build/start/smoke 立即完成；例如 backend-java 無法本地啟動時，記錄結構化 `deferred_to_test` 證據後繼續，不再反覆嘗試。隨後凍結精確 candidate，先合入 test 並觸發 CI/部署，再在部署環境驗收（web 可本地啟動並連線已部署的 test backend），最後做一次集中 Review 並停在 Gateway B。瀏覽器、登入/MFA 與驗收頁面 URL 都只屬於部署後 verification；缺少能力時進入可恢復的 `manual_required`，不會阻塞或回滾 test merge/CI。高風險 Lean 使用 Review-first standard lane，並升級 Plan Reviewer 與 Reviewer；無法作為一個計劃整體審核與驗收的需求，拆成多個分別批准的 Lean 需求。
 
 Lean/Hotfix 模型採用風險驅動路由。有效優先順序是：公開 preset < 私有 overlay < 專案 `cc-nexs.config.yml.models` < feature profiles/routing < 命中的 routing rules < feature `models.roles` 顯式覆蓋。新 feature 模板不再生成 `models.roles`，因此日常專案配置會真正生效。
 
@@ -280,6 +280,7 @@ Claude Code、Codex 和 Pi 共享同一命令語義，但使用各執行時的�
 
 ```bash
 /cc-nexs:init "需求描述"          # 預設 lean；每倉獨立 worktree + feature/<id>-<slug>
+/cc-nexs:init "小需求" --auto-plan  # 預先授權 Gateway A，符合條件的 fast-track 計劃不停頓
 /cc-nexs:plan [編號] [--from 檔案] # 起草或整理 requirements/plan，high/critical 才做獨立計劃審核，產生臨時 HTML，停 Gateway A
 /cc-nexs:approve-plan [編號]       # 批准 plan 雜湊
 /cc-nexs:run [編號]                # 實現 → 能做的本地驗證 → test/CI → 環境驗收 → 一次集中 Review
@@ -290,6 +291,8 @@ Claude Code、Codex 和 Pi 共享同一命令語義，但使用各執行時的�
 /cc-nexs:release-test [編號]      # 完整 candidate 確定性合入 test + 調 release driver
 /cc-nexs:status [編號]            # 只讀看狀態
 /cc-nexs:build [--phase=...]      # 按 git diff 自動選 build/test 命令並跑
+/cc-nexs:verify-skill <倉> [--refresh] # 產生或稽核該倉 .cc-nexs/verify/ 驗證指南與功能地圖
+cc-nexs stats --all [--since <日期>]   # 彙總整個 workspace 的 Review 輪數、finding、計劃審核與 test 結果
 
 /cc-nexs:hotfix "現象描述" --repos=api  # hotfix/<key> + BUG 文件，不佔需求號
 /cc-nexs:hotfix [bug-key]         # 恢復：本地驗證、獨立 Review、test、Gateway B
