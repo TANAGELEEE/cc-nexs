@@ -4,6 +4,38 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-11-06
+
+### Changed
+
+- A Lean code Review runs only where `review.policy` requires one, and then before test; every other candidate goes from local checks straight to test, where verification is the gate. `review.policy` requires a Review: `risk` (default) for high/critical plans, plans without a bound risk tier, and candidates touching auth, permission, security, secret, migration, schema, SQL, payment, billing, deployment, CI, or `review.required_paths`; `always` for every task. A Hotfix is reviewed before test when it is P0/P1; P2/P3 go straight to test. Test release and release approval require a Review only when the policy does, the release binding records the decision, and `cc-nexs status` prints it. `delivery_lane` no longer changes the order and still decides `--auto-plan` eligibility.
+- Test branches are shared overlays: another task's commits on a dedicated target are recorded (`delivery.test.target_shared`) instead of refused with `TARGET_OCCUPIED`, and switching the target is not a scope change.
+- A resumed test release accepts a later pipeline that deploys a revision containing the integration; the earlier pipeline is kept in `superseded_pipelines`.
+- Base preflight and release keep the tested candidate, its Review and test evidence when the base moved but the candidate still merges cleanly (git merge-tree, git 2.38+); overlapping paths join the merged-tree checks and are recorded as `overlap_paths`. Only a merge conflict reports `BASE_CHANGED`.
+- `advance` accepts only the step's next state or a defined outcome of that action; escalating to `HUMAN_INTERVENTION` stays open, and any other jump needs `--recover --authorization-evidence`, recorded as `state.recovery_authorized`.
+- Local checks run the affected generator or validator instead of a whole production build, which is added only for build configuration, dependency, or lockfile changes.
+- A repair's test attempt reruns failed or blocked checks, checks the repair can affect, and regression smoke rows, carrying unaffected results forward with a cited proof.
+- Runs wait for CI inside the run and never end a turn just to report progress.
+- When the base moves and really conflicts with a tested candidate, the candidate is synced, built locally, and released through its MR without another Review or test attempt; an earlier Gateway B approval carries over. `approve-release` and `release-base` accept it only when Git proves each repository is the tested commit plus base merges and nothing else.
+- Hotfix: local checks that only the local environment prevents may be deferred to test (`deferred_to_test`), and a configured `verify.panel` verifies Hotfixes too.
+
+### Added
+
+- Test integration replays conflict resolutions the workspace already recorded (rerere), takes the test side of a repository's `test_keep_target` paths, and redoes the merge on the new tip (up to three times) when another task pushes first; automatic resolutions are recorded as `delivery.test.conflicts_auto_resolved`.
+- `release-test --resume --wait[=<minutes>]` resumes the same attempt with backoff until it leaves `deploying`/`awaiting_receipt`.
+- Plans declare the verification accounts and data each acceptance check needs and how to prepare them; Verifiers prepare them without asking again and use the signed-in account as is.
+- `baseline_failed` local evidence records a check that fails the same way on the candidate's merge-base, which the controller proves; it does not block and is listed at Gateway B.
+- `verify.panel` runs two or more Verifiers on different models over the same matrix; `record-test-verification --verifier-json` merges their per-check results, a failure only one Verifier saw needs another Verifier's rerun (`--confirm-json`), and `verify-panel` lists who to dispatch.
+- `cc-nexs heavy -- <command>` runs builds, test suites and dev servers in one of `workflow.local_verify.heavy.slots` shared by the workspace, with Node and Maven memory caps; a local verify driver holds one slot while it runs.
+- `finalize-docs` reclaims what the finished task left behind (merged code worktrees, conflict copies, verification artifacts, task files).
+- `share-progress` publishes a task's progress snapshot to a `cc-nexs/progress` branch of the docs repository at every stop; `stats --all --remote` reads every machine's shared tasks.
+- `stats --all` reports recurring test conflicts, verification outcomes and stops for a person, with a suggestion for each shared cause.
+
+### Fixed
+
+- CLI reviewers (`codex-cli`, `pi-cli`) start on Windows, where npm and pnpm install them as `.cmd` shims, without a shell.
+- `stats --all` counts active tasks in their docs worktrees once each and no longer counts template progress files.
+
 ## [0.16.1] - 2026-11-04
 
 ### Added
