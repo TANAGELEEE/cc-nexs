@@ -35,7 +35,7 @@ Local verification is mandatory. Run the configured driver; without one, run `ve
 
 Re-read the deterministic result before persisting a transition. A local failure returns through the fix state; a missing driver alone does not require new project infrastructure. Never bypass the bound matrix, relabel a command failure, or fabricate test evidence.
 
-Apply the common release safety boundary. `release_test_hotfix` is valid only from `HOTFIX_TEST_RELEASE` with `--hotfix`. Trigger CI/CD once. A pending result persists `deploying`; `/cc-nexs:release-test <id> --hotfix --resume` only polls the existing attempt. Deliberate retry of a failed release uses `--hotfix --retry`.
+Apply the common release safety boundary. `release_test_hotfix` is valid only from `HOTFIX_TEST_RELEASE` with `--hotfix`. Trigger CI/CD once. A pending result persists `deploying`; `/cc-nexs:release-test <id> --hotfix --resume --wait` waits on the existing attempt with backoff and never retriggers; waiting is not a stop. Deliberate retry of a failed release uses `--hotfix --retry`.
 
 Browser/URL/login limitations are post-deployment verification issues. Record `manual_required` on the actual deployed attempt so later evidence can resume it. A product verification failure routes to `HOTFIX_TEST_FAILED` and cannot become an environment exception. Manual G2 cannot stand in for Hotfix evidence or Gateway B.
 
