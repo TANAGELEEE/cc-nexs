@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import test from 'node:test';
 
 import {
   extractFindings, nativeReviewerModel, parseCliReviewerOutput, planCliReviewer, readReviewerResult,
-  resolveReviewPanel, reviewSkills, runCliReviewer,
+  resolveCliCommand, resolveReviewPanel, reviewSkills, runCliReviewer,
 } from './review-panel.mjs';
 
 test('the panel is exactly what is configured, and one native reviewer when nothing is', () => {
@@ -46,7 +46,7 @@ test('a native reviewer runs on its own model or profile, else on the role routi
 test('each CLI reviewer gets a non-interactive argv; the brief stays in a file', () => {
   const options = { prompt: 'Read the brief', cwd: '/ws', runDir: '/ws/run' };
   const codex = planCliReviewer({ executor: 'codex-cli', model: 'gpt-6-astra', effort: 'high' }, options);
-  assert.deepEqual(codex.args, ['exec', '-m', 'gpt-6-astra', '-c', 'model_reasoning_effort="high"', '-s', 'workspace-write', '--ephemeral', '--skip-git-repo-check', '-C', '/ws', '-o', '/ws/run/last-message.txt', '-']);
+  assert.deepEqual(codex.args, ['exec', '-m', 'gpt-6-astra', '-c', 'model_reasoning_effort="high"', '-s', 'workspace-write', '--ephemeral', '--skip-git-repo-check', '-C', '/ws', '-o', join('/ws/run', 'last-message.txt'), '-']);
   assert.equal(codex.stdin, 'Read the brief');
   const claude = planCliReviewer({ executor: 'claude-cli', model: 'opus' }, options);
   assert.equal(claude.executable, 'claude');
@@ -56,12 +56,41 @@ test('each CLI reviewer gets a non-interactive argv; the brief stays in a file',
   const pi = planCliReviewer({ executor: 'pi-cli', model: 'magpie/deepseek/deepseek-flash', effort: 'high' }, options);
   assert.deepEqual(pi.args.slice(-3), ['--model', 'magpie/deepseek/deepseek-flash:high', 'Read the brief']);
   const dsh = planCliReviewer({ executor: 'dsh-cli', model: 'deepseek-official/deepseek-pro' }, options);
-  assert.deepEqual(dsh.args, ['--profile', 'headless', '--patch', '/ws/run/dsh.patch.yml', '-']);
-  const patch = dsh.files['/ws/run/dsh.patch.yml'];
+  assert.deepEqual(dsh.args, ['--profile', 'headless', '--patch', join('/ws/run', 'dsh.patch.yml'), '-']);
+  const patch = dsh.files[join('/ws/run', 'dsh.patch.yml')];
   assert.match(patch, /id: credentials\n {2}disabled: false/, 'dsh uses the signed-in account, not an API key');
   assert.match(patch, /provider: "deepseek-official"\n {4}model: "deepseek-pro"/);
-  assert.doesNotMatch(planCliReviewer({ executor: 'dsh-cli' }, options).files['/ws/run/dsh.patch.yml'], /agent-default-model/);
+  assert.doesNotMatch(planCliReviewer({ executor: 'dsh-cli' }, options).files[join('/ws/run', 'dsh.patch.yml')], /agent-default-model/);
   assert.throws(() => planCliReviewer({ executor: 'native' }, options), /not a CLI reviewer/);
+});
+
+test('on Windows a CLI reviewer runs what its npm or pnpm shim runs, never through a shell', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-cli-shim-'));
+  try {
+    const npmBin = join(root, 'npm');
+    const pnpmBin = join(root, 'pnpm');
+    const exeBin = join(root, 'exe');
+    for (const dir of [npmBin, pnpmBin, exeBin]) mkdirSync(dir);
+    writeFileSync(join(npmBin, 'codex'), '#!/bin/sh\n');
+    writeFileSync(join(npmBin, 'codex.ps1'), '');
+    writeFileSync(join(npmBin, 'codex.cmd'), '@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\nSETLOCAL\r\nCALL :find_dp0\r\n'
+      + 'endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\node_modules\\@openai\\codex\\bin\\codex.js" %*\r\n');
+    writeFileSync(join(pnpmBin, 'pi.cmd'), '@SETLOCAL\r\n@IF EXIST "%~dp0\\node.exe" (\r\n  "%~dp0\\node.exe"  "%~dp0\\..\\pi\\dist\\cli.js" %*\r\n) ELSE (\r\n  node  "%~dp0\\..\\pi\\dist\\cli.js" %*\r\n)\r\n');
+    writeFileSync(join(exeBin, 'claude.exe'), '');
+    const env = { PATH: [exeBin, npmBin, pnpmBin].join(delimiter), PATHEXT: '.COM;.EXE;.BAT;.CMD' };
+    const prompt = 'Read "brief" & exit';
+    assert.deepEqual(resolveCliCommand('codex', ['exec', '-'], { platform: 'win32', env }),
+      { command: process.execPath, args: [join(npmBin, 'node_modules', '@openai', 'codex', 'bin', 'codex.js'), 'exec', '-'] });
+    assert.deepEqual(resolveCliCommand('pi', ['-p', prompt], { platform: 'win32', env }),
+      { command: process.execPath, args: [join(pnpmBin, '..', 'pi', 'dist', 'cli.js'), '-p', prompt] }, 'the prompt stays one argument');
+    assert.deepEqual(resolveCliCommand('claude', ['-p'], { platform: 'win32', env }), { command: join(exeBin, 'claude.exe'), args: ['-p'] });
+    writeFileSync(join(npmBin, 'agy.cmd'), '@echo off\r\nstart agy\r\n');
+    assert.throws(() => resolveCliCommand('agy', [], { platform: 'win32', env }), /not an npm or pnpm shim/);
+    assert.throws(() => resolveCliCommand('dsh', [], { platform: 'win32', env }), /dsh was not found on PATH/);
+    assert.deepEqual(resolveCliCommand('codex', ['exec'], { platform: 'darwin', env }), { command: 'codex', args: ['exec'] });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('findings are read from each CLI reply format, including a wrapped answer', () => {
@@ -87,7 +116,7 @@ test('a CLI reviewer stores its findings, and is discarded when it touches the c
     const brief = join(root, 'brief.md');
     writeFileSync(brief, 'Break this change.');
     const source = { web: git('rev-parse', 'HEAD').trim() };
-    const base = { workspaceRoot: root, featureId: '40', round: 'consolidated', briefFile: brief, source, worktrees: { web: repo } };
+    const base = { workspaceRoot: root, featureId: '40', round: 'consolidated', briefFile: brief, source, worktrees: { web: repo }, platform: 'linux' };
     const reviewer = { id: 'r2', executor: 'codex-cli', model: 'gpt-6-astra' };
     let seen;
     const ok = (command, args, options) => {
