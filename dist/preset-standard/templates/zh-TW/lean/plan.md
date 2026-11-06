@@ -63,6 +63,7 @@
 ## 預授權 Test 操作
 
 - Test 環境操作（動作、目標、回滾；Gateway A 後不再詢問）：
+- 驗收帳號與資料（帳號按角色／方案／額度等屬性描述；準備方式寫清楚：test 庫 SQL、營運後台操作、從 test 同步等；Gateway A 後 Verifier 直接執行，不再詢問；預設複用瀏覽器中已登入的帳號，不另加限制）：
 - Test 整合策略（衍生路徑，每條寫重新產生命令，或在 Test 不使用候選值時寫「保留 Test 側」；沒有則寫「無」）：
 - derived_binding: each-candidate / before-final-test（保留其一；before-final-test 表示衍生路徑在原始碼通過 Test 前保持 base 值，通過後一次產生並做最後一輪 Test）
 

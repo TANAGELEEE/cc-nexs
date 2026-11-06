@@ -50,6 +50,7 @@ Local verification is a fast check before deployment; acceptance in test is the 
 - Admission conditions and real sample result (from current sources and real output, without publishing):
 ## Pre-authorized Test Operations
 - Test environment operations (action, target, rollback; not asked again after Gateway A):
+- Verification accounts and data (accounts by role, plan, credits and other properties; how to prepare each: test-database SQL, an operations admin action, a sync from another test environment; Verifiers run these after Gateway A without asking again; the account the browser is already signed in with is used by default, with no extra restrictions):
 - Test integration policy (derived paths, and per path either the command that regenerates them or "keep the Test side" when Test does not consume the candidate's values; write "none" if there is none):
 - derived_binding: each-candidate / before-final-test (keep one; before-final-test leaves derived paths at their base values until the source passes Test, then generates them once for a final Test attempt)
 ## Risks and Release

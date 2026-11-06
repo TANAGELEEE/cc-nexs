@@ -63,6 +63,7 @@
 ## 预授权 Test 操作
 
 - Test 环境操作（动作、目标、回滚；Gateway A 后不再询问）：
+- 验收账号与数据（账号按角色/套餐/额度等属性描述；准备方式写清楚：test 库 SQL、运营后台操作、从 test 同步等；Gateway A 后 Verifier 直接执行，不再询问；默认复用浏览器中已登录的账号，不另加限制）：
 - Test 整合策略（衍生路径，每条写重新生成命令，或在 Test 不使用候选值时写“保留 Test 侧”；没有则写“无”）：
 - derived_binding: each-candidate / before-final-test（保留其一；before-final-test 表示衍生路径在源码通过 Test 前保持 base 值，通过后一次生成并做最后一轮 Test）
 
