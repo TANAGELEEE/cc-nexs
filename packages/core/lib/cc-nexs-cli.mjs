@@ -689,6 +689,11 @@ function printResult(result) {
     if (result.sourceCommit) console.log(`Docs candidate: ${result.sourceCommit}`);
     if (result.mergeRequest?.url) console.log(`Merge request: ${result.mergeRequest.url}`);
     if (result.status === 'pending') console.log('Next: rerun finalize-docs after the merge request is merged');
+    if (result.reclaimed) {
+      console.log(`Reclaimed: ${result.reclaimed.removed.map((entry) => entry.display).join(', ') || 'nothing left to remove'}`);
+      for (const entry of result.reclaimed.failed) console.log(`Not reclaimed: ${entry.display}: ${entry.error}`);
+      for (const entry of result.reclaimed.kept) console.log(`Kept: ${entry.display} (${entry.reason})`);
+    }
     if (result.postRelease?.length) console.log(`Post-release pending (not done by this release): ${result.postRelease.join('; ')}`);
     return;
   }

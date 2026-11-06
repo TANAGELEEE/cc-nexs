@@ -70,9 +70,15 @@ test('finalize-docs archives the five Lean files with intact release evidence an
   assert.throws(() => finalizeDocs({ cwd: task.root, featureId: '07', progressPath: task.progressFile }), /changes outside the final docs \(doc\/07\.demo\/scratch\.html\)/);
   assert.throws(() => git(task.repo, ['rev-parse', '--verify', 'refs/cc-nexs/candidates/07-demo/docs']));
   rmSync(join(dirname(task.progressFile), 'scratch.html'));
+  const taskFiles = join(task.root, '.cc-nexs', 'runtime', 'tasks', '07');
+  const otherTaskFiles = join(task.root, '.cc-nexs', 'runtime', 'tasks', '08');
+  for (const dir of [taskFiles, otherTaskFiles]) { mkdirSync(join(dir, 'scratch'), { recursive: true }); writeFileSync(join(dir, 'receipt.json'), '{}\n'); }
   const result = finalizeDocs({ cwd: task.root, featureId: '07', progressPath: task.progressFile });
   assert.equal(result.status, 'merged');
   assert.equal(result.created, true);
+  assert.equal(existsSync(taskFiles), false, 'the completed task\'s own files are reclaimed');
+  assert.equal(existsSync(otherTaskFiles), true, 'another task\'s files stay');
+  assert.deepEqual(result.reclaimed.removed.map((entry) => entry.kind), ['task-files']);
   const archived = JSON.parse(git(task.repo, ['show', 'origin/main:doc/07.demo/progress.json']));
   assert.equal(archived.gates.release.approved, true);
   assert.equal(archived.gates.release.binding.candidate_fingerprint, 'f'.repeat(64));
