@@ -170,7 +170,7 @@ export function preflightTestRelease({
       : extractHotfixScope(readFileSync(resolveHotfixDocument(progress, dirname(progressFile)), 'utf8')).raw);
     assertRecordedLocalVerification(progress, { source: source, fingerprint: releaseFingerprint(source), expectedChecks: localChecks });
   }
-  if (hotfix) assertHotfixReleaseEvidence(progress, source);
+  if (hotfix) assertHotfixReleaseEvidence(progress, source, config.mergedReview);
   else if (progress.mode === 'lean') assertLeanReleaseEvidence(progress, source, config.mergedReview);
 
   const release = { ...config.mergedRelease?.test, ...progress.delivery.test.target };
@@ -214,13 +214,14 @@ function assertLeanReleaseEvidence(progress, source, review) {
   }
 }
 
-function assertHotfixReleaseEvidence(progress, source) {
+function assertHotfixReleaseEvidence(progress, source, review) {
   const fingerprint = createHash('sha256').update(JSON.stringify(Object.fromEntries(Object.entries(source).sort(([a], [b]) => a.localeCompare(b))))).digest('hex');
-  if (progress.local_verification?.status !== 'passed' || progress.local_verification.candidate_fingerprint !== fingerprint) {
+  if (!['passed', 'deferred_to_test'].includes(progress.local_verification?.status) || progress.local_verification.candidate_fingerprint !== fingerprint) {
     throw new Error('[cc-nexs] hotfix test release requires local verification for the exact candidate');
   }
-  if (progress.review?.status !== 'passed' || progress.review.candidate_fingerprint !== fingerprint) {
-    throw new Error('[cc-nexs] hotfix test release requires one passing Review for the exact candidate');
+  const requirement = reviewRequirement(progress, review);
+  if (!reviewSatisfied(progress, fingerprint, requirement)) {
+    throw new Error(`[cc-nexs] hotfix test release requires one passing Review for the exact candidate (${requirement.reasons.join('; ')})`);
   }
 }
 

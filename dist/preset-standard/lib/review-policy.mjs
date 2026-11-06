@@ -1,10 +1,11 @@
-// Whether a Lean candidate needs a code Review before Gateway B.
+// Whether a Lean or Hotfix candidate needs a code Review.
 //
-// Verification in the test environment is the main gate. A code Review runs, after
-// verification, only where it finds what black-box checks cannot: a high/critical
+// Verification in the test environment is the main gate. A code Review runs, before
+// test, only where it finds what black-box checks cannot: a high/critical
 // plan, or a candidate touching sensitive paths (auth, permission, migration, schema,
 // payment/billing, deployment, CI, plus the workspace's own `review.required_paths`).
-// `review.policy: always` restores a Review for every task. Hotfix keeps its Review.
+// `review.policy: always` restores a Review for every task. A Hotfix is reviewed when it
+// is P0/P1 (or has no bound severity); P2/P3 are gated by test verification.
 
 import { matchAny } from './build-selector.mjs';
 import { isSensitivePlanPath } from './plan-contract.mjs';
@@ -12,10 +13,17 @@ import { isSensitivePlanPath } from './plan-contract.mjs';
 export const REVIEW_POLICIES = new Set(['risk', 'always']);
 
 export function reviewRequirement(progress, review = {}) {
-  if (progress?.mode !== 'lean') return { required: true, reasons: [`${progress?.mode || 'unknown'} mode always reviews`] };
+  if (!['lean', 'hotfix'].includes(progress?.mode)) return { required: true, reasons: [`${progress?.mode || 'unknown'} mode always reviews`] };
   const policy = review.policy ?? 'risk';
   if (!REVIEW_POLICIES.has(policy)) throw new Error(`[cc-nexs] review.policy must be risk or always, got ${policy}`);
   if (policy === 'always') return { required: true, reasons: ['review.policy is always'] };
+  if (progress.mode === 'hotfix') {
+    const severity = progress.hotfix?.severity || null;
+    if (!severity) return { required: true, reasons: ['the Hotfix binds no severity'] };
+    return ['P0', 'P1'].includes(severity)
+      ? { required: true, reasons: [`severity is ${severity}`] }
+      : { required: false, reasons: [`severity is ${severity}`] };
+  }
   const risk = progress.gates?.plan?.binding?.risk_tier || null;
   if (!risk) return { required: true, reasons: ['the approved plan binds no risk_tier'] };
   if (['high', 'critical'].includes(risk)) return { required: true, reasons: [`risk_tier is ${risk}`] };

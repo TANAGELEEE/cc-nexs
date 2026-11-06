@@ -138,7 +138,7 @@ Lean defaults to `auto_if_ready`; `--no-auto-test-release` explicitly opts out o
 
 - `hotfix` invokes the internal `init-hotfix` controller and creates `hotfix/<key>` and latest-base `.worktrees/<key>/<repo>/` assignments, plus one BUG document in docs; it never pushes placeholders.
 - Bind paths, severity, required P0/P1 AC/rollback fields, and the local verification matrix in that BUG. `progress.hotfix_document` identifies it; local machine files live in `.cc-nexs/hotfixes/<key>/`.
-- Run the configured driver or exact scope-bound commands with structured evidence, then independent consolidated Review for every severity, including P3. File/line counts cannot prove behavior or exempt Review.
+- Run the configured driver or exact scope-bound commands with structured evidence (environment-only checks may be deferred to test), then an independent consolidated Review before test for P0/P1; P2/P3 are gated by test verification.
 - Deliver the exact candidate to test, verify it independently, then obtain Gateway B approval before integrating that candidate to configured bases.
 - If actual test deployment succeeded but verification requires unavailable environment capability, explicit user authorization may use `approve-release --test-exception` with exact local/Review, environment, and rollback evidence. Preserve `manual_required`; this authorizes base integration only, not production deployment.
 

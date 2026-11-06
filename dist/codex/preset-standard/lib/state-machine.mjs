@@ -22,10 +22,10 @@ const TERMINAL = new Set(['COMPLETE']);
  *
  *   mode='hotfix' — standalone mini-Lean pipeline on its own latest-base worktree:
  *     INIT → HOTFIX_IMPLEMENTING → HOTFIX_LOCAL_VERIFYING
- *       → [HOTFIX_REVIEWING → HOTFIX_FIXING → HOTFIX_LOCAL_REVERIFYING → HOTFIX_DELTA_REVIEW]
+ *       → [P0/P1: HOTFIX_REVIEWING → HOTFIX_FIXING → HOTFIX_LOCAL_REVERIFYING → HOTFIX_DELTA_REVIEW]
  *       → HOTFIX_CANDIDATE_READY → HOTFIX_TEST_RELEASE → HOTFIX_TEST_VERIFYING
  *       → HOTFIX_RELEASE_PENDING_HUMAN → HOTFIX_BASE_MERGING → COMPLETE
- *     Every severity retains independent Review; diff size is not proof of unchanged behavior.
+ *     P0/P1 keep an independent Review before test; P2/P3 are gated by test verification.
  *
  */
 export function nextStep({
@@ -58,6 +58,8 @@ function nextStepHotfix({ state, counters, thresholds, enabledRoles, workflow = 
   const reviewStatus = workflow.review?.status || 'idle';
   const reviewExact = workflow.review?.exact === true;
   const closureAttempts = Number(workflow.review?.closure_attempts || 0);
+  // P0/P1 are reviewed before test; P2/P3 are gated by test verification.
+  const reviewRequired = workflow.review?.required !== false;
 
   if (TERMINAL.has(state)) return { next: state, role: null, action: 'noop' };
   // A tested candidate synced with a moved base and built locally goes to its MR; it is
@@ -83,6 +85,7 @@ function nextStepHotfix({ state, counters, thresholds, enabledRoles, workflow = 
     case 'HOTFIX_LOCAL_VERIFY_FAILED':
       return { next: 'HOTFIX_IMPLEMENTED', role: developer, action: 'fix_local' };
     case 'HOTFIX_LOCAL_VERIFYING':
+      if (!reviewRequired) return { next: 'HOTFIX_CANDIDATE_READY', role: null, action: 'continue_to_test' };
       if (reviewExact && ['passed', 'blocked'].includes(reviewStatus)) {
         return { next: 'HOTFIX_REVIEWING', role: null, action: 'continue' };
       }
@@ -98,6 +101,7 @@ function nextStepHotfix({ state, counters, thresholds, enabledRoles, workflow = 
     case 'HOTFIX_LOCAL_REVERIFY_FAILED':
       return { next: 'HOTFIX_FIXING', role: developer, action: 'fix_local' };
     case 'HOTFIX_LOCAL_REVERIFYING':
+      if (!reviewRequired) return { next: 'HOTFIX_CANDIDATE_READY', role: null, action: 'continue_to_test' };
       if (reviewExact && closureAttempts > 0) {
         return { next: 'HOTFIX_DELTA_REVIEW', role: null, action: 'continue' };
       }
@@ -428,12 +432,12 @@ const LEAN_OUTCOMES = {
 const HOTFIX_OUTCOMES = {
   HOTFIX_IMPLEMENTING: ['HOTFIX_IMPLEMENTED'],
   HOTFIX_IMPLEMENTED: ['HOTFIX_LOCAL_VERIFYING'],
-  HOTFIX_LOCAL_VERIFYING: ['HOTFIX_REVIEWING', 'HOTFIX_LOCAL_VERIFY_FAILED'],
+  HOTFIX_LOCAL_VERIFYING: ['HOTFIX_REVIEWING', 'HOTFIX_CANDIDATE_READY', 'HOTFIX_LOCAL_VERIFY_FAILED'],
   HOTFIX_LOCAL_VERIFY_FAILED: ['HOTFIX_IMPLEMENTED'],
   HOTFIX_REVIEWING: ['PARSE_HOTFIX_REVIEW'],
   PARSE_HOTFIX_REVIEW: ['HOTFIX_CANDIDATE_READY', 'HOTFIX_REVIEW_BLOCKED'],
   HOTFIX_FIXING: ['HOTFIX_LOCAL_REVERIFYING', 'HOTFIX_LOCAL_REVERIFY_FAILED'],
-  HOTFIX_LOCAL_REVERIFYING: ['HOTFIX_DELTA_REVIEW', 'HOTFIX_LOCAL_REVERIFY_FAILED'],
+  HOTFIX_LOCAL_REVERIFYING: ['HOTFIX_DELTA_REVIEW', 'HOTFIX_CANDIDATE_READY', 'HOTFIX_LOCAL_REVERIFY_FAILED'],
   HOTFIX_DELTA_REVIEW: ['PARSE_HOTFIX_DELTA_REVIEW'],
   PARSE_HOTFIX_DELTA_REVIEW: ['HOTFIX_CANDIDATE_READY', 'HOTFIX_DELTA_REVIEW_BLOCKED'],
   HOTFIX_CANDIDATE_READY: ['HOTFIX_TEST_RELEASE'],

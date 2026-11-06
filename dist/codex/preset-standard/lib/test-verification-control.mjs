@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 
 import { resolveFeatureProgress } from './approval-command.mjs';
 import { extractApprovalScope } from './plan-contract.mjs';
+import { resolveHotfixDocument } from './hotfix-contract.mjs';
 import { appendProgressEvent, readProgressV2, recordTestVerification } from './progress-v2.mjs';
 import { preflightTestRelease } from './test-release.mjs';
 import { acceptanceCheckIds, insertVerificationSection, mergeShardResults, renderShardedVerification } from './verification-shards.mjs';
@@ -54,11 +55,8 @@ export function recordEnvironmentVerification({ cwd = process.cwd(), featureId, 
   let panelResult = null;
   if (verifiers) {
     if (shards || status || evidence.length > 0) throw new Error('[cc-nexs] a verification panel derives status and evidence; do not combine --verifier-json with --shard-json, a status flag, or --evidence');
-    if (progress.mode !== 'lean') throw new Error('[cc-nexs] a verification panel applies to Lean only');
     const panel = resolveVerifyPanel(loadCandidateConfig(context.workspaceRoot).mergedVerify, runtime);
-    panelResult = mergeVerifierResults(verifiers, {
-      requiredChecks: acceptanceCheckIds(extractApprovalScope(readFileSync(planFile, 'utf8'))), confirmations, panel,
-    });
+    panelResult = mergeVerifierResults(verifiers, { requiredChecks: acceptanceChecks(progress, progressFile), confirmations, panel });
     status = panelResult.status;
     evidence = panelResult.evidence;
   }
@@ -74,7 +72,8 @@ export function recordEnvironmentVerification({ cwd = process.cwd(), featureId, 
   }
   if (panelResult) {
     const section = renderPanelVerification({ attemptId: attempt.id, environmentRevision: attempt.environment_revision, status: result, rows: panelResult.rows, models: panelResult.models });
-    writeFileSync(planFile, insertVerificationSection(readFileSync(planFile, 'utf8'), section));
+    const document = verificationDocument(progress, progressFile);
+    writeFileSync(document, insertVerificationSection(readFileSync(document, 'utf8'), section));
   }
   // Persist the next actionable state before returning, including on a forked run.
   const target = verificationResultState(progress.mode, result);
@@ -112,6 +111,16 @@ function sortedObject(value) {
   return Object.fromEntries(Object.entries(value || {}).sort(([left], [right]) => left.localeCompare(right)));
 }
 
+// Lean keeps its acceptance matrix in plan.md; a Hotfix in its BUG document.
+function verificationDocument(progress, progressFile) {
+  return progress.mode === 'hotfix' ? resolveHotfixDocument(progress, dirname(progressFile)) : join(dirname(progressFile), 'plan.md');
+}
+
+function acceptanceChecks(progress, progressFile) {
+  const text = readFileSync(verificationDocument(progress, progressFile), 'utf8');
+  return acceptanceCheckIds(progress.mode === 'hotfix' ? text : extractApprovalScope(text));
+}
+
 // Which Verifiers to dispatch on the same matrix and revision, and on which models.
 export function verifyPanelStatus({ cwd = process.cwd(), featureId, progressPath = null, runtime = detectRuntime() } = {}) {
   const progressFile = resolveFeatureProgress({ cwd, featureId, progressPath });
@@ -121,6 +130,6 @@ export function verifyPanelStatus({ cwd = process.cwd(), featureId, progressPath
   return {
     kind: 'verify-panel', feature: progress.feature, runtime,
     verifiers: verifyPanelModels(panel, { runtime, models: config.mergedModels }),
-    checks: acceptanceCheckIds(extractApprovalScope(readFileSync(join(dirname(progressFile), 'plan.md'), 'utf8'))),
+    checks: acceptanceChecks(progress, progressFile),
   };
 }

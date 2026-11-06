@@ -6,7 +6,7 @@ Read this file only when resolved mode is `hotfix`. Common identity, safety, mod
 
 `/cc-nexs:hotfix` initializes a repair through `init-hotfix`, binds the assigned BUG document, and owns `INIT -> HOTFIX_IMPLEMENTING`. New repairs use `hotfix/<key>`, `.worktrees/<key>/<repo>/`, and local machine state in `.cc-nexs/hotfixes/<key>/`; they never reserve a feature number or publish placeholders. Resolve the document through `progress.hotfix_document`; legacy tasks retain `hotfix.md` and their existing state location.
 
-Run performs local verification, independent consolidated Review for every severity including P3, exact-candidate test delivery, independent verification, Gateway B, and base integration. P3 file/line counts are risk hints, not a behavioral proof or a Review exemption. P0/P1 routes Reviewer to `escalated` and requires affected ACs plus rollback owner/steps in the bound scope.
+Run performs local verification, an independent consolidated Review before test for P0/P1 (and any severity under `review.policy: always`), exact-candidate test delivery, independent verification, Gateway B, and base integration. P2/P3 go from local verification straight to test, where verification is the gate; `cc-nexs status` prints whether a Review is required. P0/P1 routes Reviewer to `escalated` and requires affected ACs plus rollback owner/steps in the bound scope.
 
 ## Role → command dispatch table
 

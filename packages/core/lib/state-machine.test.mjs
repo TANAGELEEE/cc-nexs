@@ -354,3 +354,14 @@ test('removed Fast and Full modes are rejected', () => {
     assert.throws(() => nextStep({ mode, state: 'INIT', enabledRoles: [] }), /unsupported mode/);
   }
 });
+
+test('hotfix mode: P0/P1 are reviewed before test, P2/P3 go from local checks straight to test', () => {
+  const hotfixRoles = ['hotfix-developer', 'hotfix-reviewer', 'hotfix-verifier'];
+  const step = (state, required) => nextStep({ state, enabledRoles: hotfixRoles, mode: 'hotfix', workflow: { review: { required, status: 'idle' } } });
+  assert.deepEqual(step('HOTFIX_LOCAL_VERIFYING', true), { next: 'HOTFIX_REVIEWING', role: 'hotfix-reviewer', action: 'review_hotfix' });
+  assert.deepEqual(step('HOTFIX_LOCAL_VERIFYING', false), { next: 'HOTFIX_CANDIDATE_READY', role: null, action: 'continue_to_test' });
+  assert.deepEqual(step('HOTFIX_LOCAL_REVERIFYING', false), { next: 'HOTFIX_CANDIDATE_READY', role: null, action: 'continue_to_test' });
+  assert.equal(step('HOTFIX_LOCAL_REVERIFYING', true).next, 'HOTFIX_DELTA_REVIEW');
+  const carried = nextStep({ state: 'HOTFIX_LOCAL_REVERIFYING', enabledRoles: hotfixRoles, mode: 'hotfix', workflow: { review: { required: true }, base_sync: { carried: true, approved: true } } });
+  assert.deepEqual(carried, { next: 'HOTFIX_BASE_MERGING', role: null, action: 'release_base' }, 'a synced tested Hotfix goes to its MR');
+});

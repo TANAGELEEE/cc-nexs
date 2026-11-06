@@ -81,7 +81,7 @@ If any repository fails, retain the evidence already collected and stop. After e
 
 Hotfix uses `init-hotfix` to create `hotfix/<key>` and `.worktrees/<key>/<repo>/` from the latest base of each repository, without consuming a shared requirement number or pushing placeholder files. When there is an associated requirement, the BUG document is written to `doc/<id>.<slug>/bugs/BUG-<key>.md`; otherwise, it is written to `hotfix/<key>/BUG-001.md` in the docs repository. Machine state is located in the workspace at `.cc-nexs/hotfixes/<key>/`, with the document linked via `progress.hotfix_document`. Legacy hotfix.md tasks retain a compatibility path.
 ```text
-scope bind -> implement -> local verify -> independent Review (all severities)
+scope bind -> implement -> local verify -> independent Review (P0/P1)
 -> exact candidate -> test -> independent black-box verify
 -> HOTFIX_RELEASE_PENDING_HUMAN -> exact candidate -> base
 ```

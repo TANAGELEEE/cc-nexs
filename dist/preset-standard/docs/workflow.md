@@ -81,11 +81,11 @@ If any repository fails, retain the evidence already collected and stop. After e
 
 Hotfix uses `init-hotfix` to create `hotfix/<key>` and `.worktrees/<key>/<repo>/` from the latest base of each repository, without consuming a shared requirement number or pushing placeholder files. When there is an associated requirement, the BUG document is written to `doc/<id>.<slug>/bugs/BUG-<key>.md`; otherwise, it is written to `hotfix/<key>/BUG-001.md` in the docs repository. Machine state is located in the workspace at `.cc-nexs/hotfixes/<key>/`, with the document linked via `progress.hotfix_document`. Legacy hotfix.md tasks retain a compatibility path.
 ```text
-scope bind -> implement -> local verify -> independent Review (all severities)
+scope bind -> implement -> local verify -> independent Review (P0/P1)
 -> exact candidate -> test -> independent black-box verify
 -> HOTFIX_RELEASE_PENDING_HUMAN -> exact candidate -> base
 ```
-The binding scope must include the actual intended_paths and the local command matrix; P0/P1 must additionally include the affected ACs, the rollback owner, and the rollback steps. When no driver is available, real structured evidence from the bound commands may be registered; Hotfixes may not be deferred. P3 must also be Reviewed; file count/line count serve only as a risk reference. Keep the existing single delta and failure circuit breaker; do not add fixed rounds.
+The binding scope must include the actual intended_paths and the local command matrix; P0/P1 must additionally include the affected ACs, the rollback owner, and the rollback steps. When no driver is available, real structured evidence from the bound commands may be registered; an environment-only check may be deferred to test, which must close it. P0/P1 are Reviewed before test; P2/P3 are gated by test verification. Keep the existing single delta and failure circuit breaker; do not add fixed rounds.
 
 For an authorized path/tier revision of the same failure, use `revise-hotfix` to rebind on the original key/branch, preserving history and invalidating the current evidence. For genuine contract/schema/permission extensions, use `--promote-lean` to create `<BUGstem>.lean/` next to the BUG, migrate the state, and return to Gateway A without taking a new number. Gateway B evidence comments only supplement documentation; implementation comments require re-verification; merging base from test is forbidden.
 

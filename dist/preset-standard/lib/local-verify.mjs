@@ -61,7 +61,7 @@ export function runLocalVerification({
   }
   const driver = normalizeDriver(context.config.mergedWorkflow?.local_verify?.driver, context.workspaceRoot);
   const expectedChecks = extractLocalVerificationChecks(releaseScope(context.progress, context.progressFile));
-  const evidencePolicy = { allowTestDefer: context.progress.mode === 'lean', expectedChecks };
+  const evidencePolicy = { allowTestDefer: ['lean', 'hotfix'].includes(context.progress.mode), expectedChecks };
   const contractFingerprint = createHash('sha256').update(JSON.stringify({ driver, ...evidencePolicy })).digest('hex');
   assertVerificationWorktrees(context);
   const fingerprint = candidateFingerprint(context.source);
@@ -130,7 +130,7 @@ export function runLocalVerification({
   }
 
   if (!driver) {
-    const flags = context.progress.mode === 'lean' ? '--passed, --failed, or --deferred-to-test' : '--passed or --failed';
+    const flags = '--passed, --failed, or --deferred-to-test';
     throw new Error(`[cc-nexs] workflow.local_verify.driver is not configured; run scope-bound local commands in the exact candidate worktrees, then use verify-local ${flags} with structured --evidence-json records`);
   }
   ensureDiskSpace(context, freeBytes);

@@ -5,7 +5,7 @@ const BROWSER_COMMAND = /^browser:\s*\S/;
 export function assertRecordedLocalVerification(progress, { source, fingerprint, expectedChecks = [] }) {
   const verification = progress.local_verification;
   const latest = verification?.attempts?.at(-1);
-  const allowed = progress.mode === 'lean' ? ['passed', 'deferred_to_test'] : ['passed'];
+  const allowed = ['lean', 'hotfix'].includes(progress.mode) ? ['passed', 'deferred_to_test'] : ['passed'];
   if (!allowed.includes(verification?.status) || verification.candidate_fingerprint !== fingerprint
     || latest?.status !== verification.status || latest.fingerprint !== fingerprint
     || !jsonValuesEqual(latest.source, source)) {
@@ -14,7 +14,7 @@ export function assertRecordedLocalVerification(progress, { source, fingerprint,
   const evidence = Array.isArray(latest.evidence)
     ? latest.evidence.filter((item) => item?.type !== 'p3_boundary' || Object.hasOwn(item, 'result')) : latest.evidence;
   validateLocalEvidence(latest.status, evidence, {
-    allowTestDefer: progress.mode === 'lean', expectedChecks,
+    allowTestDefer: ['lean', 'hotfix'].includes(progress.mode), expectedChecks,
   });
   return latest;
 }

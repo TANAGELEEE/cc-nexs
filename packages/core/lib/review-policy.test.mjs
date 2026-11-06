@@ -18,7 +18,7 @@ test('a low or medium Lean task is gated by verification unless it touches sensi
   assert.equal(reviewRequirement(lean('medium', { web: ['src/billing/plan.ts'] })).required, true);
 });
 
-test('high risk, a missing risk tier, configured paths, policy always, and Hotfix keep the Review', () => {
+test('high risk, a missing risk tier, configured paths, policy always, and P0/P1 Hotfixes keep the Review', () => {
   assert.equal(reviewRequirement(lean('high')).required, true);
   assert.equal(reviewRequirement(lean('critical')).required, true);
   assert.equal(reviewRequirement(lean(null)).required, true);
@@ -26,7 +26,10 @@ test('high risk, a missing risk tier, configured paths, policy always, and Hotfi
   assert.equal(reviewRequirement(lean('low', { web: ['src/lib/public-apis/catalog.ts'] }), contracts).required, true);
   assert.equal(reviewRequirement(lean('low', { web: ['src/app/page.tsx'] }), contracts).required, false);
   assert.equal(reviewRequirement(lean('low'), { policy: 'always' }).required, true);
-  assert.equal(reviewRequirement({ mode: 'hotfix' }).required, true);
+  assert.equal(reviewRequirement({ mode: 'hotfix' }).required, true, 'a Hotfix without a bound severity is reviewed');
+  assert.equal(reviewRequirement({ mode: 'hotfix', hotfix: { severity: 'P1' } }).required, true);
+  assert.equal(reviewRequirement({ mode: 'hotfix', hotfix: { severity: 'P2' } }).required, false);
+  assert.equal(reviewRequirement({ mode: 'hotfix', hotfix: { severity: 'P3' } }, { policy: 'always' }).required, true);
   assert.throws(() => reviewRequirement(lean('low'), { policy: 'never' }), /review.policy must be risk or always/);
 });
 
