@@ -219,6 +219,26 @@ function assertHotfixReleaseEvidence(progress, source) {
   }
 }
 
+const WAITING_STATUSES = new Set(['deploying', 'awaiting_receipt']);
+const POLL_SECONDS = [30, 60, 120];
+
+function sleepSync(ms) {
+  if (ms > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+// Waiting for CI is not a stop: resume the same attempt with backoff until it leaves
+// deploying/awaiting_receipt or the wait budget ends (kept under a host tool timeout),
+// so one command call replaces a human "continue".
+export function waitForTestRelease({ waitMinutes = 8, sleep = sleepSync, ...options } = {}) {
+  const deadline = Date.now() + waitMinutes * 60000;
+  for (let polls = 1; ; polls += 1) {
+    const result = runTestRelease({ ...options, resume: true });
+    const waiting = WAITING_STATUSES.has(result.attempt?.status);
+    if (!waiting || Date.now() >= deadline) return { ...result, waited: { polls, still_waiting: waiting } };
+    sleep(Math.min(POLL_SECONDS[Math.min(polls, POLL_SECONDS.length) - 1] * 1000, Math.max(0, deadline - Date.now())));
+  }
+}
+
 export function runTestRelease({
   cwd = process.cwd(),
   featureId,

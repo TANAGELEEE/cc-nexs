@@ -22,7 +22,7 @@ import { recordLeanPlanReview, recordLeanReview } from './review-control.mjs';
 import { requestReleaseChanges } from './release-change-command.mjs';
 import { renderLeanPlan } from './plan-render.mjs';
 import { requestPlanAmendment, reviewPlanAmendment } from './plan-amendment.mjs';
-import { runTestRelease } from './test-release.mjs';
+import { runTestRelease, waitForTestRelease } from './test-release.mjs';
 import { recordEnvironmentVerification } from './test-verification-control.mjs';
 import { migrateFeatureConfig } from './feature-config.mjs';
 import { modelGateway } from './model-gateway.mjs';
@@ -85,7 +85,8 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   if (command === 'init-hotfix') return initializeHotfix({ cwd, ...parseHotfixLifecycleOptions(args, true) });
   if (command === 'revise-hotfix') return reviseHotfix({ cwd, ...parseHotfixLifecycleOptions(args, false) });
   if (command === 'release-test') {
-    return runTestRelease({ cwd, ...parseReleaseOptions(args) });
+    const { wait, waitMinutes, ...options } = parseReleaseOptions(args);
+    return wait ? waitForTestRelease({ cwd, ...options, ...(waitMinutes && { waitMinutes }) }) : runTestRelease({ cwd, ...options });
   }
   if (command === 'resolve-test-conflict') return resolveTestConflict({ cwd, ...parseFeatureOptions(args) });
   if (command === 'sync-base') return syncReleaseBase({ cwd, ...parseFeatureOptions(args) });
@@ -457,11 +458,19 @@ function parseReleaseOptions(args) {
     else if (token === '--dry-run') options.dryRun = true;
     else if (token === '--hotfix') options.hotfix = true;
     else if (token === '--capability-attested') options.capabilityAttested = true;
+    else if (token === '--wait' || token.startsWith('--wait=')) {
+      options.wait = true;
+      if (token.startsWith('--wait=')) {
+        options.waitMinutes = Number(token.slice('--wait='.length));
+        if (!Number.isFinite(options.waitMinutes) || options.waitMinutes <= 0) throw new Error('--wait=<minutes> must be a positive number');
+      }
+    }
     else if (token.startsWith('-')) throw new Error(`unknown option: ${token}`);
     else positional.push(token);
   }
   options.featureId = positional[0] || null;
   if (options.resume && options.retry) throw new Error('--resume and --retry are mutually exclusive');
+  if (options.wait && !options.resume) throw new Error('--wait polls an existing attempt; use it with --resume');
   if (positional.length > 1) throw new Error(`unexpected arguments: ${positional.slice(1).join(' ')}`);
   return options;
 }
@@ -723,7 +732,9 @@ function printResult(result) {
     }
     if (result.attempt) console.log(`Attempt: ${result.attempt.id}`);
     if (['deploying', 'awaiting_receipt'].includes(result.attempt?.status)) {
-      console.log('CI/CD: deploying; resume this exact attempt with release-test --resume');
+      console.log(result.waited
+        ? `CI/CD: still deploying after ${result.waited.polls} poll(s); keep waiting with release-test --resume --wait (not a stop)`
+        : 'CI/CD: deploying; wait with release-test --resume --wait (not a stop)');
       if (result.attempt.reason) console.log(`Waiting for: ${result.attempt.reason}`);
     }
     if (result.verificationPrerequisites?.ready === false) {
@@ -764,7 +775,7 @@ function printUsage() {
   console.error('  cc-nexs approve-plan <feature-id> [--approver <name>] [--auto] [--progress <path>]');
   console.error('  cc-nexs approve-release <feature-id> [--approver <name>] [--progress <path>]');
   console.error('    [--test-exception --authorization-evidence <text> --reason <text> --environment-evidence <text> --rollback-evidence <text>]');
-  console.error('  cc-nexs release-test <feature-id> [--resume | --retry] [--dry-run] [--hotfix] [--progress <path>]');
+  console.error('  cc-nexs release-test <feature-id> [--resume [--wait[=<minutes>]] | --retry] [--dry-run] [--hotfix] [--progress <path>]');
   console.error('  cc-nexs verify-local <feature-id> [--preflight|--passed|--failed|--deferred-to-test --evidence-json <json>] [--progress <path>]');
   console.error('  cc-nexs record-review <feature-id> --document-findings [--not-reproduced <finding-id>]... [--closure|--gateway-b-delta] [--progress <path>]');
   console.error('  cc-nexs record-review <feature-id> <--passed|--blocked> [--finding <P0/P1 text>] [--closure|--gateway-b-delta] [--progress <path>]  (legacy)');

@@ -2,7 +2,7 @@
 description: "Integrate final feature candidates into test, run the project release driver, then hand deployed evidence to the black-box Verifier."
 disable-model-invocation: true
 allowed-tools: "Read, Bash, Skill, Task, mcp__chrome-devtools__*"
-argument-hint: "<feature-id> [--resume | --retry | --dry-run] [--hotfix]"
+argument-hint: "<feature-id> [--resume [--wait[=<minutes>]] | --retry | --dry-run] [--hotfix]"
 ---
 
 # /cc-nexs:release-test
@@ -42,8 +42,10 @@ For CI/CD systems triggered by the test push, the driver should return promptly:
 This persists `delivery.test.status=deploying` and returns control immediately. `examples/drivers/gitlab-test-release-driver.mjs` is a reference GitLab driver that reads pipelines through the API, so no browser is needed to observe CI. Where API tokens are not allowed, run it with `--receipts .cc-nexs/runtime/tasks`: it returns `awaiting_receipt` with the exact `record-receipt` command, and the Orchestrator records what the signed-in GitLab pipeline or operations publication page shows. The controller still proves the recorded revision contains the integration. Resume without another merge or trigger:
 
 ```text
-node <plugin-root>/lib/cc-nexs-cli.mjs release-test <feature-id> --resume
+node <plugin-root>/lib/cc-nexs-cli.mjs release-test <feature-id> --resume --wait
 ```
+
+`--wait` keeps resuming the same attempt with backoff (30s, 60s, then every 120s) for up to 8 minutes, or `--wait=<minutes>`, and returns as soon as the attempt leaves `deploying`/`awaiting_receipt`; the result reports `waited.polls` and `waited.still_waiting`. Call it again while it is still waiting. It never re-integrates or retriggers.
 
 Hotfix resume also includes `--hotfix`.
 
