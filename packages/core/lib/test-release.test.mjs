@@ -692,10 +692,10 @@ test('test release driver fails closed on invalid output, process failure, timeo
       "console.log(JSON.stringify({status:'pending',pipeline:{metadata:{run:7,provider:'ci'},id:'p1'}}));\n",
       reorderedPipeline,
     ));
-    assert.throws(runWithPayload(
-      "console.log(JSON.stringify({status:'pending',pipeline:{metadata:{run:8,provider:'ci'},id:'p1'}}));\n",
+    assert.equal(runWithPayload(
+      "console.log(JSON.stringify({status:'pending',pipeline:{metadata:{run:8,provider:'ci'},id:'p2'}}));\n",
       reorderedPipeline,
-    ), /changed pipeline identity/);
+    )().pipeline.id, 'p2', 'a later pipeline may take over the attempt');
     assert.throws(runWithPayload(
       "console.log(JSON.stringify({status:'pending'}));\n",
       { ...reorderedPipeline, previous: { pipeline: null } },

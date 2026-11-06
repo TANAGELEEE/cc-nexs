@@ -355,22 +355,17 @@ test('test release attempts are idempotent and retain integration plus verificat
         url: 'https://ci.example/pipelines/42',
       },
     });
-    assert.throws(() => completeTestRelease(file, {
-      attemptId: first.attempt.id,
-      status: 'deploying',
-      pipeline: {
-        url: 'https://ci.example/pipelines/42',
-        metadata: { run: 43, provider: 'ci' },
-        id: '42',
-      },
-    }), /pipeline identity changed/);
+    // Another task's later pipeline that deploys a tip containing this integration takes over.
+    const later = { id: '43', metadata: { provider: 'ci', run: 43 }, url: 'https://ci.example/pipelines/43' };
+    completeTestRelease(file, { attemptId: first.attempt.id, status: 'deploying', pipeline: later });
+    assert.deepEqual(readProgressV2(file).delivery.test.attempts.at(-1).superseded_pipelines, [{ id: '42', metadata: { provider: 'ci', run: 42 }, url: 'https://ci.example/pipelines/42' }]);
     completeTestRelease(file, {
       attemptId: first.attempt.id,
       status: 'succeeded',
       pipeline: {
-        url: 'https://ci.example/pipelines/42',
-        metadata: { run: 42, provider: 'ci' },
-        id: '42',
+        url: 'https://ci.example/pipelines/43',
+        metadata: { run: 43, provider: 'ci' },
+        id: '43',
       },
       deployment: { environment: 'test' },
       environmentRevision: { api: 'merge123' },
@@ -380,11 +375,11 @@ test('test release attempts are idempotent and retain integration plus verificat
     const progress = readProgressV2(file);
     const attempt = progress.delivery.test.attempts[0];
     assert.equal(attempt.integrations.api.integrationCommit, 'merge123');
-    assert.equal(attempt.pipeline.id, '42');
+    assert.equal(attempt.pipeline.id, '43');
     assert.equal(attempt.verification.result, 'passed');
     assert.equal(attempt.status, 'verified');
     assert.equal(progress.delivery.test.status, 'verified');
-    assert.equal(progress.events.length, 5);
+    assert.equal(progress.events.length, 6);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

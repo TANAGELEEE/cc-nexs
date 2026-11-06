@@ -75,7 +75,7 @@ The automation controller follows `release_order`:
 6. subsequent `release-test --resume` only polls the same attempt and does not repeat merge/push/pipeline triggering;
 7. record integration, pipeline, deployment, and environment_revision in `delivery.test.attempts[]`.
 
-If any repository fails, retain the evidence already collected and stop. After entering release-blocked, only an explicit `--retry` recovers and creates a new attempt from the latest remote tip; repositories that already contain the candidate are skipped idempotently. While `deploying`, the candidate is frozen: only `--resume` of the same pipeline is allowed, and neither retry nor candidate switching is permitted.
+If any repository fails, retain the evidence already collected and stop. After entering release-blocked, only an explicit `--retry` recovers and creates a new attempt from the latest remote tip; repositories that already contain the candidate are skipped idempotently. While `deploying`, the candidate is frozen: only `--resume` is allowed, and neither retry nor candidate switching is permitted. A resume may report a later pipeline that deploys a test commit containing the integration; that deployment proves the candidate as well.
 
 ## Hotfix
 

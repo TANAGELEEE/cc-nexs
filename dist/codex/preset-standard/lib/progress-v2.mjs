@@ -304,8 +304,10 @@ export function completeTestRelease(file, {
     && deployment.environment !== (attempt.environment || 'test')) {
     throw new Error('[cc-nexs] deployment evidence must name the bound test environment');
   }
+  // Another task's later pipeline may deploy a test tip that contains this integration;
+  // that deployment proves the candidate just as well, so it supersedes ours.
   if (attempt.pipeline && pipeline && !jsonValuesEqual(attempt.pipeline, pipeline)) {
-    throw new Error('[cc-nexs] test release pipeline identity changed while resuming');
+    attempt.superseded_pipelines = [...(attempt.superseded_pipelines || []), attempt.pipeline];
   }
   if (['succeeded', 'deployed_needs_manual_verification'].includes(status)) {
     for (const [repository, integration] of Object.entries(attempt.integrations || {})) {

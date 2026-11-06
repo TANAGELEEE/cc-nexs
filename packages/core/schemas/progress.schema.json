@@ -136,6 +136,7 @@
                   "source": { "type": "object" },
                   "integrations": { "type": "object" },
                   "pipeline": { "type": ["object", "null"] },
+                  "superseded_pipelines": { "type": "array", "items": { "type": "object" } },
                   "deployment": { "type": ["object", "null"] },
                   "environment_revision": { "type": ["object", "string", "null"] },
                   "environment_revision_proof": { "type": ["object", "null"] },

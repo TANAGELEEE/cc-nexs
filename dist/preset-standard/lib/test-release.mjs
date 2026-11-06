@@ -568,10 +568,6 @@ export function invokeTestReleaseDriver({ driver, workspaceRoot, payload, resolv
   const effectivePipeline = result.pipeline || payload.previous?.pipeline;
   const effectiveDeployment = result.deployment || payload.previous?.deployment;
   const effectiveEnvironmentRevision = result.environment_revision || payload.previous?.environment_revision;
-  if (payload.previous?.pipeline && result.pipeline
-    && !jsonValuesEqual(payload.previous.pipeline, result.pipeline)) {
-    throw new Error('[cc-nexs] release driver changed pipeline identity while resuming');
-  }
   if (payload.operation === 'release_test_status' && !payload.previous?.pipeline
     && ['pending', 'succeeded', 'deployed_needs_manual_verification'].includes(result.status)
     && !isNonEmptyRecord(result.pipeline)) {
