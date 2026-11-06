@@ -309,8 +309,20 @@ function assessTargetChanges({ repo, sourceCommit, targetBefore, checkSensitive 
   };
 }
 
+// Whether the candidate merges into the target without conflicts, computed without
+// touching a worktree (git merge-tree, git 2.38+).
+function mergesCleanly(repo, sourceCommit, targetBefore) {
+  try {
+    execFileSync('git', ['-C', repo, 'merge-tree', '--write-tree', '--no-messages', targetBefore, sourceCommit], { stdio: ['ignore', 'pipe', 'pipe'] });
+    return true;
+  } catch (error) {
+    if (error.status === 1) return false;
+    throw new Error(`[cc-nexs] git merge-tree failed (git 2.38 or newer is required): ${error.stderr?.toString().trim() || error.message}`);
+  }
+}
+
 function overlapError(targetBranch) {
-  return new Error(`[cc-nexs] BASE_CHANGED: origin/${targetBranch} overlaps candidate paths; resolve and verify the affected changes before release`);
+  return new Error(`[cc-nexs] BASE_CHANGED: candidate conflicts with origin/${targetBranch}; resolve and verify the affected changes before release`);
 }
 
 function assertBranchName(name) {
@@ -390,11 +402,15 @@ function integrateOnce({
       alreadyIntegrated: true,
     };
   }
+  // A base that changed the candidate's own paths still takes the tested candidate when
+  // the merge is clean; those paths join the merged-tree checks, and a conflict below
+  // sends the task to BASE_CHANGED.
   let sensitive = [];
+  let overlap = [];
   if (requireDisjointTargetChanges && !isAncestor(repo, targetBefore, sourceCommit)) {
     const changes = assessTargetChanges({ repo, sourceCommit, targetBefore });
-    if (changes.overlap.length) throw overlapError(targetBranch);
-    sensitive = changes.sensitive;
+    overlap = changes.overlap;
+    sensitive = [...new Set([...changes.sensitive, ...changes.overlap])];
   }
   const tempRoot = conflictWorktree ? null : mkdtempSync(join(tmpdir(), `cc-nexs-test-release-${repositoryId}-`));
   const integrationWorktree = conflictWorktree || join(tempRoot, 'worktree');
@@ -457,6 +473,7 @@ function integrateOnce({
       alreadyIntegrated: false,
       integrationVerification,
       ...(autoResolved && { autoResolved }),
+      ...(overlap.length && { overlapPaths: overlap }),
       ...(sensitive.length && !verifyIntegration && { unverifiedSensitivePaths: sensitive }),
     };
   } finally {
@@ -552,13 +569,16 @@ export function promoteCandidateViaMergeRequest({
   }
   let integrationVerification = null;
   let unverifiedSensitivePaths = [];
+  let overlapPaths = [];
   if (!isAncestor(repo, targetBefore, sourceCommit)) {
     const changes = assessTargetChanges({ repo, sourceCommit, targetBefore, checkSensitive });
-    if (changes.overlap.length) throw overlapError(targetBranch);
-    if (changes.sensitive.length && verifyIntegration) {
-      integrationVerification = verifyMergedTree({ repo, repositoryId, sourceCommit, targetBefore, sensitive: changes.sensitive, verifyIntegration });
+    if (changes.overlap.length && !mergesCleanly(repo, sourceCommit, targetBefore)) throw overlapError(targetBranch);
+    overlapPaths = changes.overlap;
+    const checked = [...new Set([...changes.sensitive, ...changes.overlap])];
+    if (checked.length && verifyIntegration) {
+      integrationVerification = verifyMergedTree({ repo, repositoryId, sourceCommit, targetBefore, sensitive: checked, verifyIntegration });
     } else {
-      unverifiedSensitivePaths = changes.sensitive;
+      unverifiedSensitivePaths = checked;
     }
   }
   // The driver pushes the candidate to the branch itself: GitLab ignores
@@ -569,14 +589,14 @@ export function promoteCandidateViaMergeRequest({
   }
   const remoteCommit = git(repo, ['rev-parse', fetchBase(repo, targetBranch)]);
   if (isAncestor(repo, sourceCommit, remoteCommit)) {
-    return { ...base, ...proveCandidateMerge({ repo, remoteCommit, sourceCommit }), remoteCommit, pending: false, mergeRequest: { ...receipt, status: 'merged' }, integrationVerification, ...(unverifiedSensitivePaths.length && { unverifiedSensitivePaths }) };
+    return { ...base, ...proveCandidateMerge({ repo, remoteCommit, sourceCommit }), remoteCommit, pending: false, mergeRequest: { ...receipt, status: 'merged' }, integrationVerification, ...(overlapPaths.length && { overlapPaths }), ...(unverifiedSensitivePaths.length && { unverifiedSensitivePaths }) };
   }
   if (receipt.status === 'merged') throw new Error('[cc-nexs] MR receipt has no remote ancestry proof');
   const pushed = git(repo, ['ls-remote', '--heads', 'origin', `refs/heads/${branch}`]).split(/\s+/)[0] || '';
   if (pushed !== sourceCommit) {
     throw new Error(`[cc-nexs] MR_SOURCE_DRIFT: origin/${branch} is ${pushed || 'absent'}, expected approved candidate ${sourceCommit}; the driver must push exactly the candidate`);
   }
-  return { ...base, remoteCommit, pending: true, mergeRequest: receipt, integrationVerification, ...(unverifiedSensitivePaths.length && { unverifiedSensitivePaths }) };
+  return { ...base, remoteCommit, pending: true, mergeRequest: receipt, integrationVerification, ...(overlapPaths.length && { overlapPaths }), ...(unverifiedSensitivePaths.length && { unverifiedSensitivePaths }) };
 }
 
 // Read-only check that a tested candidate can still be released unchanged. It
@@ -589,8 +609,10 @@ export function checkBaseReadiness({ repo, repositoryId, sourceCommit, targetBra
   if (isAncestor(repo, sourceCommit, targetBefore)) return { ...result, status: 'merged' };
   if (isAncestor(repo, targetBefore, sourceCommit)) return { ...result, status: 'ready', sensitive: [] };
   const changes = assessTargetChanges({ repo, sourceCommit, targetBefore });
-  if (changes.overlap.length) return { ...result, status: 'base_changed', reason: overlapError(targetBranch).message, overlap: changes.overlap };
-  return { ...result, status: 'ready', sensitive: changes.sensitive };
+  if (changes.overlap.length && !mergesCleanly(repo, sourceCommit, targetBefore)) {
+    return { ...result, status: 'base_changed', reason: overlapError(targetBranch).message, overlap: changes.overlap };
+  }
+  return { ...result, status: 'ready', sensitive: changes.sensitive, ...(changes.overlap.length && { overlap: changes.overlap }) };
 }
 
 // Commits on a Test target that are neither in the base, this candidate, nor this

@@ -227,6 +227,7 @@ function baseIntegrationRecord(result, previous) {
     merge_request: mergeRequest && { ...mergeRequest, status: result.pending ? 'pending' : 'merged' },
     integration_verification: result.integrationVerification || previous?.integration_verification || null,
     ...((result.unverifiedSensitivePaths || previous?.unverified_sensitive_paths) && { unverified_sensitive_paths: result.unverifiedSensitivePaths || previous.unverified_sensitive_paths }),
+    ...((result.overlapPaths || previous?.overlap_paths) && { overlap_paths: result.overlapPaths || previous.overlap_paths }),
   };
 }
 

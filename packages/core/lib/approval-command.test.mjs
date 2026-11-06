@@ -735,7 +735,7 @@ test('base release integrates a newer non-conflicting base without invalidating 
   });
 });
 
-test('base release refuses overlapping paths without mutating candidate or test evidence', () => {
+test('base release refuses conflicting paths without mutating candidate or test evidence', () => {
   const changedPath = 'candidate.txt';
   const fixture = createEnvironmentBlockedCandidate('lean', '26-overlap');
   withPresetEnv(fixture, () => {
@@ -748,7 +748,7 @@ test('base release refuses overlapping paths without mutating candidate or test 
     fixture.git(fixture.repo, ['commit', '-m', 'overlapping change']);
     fixture.git(fixture.repo, ['push', 'origin', 'main']);
     const remoteBefore = fixture.git(fixture.repo, ['rev-parse', 'origin/main']);
-    assert.throws(() => runBaseRelease({ cwd: fixture.root, featureId: '26-overlap' }), /BASE_CHANGED.*overlaps/);
+    assert.throws(() => runBaseRelease({ cwd: fixture.root, featureId: '26-overlap' }), /BASE_CHANGED.*conflicts/);
     const blocked = readProgressV2(fixture.progressFile);
     assert.equal(blocked.state, 'BASE_CHANGED');
     assert.deepEqual(blocked.delivery.test, approved.delivery.test);

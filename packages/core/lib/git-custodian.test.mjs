@@ -488,7 +488,7 @@ test('MR delivery keeps the overlap guard, records unchecked sensitive paths, an
     assert.match(result.integrationVerification.integrationTree, /^[0-9a-f]{40}$/);
     assert.equal(git(repo, ['worktree', 'list', '--porcelain']).split('\n').filter((line) => line.startsWith('worktree ')).length, 1);
     writeFileSync(join(other, 'change.txt'), 'upstream'); git(other, ['add', '.']); git(other, ['commit', '-m', 'overlap']); git(other, ['push', 'origin', 'main']);
-    assert.throws(() => promoteCandidateViaMergeRequest({ ...options, mergeRequest: driver, verifyIntegration: () => ({}) }), /BASE_CHANGED: origin\/main overlaps candidate paths/);
+    assert.throws(() => promoteCandidateViaMergeRequest({ ...options, mergeRequest: driver, verifyIntegration: () => ({}) }), /BASE_CHANGED: candidate conflicts with origin\/main/);
   } finally { rmSync(fixture.root, { recursive: true, force: true }); }
 });
 
@@ -510,6 +510,31 @@ test('base readiness reports drift before Gateway B without mutating refs', () =
     assert.deepEqual(drift.overlap, ['change.txt']);
     assert.equal(git(repo, ['rev-parse', 'refs/cc-nexs/candidates/07-demo/api']), source);
   } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+});
+
+test('a base that edits the candidate\'s files elsewhere keeps the tested candidate releasable', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-clean-overlap-'));
+  try {
+    const repo = join(root, 'repo');
+    git(root, ['init', '--bare', join(root, 'remote.git')]);
+    git(root, ['clone', join(root, 'remote.git'), repo]); configure(repo);
+    git(repo, ['checkout', '-b', 'main']);
+    writeFileSync(join(repo, 'routes.txt'), 'a\nb\nc\nd\ne\nf\ng\n'); git(repo, ['add', '.']); git(repo, ['commit', '-m', 'base']); git(repo, ['push', 'origin', 'main']);
+    git(repo, ['checkout', '-b', 'feature']);
+    writeFileSync(join(repo, 'routes.txt'), 'a feature\nb\nc\nd\ne\nf\ng\n'); git(repo, ['commit', '-am', 'feature']);
+    const source = git(repo, ['rev-parse', 'HEAD']);
+    const ref = 'refs/cc-nexs/candidates/overlap/api'; git(repo, ['update-ref', ref, source]);
+    git(repo, ['checkout', 'main']); writeFileSync(join(repo, 'routes.txt'), 'a\nb\nc\nd\ne\nf\ng upstream\n'); git(repo, ['commit', '-am', 'another task']); git(repo, ['push', 'origin', 'main']);
+    const ready = checkBaseReadiness({ repo, repositoryId: 'api', sourceCommit: source, targetBranch: 'main' });
+    assert.equal(ready.status, 'ready');
+    assert.deepEqual(ready.overlap, ['routes.txt']);
+    const result = integrateCandidateToTest({ repo, repositoryId: 'api', candidateRef: ref, targetBranch: 'main', requireDisjointTargetChanges: true, verifyIntegration: (payload) => {
+      assert.deepEqual(payload.sensitivePaths, ['routes.txt'], 'overlapping paths get the merged-tree checks');
+      return { status: 'passed', integrationCommit: payload.integrationCommit, proof: 'merged tree checks passed' };
+    } });
+    assert.deepEqual(result.overlapPaths, ['routes.txt']);
+    assert.equal(git(repo, ['show', 'origin/main:routes.txt']), 'a feature\nb\nc\nd\ne\nf\ng upstream');
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test('disjoint sensitive base changes integrate unchanged, through merged-tree checks when configured', () => {
