@@ -7,13 +7,12 @@ const TERMINAL = new Set(['COMPLETE']);
 /**
  * Decide the next state and the role/action to invoke for a Lean or Hotfix task.
  *
- *   mode='lean' — plan-first, two-gate, one-consolidated-review pipeline.
- *     Eligible fast-track work reaches test before the consolidated Review;
- *     standard work keeps Review before test. Both require Review + verified test
- *     evidence for the exact candidate before Gateway B:
+ *   mode='lean' — plan-first, two-gate, verification-led pipeline. Every candidate
+ *     reaches test first; a consolidated Review of the exact tested candidate follows
+ *     only where the review policy requires one (high/critical, sensitive paths):
  *     INIT → PLANNING → PLAN_REVIEWING → PLAN_PENDING_HUMAN → PLAN_APPROVED → IMPLEMENTING
- *       → LOCAL_VERIFYING → [CONSOLIDATED_REVIEW] → CANDIDATE_READY
- *       → TEST_RELEASE → TEST_VERIFYING → [CONSOLIDATED_REVIEW] → RELEASE_PENDING_HUMAN
+ *       → LOCAL_VERIFYING → CANDIDATE_READY → TEST_RELEASE → TEST_VERIFYING
+ *       → TEST_VERIFIED → [CONSOLIDATED_REVIEW] → RELEASE_PENDING_HUMAN
  *       → BASE_MERGING → COMPLETE
  *     An independent plan review precedes Gateway A; a blocked plan gets one revision and
  *     re-review, after which open findings go to Gateway A for the human to decide.
@@ -185,13 +184,16 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
   const verifier = has('lean-verifier') ? 'lean-verifier' : reviewer;
   const planApproved = workflow.plan_approved ?? humanGateApproved;
   const releaseApproved = workflow.release_approved === true;
-  const deliveryLane = workflow.delivery_lane || (workflow.lean_fast_track === true ? 'fast-track' : 'standard');
-  const fastTrack = deliveryLane === 'fast-track';
+  // Every Lean candidate is verified in test first; a code Review follows only where
+  // the review policy requires one (high/critical plans, sensitive paths).
+  const reviewRequired = workflow.review?.required !== false;
   const reviewStatus = workflow.review?.status || workflow.review_status || 'idle';
   const reviewExact = workflow.review?.exact === true;
   const closureAttempts = Number(workflow.review?.closure_attempts || 0);
   const gatewayBDeltaAttempts = Number(workflow.review?.gateway_b_delta_attempts || 0);
   const testReleaseStatus = workflow.test_release?.status || 'idle';
+  const testExact = workflow.test_release?.exact !== false;
+  const reviewSatisfied = !reviewRequired || (reviewExact && reviewStatus === 'passed');
   const derivedPending = workflow.derived_binding?.status === 'pending';
 
   if (TERMINAL.has(state)) return { next: state, role: null, action: 'noop' };
@@ -227,11 +229,7 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
     case 'LOCAL_VERIFY_FAILED':
       return { next: 'IMPLEMENTING', role: developer, action: 'fix_local' };
     case 'LOCAL_VERIFYING':
-      if (fastTrack) return { next: 'CANDIDATE_READY', role: null, action: 'continue_to_test' };
-      if (reviewExact && ['passed', 'blocked'].includes(reviewStatus)) {
-        return { next: 'CONSOLIDATED_REVIEW', role: null, action: 'continue' };
-      }
-      return { next: 'CONSOLIDATED_REVIEW', role: reviewer, action: 'review_candidate' };
+      return { next: 'CANDIDATE_READY', role: null, action: 'continue_to_test' };
     case 'CONSOLIDATED_REVIEW':
       return { next: 'PARSE_CONSOLIDATED_REVIEW', role: null, action: 'parse_review_conclusion' };
     case 'CONSOLIDATED_REVIEW_BLOCKED':
@@ -248,7 +246,8 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
       }
       return { next: 'REVIEW_FIXING', role: developer, action: 'fix_local' };
     case 'LOCAL_REVERIFYING':
-      if (fastTrack && workflow.local_verification?.context === 'test' && reviewStatus === 'idle') {
+      // A test fix goes back to test; only a Review fix gets the delta closure.
+      if (workflow.local_verification?.context !== 'review' || !reviewRequired) {
         return { next: 'CANDIDATE_READY', role: null, action: 'continue_to_test' };
       }
       if (reviewExact && closureAttempts > 0) {
@@ -258,7 +257,7 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
     case 'REVIEW_CLOSURE':
       return { next: 'PARSE_REVIEW_CLOSURE', role: null, action: 'parse_review_conclusion' };
     case 'CANDIDATE_READY':
-      if (fastTrack && testReleaseStatus === 'verified' && reviewStatus === 'passed' && !derivedPending) {
+      if (testReleaseStatus === 'verified' && testExact && reviewSatisfied && !derivedPending) {
         return { next: 'RELEASE_PENDING_HUMAN', role: null, action: 'await_release_approval', stop: true };
       }
       return { next: 'TEST_RELEASE', role: null, action: 'continue' };
@@ -299,10 +298,10 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
       // Deferred derived data is generated once the source passes Test, and that
       // final candidate gets its own local check, Review and Test attempt.
       if (derivedPending) return { next: 'TEST_FIXING', role: developer, action: 'bind_derived' };
-      if (fastTrack && reviewExact && reviewStatus === 'blocked') {
+      if (reviewRequired && reviewExact && reviewStatus === 'blocked') {
         return { next: 'CONSOLIDATED_REVIEW', role: null, action: 'continue' };
       }
-      if (fastTrack && (!reviewExact || reviewStatus !== 'passed')) {
+      if (!reviewSatisfied) {
         return { next: 'CONSOLIDATED_REVIEW', role: reviewer, action: 'review_tested_candidate' };
       }
       return { next: 'RELEASE_PENDING_HUMAN', role: null, action: 'await_release_approval', stop: true };
@@ -314,6 +313,7 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
     case 'GATEWAY_B_FIXING':
       return { next: 'GATEWAY_B_LOCAL_REVERIFYING', role: null, action: 'verify_local' };
     case 'GATEWAY_B_LOCAL_REVERIFYING':
+      if (!reviewRequired) return { next: 'CANDIDATE_READY', role: null, action: 'continue_to_test' };
       if (reviewExact && gatewayBDeltaAttempts > 0) {
         return { next: 'GATEWAY_B_DELTA_REVIEW', role: null, action: 'continue' };
       }

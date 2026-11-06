@@ -1,16 +1,17 @@
 import { assertTestAttemptNotInvalidated, assertDeferredChecksClosed, candidateFingerprint, deploymentContainsIntegration } from './progress-v2.mjs';
 import { jsonValuesEqual } from './canonical-json.mjs';
 import { assertRecordedLocalVerification } from './local-evidence.mjs';
+import { reviewRequirement, reviewSatisfied } from './review-policy.mjs';
 
 // This authorizes base integration with an acknowledged test-environment gap;
 // it neither verifies test nor authorizes a production deployment.
-export function createReleaseExceptionBinding(progress, options) {
+export function createReleaseExceptionBinding(progress, options, review = {}) {
   for (const field of ['authorizationEvidence', 'reason', 'environmentEvidence', 'rollbackEvidence']) {
     if (typeof options?.[field] !== 'string' || !options[field].trim()) {
       throw new Error(`[cc-nexs] test exception requires ${field}`);
     }
   }
-  const { attempt, local } = assertExceptionPrerequisites(progress);
+  const { attempt, local } = assertExceptionPrerequisites(progress, review);
   return {
     kind: 'test_environment_unavailable',
     authorization_evidence: options.authorizationEvidence.trim(),
@@ -22,7 +23,7 @@ export function createReleaseExceptionBinding(progress, options) {
   };
 }
 
-export function assertReleaseExceptionCurrent(progress, binding) {
+export function assertReleaseExceptionCurrent(progress, binding, review = {}) {
   const exception = binding?.test_exception;
   if (exception?.kind !== 'test_environment_unavailable') {
     throw new Error('[cc-nexs] release test exception is missing or invalid');
@@ -32,7 +33,7 @@ export function assertReleaseExceptionCurrent(progress, binding) {
     reason: exception.reason,
     environmentEvidence: exception.environment_evidence,
     rollbackEvidence: exception.rollback_evidence,
-  });
+  }, review);
   const attempt = progress.delivery.test.attempts.at(-1);
   if (!jsonValuesEqual(rebuilt, exception)
     || binding.test_attempt !== attempt.id
@@ -43,7 +44,7 @@ export function assertReleaseExceptionCurrent(progress, binding) {
   }
 }
 
-function assertExceptionPrerequisites(progress) {
+function assertExceptionPrerequisites(progress, review) {
   if (!['lean', 'hotfix'].includes(progress.mode)) throw new Error('[cc-nexs] test exception requires Lean or Hotfix');
   const attempt = progress.delivery?.test?.attempts?.at(-1);
   assertTestAttemptNotInvalidated(attempt);
@@ -75,7 +76,7 @@ function assertExceptionPrerequisites(progress) {
   }
   const local = assertRecordedLocalVerification(progress, { source: attempt.source, fingerprint });
   assertDeferredChecksClosed(progress, attempt, attempt.verification.evidence);
-  if (progress.review?.status !== 'passed' || progress.review.candidate_fingerprint !== fingerprint) {
+  if (!reviewSatisfied(progress, fingerprint, reviewRequirement(progress, review))) {
     throw new Error('[cc-nexs] test exception requires a passing consolidated Review for the same candidate');
   }
   return { attempt, local };

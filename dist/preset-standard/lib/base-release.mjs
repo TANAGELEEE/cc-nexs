@@ -23,6 +23,7 @@ import { assertRecordedLocalVerification, extractLocalVerificationChecks } from 
 import { transitionState } from './progress-io.mjs';
 import { resolveFeatureProgress } from './approval-command.mjs';
 import { assertReleaseExceptionCurrent } from './release-exception.mjs';
+import { reviewRequirement, reviewSatisfied } from './review-policy.mjs';
 
 export function runBaseRelease({ cwd = process.cwd(), featureId, progressPath = null } = {}) {
   // Code candidates are the immutable, approved release payload. The docs
@@ -62,7 +63,7 @@ function executeBaseRelease(context) {
   if (currentFingerprint !== gate.binding.candidate_fingerprint) {
     throw new Error('[cc-nexs] candidate fingerprint changed after release approval');
   }
-  if (context.progress.review?.status !== 'passed' || context.progress.review.candidate_fingerprint !== currentFingerprint) {
+  if (!reviewSatisfied(context.progress, currentFingerprint, reviewRequirement(context.progress, context.config.mergedReview))) {
     throw new Error('[cc-nexs] approved candidate no longer has a passing consolidated Review');
   }
   const localChecks = extractLocalVerificationChecks(releaseScope(context.progress, context.progressFile));
@@ -70,7 +71,7 @@ function executeBaseRelease(context) {
   const testAttempt = context.progress.delivery?.test?.attempts?.find((item) => item.id === gate.binding.test_attempt);
   assertTestAttemptNotInvalidated(testAttempt);
   if (gate.binding.test_exception) {
-    assertReleaseExceptionCurrent(context.progress, gate.binding);
+    assertReleaseExceptionCurrent(context.progress, gate.binding, context.config.mergedReview);
   } else if (!testAttempt || testAttempt.status !== 'verified' || testAttempt.fingerprint !== currentFingerprint) {
     throw new Error('[cc-nexs] approved test verification is missing or stale');
   }

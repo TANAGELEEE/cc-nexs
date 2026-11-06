@@ -38,9 +38,11 @@
     "models": { "$ref": "#/definitions/models" },
     "review": {
       "type": "object",
-      "description": "Review panel. Every reviewer runs the same brief on the exact candidate; one entry is one reviewer. Without a panel, one native reviewer uses the Reviewer role routing.",
+      "description": "Code Review after test verification. policy decides when a Lean task needs one; the panel lists the reviewers. Without a panel, one native reviewer uses the Reviewer role routing.",
       "additionalProperties": false,
       "properties": {
+        "policy": { "enum": ["risk", "always"], "default": "risk", "description": "risk: Lean reviews high/critical plans and candidates touching sensitive or required_paths; always: every Lean task. Hotfix always reviews." },
+        "required_paths": { "type": "array", "items": { "type": "string" }, "description": "Extra path globs (repository-relative) whose change requires a Review" },
         "panel": {
           "description": "A list for every runtime, or a map of claude/codex/pi lists.",
           "oneOf": [

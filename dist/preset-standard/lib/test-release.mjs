@@ -170,7 +170,7 @@ export function preflightTestRelease({
     assertRecordedLocalVerification(progress, { source: source, fingerprint: releaseFingerprint(source), expectedChecks: localChecks });
   }
   if (hotfix) assertHotfixReleaseEvidence(progress, source);
-  else if (progress.mode === 'lean') assertLeanReleaseEvidence(progress, source, planDelivery.lane);
+  else if (progress.mode === 'lean') assertLeanReleaseEvidence(progress, source);
 
   const release = { ...config.mergedRelease?.test, ...progress.delivery.test.target };
   if (progress.delivery.test.target) validateTestTarget(progress.delivery.test.target, workspace.repositories, deployRepositories.map(repo => repo.id));
@@ -200,15 +200,12 @@ export function preflightTestRelease({
   };
 }
 
-function assertLeanReleaseEvidence(progress, source, lane) {
+// Lean verifies in test before any Review, so only local verification gates a release.
+function assertLeanReleaseEvidence(progress, source) {
   const fingerprint = releaseFingerprint(source);
   if (!['passed', 'deferred_to_test'].includes(progress.local_verification?.status)
     || progress.local_verification.candidate_fingerprint !== fingerprint) {
     throw new Error('[cc-nexs] Lean test release requires passed or test-deferred local verification for the exact candidate');
-  }
-  if (lane !== 'fast-track'
-    && (progress.review?.status !== 'passed' || progress.review.candidate_fingerprint !== fingerprint)) {
-    throw new Error('[cc-nexs] standard Lean test release requires a passing Review for the exact candidate');
   }
 }
 

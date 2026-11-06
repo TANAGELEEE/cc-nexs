@@ -154,10 +154,15 @@ async function assertStateMachine() {
   );
   expectStep(
     mod.nextStep({ state: 'LOCAL_VERIFYING', enabledRoles: leanRoles, mode: 'lean' }),
-    { next: 'CONSOLIDATED_REVIEW', role: 'lean-reviewer', action: 'review_candidate' },
-    'lean consolidated review',
+    { next: 'CANDIDATE_READY', role: null, action: 'continue_to_test' },
+    'lean verifies in test first',
   );
-  const leanReleaseGate = mod.nextStep({ state: 'TEST_VERIFIED', enabledRoles: leanRoles, mode: 'lean' });
+  expectStep(
+    mod.nextStep({ state: 'TEST_VERIFIED', enabledRoles: leanRoles, mode: 'lean', workflow: { review: { required: true, status: 'idle' } } }),
+    { next: 'CONSOLIDATED_REVIEW', role: 'lean-reviewer', action: 'review_tested_candidate' },
+    'lean required Review of the tested candidate',
+  );
+  const leanReleaseGate = mod.nextStep({ state: 'TEST_VERIFIED', enabledRoles: leanRoles, mode: 'lean', workflow: { review: { required: false } } });
   expectStep(leanReleaseGate, { next: 'RELEASE_PENDING_HUMAN', action: 'await_release_approval' }, 'lean release gate');
   assert(leanReleaseGate.stop === true, 'Lean release gate must stop for human approval');
 

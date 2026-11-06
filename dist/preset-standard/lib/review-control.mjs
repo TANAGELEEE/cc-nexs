@@ -44,11 +44,15 @@ export function recordLeanReview({
   if (!documentFindings && notReproduced.length > 0) throw new Error('[cc-nexs] --not-reproduced requires --document-findings');
   const context = resolveCandidateContext({ cwd, featureId, progressPath });
   releaseScope(context.progress, context.progressFile);
-  let leanDeliveryLane = 'standard';
+  // Lean reviews the exact candidate after it is verified in test. A standard-lane task
+  // that was already reviewing before test when it upgraded may finish that Review.
   if (context.progress.mode === 'lean') {
     assertPlanApprovalCurrent(context.progress, dirname(context.progressFile));
-    leanDeliveryLane = approvedPlanDeliveryLane(context.progress, dirname(context.progressFile));
-    if (!closure && !gatewayBDelta && leanDeliveryLane === 'fast-track') {
+    const fingerprint = candidateFingerprint(context.source);
+    const legacyPreTestReview = approvedPlanDeliveryLane(context.progress, dirname(context.progressFile)) === 'standard'
+      && ['LOCAL_VERIFYING', 'CONSOLIDATED_REVIEW'].includes(context.progress.state)
+      && !(context.progress.delivery?.test?.attempts || []).some((item) => item.fingerprint === fingerprint && !item.invalidated_at);
+    if (!closure && !gatewayBDelta && !legacyPreTestReview) {
       const attempt = context.progress.delivery?.test?.attempts?.at(-1);
       assertTestAttemptNotInvalidated(attempt);
       const deployedForManualVerification = attempt?.status === 'deployed_needs_manual_verification'
@@ -58,7 +62,7 @@ export function recordLeanReview({
         && Object.keys(attempt.environment_revision || {}).length > 0;
       if ((!deployedForManualVerification && attempt?.status !== 'verified')
         || attempt.fingerprint !== candidateFingerprint(context.source)) {
-        throw new Error('[cc-nexs] fast-track consolidated Review requires verified test or a deployed manual-verification attempt for the exact candidate');
+        throw new Error('[cc-nexs] consolidated Review requires verified test or a deployed manual-verification attempt for the exact candidate');
       }
     }
   }
@@ -75,7 +79,7 @@ export function recordLeanReview({
       ? ['GATEWAY_B_LOCAL_REVERIFYING', 'GATEWAY_B_DELTA_REVIEW']
       : closure
         ? ['LOCAL_REVERIFYING', 'REVIEW_CLOSURE']
-        : ['RELEASE_PENDING_HUMAN', 'LOCAL_VERIFYING', 'CONSOLIDATED_REVIEW', ...(leanDeliveryLane === 'fast-track' ? ['TEST_VERIFIED', 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY'] : [])];
+        : ['RELEASE_PENDING_HUMAN', 'LOCAL_VERIFYING', 'CONSOLIDATED_REVIEW', 'TEST_VERIFIED', 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY'];
   if (!expectedStates.includes(context.progress.state)) {
     throw new Error(`[cc-nexs] ${closure ? 'review closure' : 'consolidated review'} requires ${expectedStates.join(' or ')}, found ${context.progress.state}`);
   }

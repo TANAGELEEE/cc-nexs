@@ -22,7 +22,7 @@ Only for `mode=lean` with an approved plan. Read the plan task DAG and dispatch 
 - `test-fix` repairs every failure in the Verifier's report in one round and returns local evidence for each: a frontend-only fix is confirmed in a local browser or targeted test against the deployed test backend before it is redeployed.
 - `gateway-b-fix` handles only the ACs and allowed paths of the current Gateway B implementation request in `plan.md`; if requirement/AC/approved-plan changes are found, stop and switch to a scope request.
 
-Fast-track constraints:
+Local check constraints (every lane):
 
 - Run only the targeted checks specified by the plan, preferring to reuse/extend the most recent existing tests; do not add new test files unless there is no existing file where the key regression can live.
 - Record the same confirmed baseline Maven/Nexus/external-dependency blocker only once; do not repeatedly download, re-run, or have multiple children prove it again.

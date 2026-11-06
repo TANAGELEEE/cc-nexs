@@ -11,6 +11,8 @@ import { assertRecordedLocalVerification, extractLocalVerificationChecks } from 
 import { syncHotfixChangeStatuses, syncPlanChangeStatuses } from './release-change-docs.mjs';
 import { loadWorkspaceConfig } from './config-loader.mjs';
 import { createReleaseExceptionBinding } from './release-exception.mjs';
+import { findWorkspaceRoot, loadCandidateConfig } from './candidate-context.mjs';
+import { reviewRequirement, reviewSatisfied } from './review-policy.mjs';
 
 const GATES = new Set(['plan', 'release']);
 const SKIP_DIRS = new Set([
@@ -107,14 +109,16 @@ export function approveFeatureGate({
     const localChecks = extractLocalVerificationChecks(releaseScope(before, progressFile));
     const attempt = before.delivery?.test?.attempts?.at(-1);
     assertTestAttemptNotInvalidated(attempt);
-    const exceptionBinding = testException ? createReleaseExceptionBinding(before, testException) : null;
+    const reviewConfig = loadCandidateConfig(findWorkspaceRoot(cwd, progressFile)).mergedReview;
+    const exceptionBinding = testException ? createReleaseExceptionBinding(before, testException, reviewConfig) : null;
     if (!exceptionBinding && (!attempt || attempt.status !== 'verified' || attempt.verification?.result !== 'passed')) {
       throw new Error('[cc-nexs] release approval requires a verified test release attempt');
     }
     const baseTargets = assertReleaseCandidateRefsCurrent({ progress: before, progressFile, attempt });
     assertRecordedLocalVerification(before, { source: attempt.source, fingerprint: attempt.fingerprint, expectedChecks: localChecks });
-    if (before.review?.status !== 'passed' || before.review.candidate_fingerprint !== attempt.fingerprint) {
-      throw new Error('[cc-nexs] release approval requires a consolidated review for the tested candidate');
+    const reviewNeed = reviewRequirement(before, reviewConfig);
+    if (!reviewSatisfied(before, attempt.fingerprint, reviewNeed)) {
+      throw new Error(`[cc-nexs] release approval requires a consolidated review for the tested candidate (${reviewNeed.reasons.join('; ')})`);
     }
     const binding = {
       candidate_fingerprint: attempt.fingerprint,
@@ -122,6 +126,7 @@ export function approveFeatureGate({
       base_targets: baseTargets,
       test_attempt: attempt.id,
       environment_revision: attempt.environment_revision,
+      review: { required: reviewNeed.required, reasons: reviewNeed.reasons },
       plan_binding: before.mode === 'lean' ? before.gates.plan?.binding?.combined_sha256 || null : null,
       hotfix_scope_binding: before.mode === 'hotfix' ? before.hotfix.scope_binding.hotfix_scope_sha256 : null,
       ...(exceptionBinding && { test_exception: exceptionBinding }),

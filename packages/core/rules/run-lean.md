@@ -6,12 +6,11 @@ Read this file only when resolved mode is `lean`. Common identity, safety, model
 
 `/cc-nexs:plan` owns `INIT -> PLANNING -> PLAN_REVIEWING -> PLAN_PENDING_HUMAN`, including the one independent plan review of a high/critical plan and at most one revision; a low/medium plan records a skipped review bound to its hash and goes to Gateway A. Run normally starts after `/cc-nexs:approve-plan` (or its `--auto` form for a feature initialized with `--auto-plan`) and must validate the current plan approval binding before dispatch.
 
-Run implements the approved plan, records exact candidates, and invokes deterministic local verification. The approved `delivery_lane` selects ordering:
+Run implements the approved plan, records exact candidates, and invokes deterministic local verification. Verification is the main gate, so every Lean candidate follows one order:
 
-- `standard`: local verification → one consolidated Review → test integration/deployment → test verification → Gateway B.
-- low/medium `fast-track`: local verification → test integration/deployment → test verification → one consolidated Review of the exact tested candidate → Gateway B.
+local verification → test integration/deployment → test verification → [one consolidated Review of the exact tested candidate] → Gateway B.
 
-High/critical plans may not use fast-track. In either lane `/cc-nexs:approve-release` binds the exact tested and reviewed fingerprint before base integration.
+The Review runs only where it finds what black-box checks cannot. `review.policy: risk` (the default) requires it for a high/critical plan, a plan without a bound risk tier, or a candidate touching sensitive paths (auth, permission, security, secret, migration, schema, SQL, payment, billing, deployment, CI) or the workspace's `review.required_paths`; `review.policy: always` requires it for every task. `cc-nexs status` reports `review.required` and its reasons. `delivery_lane` no longer changes this order; it still decides `--auto-plan` eligibility. `/cc-nexs:approve-release` binds the exact tested fingerprint, and the Review when one is required, before base integration.
 
 ## Role → command dispatch table
 
@@ -111,7 +110,7 @@ Read only the final relevant conclusion line in `plan.md`, using `^结论:\s*(\S
 
 After every Review round (the review panel's reviewers in parallel on one brief, then one Judge that reruns the P0/P1 commands), call `record-review --document-findings` to classify the `cc-nexs-review` block under `rules/review-findings.md` and bind the derived conclusion to the same candidate fingerprint as local verification. After test parse, call `record-test-verification` to bind the exact attempt/environment revision; parallel shard Verifiers are recorded together with `--shard-json`, which derives the conclusion and writes the merged acceptance section. Verifiers drive each repository through the guide `verify-guides` lists for it (in the candidate commit, else the docs repository's committed base, else the workspace). Complete Review occurs once; repairs use one delta closure. A test-blocked repair also requires new local verification and delta Review before a new test attempt.
 
-Fast-track specifically routes a locally ready candidate directly through `CANDIDATE_READY -> TEST_RELEASE`; after `TEST_VERIFIED`, dispatch `review_tested_candidate`. The Review controller must prove the current verified attempt fingerprint equals the reviewed candidate. Standard lane reviews before `CANDIDATE_READY`.
+A locally ready candidate goes `CANDIDATE_READY -> TEST_RELEASE`; after `TEST_VERIFIED`, dispatch `review_tested_candidate` only when the Review is required, otherwise go to Gateway B. The Review controller must prove the current verified attempt fingerprint equals the reviewed candidate. A test fix returns to test; only a Review fix gets the delta closure, after which the changed candidate gets its own test attempt. Without a required Review, a Gateway B implementation change goes from local reverification straight to a new test attempt.
 
 ## Human gateways and change requests
 

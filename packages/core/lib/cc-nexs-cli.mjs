@@ -522,6 +522,8 @@ function printResult(result) {
     console.log(`Action: ${next.action}${next.role ? ` (role: ${next.role})` : ''}${next.stop ? ' [stop]' : ''}`);
     if (next.circuitBreaker) console.log(`Circuit breaker: ${next.circuitBreaker}${next.bug ? ` (${next.bug})` : ''}`);
     console.log(`Milestones: ${result.milestones.map((item) => `${item.id}=${item.status}${item.detail ? ` (${item.detail})` : ''}`).join(', ')}`);
+    const review = result.input.workflow?.review;
+    if (result.input.mode === 'lean' && review) console.log(`Review: ${review.required ? 'required' : 'not required'} (${(review.required_reasons || []).join('; ')})`);
     if (result.taskFiles) console.log(`Task files: ${result.taskFiles} (rebuildable copies only in scratch/)`);
     if (result.postRelease?.length) console.log(`Post-release pending: ${result.postRelease.join('; ')}`);
     console.log(`Progress: ${result.progressFile}`);

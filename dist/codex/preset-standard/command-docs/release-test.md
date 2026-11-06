@@ -7,7 +7,7 @@ argument-hint: "<feature-id> [--resume | --retry | --dry-run] [--hotfix]"
 
 # /cc-nexs:release-test
 
-This is the deterministic test delivery action for an exact candidate. Standard Lean invokes it after Review; eligible fast-track Lean invokes it immediately after deterministic local checks and performs its one Review after test verification. It never targets production.
+This is the deterministic test delivery action for an exact candidate. Lean invokes it right after deterministic local checks; a required Review follows test verification. It never targets production.
 
 ## Delivery preflight
 
@@ -17,7 +17,7 @@ Before any remote mutation, resolve `release.test` from project config/private o
 2. A structured release driver exists and every assigned code repository has an exact candidate ref.
 3. At least one repository is approved for `deploy` and has a configured `test_branch`. A Lean repository is local only when its Gateway A-bound plan explicitly contains `test_delivery.<repo>: local`; missing `test_branch` is never silently interpreted as local.
 4. Plaintext credentials are absent. Browser provider, login/MFA, app/operations URLs, allowlist completeness, and S3 bucket/CORS/IAM observability are post-deployment verification concerns and must not block the test merge.
-5. Lean has exact-fingerprint local evidence (`passed` or structured `deferred_to_test`); standard Lean additionally has an exact-fingerprint passing Review. Fast-track intentionally performs that Review after test verification.
+5. Lean has exact-fingerprint local evidence (`passed` or structured `deferred_to_test`). Review is not a test-release prerequisite; it follows test verification when the review policy requires it.
 
 `--hotfix` is accepted only for `mode=hotfix + HOTFIX_TEST_RELEASE`; it never bypasses readiness.
 

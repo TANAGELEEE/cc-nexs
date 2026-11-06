@@ -600,6 +600,32 @@ test('Hotfix Gateway B binds the same reviewed and test-verified feature candida
   assert.equal(approved.gates.release.binding.hotfix_scope_binding, approved.hotfix.scope_binding.hotfix_scope_sha256);
 });
 
+test('Lean release approval needs no Review for a verified low-risk candidate unless the policy asks for one', () => {
+  const fixture = createFeature({ id: '24', mode: 'lean', state: 'PLAN_PENDING_HUMAN' });
+  approveFeatureGate({ cwd: fixture.root, featureId: '24', gate: 'plan', approver: 'Plan Owner' });
+  const source = { api: bindCandidate(fixture, 'api', 'verified candidate\n') };
+  recordLocalVerification(fixture.progressFile, { source, status: 'passed', evidence: [{ check: 'unit', result: 'passed', command: 'node unit.mjs', exit_code: 0, proof: 'unit passed' }] });
+  const release = beginTestRelease(fixture.progressFile, { source });
+  completeTestRelease(fixture.progressFile, {
+    attemptId: release.attempt.id, status: 'succeeded', pipeline: { id: 'p-24' },
+    deployment: { id: 'd-24', environment: 'test' }, environmentRevision: source,
+  });
+  recordTestVerification(fixture.progressFile, { attemptId: release.attempt.id, result: 'passed', evidence: ['journeys passed'] });
+  const ready = readProgressV2(fixture.progressFile);
+  ready.state = 'RELEASE_PENDING_HUMAN';
+  writeProgressV2(fixture.progressFile, ready);
+  writeFileSync(join(fixture.root, 'cc-nexs.config.yml'), 'preset_path: .cc-nexs\nreview:\n  policy: always\n');
+  withPresetEnv(fixture, () => assert.throws(
+    () => approveFeatureGate({ cwd: fixture.root, featureId: '24', gate: 'release', approver: 'Release Owner' }),
+    /requires a consolidated review for the tested candidate \(review.policy is always\)/,
+  ));
+  writeFileSync(join(fixture.root, 'cc-nexs.config.yml'), 'preset_path: .cc-nexs\n');
+  withPresetEnv(fixture, () => approveFeatureGate({ cwd: fixture.root, featureId: '24', gate: 'release', approver: 'Release Owner' }));
+  const approved = readProgressV2(fixture.progressFile);
+  assert.equal(approved.gates.release.approved, true);
+  assert.deepEqual(approved.gates.release.binding.review, { required: false, reasons: ['risk_tier is medium and no sensitive path changed'] });
+});
+
 const testException = {
   authorizationEvidence: 'User explicitly authorized this candidate to proceed to base and formal acceptance',
   reason: 'Test account permissions prevent the required acceptance path',
