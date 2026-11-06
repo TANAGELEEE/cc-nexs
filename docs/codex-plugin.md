@@ -100,8 +100,8 @@ Generated Codex skills explicitly forbid relocating these paths.
 5. A deterministic local driver runs the available checks. If Lean has no driver, the parent runs only plan-approved commands and records exact command/exit/proof evidence; environment-only checks become structured `deferred_to_test` rather than repeated blockers. Hotfix may also record direct evidence for its frozen scope matrix; every required command must match and pass, and Hotfix cannot defer checks.
 6. The exact candidate is integrated to test and CI/deployment runs before any browser preflight.
 7. The deployed environment is verified independently; a local web may target the deployed test backend. Missing browser/login/URL capability records recoverable `manual_required` instead of blocking delivery.
-8. One independent consolidated Review reports all P0/P1 blockers; only one delta closure is allowed after fixes.
-9. Gateway B binds the reviewed and test-verified fingerprint before non-force base integration; docs are finalized last.
+8. Where `review.policy` requires it (high/critical plans, sensitive paths), one independent consolidated Review of the tested candidate reports all P0/P1 blockers; only one delta closure is allowed after fixes.
+9. Gateway B binds the test-verified fingerprint (and the Review when required) before non-force base integration; docs are finalized last.
 
 Private model configuration uses ordinary nested YAML. The following intentionally uses the same model with stronger Review reasoning; set another model ID if heterogeneous Review is preferred:
 

@@ -23,9 +23,13 @@ Source stays easy to maintain (monorepo) while distribution artifacts stay flat 
 
 To add a preset, follow [docs/extending-presets.md](./docs/extending-presets.md). For modes and role selection, see [docs/role-map.md](./packages/preset-standard/docs/role-map.md) in `preset-standard`.
 
-New requirements in `preset-standard` use Lean. The plan comes from the Planner, or from a plan the user wrote in a runtime's plan mode (`/cc-nexs:plan <id> --from <file>`), which the Planner only normalizes. A low/medium plan goes straight to Gateway A, where the human reviews it; a high/critical plan is first fact-checked by an independent Plan Reviewer against the requirements and the code, and a blocked plan gets one revision. Gateway A refuses a plan whose acceptance criteria do not each trace to a task, a local check, and a test check; a requirement initialized with `--auto-plan` passes Gateway A without stopping only when its plan is fast-track, low/medium, and touches no sensitive path. Code Review runs the configured review panel: every reviewer gets the same brief (break this change, prove each finding with a run), in parallel, on its own model. A reviewer is a native subagent or another agent CLI (`codex-cli`, `claude-cli`, `agy-cli`, `dsh-cli`, `pi-cli`), so a Claude Code or Codex host can include another vendor's model; one panel entry means one reviewer, and skills listed under `review.skills` steer what they emphasize. A Judge that did not review reruns every P0/P1 command and keeps every verified finding from any reviewer: only a confirmed run-proven failure blocks, while unproven risks become probe checks for test-environment verification and are listed at Gateway B. Verification is the main gate: Verifiers drive each repository through its `.cc-nexs/verify/` guide and feature map (`/cc-nexs:verify-skill`), and an acceptance matrix with independent parts can run as parallel shard Verifiers whose results the controller merges. Small requirements that are low/medium risk, reuse existing capabilities, and add no new table schemas/infrastructure/breaking contracts take the fast-track by default: once the plan is approved, implementation runs in parallel across worktree/feature branches, and any build/start/smoke that can be completed locally is completed immediately; for example, when backend-java cannot be started locally, it records structured `deferred_to_test` evidence and moves on instead of retrying repeatedly. The exact candidate is then frozen, merged into test first with CI/deployment triggered, accepted in the deployed environment (web can start locally and connect to the deployed test backend), and finally given one consolidated Review, stopping at Gateway B. Browser, login/MFA, and acceptance page URLs all belong only to post-deployment verification; when a capability is missing, the flow enters a recoverable `manual_required` and does not block or roll back the test merge/CI. High-risk Lean uses the Review-first standard lane with an escalated Plan Reviewer and Reviewer; a requirement too large to review and verify as one plan is split into separately approved Lean requirements.
+New requirements in `preset-standard` use Lean. The plan comes from the Planner, or from a plan the user wrote in a runtime's plan mode (`/cc-nexs:plan <id> --from <file>`), which the Planner only normalizes. A low/medium plan goes straight to Gateway A, where the human reviews it; a high/critical plan is first fact-checked by an independent Plan Reviewer against the requirements and the code, and a blocked plan gets one revision. Gateway A refuses a plan whose acceptance criteria do not each trace to a task, a local check, and a test check; the plan also declares the verification accounts and data each check needs and how to prepare them, so Verifiers do not stop to ask later. A requirement initialized with `--auto-plan` passes Gateway A without stopping only when its plan is fast-track, low/medium, and touches no sensitive path.
 
-The review panel lives in `cc-nexs.config.yml` or `.cc-nexs/overlay.yml`; without it, one native reviewer uses the Reviewer role's routing:
+Verification is the main gate, so every Lean candidate follows one order: parallel implementation across worktree/feature branches → fast local checks (lint, the affected tests, the changed page; whole production builds stay in CI) → test integration and deployment → black-box verification → Gateway B. Locally unverifiable items are recorded as structured `deferred_to_test` evidence, and a check that already fails the same way on the merge-base is recorded as `baseline_failed` instead of blocking. Test branches are shared overlays: other tasks' commits there are recorded, conflicts this workspace already resolved are replayed, `test_keep_target` paths take the test side, and a push race is redone on the new tip, so only new conflicts reach the Developer. A later pipeline that deploys a revision containing the integration proves the candidate too, and `release-test --resume --wait` waits for CI inside the run instead of ending it. Verifiers drive each repository through its `.cc-nexs/verify/` guide and feature map (`/cc-nexs:verify-skill`); a configured `verify.panel` runs several Verifiers on different models over the same matrix and merges their per-check results, and a failure only one of them saw is rerun by another before it counts. A repair's test attempt rechecks only what the repair can affect.
+
+A code Review of the tested candidate runs only where it finds what black-box checks cannot: `review.policy: risk` (default) requires it for high/critical plans and for candidates touching auth, permission, migration, schema, payment/billing, deployment, CI, or `review.required_paths`; `review.policy: always` restores it for every task. It runs the configured review panel: every reviewer gets the same brief (break this change, prove each finding with a run), in parallel, on its own model, and may be a native subagent or another agent CLI (`codex-cli`, `claude-cli`, `agy-cli`, `dsh-cli`, `pi-cli`). A Judge reruns every P0/P1 command; only a confirmed run-proven failure blocks. When the base moves after verification but still merges cleanly, the tested candidate and its evidence stay valid; only a real conflict sends the task back through sync. Browser, login/MFA, and acceptance URLs belong to post-deployment verification; a missing capability the plan did not pre-authorize enters a recoverable `manual_required` without rolling back the test merge/CI. A requirement too large to review and verify as one plan is split into separately approved Lean requirements.
+
+The review and verification panels live in `cc-nexs.config.yml` or `.cc-nexs/overlay.yml`; without them, one native reviewer and one Verifier use their roles' routing:
 
 ```yaml
 review:
@@ -39,7 +43,27 @@ review:
     - .cc-nexs/review-skills/api-contracts
 ```
 
-To give each runtime its own reviewers, key the panel by runtime (`panel: { claude: [...], codex: [...], pi: [...] }`); a runtime without a list gets the single native reviewer.
+To give each runtime its own reviewers, key the panel by runtime (`panel: { claude: [...], codex: [...], pi: [...] }`); a runtime without a list gets the single native reviewer. The same keys control when a Review runs and who verifies:
+
+```yaml
+review:
+  policy: risk                 # risk (default) | always
+  required_paths:              # extra repository-relative globs that require a Review
+    - src/lib/public-apis/**
+verify:
+  panel:                       # two or more Verifiers on the same matrix; unset = one Verifier
+    - id: v1                   # role routing
+    - id: v2
+      profile: acceptance-alt  # or model: <id>
+workflow:
+  local_verify:
+    heavy:                     # cc-nexs heavy -- <command>: workspace-wide slots for builds/tests/dev servers
+      slots: 2
+      node_max_old_space_mb: 4096
+      java_max_heap: 2g
+```
+
+In `.cc-nexs/workspace.yml`, a repository's `test_keep_target: [<globs>]` names generated files whose test-branch side wins a test integration conflict.
 
 Lean/Hotfix models use risk-driven routing. The effective precedence is: public preset < private overlay < project `cc-nexs.config.yml.models` < feature profiles/routing < matched routing rules < explicit overrides in feature `models.roles`. New feature templates no longer generate `models.roles`, so everyday project configuration actually takes effect.
 
@@ -277,7 +301,7 @@ Claude Code, Codex, and Pi share the same command semantics but use each runtime
 /cc-nexs:init "small change" --auto-plan        # pre-authorize Gateway A for an eligible fast-track plan
 /cc-nexs:plan [id] [--from file] # draft or normalize requirements/plan, review high/critical plans, render temporary HTML, then stop at Gateway A
 /cc-nexs:approve-plan [id]       # approve the plan hash
-/cc-nexs:run [id]                # implement → local verification where possible → test/CI → environment acceptance → one consolidated Review
+/cc-nexs:run [id]                # implement → local checks → test/CI → environment acceptance → Review where required → Gateway B
 /cc-nexs:approve-release [id]    # Gateway B，approve the exact tested fingerprint
 /cc-nexs:request-release-changes [id] --type=... --feedback="..."  # submit Gateway B feedback and return safely
 /cc-nexs:release-base [id]       # merge into the configured base after approval; archive docs last
@@ -286,7 +310,11 @@ Claude Code, Codex, and Pi share the same command semantics but use each runtime
 /cc-nexs:status [id]            # read-only status view
 /cc-nexs:build [--phase=...]      # select and run build/test commands from git diff
 /cc-nexs:verify-skill <repo> [--docs|--workspace] [--refresh] # write or audit the guide and feature map (repo, docs repo, or workspace .cc-nexs/verify/)
-cc-nexs stats --all [--since <date>]   # Review rounds, findings, plan reviews, and test verdicts across the workspace
+cc-nexs stats --all [--since <date>] [--remote]   # rounds, verdicts, stops and recurring causes across the workspace (--remote: every machine's shared tasks)
+cc-nexs share-progress <id>     # publish a task's progress snapshot for other machines (run at every stop)
+cc-nexs heavy -- <command>      # run a build/test/dev server in a workspace-wide slot with a memory cap
+cc-nexs release-test <id> --resume --wait   # wait for a running test deployment inside the run
+cc-nexs verify-panel <id>       # list the Verifiers to dispatch and their models
 
 /cc-nexs:hotfix "symptom description" --repos=api  # hotfix/<key> + BUG document without consuming a requirement number
 /cc-nexs:hotfix [bug-key]         # resume: local verification, independent Review, test, Gateway B
@@ -338,7 +366,7 @@ The concrete phase commands (invoked one step at a time by a role) are determine
 
 1. **Event state machine** — `progress.json` v2 is the authoritative event log with revisions; `progress.md` is only a human-readable view
 2. **Two gate types with distinct semantics** — Lean fixes Gateway A (reviewed, traceable plan) and Gateway B (tested candidate); if acceptance capability is insufficient after deployment, the task enters a recoverable `manual_required` without blocking test delivery
-3. **Bounded loops** — one plan revision, one Review delta closure, and a per-bug repair breaker escalate to a human instead of looping
+3. **Bounded loops** — one plan revision, one Review delta closure, and a per-bug repair breaker escalate to a human instead of looping; `advance` only takes transitions the workflow defines, and any other jump needs a recorded human authorization
 4. **Hard isolation of role boundaries** — hooks block out-of-scope operations via the `CC_NEXS_ROLE` environment variable
 5. **Pluggable presets** — new project stacks get a new preset without touching core
 6. **One source for multiple runtimes** — Claude Code, Codex, and Pi share the command SOP; runtimes only adapt role scheduling, model resolution, and permission interception
@@ -346,7 +374,7 @@ The concrete phase commands (invoked one step at a time by a role) are determine
 
 ## Status
 
-The current version runs Lean requirements and Hotfix repairs: after the Lean fast-track records locally unverifiable items as `deferred_to_test`, it prioritizes completing the deterministic test merge/CI; cross-platform browser verification happens only after deployment, where insufficient capability can be recovered manually without rolling back delivery that has already completed.
+The current version runs Lean requirements and Hotfix repairs, verification-led: Lean records locally unverifiable items as `deferred_to_test`, completes the deterministic test merge/CI on a shared test branch, verifies the deployed revision, and reviews code only where the review policy requires it. Insufficient verification capability is recovered without rolling back delivery that has already completed.
 
 cc-nexs keeps every role inside the active runtime except the CLI reviewers a project lists in `review.panel`. They review the same brief independently and never debate; for a cross-vendor planner/reviewer workflow, use the separate `nexs-sop` skill.
 

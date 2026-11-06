@@ -6,7 +6,7 @@ cc-nexs provides experimental Pi support for the `preset-standard` lean and hotf
 
 Supported end to end:
 
-- Lean plan, independent plan review, two human gates, local verification, one consolidated Review, test verification, and base integration
+- Lean plan, independent plan review, two human gates, local verification, test verification, a consolidated Review where the review policy requires it, and base integration
 - Lean Planner, Plan Reviewer, Developer, Reviewer, and Verifier isolation
 - workspace-aware build and Git Custodian commands
 - progress v2 state, counters, artifacts, and status/doctor commands

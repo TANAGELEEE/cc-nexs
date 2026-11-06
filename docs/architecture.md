@@ -112,7 +112,7 @@ Zero-dependency hand-written YAML parser, supporting key:value, nesting, arrays,
 Pure function. No I/O, no side effects. Given `(state, counters, thresholds, enabledRoles, humanGateApproved, workflow, mode)`, decides the next step for Lean or Hotfix.
 
 Characteristics:
-- `mode=lean` is used for new requirements; the fast-track order is plan, independent plan review, plan gate, locally executable verification, test delivery/acceptance, a single consolidated Review, release gate, base merge
+- `mode=lean` is used for new requirements; every Lean task goes plan, independent plan review (high/critical), plan gate, locally executable verification, test delivery/acceptance, a consolidated Review of the tested candidate where the review policy requires it, release gate, base merge
 - Bounded loops: one plan revision, one Review delta closure, and the review_revision / fix_per_bug circuit breakers
 - Unsupported modes throw instead of falling back
 - Default stops: Gateway A, Gateway B, test release block, manual verification, and circuit breaker
