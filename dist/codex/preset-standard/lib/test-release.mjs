@@ -9,7 +9,7 @@ import { loadConfig, loadWorkspaceConfig } from './config-loader.mjs';
 import { jsonValuesEqual } from './canonical-json.mjs';
 import { assertLocalCandidateWorktree } from './candidate-context.mjs';
 import { assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
-import { assertCandidateExcludesTestHistory, assertDedicatedTargetFree, integrateCandidateToTest, removeIntegrationWorktree, resolveCandidateCommit, resolveDeployedRevision } from './git-custodian.mjs';
+import { assertCandidateExcludesTestHistory, integrateCandidateToTest, removeIntegrationWorktree, resolveCandidateCommit, resolveDeployedRevision, targetForeignCommits } from './git-custodian.mjs';
 import { approvedPlanDeliveryContract, extractApprovalScope } from './plan-contract.mjs';
 import { assertRecordedLocalVerification, extractLocalVerificationChecks } from './local-evidence.mjs';
 import {
@@ -359,13 +359,19 @@ function integratePendingRepositories(context, attemptId) {
       continue;
     }
     if (repository.dedicatedTarget) {
-      assertDedicatedTargetFree({
+      const shared = targetForeignCommits({
         repo: repository.repo,
         targetBranch: repository.targetBranch,
         baseBranch: repository.baseBranch,
         sourceCommit: repository.sourceCommit,
         ownCommits: progress.delivery.test.attempts.map((attempt) => attempt.integrations?.[repository.id]?.integrationCommit),
       });
+      if (shared.foreign.length) {
+        appendProgressEvent(context.progressFile, { type: 'delivery.test.target_shared', data: {
+          attempt: attemptId, repository: repository.id, targetBranch: repository.targetBranch,
+          commits: shared.foreign.slice(0, 20), count: shared.foreign.length,
+        } });
+      }
     }
     const result = integrateCandidateToTest({
       repo: repository.repo,

@@ -341,7 +341,8 @@ test('test release integrates candidates, invokes structured driver, records evi
     assert.equal(readProgressV2(progressFile).state, 'TEST_VERIFIED');
     const previous = readProgressV2(progressFile).delivery.test.attempts.at(-1);
     const target = { kind: 'test', environment: 'test02', branches: { code: 'test02' }, allowed_hosts: ['test02.example.com'], app_url: 'https://test02.example.com', operations_url: 'https://test02.example.com/ops' };
-    git(code, ['push', 'origin', 'origin/master:refs/heads/test02']);
+    const otherTask = git(code, ['commit-tree', git(code, ['rev-parse', 'origin/master^{tree}']), '-p', 'origin/master', '-m', 'another task on test02']);
+    git(code, ['push', 'origin', `${otherTask}:refs/heads/test02`]);
     const oldPlugin = process.env.CC_NEXS_PLUGIN_ROOT;
     process.env.CC_NEXS_PLUGIN_ROOT = new URL('../../preset-standard', import.meta.url).pathname;
     try { switchTestTarget({ cwd: root, featureId: '05', progressPath: progressFile, target, authorizationEvidence: 'user requested test02' }); }
@@ -351,6 +352,8 @@ test('test release integrates candidates, invokes structured driver, records evi
     const switched = runTestRelease({ cwd: root, featureId: '05', progressPath: progressFile });
     assert.equal(switched.attempt.status, 'awaiting_receipt');
     assert.equal(switched.environment, 'test02');
+    const shared = readProgressV2(progressFile).events.find((event) => event.type === 'delivery.test.target_shared');
+    assert.deepEqual([shared.data.repository, shared.data.count, shared.data.commits[0]], ['code', 1, otherTask], 'another task on the target is recorded, not refused');
     assert.throws(() => runTestRelease({ cwd: root, featureId: '05', progressPath: progressFile, retry: true }), /must be resumed/);
     const completed = runTestRelease({ cwd: root, featureId: '05', progressPath: progressFile, resume: true });
     assert.equal(completed.attempt.status, 'succeeded');

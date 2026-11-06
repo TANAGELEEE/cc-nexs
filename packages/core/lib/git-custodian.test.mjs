@@ -7,7 +7,7 @@ import test from 'node:test';
 
 import {
   assertCandidateExcludesTestHistory,
-  assertDedicatedTargetFree,
+  targetForeignCommits,
   checkBaseReadiness,
   cleanupMergedWorktree,
   commitCandidate,
@@ -647,20 +647,21 @@ test('a deployed revision proves the integration when it is that commit or a lat
   }
 });
 
-test('a dedicated Test target accepts its own integrations and refuses foreign work', () => {
+test('a dedicated Test target reports other tasks\' work instead of refusing it', () => {
   const fixture = mrFixture('cc-nexs-dedicated-');
   try {
     const { root, origin, repo, source } = fixture;
     git(repo, ['push', 'origin', 'origin/main:refs/heads/test02']);
-    const check = (ownCommits = []) => assertDedicatedTargetFree({ repo, targetBranch: 'test02', baseBranch: 'main', sourceCommit: source, ownCommits });
-    assert.equal(check().free, true);
+    const check = (ownCommits = []) => targetForeignCommits({ repo, targetBranch: 'test02', baseBranch: 'main', sourceCommit: source, ownCommits }).foreign;
+    assert.deepEqual(check(), []);
     const result = integrateCandidateToTest({ repo, repositoryId: 'api', candidateRef: 'refs/cc-nexs/candidates/07-demo/api', targetBranch: 'test02' });
-    assert.throws(() => check(), /TARGET_OCCUPIED: origin\/test02 carries 1 commit/);
-    assert.equal(check([result.integrationCommit]).free, true);
+    assert.deepEqual(check([result.integrationCommit]), [], 'its own merge commit is not foreign');
     const other = join(root, 'other');
     git(root, ['clone', origin, other]); configure(other); git(other, ['checkout', 'test02']);
     writeFileSync(join(other, 'theirs.txt'), 'another feature'); git(other, ['add', '.']); git(other, ['commit', '-m', 'their feature']); git(other, ['push', 'origin', 'test02']);
-    assert.throws(() => check([result.integrationCommit]), /TARGET_OCCUPIED: origin\/test02 carries 1 commit/);
+    const foreign = check([result.integrationCommit]);
+    assert.equal(foreign.length, 1);
+    assert.equal(git(repo, ['log', '-1', '--format=%s', foreign[0]]), 'their feature');
   } finally { rmSync(fixture.root, { recursive: true, force: true }); }
 });
 

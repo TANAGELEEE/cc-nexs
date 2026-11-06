@@ -542,20 +542,17 @@ export function checkBaseReadiness({ repo, repositoryId, sourceCommit, targetBra
   return { ...result, status: 'ready', sensitive: changes.sensitive };
 }
 
-// A dedicated Test target (one task switched off the shared test branch) is a
-// slot for this task alone. Work on it that is neither in the base, in this
-// candidate, nor one of this task's own integrations belongs to someone else;
-// integrating would test a tree that is not this candidate.
-export function assertDedicatedTargetFree({ repo, targetBranch, baseBranch, sourceCommit, ownCommits = [] }) {
+// Commits on a Test target that are neither in the base, this candidate, nor this
+// task's own integrations: other tasks deployed there too. Test branches are shared
+// overlays, so this is recorded for the acceptance evidence, never a refusal; the
+// deployed revision only has to contain this task's integration.
+export function targetForeignCommits({ repo, targetBranch, baseBranch, sourceCommit, ownCommits = [] }) {
   const target = fetchBase(repo, targetBranch);
   const base = fetchBase(repo, baseBranch);
   const known = ownCommits.filter((commit) => typeof commit === 'string' && /^[0-9a-f]{40}$/.test(commit)
     && (() => { try { git(repo, ['cat-file', '-e', `${commit}^{commit}`]); return true; } catch { return false; } })());
-  const foreign = git(repo, ['rev-list', target, `^${base}`, `^${sourceCommit}`, ...known.map((commit) => `^${commit}`)]).split('\n').filter(Boolean);
-  if (foreign.length) {
-    throw new Error(`[cc-nexs] TARGET_OCCUPIED: origin/${targetBranch} carries ${foreign.length} commit(s) that are not in origin/${baseBranch}, this candidate, or this task's earlier integrations (${foreign.slice(0, 3).join(', ')}${foreign.length > 3 ? ', ...' : ''}); free the target with its owners or switch back to the shared test branch`);
-  }
-  return { targetBranch, free: true };
+  const foreign = git(repo, ['rev-list', '--no-merges', target, `^${base}`, `^${sourceCommit}`, ...known.map((commit) => `^${commit}`)]).split('\n').filter(Boolean);
+  return { targetBranch, foreign };
 }
 
 // How a head relates to a base: contained by ancestry, every commit present as
