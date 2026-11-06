@@ -36,7 +36,7 @@ Each code repository must keep one machine-parseable policy line; `deploy` must 
 |---|---|---|---|---|---|
 | LV-001 | AC-001 | lint/typecheck/targeted test/browser |  |  |  |
 
-Local verification is a fast check before deployment; acceptance in test is the main gate. Frontend changes run lint, type check, and targeted tests, with a `browser: <start command> @ <page path>` row for each affected page; backend changes run targeted tests. CI runs the full production build, so add it here only when the change touches build configuration, dependencies, lockfiles, route generation, or publishing. When the test environment relaxes a production check (strict build, publication or translation validation), add the production-strict command for the affected area here: Test cannot prove it.
+Local verification is a fast check before deployment; acceptance in test is the main gate. Frontend changes run lint, type check, and targeted tests, with a `browser: <start command> @ <page path>` row for each affected page; backend changes run targeted tests. CI runs the full production build, so add it here only when the change touches build configuration, dependencies, or lockfiles. Route generation, publication, or translation checks run their own generator or validator script, never the whole production build. When the test environment relaxes a production check, add that one strict check for the affected area here: Test cannot prove it.
 
 ## Test Environment Acceptance Matrix
 
