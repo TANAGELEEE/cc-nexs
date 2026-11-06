@@ -43,7 +43,7 @@
 
 ## 本地驗證
 
-使用配置的 driver，或在無 driver 時執行繫結矩陣內的命令並登記 `check/command/exit_code/proof/result`；瀏覽器行登記 `check/method/command/proof/result`。證據繫結精確 candidate，Hotfix 不允許延期到 test。
+使用配置的 driver，或在無 driver 時執行繫結矩陣內的命令並登記 `check/command/exit_code/proof/result`；瀏覽器行登記 `check/method/command/proof/result`。證據繫結精確 candidate；僅因本地環境無法執行的檢查可寫明原因和 test 動作後延期到 test，並由 test 驗收關閉。
 
 ## 集中 Review
 

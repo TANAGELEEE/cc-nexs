@@ -10,7 +10,7 @@ import { execFileSync } from 'node:child_process';
 import { assertRecordedLocalVerification } from './local-evidence.mjs';
 import { appendMutationEvent, candidateFingerprint, readProgressV2, writeProgressV2 } from './progress-v2.mjs';
 
-const LOCAL_READY = { lean: ['passed', 'deferred_to_test'], hotfix: ['passed'] };
+const LOCAL_READY = { lean: ['passed', 'deferred_to_test'], hotfix: ['passed', 'deferred_to_test'] };
 
 function git(repo, args) {
   return execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();

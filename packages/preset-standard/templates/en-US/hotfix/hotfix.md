@@ -34,7 +34,7 @@ Fill in the actual path and verification command, then bind. For scope, tier, or
 - Affected call surface:
 - Rollback verification evidence:
 ## Local Verification
-Use the configured driver, or, when no driver is available, run the command in the binding matrix and record `check/command/exit_code/proof/result`; a browser row records `check/method/command/proof/result`. Evidence binds to the exact candidate; Hotfixes may not be deferred to test.
+Use the configured driver, or, when no driver is available, run the command in the binding matrix and record `check/command/exit_code/proof/result`; a browser row records `check/method/command/proof/result`. Evidence binds to the exact candidate; a check only the local environment prevents may be deferred to test with its reason and test action, and test verification must close it.
 ## Consolidated Review
 P0/P1/P2/P3 all require independent review. File counts and changed line counts are for risk reference only; they cannot prove that no behavior changes occurred. Record conclusions for candidates, blockers, and fix deltas. Only run-proven P0/P1 failures confirmed by the Judge rerun block; unproven findings go to test verification as probes. End this section with the `cc-nexs-review` block (rules/review-findings.md).
 ## Test Environment Acceptance

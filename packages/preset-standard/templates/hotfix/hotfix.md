@@ -43,7 +43,7 @@
 
 ## 本地验证
 
-使用配置的 driver，或在无 driver 时执行绑定矩阵内的命令并登记 `check/command/exit_code/proof/result`；浏览器行登记 `check/method/command/proof/result`。证据绑定精确 candidate，Hotfix 不允许延期到 test。
+使用配置的 driver，或在无 driver 时执行绑定矩阵内的命令并登记 `check/command/exit_code/proof/result`；浏览器行登记 `check/method/command/proof/result`。证据绑定精确 candidate；仅因本地环境无法执行的检查可写明原因和 test 动作后延期到 test，并由 test 验收关闭。
 
 ## 集中 Review
 

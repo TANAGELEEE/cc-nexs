@@ -815,11 +815,11 @@ export function recordLocalVerification(file, {
 } = {}) {
   if (!source || Object.keys(source).length === 0) throw new Error('[cc-nexs] local verification source is required');
   const progress = readProgressV2(file);
-  const allowedStatuses = progress.mode === 'lean'
+  const allowedStatuses = ['lean', 'hotfix'].includes(progress.mode)
     ? ['passed', 'failed', 'deferred_to_test']
     : ['passed', 'failed'];
   if (!allowedStatuses.includes(status)) throw new Error(`[cc-nexs] invalid local verification status: ${status}`);
-  validateLocalEvidence(status, evidence, { allowTestDefer: progress.mode === 'lean' });
+  validateLocalEvidence(status, evidence, { allowTestDefer: ['lean', 'hotfix'].includes(progress.mode) });
   if (expectedRevision !== null && progress.revision !== expectedRevision) {
     throw new Error(`[cc-nexs] stale progress revision: expected ${expectedRevision}, found ${progress.revision}`);
   }

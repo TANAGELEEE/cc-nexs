@@ -408,7 +408,7 @@ test('Lean local verification can defer an environment-only backend start to tes
     const direct = (recordStatus, evidence) => runLocalVerification({
       cwd: root, featureId: '31', progressPath: progressFile, recordStatus, evidence,
     });
-    assert.throws(() => direct('deferred_to_test', [passedEvidence, deferredEvidence]), /invalid local verification status/);
+    assert.equal(direct('deferred_to_test', [passedEvidence, deferredEvidence]).status, 'deferred_to_test', 'a Hotfix may defer an environment-only check to test like Lean');
     assert.throws(() => direct('passed', [{ ...passedEvidence, check: 'unrelated-test' }]), /must cover bound checks/);
     assert.throws(() => direct('passed', [{ ...passedEvidence, command: 'npm test unrelated' }]), /does not match the bound matrix/);
     assert.equal(direct('passed', [passedEvidence]).status, 'passed');

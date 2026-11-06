@@ -26,7 +26,7 @@ For every role dispatch, set `CC_NEXS_PROGRESS_FILE` to the absolute authoritati
 
 ## Verification, release, and retries
 
-Local verification is mandatory. Run the configured driver; without one, run `verify-local <id> --preflight`, execute the exact commands in the bound scope's local verification matrix, and pass structured results to `verify-local --passed|--failed --evidence-json`. Both paths require check/command/exit_code/proof/result, exact command matching, and coverage of every bound check. A `browser:` row is run by the parent as `commands/verify-local.md` describes and uses method/command/proof/result instead of an exit code. Hotfix never uses `deferred_to_test`, so bind a browser row only when it can run locally; otherwise rebind it with `revise-hotfix`.
+Local verification is mandatory. Run the configured driver; without one, run `verify-local <id> --preflight`, execute the exact commands in the bound scope's local verification matrix, and pass structured results to `verify-local --passed|--failed|--deferred-to-test --evidence-json`. Both paths require check/command/exit_code/proof/result, exact command matching, and coverage of every bound check. A `browser:` row is run by the parent as `commands/verify-local.md` describes and uses method/command/proof/result instead of an exit code. A check that cannot run locally only because of the environment (a backend that does not start, a page that needs the deployed backend) is recorded as structured `deferred_to_test`, as in Lean, and test verification must close it with passed evidence; a check that ran and failed is `failed`.
 
 | action source state | `passed` effective next | `failed` effective next |
 |---|---|---|
