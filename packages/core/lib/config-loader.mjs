@@ -417,6 +417,9 @@ export function loadWorkspaceConfig({ projectRoot = process.cwd(), configPath = 
     if (testBranch && testBranch === baseBranch) {
       throw new Error(`[cc-nexs] repository ${repo.id} test_branch must differ from base_branch; automatic test delivery must never target the base branch`);
     }
+    if (repo.test_keep_target !== undefined && (!Array.isArray(repo.test_keep_target) || repo.test_keep_target.some((glob) => typeof glob !== 'string' || !glob.trim()))) {
+      throw new Error(`[cc-nexs] repository ${repo.id} test_keep_target must be a list of path globs`);
+    }
     return {
       ...repo,
       base_branch: baseBranch,

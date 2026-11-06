@@ -68,8 +68,8 @@ Observable behavior of the browser, login/MFA, `app_url` / `operations_url`, all
 The automation controller follows `release_order`:
 
 1. fetch the latest `origin/<test_branch>`;
-2. merge the candidate with `--no-ff` in a temporary detached worktree;
-3. perform a normal non-force push;
+2. merge the candidate with `--no-ff` in a temporary detached worktree; conflicts this workspace already resolved are replayed (rerere) and `test_keep_target` paths take the test side, so only new conflicts reach the Developer;
+3. perform a normal non-force push; if another task pushed first, redo the merge on the new tip (up to three times);
 4. fetch again and prove that the remote contains the source/integration SHA;
 5. call release driver start; if CI/CD has not yet completed, return `pending + pipeline` and persist `deploying`;
 6. subsequent `release-test --resume` only polls the same attempt and does not repeat merge/push/pipeline triggering;

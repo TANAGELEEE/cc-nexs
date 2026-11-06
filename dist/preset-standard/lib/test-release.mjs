@@ -142,6 +142,7 @@ export function preflightTestRelease({
         worktree,
         releaseOrder: repo.release_order,
         baseBranch: configuredRepo.base_branch,
+        keepTarget: configuredRepo.test_keep_target || [],
         testBranches: [configuredRepo.test_branch, repo.test_branch],
         dedicatedTarget: requestedDelivery !== 'local' && Boolean(progress.delivery.test.target?.branches?.[repo.id])
           && approvedTestTarget !== configuredRepo.test_branch,
@@ -381,7 +382,13 @@ function integratePendingRepositories(context, attemptId) {
       targetBranch: repository.targetBranch,
       preserveConflicts: true,
       conflictWorktree: resolve(context.workspaceRoot, '.cc-nexs', 'runtime', 'test-conflicts', context.progress.feature.id, attemptId, repository.id),
+      keepTarget: repository.keepTarget,
     });
+    if (result.autoResolved) {
+      appendProgressEvent(context.progressFile, { type: 'delivery.test.conflicts_auto_resolved', data: {
+        attempt: attemptId, repository: repository.id, ...result.autoResolved, completed: result.status !== 'conflicts',
+      } });
+    }
     if (result.status === 'conflicts') {
       recordTestIntegration(context.progressFile, {
         attemptId, repository: repository.id, sourceCommit: result.sourceCommit,

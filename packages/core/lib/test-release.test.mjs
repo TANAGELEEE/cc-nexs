@@ -550,18 +550,21 @@ for (const scenario of ['running', 'failed', 'conflict', 'conflict-invalidated',
       assert.equal(remoteContains(sourceCommit), false);
 
       const retried = runTestRelease({ cwd: root, featureId: '06', progressPath: progressFile });
-      assert.equal(retried.status, 'conflicts');
       assert.equal(retried.attempt.id, 'test-release-2');
       assert.ok(readProgressV2(progressFile).delivery.test.attempts[0].invalidated_at);
       assert.equal(existsSync(join(conflictRoot, 'test-release-1')), false);
       assert.doesNotMatch(git(code, ['worktree', 'list', '--porcelain']), /test-release-1/);
       if (scenario === 'conflict-target-advanced') {
-        // rerere replays the earlier resolution but still requires the developer to stage it.
-        assert.equal(readFileSync(join(retried.worktree, 'feature.txt'), 'utf8'), 'feature and test-only version\n');
-        assert.throws(() => resolveTestConflict({ cwd: root, featureId: '06', progressPath: progressFile }), /unresolved/);
-      } else {
-        writeFileSync(join(retried.worktree, 'feature.txt'), 'feature and test-only version\n');
+        // rerere replays the earlier resolution and the merge completes without a Developer round.
+        assert.notEqual(retried.status, 'conflicts');
+        const replay = readProgressV2(progressFile).events.find((event) => event.type === 'delivery.test.conflicts_auto_resolved');
+        assert.deepEqual([replay.data.replayed, replay.data.completed], [['feature.txt'], true]);
+        assert.equal(remoteContains(current), true);
+        assert.equal(git(code, ['show', 'origin/test:feature.txt']), 'feature and test-only version');
+        return;
       }
+      assert.equal(retried.status, 'conflicts');
+      writeFileSync(join(retried.worktree, 'feature.txt'), 'feature and test-only version\n');
       git(retried.worktree, ['add', 'feature.txt']);
       const resolved = runCli(['resolve-test-conflict', '06', '--progress', progressFile]);
       assert.equal(resolved.status, 0, resolved.stderr);

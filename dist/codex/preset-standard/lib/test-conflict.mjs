@@ -49,7 +49,8 @@ function testReleaseState(mode) {
 }
 
 // The target moved before the resolved merge could land. Retire the attempt so release-test
-// integrates the new tip; rerere replays the recorded resolution for the developer to confirm.
+// integrates the new tip; rerere replays the recorded resolution there and the merge completes
+// on its own unless the new tip brought a conflict nobody has resolved yet.
 function retireAdvancedAttempt(context, progressFile, attemptId, repository, reason, releaseState) {
   const progress = readProgressV2(progressFile);
   const attempt = progress.delivery.test.attempts.at(-1);

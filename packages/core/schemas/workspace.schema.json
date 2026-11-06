@@ -21,6 +21,7 @@
           "path": { "type": "string" },
           "base_branch": { "type": "string", "default": "main" },
           "test_branch": { "type": ["string", "null"] },
+          "test_keep_target": { "type": "array", "items": { "type": "string" }, "description": "Globs whose test-branch side wins when a test integration conflicts (generated manifests the test pipeline rebuilds)" },
           "release_order": { "type": "integer", "minimum": 0, "default": 100 },
           "docs": { "type": "boolean", "default": false },
           "match": { "type": "array", "items": { "type": "string" } },

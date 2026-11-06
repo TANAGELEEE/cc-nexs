@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync 
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep, win32 } from 'node:path';
 
+import { matchAny } from './build-selector.mjs';
 import { gitIdentityEnv, resolveGitIdentity } from './git-identity.mjs';
 import { recordRepositoryCandidatePrepared } from './progress-v2.mjs';
 
@@ -320,7 +321,42 @@ function assertBranchName(name) {
   return name;
 }
 
-export function integrateCandidateToTest({
+const TARGET_RETRIES = 3;
+
+// Integrates a candidate onto the latest target. When another task pushes between
+// the fetch and the push, the merge is redone on the new tip (a few times) instead of
+// handing the race to a person.
+export function integrateCandidateToTest(options) {
+  for (let round = 1; ; round += 1) {
+    try { return integrateOnce(options); }
+    catch (error) { if (error.code !== 'TARGET_MOVED' || round >= TARGET_RETRIES) throw error; }
+  }
+}
+
+// Conflicts the task already resolved once are replayed by rerere; paths the workspace
+// marks `test_keep_target` take the target's side. When nothing else is left the merge
+// completes without a Developer round.
+function settleTestConflicts(worktree, keepTarget) {
+  const unmerged = () => git(worktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
+  const conflicted = unmerged();
+  const remaining = new Set(git(worktree, ['rerere', 'remaining']).split('\n').filter(Boolean));
+  const replayed = conflicted.filter((path) => !remaining.has(path) && !hasConflictMarkers(join(worktree, path)));
+  for (const path of replayed) git(worktree, ['add', '--', path]);
+  const kept = [];
+  for (const path of unmerged().filter((item) => keepTarget.length && matchAny(item, keepTarget))) {
+    try { git(worktree, ['checkout', '--ours', '--', path]); git(worktree, ['add', '--', path]); kept.push(path); } catch {}
+  }
+  return { conflicts: unmerged(), replayed, kept };
+}
+
+function hasConflictMarkers(file) {
+  if (!existsSync(file)) return false;
+  const bytes = readFileSync(file);
+  if (bytes.includes(0)) return true;
+  return /^(<{7}|>{7})( |$)/m.test(bytes.toString('utf8'));
+}
+
+function integrateOnce({
   repo,
   repositoryId,
   candidateRef,
@@ -331,6 +367,7 @@ export function integrateCandidateToTest({
   verifyIntegration = null,
   preserveConflicts = false,
   conflictWorktree = null,
+  keepTarget = [],
 }) {
   assertSegment(repositoryId, 'repository id');
   assertSegment(targetBranch, 'test branch');
@@ -368,17 +405,26 @@ export function integrateCandidateToTest({
     git(repo, ['worktree', 'add', '--detach', integrationWorktree, target]);
     registered = true;
     const identity = resolveGitIdentity(repo);
+    let autoResolved = null;
     try {
       // rerere replays a recorded resolution if the target advances and the merge is retried.
-      git(integrationWorktree, [...(preserveConflicts ? ['-c', 'rerere.enabled=true'] : []), 'merge', '--no-ff', '--no-edit', sourceCommit], { env: gitIdentityEnv(identity) });
+      git(integrationWorktree, [...(preserveConflicts ? ['-c', 'rerere.enabled=true', '-c', 'rerere.autoupdate=false'] : []), 'merge', '--no-ff', '--no-edit', sourceCommit], { env: gitIdentityEnv(identity) });
     } catch {
-      const conflicts = git(integrationWorktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
-      if (preserveConflicts && conflicts.length) {
+      const settled = preserveConflicts
+        ? settleTestConflicts(integrationWorktree, keepTarget)
+        : { conflicts: git(integrationWorktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean), replayed: [], kept: [] };
+      const handled = settled.replayed.length + settled.kept.length;
+      if (preserveConflicts && settled.conflicts.length === 0 && handled > 0) {
+        git(integrationWorktree, ['-c', 'rerere.enabled=true', 'commit', '--no-edit'], { env: gitIdentityEnv(identity) });
+        autoResolved = { replayed: settled.replayed, kept: settled.kept };
+      } else if (preserveConflicts && settled.conflicts.length) {
         keepWorktree = true;
-        return { repository: repositoryId, sourceCommit, targetBranch, targetBefore, status: 'conflicts', conflicts, worktree: integrationWorktree };
+        return { repository: repositoryId, sourceCommit, targetBranch, targetBefore, status: 'conflicts', conflicts: settled.conflicts, worktree: integrationWorktree,
+          ...(handled && { autoResolved: { replayed: settled.replayed, kept: settled.kept } }) };
+      } else {
+        try { git(integrationWorktree, ['merge', '--abort']); } catch {}
+        throw new Error(`[cc-nexs] ${requireDisjointTargetChanges ? 'BASE_CHANGED: ' : ''}candidate ${candidateRef} conflicts with latest origin/${targetBranch}`);
       }
-      try { git(integrationWorktree, ['merge', '--abort']); } catch {}
-      throw new Error(`[cc-nexs] ${requireDisjointTargetChanges ? 'BASE_CHANGED: ' : ''}candidate ${candidateRef} conflicts with latest origin/${targetBranch}`);
     }
     const integrationCommit = git(integrationWorktree, ['rev-parse', 'HEAD']);
     const integrationVerification = sensitive.length && verifyIntegration
@@ -389,7 +435,11 @@ export function integrateCandidateToTest({
     } catch (error) {
       const detail = error.stderr?.toString().trim() || error.message;
       const remote = fetchBase(repo, targetBranch);
-      if (git(repo, ['rev-parse', remote]) !== targetBefore) throw new Error(`[cc-nexs] origin/${targetBranch} advanced during integration; retry from the new remote tip: ${detail}`);
+      if (git(repo, ['rev-parse', remote]) !== targetBefore) {
+        const moved = new Error(`[cc-nexs] origin/${targetBranch} advanced during integration; retry from the new remote tip: ${detail}`);
+        moved.code = 'TARGET_MOVED';
+        throw moved;
+      }
       throw new Error(`[cc-nexs] PUSH_REJECTED: origin/${targetBranch} did not advance; check branch protection/permissions and configure release.base.driver for MR delivery: ${detail}`);
     }
     const remote = fetchBase(repo, targetBranch);
@@ -406,6 +456,7 @@ export function integrateCandidateToTest({
       remoteCommit,
       alreadyIntegrated: false,
       integrationVerification,
+      ...(autoResolved && { autoResolved }),
       ...(sensitive.length && !verifyIntegration && { unverifiedSensitivePaths: sensitive }),
     };
   } finally {

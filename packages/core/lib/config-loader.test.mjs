@@ -153,3 +153,19 @@ test('workspace config rejects a test branch that aliases the base branch', () =
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('workspace config keeps test_keep_target globs and rejects anything else', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-workspace-'));
+  mkdirSync(join(root, '.cc-nexs'), { recursive: true });
+  const write = (value) => writeFileSync(join(root, '.cc-nexs', 'workspace.yml'), [
+    'version: 1', 'repositories:', '  - id: web', '    path: web', '    test_branch: test', `    test_keep_target: ${value}`, '',
+  ].join('\n'));
+  try {
+    write('["data/i18n/publication-manifest.json"]');
+    assert.deepEqual(loadWorkspaceConfig({ projectRoot: root }).repositories[0].test_keep_target, ['data/i18n/publication-manifest.json']);
+    write('data/i18n/publication-manifest.json');
+    assert.throws(() => loadWorkspaceConfig({ projectRoot: root }), /test_keep_target must be a list of path globs/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
