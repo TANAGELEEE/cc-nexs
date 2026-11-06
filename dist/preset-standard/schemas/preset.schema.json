@@ -181,6 +181,40 @@
         "test_fail": { "type": "string", "default": "BLOCKED" }
       }
     },
+    "verify": {
+      "type": "object",
+      "description": "Verification panel: several Verifiers run the same acceptance matrix on the same deployed revision and their per-check results are merged",
+      "additionalProperties": false,
+      "properties": {
+        "panel": {
+          "description": "A list (two or more) for every runtime, or a map of claude/codex/pi lists. Unset: one Verifier.",
+          "oneOf": [
+            { "$ref": "#/properties/verify/$defs/verifiers" },
+            { "type": "object", "additionalProperties": false, "properties": {
+              "claude": { "$ref": "#/properties/verify/$defs/verifiers" },
+              "codex": { "$ref": "#/properties/verify/$defs/verifiers" },
+              "pi": { "$ref": "#/properties/verify/$defs/verifiers" }
+            } }
+          ]
+        }
+      },
+      "$defs": {
+        "verifiers": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,31}$" },
+              "profile": { "type": "string", "description": "model profile name" },
+              "model": { "type": "string" },
+              "effort": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
     "review": {
       "type": "object",
       "description": "Code Review after test verification. policy decides when a Lean task needs one; the panel lists the reviewers. Without a panel, one native reviewer uses the Reviewer role routing.",

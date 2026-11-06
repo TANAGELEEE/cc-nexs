@@ -24,7 +24,7 @@ import { requestReleaseChanges } from './release-change-command.mjs';
 import { renderLeanPlan } from './plan-render.mjs';
 import { requestPlanAmendment, reviewPlanAmendment } from './plan-amendment.mjs';
 import { runTestRelease, waitForTestRelease } from './test-release.mjs';
-import { recordEnvironmentVerification } from './test-verification-control.mjs';
+import { recordEnvironmentVerification, verifyPanelStatus } from './test-verification-control.mjs';
 import { migrateFeatureConfig } from './feature-config.mjs';
 import { modelGateway } from './model-gateway.mjs';
 import { recordPanelReviewer, reviewPanelStatus, runPanelReviewer } from './review-panel.mjs';
@@ -136,6 +136,7 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
   if (command === 'assert-hotfix-candidate') {
     return assertHotfixCandidate({ cwd, ...parseFeatureOptions(args) });
   }
+  if (command === 'verify-panel') return verifyPanelStatus({ cwd, ...parseReviewerOptions(args) });
   if (command === 'record-test-verification') {
     return recordEnvironmentVerification({ cwd, ...parseTestVerificationOptions(args) });
   }
@@ -201,7 +202,7 @@ function parseStartHotfixOptions(args) {
 
 function parseTestVerificationOptions(args) {
   const positional = [];
-  const options = { featureId: null, progressPath: null, status: null, attemptId: null, evidence: [], shards: [] };
+  const options = { featureId: null, progressPath: null, status: null, attemptId: null, evidence: [], shards: [], verifiers: [], confirmations: [] };
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index];
     if (token === '--passed') options.status = options.status ? 'invalid' : 'passed';
@@ -209,6 +210,10 @@ function parseTestVerificationOptions(args) {
     else if (token === '--manual-required') options.status = options.status ? 'invalid' : 'manual_required';
     else if (token === '--attempt') options.attemptId = requireValue(args, ++index, token);
     else if (token.startsWith('--attempt=')) options.attemptId = token.slice('--attempt='.length);
+    else if (token === '--verifier-json') options.verifiers.push(parseEvidenceJson(requireValue(args, ++index, token)));
+    else if (token.startsWith('--verifier-json=')) options.verifiers.push(parseEvidenceJson(token.slice('--verifier-json='.length)));
+    else if (token === '--confirm-json') options.confirmations.push(parseEvidenceJson(requireValue(args, ++index, token)));
+    else if (token.startsWith('--confirm-json=')) options.confirmations.push(parseEvidenceJson(token.slice('--confirm-json='.length)));
     else if (token === '--shard-json') options.shards.push(parseEvidenceJson(requireValue(args, ++index, token)));
     else if (token.startsWith('--shard-json=')) options.shards.push(parseEvidenceJson(token.slice('--shard-json='.length)));
     else if (token === '--evidence') options.evidence.push(requireValue(args, ++index, token));
@@ -221,6 +226,15 @@ function parseTestVerificationOptions(args) {
     else positional.push(token);
   }
   options.featureId = positional[0] || null;
+  if (options.confirmations.length > 0 && options.verifiers.length === 0) throw new Error('--confirm-json goes with the --verifier-json results it settles');
+  if (options.verifiers.length > 0) {
+    if (positional.length > 1) throw new Error(`unexpected arguments: ${positional.slice(1).join(' ')}`);
+    if (options.status || options.evidence.length > 0 || options.shards.length > 0) throw new Error('--verifier-json derives status and evidence; do not pass a status flag, --evidence, or --shard-json');
+    delete options.shards;
+    return { ...options, status: null };
+  }
+  delete options.verifiers;
+  delete options.confirmations;
   if (options.shards.length > 0) {
     if (positional.length > 1) throw new Error(`unexpected arguments: ${positional.slice(1).join(' ')}`);
     if (options.status || options.evidence.length > 0) throw new Error('--shard-json derives status and evidence; do not pass --passed, --blocked, --manual-required, or --evidence');
@@ -563,6 +577,14 @@ function printResult(result) {
       : `cc-nexs browser provider (${result.runtime}): none available (${result.reason}); record manual_required`);
     return;
   }
+  if (result.kind === 'verify-panel') {
+    if (!result.verifiers.length) console.log(`cc-nexs verify panel (${result.runtime}): none configured; one Verifier runs the matrix`);
+    else {
+      console.log(`cc-nexs verify panel (${result.runtime}): each Verifier runs ${result.checks.join(', ') || 'the whole matrix'} on the same revision`);
+      for (const verifier of result.verifiers) console.log(`- ${verifier.id}: ${typeof verifier.model === 'string' ? verifier.model : `${verifier.model.model} (${verifier.model.effort}, ${verifier.model.source})`}`);
+    }
+    return;
+  }
   if (result.kind === 'heavy') {
     console.error(`cc-nexs heavy: ${result.ran} exited ${result.signal || result.status} (slot ${result.slot}${result.waited_ms >= 1000 ? `, waited ${Math.round(result.waited_ms / 1000)}s` : ''})`);
     if (result.status !== 0) process.exitCode = result.status || 1;
@@ -802,6 +824,8 @@ function printUsage() {
   console.error('  cc-nexs start-hotfix <feature-id> [--level <P0|P1|P2|P3>] [--related <feature-id>] [--progress <path>]');
   console.error('  cc-nexs assert-hotfix-candidate <feature-id> [--progress <path>]');
   console.error('  cc-nexs record-test-verification <feature-id> <--passed|--blocked|--manual-required> --evidence <text> [--attempt <id>] [--progress <path>]');
+  console.error('  cc-nexs record-test-verification <feature-id> --verifier-json <json> --verifier-json <json>... [--confirm-json <json>]... [--attempt <id>] [--progress <path>]');
+  console.error('  cc-nexs verify-panel <feature-id> [--runtime <claude|codex|pi>] [--progress <path>]');
   console.error('  cc-nexs record-test-verification <feature-id> --shard-json <json> --shard-json <json>... [--attempt <id>] [--progress <path>]');
   console.error('  cc-nexs request-release-changes <feature-id> --type <evidence|implementation|scope> --feedback <text> [--ac <id>] [--path <path>] [--progress <path>]');
   console.error('  cc-nexs release-base <feature-id> [--progress <path>]');

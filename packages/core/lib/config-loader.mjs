@@ -331,6 +331,7 @@ export function loadConfig({ projectRoot = process.cwd(), presetRoot = null } = 
   const mergedModels = mergeModelConfigs(preset?.models, project.models);
   // review.panel is an array, so a project list replaces the preset's.
   const mergedReview = deepMerge(preset?.review || {}, project.review || {});
+  const mergedVerify = deepMerge(preset?.verify || {}, project.verify || {});
 
   // Project-level paths_override merges into preset.stack.
   // Use case: public preset ships with generic placeholders like "src/main/java/**";
@@ -377,6 +378,7 @@ export function loadConfig({ projectRoot = process.cwd(), presetRoot = null } = 
     mergedRelease,
     mergedModels,
     mergedReview,
+    mergedVerify,
   };
 }
 

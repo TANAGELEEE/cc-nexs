@@ -6,8 +6,11 @@ import { extractApprovalScope } from './plan-contract.mjs';
 import { appendProgressEvent, readProgressV2, recordTestVerification } from './progress-v2.mjs';
 import { preflightTestRelease } from './test-release.mjs';
 import { acceptanceCheckIds, insertVerificationSection, mergeShardResults, renderShardedVerification } from './verification-shards.mjs';
+import { mergeVerifierResults, renderPanelVerification, resolveVerifyPanel, verifyPanelModels } from './verification-panel.mjs';
+import { findWorkspaceRoot, loadCandidateConfig } from './candidate-context.mjs';
+import { detectRuntime } from './runtime-resolver.mjs';
 
-export function recordEnvironmentVerification({ cwd = process.cwd(), featureId, progressPath = null, status, attemptId = null, evidence = [], shards = null } = {}) {
+export function recordEnvironmentVerification({ cwd = process.cwd(), featureId, progressPath = null, status, attemptId = null, evidence = [], shards = null, verifiers = null, confirmations = [], runtime = detectRuntime() } = {}) {
   const progressFile = resolveFeatureProgress({ cwd, featureId, progressPath });
   const before = readProgressV2(progressFile);
   const context = preflightTestRelease({
@@ -48,6 +51,17 @@ export function recordEnvironmentVerification({ cwd = process.cwd(), featureId, 
     status = merged.status;
     evidence = merged.evidence;
   }
+  let panelResult = null;
+  if (verifiers) {
+    if (shards || status || evidence.length > 0) throw new Error('[cc-nexs] a verification panel derives status and evidence; do not combine --verifier-json with --shard-json, a status flag, or --evidence');
+    if (progress.mode !== 'lean') throw new Error('[cc-nexs] a verification panel applies to Lean only');
+    const panel = resolveVerifyPanel(loadCandidateConfig(context.workspaceRoot).mergedVerify, runtime);
+    panelResult = mergeVerifierResults(verifiers, {
+      requiredChecks: acceptanceCheckIds(extractApprovalScope(readFileSync(planFile, 'utf8'))), confirmations, panel,
+    });
+    status = panelResult.status;
+    evidence = panelResult.evidence;
+  }
   if (!Array.isArray(evidence) || evidence.length === 0) throw new Error('[cc-nexs] test verification requires at least one evidence item');
   const result = ['passed', 'blocked', 'manual_required'].includes(status) ? status : null;
   if (!result) throw new Error('[cc-nexs] verification status must be passed, blocked, or manual_required');
@@ -56,6 +70,10 @@ export function recordEnvironmentVerification({ cwd = process.cwd(), featureId, 
   let after = recordTestVerification(progressFile, { attemptId: attempt.id, result, evidence, actor });
   if (shards) {
     const section = renderShardedVerification({ attemptId: attempt.id, environmentRevision: attempt.environment_revision, status: result, evidence });
+    writeFileSync(planFile, insertVerificationSection(readFileSync(planFile, 'utf8'), section));
+  }
+  if (panelResult) {
+    const section = renderPanelVerification({ attemptId: attempt.id, environmentRevision: attempt.environment_revision, status: result, rows: panelResult.rows, models: panelResult.models });
     writeFileSync(planFile, insertVerificationSection(readFileSync(planFile, 'utf8'), section));
   }
   // Persist the next actionable state before returning, including on a forked run.
@@ -92,4 +110,17 @@ export function verificationResultState(mode, result) {
 
 function sortedObject(value) {
   return Object.fromEntries(Object.entries(value || {}).sort(([left], [right]) => left.localeCompare(right)));
+}
+
+// Which Verifiers to dispatch on the same matrix and revision, and on which models.
+export function verifyPanelStatus({ cwd = process.cwd(), featureId, progressPath = null, runtime = detectRuntime() } = {}) {
+  const progressFile = resolveFeatureProgress({ cwd, featureId, progressPath });
+  const config = loadCandidateConfig(findWorkspaceRoot(cwd, progressFile));
+  const progress = readProgressV2(progressFile);
+  const panel = resolveVerifyPanel(config.mergedVerify, runtime);
+  return {
+    kind: 'verify-panel', feature: progress.feature, runtime,
+    verifiers: verifyPanelModels(panel, { runtime, models: config.mergedModels }),
+    checks: acceptanceCheckIds(extractApprovalScope(readFileSync(join(dirname(progressFile), 'plan.md'), 'utf8'))),
+  };
 }

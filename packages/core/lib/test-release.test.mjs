@@ -363,6 +363,12 @@ test('test release integrates candidates, invokes structured driver, records evi
     assert.equal(readProgressV2(progressFile).delivery.test.attempts.length, 2);
     assert.ok(readProgressV2(progressFile).delivery.test.attempts[0].invalidated_at);
 
+    const verifierJson = (id, result) => JSON.stringify({ verifier: id, model: `model-${id}`, checks: [{ check: 'smoke-code', result, proof: `${id} saw ${result}` }] });
+    assert.throws(
+      () => runCcNexsCommand(['record-test-verification', '05', '--verifier-json', verifierJson('v1', 'failed'), '--verifier-json', verifierJson('v2', 'passed'), '--progress', progressFile], { cwd: root }),
+      /rerun these checks with another Verifier.*smoke-code \(failed only by v1\)/,
+    );
+    assert.equal(readProgressV2(progressFile).delivery.test.attempts.at(-1).verification ?? null, null, 'a disputed panel records nothing');
     const shardJson = (name, result) => JSON.stringify({ shard: name, result, checks: [`smoke-${name}`], evidence: [{ check: `smoke-${name}`, result: result === 'blocked' ? 'failed' : 'passed', proof: `${name} smoke` }] });
     assert.throws(
       () => runCcNexsCommand(['record-test-verification', '05', '--passed', '--shard-json', shardJson('code', 'passed'), '--shard-json', shardJson('other', 'passed'), '--progress', progressFile], { cwd: root }),
