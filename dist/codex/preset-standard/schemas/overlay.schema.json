@@ -30,7 +30,18 @@
           "properties": {
             "driver": { "$ref": "#/definitions/driver" },
             "reuse_passed": { "type": "boolean" },
-            "min_free_gb": { "type": "number", "minimum": 0 }
+            "min_free_gb": { "type": "number", "minimum": 0 },
+            "heavy": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Workspace-wide limit for heavy commands run through cc-nexs heavy and local verify drivers",
+              "properties": {
+                "slots": { "type": "integer", "minimum": 1, "default": 2 },
+                "wait_minutes": { "type": "number", "minimum": 1, "default": 60 },
+                "node_max_old_space_mb": { "type": ["integer", "null"], "minimum": 256, "default": 4096 },
+                "java_max_heap": { "type": ["string", "null"], "default": "2g" }
+              }
+            }
           }
         }
       }

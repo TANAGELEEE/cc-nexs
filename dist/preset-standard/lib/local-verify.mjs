@@ -24,6 +24,7 @@ import {
   saveDriverOutput,
 } from './verify-artifacts.mjs';
 import { reclaimInactiveVerifyScratch } from './worktree-reclaim.mjs';
+import { acquireHeavySlot, heavySettings } from './heavy-slots.mjs';
 
 // A baseline_failed item must name the commit this candidate was built on: the merge-base
 // of the candidate and its base branch, so a failure the candidate introduced cannot pass
@@ -165,7 +166,12 @@ export function runLocalVerification({
   // Scratch outlives evidence recording so nothing the driver proved is removed first.
   const ending = { status: 'error', error: null };
   try {
-    const result = invokeLocalVerifyDriver({ driver, workspaceRoot: context.workspaceRoot, payload, attempt });
+    // The driver runs the heavy checks, so it holds one workspace-wide heavy slot.
+    const heavy = heavySettings(context.config);
+    const slot = acquireHeavySlot({ root: context.workspaceRoot, slots: heavy.slots, label: `verify-local ${context.progress.feature.id}`, waitMs: heavy.wait_minutes * 60000 });
+    let result;
+    try { result = invokeLocalVerifyDriver({ driver, workspaceRoot: context.workspaceRoot, payload, attempt }); }
+    finally { slot.release(); }
     assertVerificationWorktrees(context);
     const evidence = result.evidence || [];
     assertBaselineCommits(context, evidence);

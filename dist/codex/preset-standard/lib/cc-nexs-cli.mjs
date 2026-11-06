@@ -14,6 +14,7 @@ import { reconcileTask } from './task-reconcile.mjs';
 import { taskStats, workspaceStats } from './task-stats.mjs';
 import { candidateVerifyGuides } from './verify-guide.mjs';
 import { browserProviderStatus, testAccount } from './test-session.mjs';
+import { runHeavy } from './heavy-slots.mjs';
 import { assertHotfixCandidate, startHotfix } from './hotfix-control.mjs';
 import { initializeHotfix } from './hotfix-init.mjs';
 import { reviseHotfix } from './hotfix-revision.mjs';
@@ -77,6 +78,11 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
     const separator = args.indexOf('--');
     if (separator < 0 && args.length > 0 && !(args.length === 1 && args[0] === '--check')) throw new Error('usage: test-account [--check] | test-account -- <command> [args...]');
     return testAccount({ cwd, command: separator >= 0 ? args.slice(separator + 1) : [] });
+  }
+  if (command === 'heavy') {
+    const separator = args.indexOf('--');
+    if (separator !== 0) throw new Error('usage: heavy -- <command> [args...]');
+    return runHeavy({ cwd, command: args.slice(1) });
   }
   if (command === 'stats') {
     if (args.includes('--all')) return workspaceStats({ cwd, ...parseWorkspaceStatsOptions(args) });
@@ -557,6 +563,11 @@ function printResult(result) {
       : `cc-nexs browser provider (${result.runtime}): none available (${result.reason}); record manual_required`);
     return;
   }
+  if (result.kind === 'heavy') {
+    console.error(`cc-nexs heavy: ${result.ran} exited ${result.signal || result.status} (slot ${result.slot}${result.waited_ms >= 1000 ? `, waited ${Math.round(result.waited_ms / 1000)}s` : ''})`);
+    if (result.status !== 0) process.exitCode = result.status || 1;
+    return;
+  }
   if (result.kind === 'test-account') {
     if (!result.configured) console.log(`cc-nexs test account: not configured. ${result.message}`);
     else if (result.ran) console.log(`cc-nexs test account: ran ${result.ran} with the account from ${result.source}`);
@@ -767,6 +778,7 @@ function printUsage() {
   console.error('  cc-nexs record-reviewer <feature-id> --reviewer <id> --model <model> --findings-file <file> [--round <round>] [--progress <path>]');
   console.error('  cc-nexs browser-provider --runtime <claude|codex|pi>');
   console.error('  cc-nexs test-account [--check] | test-account -- <command> [args...]');
+  console.error('  cc-nexs heavy -- <command> [args...]');
   console.error('  cc-nexs resolve-test-conflict <feature-id> [--progress <path>]');
   console.error('  cc-nexs reclaim-worktrees [--sizes] [--confirm <token>]');
   console.error('  cc-nexs reconcile <feature-id> [--confirm <token>] [--progress <path>]');
