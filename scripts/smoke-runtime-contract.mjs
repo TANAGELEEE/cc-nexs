@@ -153,14 +153,14 @@ async function assertStateMachine() {
     'lean local verification',
   );
   expectStep(
-    mod.nextStep({ state: 'LOCAL_VERIFYING', enabledRoles: leanRoles, mode: 'lean' }),
-    { next: 'CANDIDATE_READY', role: null, action: 'continue_to_test' },
-    'lean verifies in test first',
+    mod.nextStep({ state: 'LOCAL_VERIFYING', enabledRoles: leanRoles, mode: 'lean', workflow: { review: { required: true } } }),
+    { next: 'CONSOLIDATED_REVIEW', role: 'lean-reviewer', action: 'review_candidate' },
+    'lean required Review before test',
   );
   expectStep(
-    mod.nextStep({ state: 'TEST_VERIFIED', enabledRoles: leanRoles, mode: 'lean', workflow: { review: { required: true, status: 'idle' } } }),
-    { next: 'CONSOLIDATED_REVIEW', role: 'lean-reviewer', action: 'review_tested_candidate' },
-    'lean required Review of the tested candidate',
+    mod.nextStep({ state: 'LOCAL_VERIFYING', enabledRoles: leanRoles, mode: 'lean', workflow: { review: { required: false } } }),
+    { next: 'CANDIDATE_READY', role: null, action: 'continue_to_test' },
+    'lean without a required Review goes to test',
   );
   const leanReleaseGate = mod.nextStep({ state: 'TEST_VERIFIED', enabledRoles: leanRoles, mode: 'lean', workflow: { review: { required: false } } });
   expectStep(leanReleaseGate, { next: 'RELEASE_PENDING_HUMAN', action: 'await_release_approval' }, 'lean release gate');

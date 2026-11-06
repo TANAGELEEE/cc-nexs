@@ -18,8 +18,8 @@ New requirements use `mode=lean`. The complete chain is:
 ```text
 init -> plan (Planner draft or user --from) -> high/critical: independent plan review (one revision at most) -> PLAN_PENDING_HUMAN (Gateway A; --auto-plan passes eligible fast-track plans)
 -> implement -> local executable checks (pass or structured deferred_to_test)
--> test release/CI -> test verification
--> Review required (high/critical or sensitive paths): one consolidated Review of the tested candidate
+-> Review required (high/critical or sensitive paths): one consolidated Review
+-> test release/CI -> test verification (one Verifier or a verify.panel)
 -> RELEASE_PENDING_HUMAN (Gateway B) -> configured base merge -> COMPLETE
 ```
 Lean 只维护两份由人工维护的文档：`requirements.md` 和 `plan.md`。high/critical 计划在 Gateway A 之前由独立 Plan Reviewer 对照需求与代码做事实核查，只阻塞能指出出处的 P0/P1；阻塞时 Planner 修订一次并复审，仍未关闭的问题带到 Gateway A 由人决定。low/medium 计划记录绑定哈希的 skipped 审核，由人在 Gateway A 审。Gateway A 要求计划审核绑定到正在批准的精确计划，并要求 `requirements.md` 的每条 AC 都对应任务、本地检查和 test 检查。每个仓库仍然需要独立 worktree、`feature/<id>-<slug>` 分支以及不可变的 candidate ref。Gateway A 绑定 requirements + plan approval scope 的哈希，其中包括 `risk_tier`、`delivery_lane` 和每个仓库的 `test_delivery.<repo>: deploy|local`；Gateway B 绑定本地验证、Review 和 test 验收所共享的精确 fingerprint。`fast-track` 只允许 low/medium；旧计划缺少 lane 时，安全地解释为 standard。

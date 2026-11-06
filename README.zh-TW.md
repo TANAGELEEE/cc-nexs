@@ -25,9 +25,9 @@
 
 `preset-standard` 新需求使用 Lean。計劃由 Planner 產出，或由使用者在各 runtime 的 plan mode 寫好後以 `/cc-nexs:plan <編號> --from <檔案>` 交給 Planner 只做格式整理。low/medium 計劃直接到 Gateway A 由人審；high/critical 計劃先由獨立的 Plan Reviewer 對照需求與程式碼做事實核查，被阻塞的計劃只修訂一次。每條驗收標準都必須對應任務、本地檢查和 test 檢查，否則 Gateway A 拒絕批准；計劃同時寫明每項驗收需要的帳號與資料及準備方式，Verifier 之後不必停下來詢問。以 `--auto-plan` 初始化的需求，只有 fast-track、low/medium 且不觸及敏感路徑的計劃才會不停頓地通過 Gateway A。
 
-驗收是主要關卡，所以每個 Lean candidate 走同一個順序：按 worktree/feature branch 並行實現 → 快速本地檢查（lint、受影響測試、改動頁面；整條生產構建留給 CI）→ 合入 test 並部署 → 黑箱驗收 → Gateway B。本地無法驗證的項目記錄為結構化 `deferred_to_test`；在 merge-base 上本來就以同樣方式失敗的檢查記錄為 `baseline_failed`，不再阻塞。test 分支是共享疊加環境：其他需求在上面的提交只記錄不攔截，本 workspace 已解過的衝突自動重放，`test_keep_target` 路徑取 test 側，推送被搶先時在新 tip 上重做，只有新的衝突才交給 Developer。之後的流水線只要部署的版本包含本次 integration，也算證明了 candidate；`release-test --resume --wait` 在本次執行內等待 CI，不再中斷。Verifier 依各倉 `.cc-nexs/verify/` 的驗證指南與功能地圖驅動真實系統（`/cc-nexs:verify-skill`）；設定 `verify.panel` 後，多個不同模型的 Verifier 對同一份驗收矩陣各自執行，逐項合併結果，只有一位看到的失敗須由另一位重跑確認才算數。修復後的 test attempt 只複驗修復可能影響的項目。
+驗收是主要關卡，所以每個 Lean candidate 走同一個順序：按 worktree/feature branch 並行實現 → 快速本地檢查（lint、受影響測試、改動頁面；整條生產構建留給 CI）→ 需要時做一次集中 Review → 合入 test 並部署 → 黑箱驗收 → Gateway B。本地無法驗證的項目記錄為結構化 `deferred_to_test`；在 merge-base 上本來就以同樣方式失敗的檢查記錄為 `baseline_failed`，不再阻塞。test 分支是共享疊加環境：其他需求在上面的提交只記錄不攔截，本 workspace 已解過的衝突自動重放，`test_keep_target` 路徑取 test 側，推送被搶先時在新 tip 上重做，只有新的衝突才交給 Developer。之後的流水線只要部署的版本包含本次 integration，也算證明了 candidate；`release-test --resume --wait` 在本次執行內等待 CI，不再中斷。Verifier 依各倉 `.cc-nexs/verify/` 的驗證指南與功能地圖驅動真實系統（`/cc-nexs:verify-skill`）；設定 `verify.panel` 後，多個不同模型的 Verifier 對同一份驗收矩陣各自執行，逐項合併結果，只有一位看到的失敗須由另一位重跑確認才算數。修復後的 test attempt 只複驗修復可能影響的項目。
 
-程式碼 Review 只在黑箱驗收照不到的地方對已驗收的 candidate 執行：`review.policy: risk`（預設）在 high/critical 計劃，或 candidate 改動 auth、permission、migration、schema、payment/billing、部署、CI 或 `review.required_paths` 時才需要；`review.policy: always` 恢復每個需求都 Review。Review 由設定的 review panel 執行：每位 reviewer 拿到同一份 brief（把這次改動弄壞，每個發現都要用實際執行證明），各自用自己的模型並行審查，可以是原生子代理或其他 agent CLI（`codex-cli`、`claude-cli`、`agy-cli`、`dsh-cli`、`pi-cli`）。Judge 逐條復跑 P0/P1 命令，只有確認跑得出來的失敗才阻塞。驗收後 base 前進但仍能乾淨合併時，已驗收的 candidate 與證據保持有效；只有真正衝突才回到同步。瀏覽器、登入/MFA 與驗收頁面 URL 都只屬於部署後 verification；計劃沒有預授權的能力缺失進入可恢復的 `manual_required`，不回滾 test merge/CI。無法作為一個計劃整體審核與驗收的需求，拆成多個分別批准的 Lean 需求。
+程式碼 Review 在上 test 之前執行，且只用在黑箱驗收照不到的地方：`review.policy: risk`（預設）在 high/critical 計劃，或 candidate 改動 auth、permission、migration、schema、payment/billing、部署、CI 或 `review.required_paths` 時才需要；`review.policy: always` 恢復每個需求都 Review。Review 由設定的 review panel 執行：每位 reviewer 拿到同一份 brief（把這次改動弄壞，每個發現都要用實際執行證明），各自用自己的模型並行審查，可以是原生子代理或其他 agent CLI（`codex-cli`、`claude-cli`、`agy-cli`、`dsh-cli`、`pi-cli`）。Judge 逐條復跑 P0/P1 命令，只有確認跑得出來的失敗才阻塞。驗收後 base 前進但仍能乾淨合併時，已驗收的 candidate 與證據保持有效；只有真正衝突才回到同步。瀏覽器、登入/MFA 與驗收頁面 URL 都只屬於部署後 verification；計劃沒有預授權的能力缺失進入可恢復的 `manual_required`，不回滾 test merge/CI。無法作為一個計劃整體審核與驗收的需求，拆成多個分別批准的 Lean 需求。
 
 review 與驗收 panel 寫在 `cc-nexs.config.yml` 或 `.cc-nexs/overlay.yml`；沒有設定時，由一位原生 reviewer 和一位 Verifier 沿用各自角色的路由：
 
@@ -323,7 +323,7 @@ Claude Code、Codex 和 Pi 共享同一命令語義，但使用各執行時的�
 /cc-nexs:init "小需求" --auto-plan  # 預先授權 Gateway A，符合條件的 fast-track 計劃不停頓
 /cc-nexs:plan [編號] [--from 檔案] # 起草或整理 requirements/plan，high/critical 才做獨立計劃審核，產生臨時 HTML，停 Gateway A
 /cc-nexs:approve-plan [編號]       # 批准 plan 雜湊
-/cc-nexs:run [編號]                # 實現 → 本地檢查 → test/CI → 環境驗收 → 需要時 Review → Gateway B
+/cc-nexs:run [編號]                # 實現 → 本地檢查 → 需要時 Review → test/CI → 環境驗收 → Gateway B
 /cc-nexs:approve-release [編號]    # Gateway B，批准精確 tested fingerprint
 /cc-nexs:request-release-changes [編號] --type=... --feedback="..."  # Gateway B 提意見並安全迴流
 /cc-nexs:release-base [編號]       # 批准後合併配置 base，docs 最後歸檔
@@ -401,7 +401,7 @@ Hotfix 直接建立 `hotfix/<key>` 和 `.worktrees/<key>/<repo>/`。有關聯需
 
 ## 狀態
 
-當前版本只保留 Lean 需求與 Hotfix 修復，以驗收為主導：Lean 把本地不可驗證項留存為 `deferred_to_test`，在共享 test 分支完成確定性 merge/CI，驗收部署的版本，只在 review policy 要求時才做程式碼 Review。驗收能力不足可恢復，不回滾已經完成的交付。
+當前版本只保留 Lean 需求與 Hotfix 修復，以驗收為主導：Lean 把本地不可驗證項留存為 `deferred_to_test`，在共享 test 分支完成確定性 merge/CI，只在 review policy 要求時於上 test 前做程式碼 Review，再驗收部署的版本。驗收能力不足可恢復，不回滾已經完成的交付。
 
 除了專案在 `review.panel` 列出的 CLI reviewer，cc-nexs 的所有角色都在當前 runtime 內派發。這些 reviewer 各自獨立審同一份 brief，不互相辯論；需要跨廠商的規劃加審核流程時，請改用獨立的 `nexs-sop` skill。
 

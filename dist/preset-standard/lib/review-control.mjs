@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 
 import { resolveCandidateContext } from './candidate-context.mjs';
 import { assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
-import { approvedPlanDeliveryLane, assertPlanApprovalCurrent, extractApprovalScope, planApprovalBinding } from './plan-contract.mjs';
+import { assertPlanApprovalCurrent, extractApprovalScope, planApprovalBinding } from './plan-contract.mjs';
 import { assertRecordedLocalVerification, extractLocalVerificationChecks } from './local-evidence.mjs';
 import { assertTestAttemptNotInvalidated, candidateFingerprint, readProgressV2, recordConsolidatedReview, recordPlanReview } from './progress-v2.mjs';
 import { resolveFeatureProgress } from './approval-command.mjs';
@@ -44,15 +44,12 @@ export function recordLeanReview({
   if (!documentFindings && notReproduced.length > 0) throw new Error('[cc-nexs] --not-reproduced requires --document-findings');
   const context = resolveCandidateContext({ cwd, featureId, progressPath });
   releaseScope(context.progress, context.progressFile);
-  // Lean reviews the exact candidate after it is verified in test. A standard-lane task
-  // that was already reviewing before test when it upgraded may finish that Review.
+  // A required Lean Review normally runs before test. A Review recorded after test (a task
+  // that reached test before its Review) must be of the exact tested candidate.
   if (context.progress.mode === 'lean') {
     assertPlanApprovalCurrent(context.progress, dirname(context.progressFile));
-    const fingerprint = candidateFingerprint(context.source);
-    const legacyPreTestReview = approvedPlanDeliveryLane(context.progress, dirname(context.progressFile)) === 'standard'
-      && ['LOCAL_VERIFYING', 'CONSOLIDATED_REVIEW'].includes(context.progress.state)
-      && !(context.progress.delivery?.test?.attempts || []).some((item) => item.fingerprint === fingerprint && !item.invalidated_at);
-    if (!closure && !gatewayBDelta && !legacyPreTestReview) {
+    const testedStates = ['TEST_VERIFIED', 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY', 'RELEASE_PENDING_HUMAN'];
+    if (!closure && !gatewayBDelta && testedStates.includes(context.progress.state)) {
       const attempt = context.progress.delivery?.test?.attempts?.at(-1);
       assertTestAttemptNotInvalidated(attempt);
       const deployedForManualVerification = attempt?.status === 'deployed_needs_manual_verification'

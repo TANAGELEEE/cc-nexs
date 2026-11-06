@@ -7,6 +7,7 @@ import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 
 import { loadConfig, loadWorkspaceConfig } from './config-loader.mjs';
 import { jsonValuesEqual } from './canonical-json.mjs';
+import { reviewRequirement, reviewSatisfied } from './review-policy.mjs';
 import { assertLocalCandidateWorktree } from './candidate-context.mjs';
 import { assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
 import { assertCandidateExcludesTestHistory, integrateCandidateToTest, removeIntegrationWorktree, resolveCandidateCommit, resolveDeployedRevision, targetForeignCommits } from './git-custodian.mjs';
@@ -170,7 +171,7 @@ export function preflightTestRelease({
     assertRecordedLocalVerification(progress, { source: source, fingerprint: releaseFingerprint(source), expectedChecks: localChecks });
   }
   if (hotfix) assertHotfixReleaseEvidence(progress, source);
-  else if (progress.mode === 'lean') assertLeanReleaseEvidence(progress, source);
+  else if (progress.mode === 'lean') assertLeanReleaseEvidence(progress, source, config.mergedReview);
 
   const release = { ...config.mergedRelease?.test, ...progress.delivery.test.target };
   if (progress.delivery.test.target) validateTestTarget(progress.delivery.test.target, workspace.repositories, deployRepositories.map(repo => repo.id));
@@ -200,12 +201,16 @@ export function preflightTestRelease({
   };
 }
 
-// Lean verifies in test before any Review, so only local verification gates a release.
-function assertLeanReleaseEvidence(progress, source) {
+// A required Review comes before test, so it gates a test release together with local verification.
+function assertLeanReleaseEvidence(progress, source, review) {
   const fingerprint = releaseFingerprint(source);
   if (!['passed', 'deferred_to_test'].includes(progress.local_verification?.status)
     || progress.local_verification.candidate_fingerprint !== fingerprint) {
     throw new Error('[cc-nexs] Lean test release requires passed or test-deferred local verification for the exact candidate');
+  }
+  const requirement = reviewRequirement(progress, review);
+  if (!reviewSatisfied(progress, fingerprint, requirement)) {
+    throw new Error(`[cc-nexs] Lean test release requires a passing Review for the exact candidate (${requirement.reasons.join('; ')})`);
   }
 }
 

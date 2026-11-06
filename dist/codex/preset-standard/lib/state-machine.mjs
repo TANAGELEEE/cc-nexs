@@ -7,12 +7,12 @@ const TERMINAL = new Set(['COMPLETE']);
 /**
  * Decide the next state and the role/action to invoke for a Lean or Hotfix task.
  *
- *   mode='lean' — plan-first, two-gate, verification-led pipeline. Every candidate
- *     reaches test first; a consolidated Review of the exact tested candidate follows
- *     only where the review policy requires one (high/critical, sensitive paths):
+ *   mode='lean' — plan-first, two-gate, verification-led pipeline. A consolidated
+ *     Review runs only where the review policy requires one (high/critical, sensitive
+ *     paths), and then before test; test verification is the gate for everything:
  *     INIT → PLANNING → PLAN_REVIEWING → PLAN_PENDING_HUMAN → PLAN_APPROVED → IMPLEMENTING
- *       → LOCAL_VERIFYING → CANDIDATE_READY → TEST_RELEASE → TEST_VERIFYING
- *       → TEST_VERIFIED → [CONSOLIDATED_REVIEW] → RELEASE_PENDING_HUMAN
+ *       → LOCAL_VERIFYING → [CONSOLIDATED_REVIEW] → CANDIDATE_READY → TEST_RELEASE
+ *       → TEST_VERIFYING → TEST_VERIFIED → RELEASE_PENDING_HUMAN
  *       → BASE_MERGING → COMPLETE
  *     An independent plan review precedes Gateway A; a blocked plan gets one revision and
  *     re-review, after which open findings go to Gateway A for the human to decide.
@@ -229,7 +229,13 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
     case 'LOCAL_VERIFY_FAILED':
       return { next: 'IMPLEMENTING', role: developer, action: 'fix_local' };
     case 'LOCAL_VERIFYING':
-      return { next: 'CANDIDATE_READY', role: null, action: 'continue_to_test' };
+      // A required Review (high/critical, sensitive paths) comes before test; otherwise
+      // the candidate goes straight to test and verification is the gate.
+      if (!reviewRequired) return { next: 'CANDIDATE_READY', role: null, action: 'continue_to_test' };
+      if (reviewExact && ['passed', 'blocked'].includes(reviewStatus)) {
+        return { next: 'CONSOLIDATED_REVIEW', role: null, action: 'continue' };
+      }
+      return { next: 'CONSOLIDATED_REVIEW', role: reviewer, action: 'review_candidate' };
     case 'CONSOLIDATED_REVIEW':
       return { next: 'PARSE_CONSOLIDATED_REVIEW', role: null, action: 'parse_review_conclusion' };
     case 'CONSOLIDATED_REVIEW_BLOCKED':
@@ -246,10 +252,9 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
       }
       return { next: 'REVIEW_FIXING', role: developer, action: 'fix_local' };
     case 'LOCAL_REVERIFYING':
-      // A test fix goes back to test; only a Review fix gets the delta closure.
-      if (workflow.local_verification?.context !== 'review' || !reviewRequired) {
-        return { next: 'CANDIDATE_READY', role: null, action: 'continue_to_test' };
-      }
+      // Without a required Review a fix goes straight back to test; with one, the
+      // changed code gets the delta closure before it is tested again.
+      if (!reviewRequired) return { next: 'CANDIDATE_READY', role: null, action: 'continue_to_test' };
       if (reviewExact && closureAttempts > 0) {
         return { next: 'REVIEW_CLOSURE', role: null, action: 'continue' };
       }
