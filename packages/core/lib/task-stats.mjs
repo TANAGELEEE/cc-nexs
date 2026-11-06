@@ -148,6 +148,7 @@ export function workspaceStats({ cwd = process.cwd(), since = null, remote = fal
     if (sinceMs !== null && Date.parse(progress.created_at) < sinceMs) continue;
     tasks.push({ feature: progress.feature, mode: progress.mode, state: progress.state, source, stats: computeTaskStats(progress), progress });
   }
+  const gardener = recurringCauses(tasks.map((task) => task.progress));
   for (const task of tasks) delete task.progress;
   const sum = (pick) => tasks.reduce((total, task) => total + pick(task.stats), 0);
   const findings = {};
@@ -168,5 +169,44 @@ export function workspaceStats({ cwd = process.cwd(), since = null, remote = fal
       test_verifications_blocked: sum((stats) => stats.test_verifications.blocked),
       findings,
     },
+    gardener,
   };
+}
+
+const HUMAN_STOPS = new Set(['HUMAN_INTERVENTION', 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY', 'TEST_RELEASE_BLOCKED', 'HOTFIX_TEST_DEPLOYED_NEEDS_MANUAL_VERIFY', 'HOTFIX_TEST_RELEASE_BLOCKED']);
+const RECURRING = 3;
+
+// Failures that keep coming back across tasks point at a shared cause worth fixing once
+// (a generated file every task conflicts on, an environment that cannot be verified)
+// rather than in every task.
+export function recurringCauses(progresses) {
+  const conflicts = new Map();
+  const verification = { passed: 0, product_failed: 0, needs_input: 0 };
+  const stops = {};
+  for (const progress of progresses) {
+    for (const event of progress.events || []) {
+      if (event.type === 'delivery.test.repository_integrated' && event.data?.status === 'conflicts') {
+        for (const path of event.data.conflicts || []) {
+          const key = `${event.data.repository}:${path}`;
+          const entry = conflicts.get(key) || { path: key, count: 0, tasks: new Set() };
+          entry.count += 1;
+          entry.tasks.add(progress.feature.id);
+          conflicts.set(key, entry);
+        }
+      }
+      if (event.type === 'delivery.test.verification_passed') verification.passed += 1;
+      if (event.type === 'delivery.test.verification_blocked') verification.product_failed += 1;
+      if (event.type === 'delivery.test.verification_manual_required') verification.needs_input += 1;
+      if (event.to && HUMAN_STOPS.has(event.to) && event.from !== event.to) stops[event.to] = (stops[event.to] || 0) + 1;
+    }
+  }
+  const recurringConflicts = [...conflicts.values()].filter((entry) => entry.count >= RECURRING)
+    .sort((left, right) => right.count - left.count)
+    .map((entry) => ({ path: entry.path, conflicts: entry.count, tasks: entry.tasks.size }));
+  const suggestions = recurringConflicts.filter((entry) => entry.tasks >= 2).slice(0, 5).map((entry) => `${entry.path} conflicted ${entry.conflicts} times across ${entry.tasks} tasks: fix that once (a generated file the test pipeline rebuilds goes in test_keep_target; a file every task must edit is a design to split)`);
+  const verified = verification.passed + verification.product_failed + verification.needs_input;
+  if (verified >= 5 && verification.needs_input * 3 >= verified) {
+    suggestions.push(`${verification.needs_input} of ${verified} test verifications needed human input: declare the accounts and data each check needs in the plan's pre-authorized section`);
+  }
+  return { recurring_conflicts: recurringConflicts, verification, human_stops: stops, suggestions };
 }

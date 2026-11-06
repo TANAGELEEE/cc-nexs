@@ -7,7 +7,7 @@ import test from 'node:test';
 
 import { remoteProgressSnapshots, shareProgress } from './progress-share.mjs';
 import { createProgressV2, writeProgressV2 } from './progress-v2.mjs';
-import { workspaceStats } from './task-stats.mjs';
+import { recurringCauses, workspaceStats } from './task-stats.mjs';
 
 const git = (repo, args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 
@@ -51,4 +51,24 @@ test('share-progress publishes one snapshot per task to its own branch, and stat
     rmSync(root, { recursive: true, force: true });
     rmSync(elsewhere, { recursive: true, force: true });
   }
+});
+
+test('recurring causes name the files tasks keep conflicting on and how often verification needed a person', () => {
+  const conflict = (repository, conflicts) => ({ type: 'delivery.test.repository_integrated', data: { repository, status: 'conflicts', conflicts } });
+  const progresses = ['355', '367', '379'].map((id) => ({
+    feature: { id },
+    events: [
+      conflict('web', ['data/i18n/publication-manifest.json']),
+      conflict('web', ['data/i18n/publication-manifest.json', `src/only-${id}.ts`]),
+      { type: 'delivery.test.verification_manual_required', data: {} },
+      { type: 'delivery.test.verification_passed', data: {} },
+      { type: 'state.transition', from: 'TEST_VERIFYING', to: 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY' },
+    ],
+  }));
+  const causes = recurringCauses(progresses);
+  assert.deepEqual(causes.recurring_conflicts, [{ path: 'web:data/i18n/publication-manifest.json', conflicts: 6, tasks: 3 }]);
+  assert.deepEqual(causes.verification, { passed: 3, product_failed: 0, needs_input: 3 });
+  assert.deepEqual(causes.human_stops, { TEST_DEPLOYED_NEEDS_MANUAL_VERIFY: 3 });
+  assert.match(causes.suggestions[0], /publication-manifest\.json conflicted 6 times across 3 tasks/);
+  assert.match(causes.suggestions[1], /3 of 6 test verifications needed human input/);
 });

@@ -615,6 +615,13 @@ function printResult(result) {
     }
     const m = result.summary;
     console.log(`Total: ${m.tasks} task(s), ${m.completed} complete, median active ${(m.median_active_minutes / 60).toFixed(1)}h; plan reviews ${m.plan_reviews} (skipped ${m.plan_review_skips}), auto approvals ${m.auto_approvals}; reviews ${m.reviews} (${m.blocked_reviews} blocked); test verifications blocked ${m.test_verifications_blocked}; findings ${Object.entries(m.findings).map(([key, n]) => `${key} ${n}`).join(', ') || 'none'}; ${result.skipped} non-v2 progress file(s) skipped`);
+    const g = result.gardener;
+    if (g) {
+      console.log(`Verification outcomes: ${g.verification.passed} passed, ${g.verification.product_failed} product failure(s), ${g.verification.needs_input} needed human input`);
+      if (Object.keys(g.human_stops).length) console.log(`Stops for a person: ${Object.entries(g.human_stops).map(([state, n]) => `${state} ${n}`).join(', ')}`);
+      for (const entry of g.recurring_conflicts.slice(0, 10)) console.log(`Recurring test conflict: ${entry.path} ${entry.conflicts}x in ${entry.tasks} task(s)`);
+      for (const suggestion of g.suggestions) console.log(`Shared cause: ${suggestion}`);
+    }
     return;
   }
   if (result.kind === 'progress-share') {
