@@ -2,7 +2,9 @@ import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { resolveFeatureProgress } from './approval-command.mjs';
-import { readProgressV2 } from './progress-v2.mjs';
+import { readProgressV2, validateProgressV2 } from './progress-v2.mjs';
+import { remoteProgressSnapshots } from './progress-share.mjs';
+import { findWorkspaceRoot } from './candidate-context.mjs';
 
 const ACTIVE_GAP_MS = 2 * 60 * 60 * 1000;
 const CONFLICT_END = new Set(['delivery.test.merge_conflict_resolved', 'delivery.test.target_advanced', 'delivery.test.started']);
@@ -92,7 +94,7 @@ export function taskStats({ cwd = process.cwd(), featureId, progressPath = null 
   return { kind: 'task-stats', feature: progress.feature, state: progress.state, stats: computeTaskStats(progress), progressFile };
 }
 
-const SKIP_DIRS = new Set(['.git', '.worktrees', 'node_modules', 'dist', 'build', 'target', 'coverage']);
+const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', 'target', 'coverage']);
 
 function findProgressFiles(dir, depth = 0, out = []) {
   if (depth > 6) return out;
@@ -113,22 +115,40 @@ function median(values) {
 }
 
 // Aggregate every Lean/Hotfix task under a workspace so a workflow change can be
-// compared with the tasks before it. Feature worktrees are skipped to avoid counting
-// the docs checkout twice; progress files that are not v2 are reported as skipped.
-export function workspaceStats({ cwd = process.cwd(), since = null } = {}) {
+// compared with the tasks before it. An active task's progress lives in its docs
+// worktree, and docs checkouts carry copies of other tasks, so each task counts once,
+// from its most recently updated copy; --remote adds the snapshots other machines
+// shared. Progress files that are not v2 are reported as skipped.
+export function workspaceStats({ cwd = process.cwd(), since = null, remote = false } = {}) {
   const sinceMs = since ? Date.parse(since) : null;
   if (since && Number.isNaN(sinceMs)) throw new Error(`--since must be a date, got ${since}`);
-  const tasks = [];
+  const latest = new Map();
   let skipped = 0;
+  const consider = (progress, source) => {
+    if (!['lean', 'hotfix'].includes(progress.mode)) { skipped += 1; return; }
+    // Templates ship a progress file whose id is still a placeholder; it is not a task.
+    if (/[{}]/.test(`${progress.feature?.id}${progress.feature?.slug}`)) return;
+    const key = `${progress.mode}:${progress.feature.id}`;
+    const known = latest.get(key);
+    if (!known || Date.parse(progress.updated_at) > Date.parse(known.progress.updated_at)) latest.set(key, { progress, source });
+  };
   for (const file of findProgressFiles(cwd)) {
     let progress;
     try { progress = readProgressV2(file); } catch { skipped += 1; continue; }
-    if (!['lean', 'hotfix'].includes(progress.mode)) { skipped += 1; continue; }
-    // Templates ship a progress file whose id is still a placeholder; it is not a task.
-    if (/[{}]/.test(`${progress.feature?.id}${progress.feature?.slug}`)) continue;
-    if (sinceMs !== null && Date.parse(progress.created_at) < sinceMs) continue;
-    tasks.push({ feature: progress.feature, mode: progress.mode, state: progress.state, stats: computeTaskStats(progress) });
+    consider(progress, 'local');
   }
+  if (remote) {
+    for (const snapshot of remoteProgressSnapshots(findWorkspaceRoot(cwd))) {
+      if (validateProgressV2(snapshot).length) { skipped += 1; continue; }
+      consider(snapshot, 'remote');
+    }
+  }
+  const tasks = [];
+  for (const { progress, source } of latest.values()) {
+    if (sinceMs !== null && Date.parse(progress.created_at) < sinceMs) continue;
+    tasks.push({ feature: progress.feature, mode: progress.mode, state: progress.state, source, stats: computeTaskStats(progress), progress });
+  }
+  for (const task of tasks) delete task.progress;
   const sum = (pick) => tasks.reduce((total, task) => total + pick(task.stats), 0);
   const findings = {};
   for (const task of tasks) for (const [key, value] of Object.entries(task.stats.findings)) findings[key] = (findings[key] || 0) + value;

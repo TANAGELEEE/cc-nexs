@@ -15,6 +15,7 @@ import { taskStats, workspaceStats } from './task-stats.mjs';
 import { candidateVerifyGuides } from './verify-guide.mjs';
 import { browserProviderStatus, testAccount } from './test-session.mjs';
 import { runHeavy } from './heavy-slots.mjs';
+import { shareProgress } from './progress-share.mjs';
 import { assertHotfixCandidate, startHotfix } from './hotfix-control.mjs';
 import { initializeHotfix } from './hotfix-init.mjs';
 import { reviseHotfix } from './hotfix-revision.mjs';
@@ -84,6 +85,7 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
     if (separator !== 0) throw new Error('usage: heavy -- <command> [args...]');
     return runHeavy({ cwd, command: args.slice(1) });
   }
+  if (command === 'share-progress') return shareProgress({ cwd, ...parseFeatureOptions(args) });
   if (command === 'stats') {
     if (args.includes('--all')) return workspaceStats({ cwd, ...parseWorkspaceStatsOptions(args) });
     return taskStats({ cwd, ...parseFeatureOptions(args) });
@@ -308,6 +310,7 @@ function parseWorkspaceStatsOptions(args) {
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index];
     if (token === '--all') continue;
+    if (token === '--remote') { options.remote = true; continue; }
     if (token === '--since') options.since = requireValue(args, ++index, token);
     else if (token.startsWith('--since=')) options.since = token.slice('--since='.length);
     else throw new Error(`unexpected stats --all argument: ${token}`);
@@ -608,10 +611,14 @@ function printResult(result) {
   if (result.kind === 'workspace-stats') {
     for (const task of result.tasks) {
       const s = task.stats;
-      console.log(`${task.mode} ${task.feature.id} ${task.feature.slug} (${task.state}): active ${(s.active_minutes / 60).toFixed(1)}h, plan reviews ${s.plan_reviews}/${s.plan_review_skips} skipped, reviews ${s.reviews.consolidated + s.reviews.closure + s.reviews.gateway_b_delta} (${s.reviews.blocked} blocked), test blocked ${s.test_verifications.blocked}`);
+      console.log(`${task.mode} ${task.feature.id} ${task.feature.slug} (${task.state}${task.source === 'remote' ? ', shared' : ''}): active ${(s.active_minutes / 60).toFixed(1)}h, plan reviews ${s.plan_reviews}/${s.plan_review_skips} skipped, reviews ${s.reviews.consolidated + s.reviews.closure + s.reviews.gateway_b_delta} (${s.reviews.blocked} blocked), test blocked ${s.test_verifications.blocked}`);
     }
     const m = result.summary;
     console.log(`Total: ${m.tasks} task(s), ${m.completed} complete, median active ${(m.median_active_minutes / 60).toFixed(1)}h; plan reviews ${m.plan_reviews} (skipped ${m.plan_review_skips}), auto approvals ${m.auto_approvals}; reviews ${m.reviews} (${m.blocked_reviews} blocked); test verifications blocked ${m.test_verifications_blocked}; findings ${Object.entries(m.findings).map(([key, n]) => `${key} ${n}`).join(', ') || 'none'}; ${result.skipped} non-v2 progress file(s) skipped`);
+    return;
+  }
+  if (result.kind === 'progress-share') {
+    console.log(`cc-nexs progress ${result.unchanged ? 'already shared' : 'shared'}: ${result.feature.id} ${result.state} on ${result.branch} (${result.commit.slice(0, 12)})`);
     return;
   }
   if (result.kind === 'task-reconcile') {
@@ -798,7 +805,8 @@ function printUsage() {
   console.error('  cc-nexs advance <feature-id> --from <state> --to <state> [--reason <text>] [--recover --authorization-evidence <text>] [--progress <path>]');
   console.error('  cc-nexs record-derived-binding <feature-id> [--progress <path>]');
   console.error('  cc-nexs stats <feature-id> [--progress <path>]');
-  console.error('  cc-nexs stats --all [--since <date>]');
+  console.error('  cc-nexs stats --all [--since <date>] [--remote]');
+  console.error('  cc-nexs share-progress <feature-id> [--progress <path>]');
   console.error('  cc-nexs verify-guides <feature-id> [--progress <path>]');
   console.error('  cc-nexs review-panel <feature-id> [--runtime <claude|codex|pi>] [--round <consolidated|closure|gateway-b-delta>] [--progress <path>]');
   console.error('  cc-nexs run-reviewer <feature-id> --reviewer <id> --brief <file> [--round <round>] [--progress <path>]');
