@@ -300,11 +300,12 @@ function parseStatusOptions(args) {
 }
 
 function parseAdvanceOptions(args) {
-  const fields = { '--from': 'from', '--to': 'to', '--reason': 'reason' };
+  const fields = { '--from': 'from', '--to': 'to', '--reason': 'reason', '--authorization-evidence': 'authorizationEvidence' };
   const options = {};
   const rest = [];
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index];
+    if (token === '--recover') { options.recover = true; continue; }
     const equals = token.indexOf('=');
     const flag = equals < 0 ? token : token.slice(0, equals);
     if (fields[flag]) options[fields[flag]] = equals < 0 ? requireValue(args, ++index, flag) : token.slice(equals + 1);
@@ -745,7 +746,7 @@ function printResult(result) {
 function printUsage() {
   console.error('Usage:');
   console.error('  cc-nexs status <feature-id> [--no-auto-test-release] [--progress <path>]');
-  console.error('  cc-nexs advance <feature-id> --from <state> --to <state> [--reason <text>] [--progress <path>]');
+  console.error('  cc-nexs advance <feature-id> --from <state> --to <state> [--reason <text>] [--recover --authorization-evidence <text>] [--progress <path>]');
   console.error('  cc-nexs record-derived-binding <feature-id> [--progress <path>]');
   console.error('  cc-nexs stats <feature-id> [--progress <path>]');
   console.error('  cc-nexs stats --all [--since <date>]');

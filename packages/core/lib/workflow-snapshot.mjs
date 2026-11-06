@@ -7,7 +7,7 @@ import { loadConfig } from './config-loader.mjs';
 import { configuredPluginRoot } from './config-root.mjs';
 import { transitionState } from './progress-io.mjs';
 import { appendProgressEvent, readProgressV2 } from './progress-v2.mjs';
-import { nextStep } from './state-machine.mjs';
+import { isAllowedTransition, nextStep } from './state-machine.mjs';
 import { reviewRequirement } from './review-policy.mjs';
 import { resolveTestReleasePolicy } from './test-release.mjs';
 import { taskFilesDir } from './verify-artifacts.mjs';
@@ -147,7 +147,7 @@ export function deliveryMilestones(progress) {
 /** CLI form of the run loop's persist step: move from the captured state to effectiveNext exactly once. */
 const MAX_REASON_LENGTH = 300;
 
-export function advanceFeatureState({ cwd = process.cwd(), featureId, progressPath = null, from, to, reason = '' } = {}) {
+export function advanceFeatureState({ cwd = process.cwd(), featureId, progressPath = null, from, to, reason = '', recover = false, authorizationEvidence = '' } = {}) {
   if (!from || !to) throw new Error('advance requires --from <state> and --to <state>');
   if (String(reason).length > MAX_REASON_LENGTH) {
     throw new Error(`[cc-nexs] advance --reason must be at most ${MAX_REASON_LENGTH} characters of plain sentences; put details in the plan`);
@@ -156,6 +156,13 @@ export function advanceFeatureState({ cwd = process.cwd(), featureId, progressPa
   const status = featureStatus({ cwd, featureId, progressPath });
   const markdown = join(dirname(status.progressFile), 'progress.md');
   if (!existsSync(markdown)) throw new Error(`[cc-nexs] progress.md not found beside ${status.progressFile}`);
+  if (status.input.state === from && !isAllowedTransition({ mode: status.input.mode, from, to, next: status.next.next })) {
+    if (!recover) {
+      throw new Error(`[cc-nexs] ${from} -> ${to} is not a workflow transition (next: ${status.next.next}). Run the controller for the current step; a human-authorized recovery uses --recover --authorization-evidence "<the user's instruction>"`);
+    }
+    if (!String(authorizationEvidence).trim()) throw new Error('[cc-nexs] --recover requires --authorization-evidence with the user\'s actual instruction');
+    appendProgressEvent(status.progressFile, { type: 'state.recovery_authorized', from: null, to: null, data: { from, to, authorization_evidence: String(authorizationEvidence).trim() } });
+  }
   transitionState(markdown, { from, to, reason });
   const progress = readProgressV2(status.progressFile);
   return {
