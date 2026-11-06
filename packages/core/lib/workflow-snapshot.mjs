@@ -9,6 +9,7 @@ import { transitionState } from './progress-io.mjs';
 import { appendProgressEvent, readProgressV2 } from './progress-v2.mjs';
 import { isAllowedTransition, nextStep } from './state-machine.mjs';
 import { reviewRequirement } from './review-policy.mjs';
+import { baseSyncCarryReady } from './base-sync-carry.mjs';
 import { resolveTestReleasePolicy } from './test-release.mjs';
 import { taskFilesDir } from './verify-artifacts.mjs';
 
@@ -69,6 +70,7 @@ export function buildWorkflowSnapshot({ cwd = process.cwd(), featureId, progress
       status: progress.delivery?.base?.status || 'idle',
       attempt: progress.delivery?.base?.attempts?.length || 0,
     },
+    base_sync: { carried: baseSyncCarryReady(progress), approved: Boolean(progress.base_sync?.release_gate) },
     derived_binding: progress.gates?.plan?.binding?.derived_binding === 'before-final-test'
       ? { mode: 'before-final-test', status: progress.events.some((event) => event.type === 'derived.bound') ? 'bound' : 'pending' }
       : null,

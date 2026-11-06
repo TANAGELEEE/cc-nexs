@@ -6,6 +6,11 @@ import { prepareFeatureForMerge } from './git-custodian.mjs';
 import { gitIdentityEnv, resolveGitIdentity } from './git-identity.mjs';
 import { acquireTestReleaseLock } from './test-release.mjs';
 import { appendProgressEvent, readProgressV2, recordRepositoryCandidatePrepared } from './progress-v2.mjs';
+import { captureBaseSyncCarry, completeBaseSyncCarry, recordBaseSyncCarry } from './base-sync-carry.mjs';
+
+function syncedSource(options) {
+  return resolveCandidateContext(options).source;
+}
 
 const git = (cwd, args, env = process.env) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env }).trim();
 
@@ -66,6 +71,7 @@ export function finishBaseSync({ cwd = process.cwd(), featureId, progressPath = 
       });
       results.push({ repository: item.repository, head, resolved: staged });
     }
+    if (readProgressV2(context.progressFile).base_sync) completeBaseSyncCarry(context.progressFile, syncedSource({ cwd, featureId, progressPath }));
     return { kind: 'base-sync-finished', state: readProgressV2(context.progressFile).state, results, progressFile: context.progressFile };
   } finally { unlock(); }
 }
@@ -97,6 +103,8 @@ export function syncReleaseBase(options) {
   try {
     const progress = readProgressV2(context.progressFile);
     if (!['BASE_CHANGED', 'HOTFIX_BASE_CHANGED'].includes(progress.state)) throw new Error('sync-base requires BASE_CHANGED');
+    // Taken before the sync clears the candidate's evidence.
+    const carry = captureBaseSyncCarry(progress, context.source);
     const results = [];
     for (const item of context.repositories) {
       const result = prepareFeatureForMerge({ repo: item.repository.absolute_path,
@@ -108,6 +116,8 @@ export function syncReleaseBase(options) {
       });
     }
     const conflicts = results.some(item => item.status === 'conflicts');
+    recordBaseSyncCarry(context.progressFile, carry);
+    if (carry && !conflicts) completeBaseSyncCarry(context.progressFile, syncedSource(options));
     const state = progress.mode === 'hotfix'
       ? (conflicts ? 'HOTFIX_FIXING' : 'HOTFIX_LOCAL_VERIFYING')
       : (conflicts ? 'IMPLEMENTING' : 'LOCAL_VERIFYING');

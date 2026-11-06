@@ -11,7 +11,8 @@ import { assertRecordedLocalVerification, extractLocalVerificationChecks } from 
 import { syncHotfixChangeStatuses, syncPlanChangeStatuses } from './release-change-docs.mjs';
 import { loadWorkspaceConfig } from './config-loader.mjs';
 import { createReleaseExceptionBinding } from './release-exception.mjs';
-import { findWorkspaceRoot, loadCandidateConfig } from './candidate-context.mjs';
+import { findWorkspaceRoot, loadCandidateConfig, resolveCandidateContext } from './candidate-context.mjs';
+import { provenBaseSyncCarry } from './base-sync-carry.mjs';
 import { reviewRequirement, reviewSatisfied } from './review-policy.mjs';
 
 const GATES = new Set(['plan', 'release']);
@@ -107,26 +108,31 @@ export function approveFeatureGate({
       throw new Error(`release gate requires ${pendingState}, found ${before.state}`);
     }
     const localChecks = extractLocalVerificationChecks(releaseScope(before, progressFile));
-    const attempt = before.delivery?.test?.attempts?.at(-1);
+    // A tested candidate synced with a moved base and built locally carries its test
+    // evidence and Review to the synced candidate, which is what gets approved.
+    const carry = !testException && before.base_sync ? provenBaseSyncCarry(resolveCandidateContext({ cwd, featureId, progressPath: progressFile }), { expectedChecks: localChecks }) : null;
+    const attempt = carry ? before.delivery?.test?.attempts?.find((item) => item.id === carry.test_attempt) : before.delivery?.test?.attempts?.at(-1);
     assertTestAttemptNotInvalidated(attempt);
     const reviewConfig = loadCandidateConfig(findWorkspaceRoot(cwd, progressFile)).mergedReview;
     const exceptionBinding = testException ? createReleaseExceptionBinding(before, testException, reviewConfig) : null;
     if (!exceptionBinding && (!attempt || attempt.status !== 'verified' || attempt.verification?.result !== 'passed')) {
       throw new Error('[cc-nexs] release approval requires a verified test release attempt');
     }
-    const baseTargets = assertReleaseCandidateRefsCurrent({ progress: before, progressFile, attempt });
-    assertRecordedLocalVerification(before, { source: attempt.source, fingerprint: attempt.fingerprint, expectedChecks: localChecks });
+    const candidate = carry ? { source: carry.to_source, fingerprint: carry.to_fingerprint } : { source: attempt.source, fingerprint: attempt.fingerprint };
+    const baseTargets = assertReleaseCandidateRefsCurrent({ progress: before, progressFile, attempt: { source: candidate.source } });
+    assertRecordedLocalVerification(before, { source: candidate.source, fingerprint: candidate.fingerprint, expectedChecks: localChecks });
     const reviewNeed = reviewRequirement(before, reviewConfig);
-    if (!reviewSatisfied(before, attempt.fingerprint, reviewNeed)) {
+    if (!reviewSatisfied(carry ? { ...before, review: carry.review || {} } : before, attempt.fingerprint, reviewNeed)) {
       throw new Error(`[cc-nexs] release approval requires a consolidated review for the tested candidate (${reviewNeed.reasons.join('; ')})`);
     }
     const binding = {
-      candidate_fingerprint: attempt.fingerprint,
-      source: attempt.source,
+      candidate_fingerprint: candidate.fingerprint,
+      source: candidate.source,
       base_targets: baseTargets,
       test_attempt: attempt.id,
       environment_revision: attempt.environment_revision,
       review: { required: reviewNeed.required, reasons: reviewNeed.reasons },
+      ...(carry && { base_sync: { from_fingerprint: carry.from_fingerprint, from_source: carry.from_source, tested_again: false } }),
       plan_binding: before.mode === 'lean' ? before.gates.plan?.binding?.combined_sha256 || null : null,
       hotfix_scope_binding: before.mode === 'hotfix' ? before.hotfix.scope_binding.hotfix_scope_sha256 : null,
       ...(exceptionBinding && { test_exception: exceptionBinding }),

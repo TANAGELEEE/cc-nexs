@@ -943,6 +943,77 @@ test('finish-base-sync completes a resolved sync merge on the development branch
   });
 });
 
+for (const approvedBefore of [true, false]) test(`a tested candidate that conflicts with a moved base is synced, built locally and merged without another test (approved before sync: ${approvedBefore})`, () => {
+  const id = approvedBefore ? 'carry-approved' : 'carry-pending';
+  const fixture = createEnvironmentBlockedCandidate('lean', id);
+  withPresetEnv(fixture, () => {
+    const attempt = readProgressV2(fixture.progressFile).delivery.test.attempts.at(-1);
+    recordTestVerification(fixture.progressFile, { attemptId: attempt.id, result: 'passed', evidence: ['journeys passed on test'] });
+    const verified = readProgressV2(fixture.progressFile);
+    verified.state = 'RELEASE_PENDING_HUMAN';
+    writeProgressV2(fixture.progressFile, verified);
+    if (approvedBefore) approveFeatureGate({ cwd: fixture.root, featureId: id, gate: 'release', approver: 'Owner' });
+    const moved = readProgressV2(fixture.progressFile);
+    moved.state = 'BASE_CHANGED';
+    writeProgressV2(fixture.progressFile, moved);
+    writeFileSync(join(fixture.repo, 'candidate.txt'), 'upstream\n');
+    fixture.git(fixture.repo, ['add', '.']); fixture.git(fixture.repo, ['commit', '-m', 'another task changed the same line']); fixture.git(fixture.repo, ['push', 'origin', 'main']);
+    assert.equal(runCcNexsCommand(['sync-base', id], { cwd: fixture.root }).conflicts, true);
+    const worktree = join(fixture.root, 'api-feature');
+    writeFileSync(join(worktree, 'candidate.txt'), 'fixed and upstream\n');
+    runCcNexsCommand(['finish-base-sync', id], { cwd: fixture.root });
+    const head = fixture.git(worktree, ['rev-parse', 'HEAD']);
+    assert.throws(() => runBaseRelease({ cwd: fixture.root, featureId: id }), /base release requires BASE_MERGING/);
+    recordLocalVerification(fixture.progressFile, {
+      source: { api: head }, status: 'passed', evidence: [{ check: 'build', result: 'passed', command: 'node build.mjs', exit_code: 0, proof: 'build ok on the synced candidate' }],
+    });
+    runCcNexsCommand(['advance', id, '--from', 'IMPLEMENTING', '--to', 'LOCAL_VERIFYING', '--reason', 'synced candidate built'], { cwd: fixture.root });
+    const status = runCcNexsCommand(['status', id], { cwd: fixture.root });
+    if (!approvedBefore) {
+      assert.deepEqual([status.next.next, status.next.stop], ['RELEASE_PENDING_HUMAN', true], 'Gateway B is asked for the synced candidate, without another test');
+      runCcNexsCommand(['advance', id, '--from', 'LOCAL_VERIFYING', '--to', 'RELEASE_PENDING_HUMAN', '--reason', 'synced candidate carries test evidence'], { cwd: fixture.root });
+      approveFeatureGate({ cwd: fixture.root, featureId: id, gate: 'release', approver: 'Owner' });
+      const binding = readProgressV2(fixture.progressFile).gates.release.binding;
+      assert.deepEqual([binding.source, binding.test_attempt, binding.base_sync.tested_again], [{ api: head }, attempt.id, false]);
+      runCcNexsCommand(['advance', id, '--from', 'RELEASE_PENDING_HUMAN', '--to', 'BASE_MERGING', '--reason', 'approved'], { cwd: fixture.root });
+    } else {
+      assert.deepEqual([status.next.next, status.next.action], ['BASE_MERGING', 'release_base'], 'the earlier approval carries to the synced candidate');
+      runCcNexsCommand(['advance', id, '--from', 'LOCAL_VERIFYING', '--to', 'BASE_MERGING', '--reason', 'synced candidate carries approval'], { cwd: fixture.root });
+    }
+    const released = runBaseRelease({ cwd: fixture.root, featureId: id });
+    assert.equal(released.status, 'succeeded');
+    fixture.git(fixture.repo, ['fetch', 'origin']);
+    assert.equal(fixture.git(fixture.repo, ['merge-base', '--is-ancestor', head, 'origin/main']), '');
+    assert.equal(readProgressV2(fixture.progressFile).delivery.test.attempts.length, 1, 'no new test attempt');
+  });
+});
+
+test('a carried candidate with anything beyond the base merge is not released on the old evidence', () => {
+  const fixture = createEnvironmentBlockedCandidate('lean', 'carry-extra');
+  withPresetEnv(fixture, () => {
+    const attempt = readProgressV2(fixture.progressFile).delivery.test.attempts.at(-1);
+    recordTestVerification(fixture.progressFile, { attemptId: attempt.id, result: 'passed', evidence: ['journeys passed on test'] });
+    const moved = readProgressV2(fixture.progressFile);
+    moved.state = 'BASE_CHANGED';
+    writeProgressV2(fixture.progressFile, moved);
+    writeFileSync(join(fixture.repo, 'candidate.txt'), 'upstream\n');
+    fixture.git(fixture.repo, ['add', '.']); fixture.git(fixture.repo, ['commit', '-m', 'upstream']); fixture.git(fixture.repo, ['push', 'origin', 'main']);
+    runCcNexsCommand(['sync-base', 'carry-extra'], { cwd: fixture.root });
+    const worktree = join(fixture.root, 'api-feature');
+    writeFileSync(join(worktree, 'candidate.txt'), 'fixed and upstream\n');
+    runCcNexsCommand(['finish-base-sync', 'carry-extra'], { cwd: fixture.root });
+    writeFileSync(join(worktree, 'extra.txt'), 'new behavior\n');
+    fixture.git(worktree, ['add', '.']); fixture.git(worktree, ['commit', '-m', 'sneak in a change']);
+    const extra = fixture.git(worktree, ['rev-parse', 'HEAD']);
+    fixture.git(fixture.repo, ['update-ref', 'refs/cc-nexs/candidates/api', extra]);
+    recordLocalVerification(fixture.progressFile, { source: { api: extra }, status: 'passed', evidence: [{ check: 'build', result: 'passed', command: 'node build.mjs', exit_code: 0, proof: 'build ok' }] });
+    runCcNexsCommand(['advance', 'carry-extra', '--from', 'IMPLEMENTING', '--to', 'LOCAL_VERIFYING', '--reason', 'built'], { cwd: fixture.root });
+    const status = runCcNexsCommand(['status', 'carry-extra'], { cwd: fixture.root });
+    assert.notEqual(status.next.next, 'BASE_MERGING', 'a candidate that is more than the base merge goes back through review/test');
+    assert.notEqual(status.next.next, 'RELEASE_PENDING_HUMAN');
+  });
+});
+
 test('base preflight moves a drifted candidate to BASE_CHANGED before Gateway B is requested', () => {
   const fixture = createEnvironmentBlockedCandidate('lean', 'preflight');
   withPresetEnv(fixture, () => {

@@ -60,6 +60,13 @@ function nextStepHotfix({ state, counters, thresholds, enabledRoles, workflow = 
   const closureAttempts = Number(workflow.review?.closure_attempts || 0);
 
   if (TERMINAL.has(state)) return { next: state, role: null, action: 'noop' };
+  // A tested candidate synced with a moved base and built locally goes to its MR; it is
+  // neither reviewed nor tested again (base-sync-carry proves it is only that merge).
+  if (['HOTFIX_LOCAL_VERIFYING', 'HOTFIX_LOCAL_REVERIFYING'].includes(state) && workflow.base_sync?.carried) {
+    return workflow.base_sync.approved
+      ? { next: 'HOTFIX_BASE_MERGING', role: null, action: 'release_base' }
+      : { next: 'HOTFIX_RELEASE_PENDING_HUMAN', role: null, action: 'await_release_approval', stop: true };
+  }
   if (['HOTFIX_REVIEW_BLOCKED', 'HOTFIX_TEST_FAILED', 'HOTFIX_CHANGE_REQUESTED'].includes(state) && deltaAttempts >= 1) {
     return { next: 'HUMAN_INTERVENTION', role: null, action: 'await_human', circuitBreaker: 'hotfix_delta', stop: true };
   }
@@ -229,6 +236,13 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
     case 'LOCAL_VERIFY_FAILED':
       return { next: 'IMPLEMENTING', role: developer, action: 'fix_local' };
     case 'LOCAL_VERIFYING':
+      // A tested candidate synced with a moved base and built locally goes to its MR; it is
+      // neither reviewed nor tested again (base-sync-carry proves it is only that merge).
+      if (workflow.base_sync?.carried) {
+        return workflow.base_sync.approved
+          ? { next: 'BASE_MERGING', role: null, action: 'release_base' }
+          : { next: 'RELEASE_PENDING_HUMAN', role: null, action: 'await_release_approval', stop: true };
+      }
       // A required Review (high/critical, sensitive paths) comes before test; otherwise
       // the candidate goes straight to test and verification is the gate.
       if (!reviewRequired) return { next: 'CANDIDATE_READY', role: null, action: 'continue_to_test' };
