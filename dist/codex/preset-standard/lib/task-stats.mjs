@@ -124,6 +124,8 @@ export function workspaceStats({ cwd = process.cwd(), since = null } = {}) {
     let progress;
     try { progress = readProgressV2(file); } catch { skipped += 1; continue; }
     if (!['lean', 'hotfix'].includes(progress.mode)) { skipped += 1; continue; }
+    // Templates ship a progress file whose id is still a placeholder; it is not a task.
+    if (/[{}]/.test(`${progress.feature?.id}${progress.feature?.slug}`)) continue;
     if (sinceMs !== null && Date.parse(progress.created_at) < sinceMs) continue;
     tasks.push({ feature: progress.feature, mode: progress.mode, state: progress.state, stats: computeTaskStats(progress) });
   }

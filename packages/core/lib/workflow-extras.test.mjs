@@ -106,6 +106,7 @@ test('workspace stats aggregate v2 tasks and skip feature worktrees and legacy f
     write('all-docs/doc/01.one', lean);
     write('.worktrees/01-one/all-docs/doc/01.one', lean);
     write('.cc-nexs/hotfixes/fix-a', createProgressV2({ featureId: 'fix-a', featureSlug: 'fix-a', preset: 'preset-standard', mode: 'hotfix', repositories: [] }));
+    write('all-docs/_templates/lean', createProgressV2({ featureId: '{编号}', featureSlug: '{需求短名}', preset: 'preset-standard', mode: 'lean', repositories: [] }));
     mkdirSync(join(root, 'all-docs/doc/00.legacy'), { recursive: true });
     writeFileSync(join(root, 'all-docs/doc/00.legacy/progress.json'), '{"current_state":"DONE"}');
     const result = workspaceStats({ cwd: root });
