@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 import {
   assertCandidateExcludesTestHistory,
-  assertDedicatedTargetFree,
+  targetForeignCommits,
   checkBaseReadiness,
   cleanupMergedWorktree,
   commitCandidate,
@@ -21,6 +21,7 @@ import {
   promoteCandidateViaMergeRequest,
   proveCandidateMerge,
   resolveDeployedRevision,
+  resolveTestIntegrationConflict,
 } from './git-custodian.mjs';
 import { createProgressV2, readProgressV2, recordRepositoryAssignments, writeProgressV2 } from './progress-v2.mjs';
 
@@ -487,7 +488,7 @@ test('MR delivery keeps the overlap guard, records unchecked sensitive paths, an
     assert.match(result.integrationVerification.integrationTree, /^[0-9a-f]{40}$/);
     assert.equal(git(repo, ['worktree', 'list', '--porcelain']).split('\n').filter((line) => line.startsWith('worktree ')).length, 1);
     writeFileSync(join(other, 'change.txt'), 'upstream'); git(other, ['add', '.']); git(other, ['commit', '-m', 'overlap']); git(other, ['push', 'origin', 'main']);
-    assert.throws(() => promoteCandidateViaMergeRequest({ ...options, mergeRequest: driver, verifyIntegration: () => ({}) }), /BASE_CHANGED: origin\/main overlaps candidate paths/);
+    assert.throws(() => promoteCandidateViaMergeRequest({ ...options, mergeRequest: driver, verifyIntegration: () => ({}) }), /BASE_CHANGED: candidate conflicts with origin\/main/);
   } finally { rmSync(fixture.root, { recursive: true, force: true }); }
 });
 
@@ -509,6 +510,31 @@ test('base readiness reports drift before Gateway B without mutating refs', () =
     assert.deepEqual(drift.overlap, ['change.txt']);
     assert.equal(git(repo, ['rev-parse', 'refs/cc-nexs/candidates/07-demo/api']), source);
   } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+});
+
+test('a base that edits the candidate\'s files elsewhere keeps the tested candidate releasable', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-clean-overlap-'));
+  try {
+    const repo = join(root, 'repo');
+    git(root, ['init', '--bare', join(root, 'remote.git')]);
+    git(root, ['clone', join(root, 'remote.git'), repo]); configure(repo);
+    git(repo, ['checkout', '-b', 'main']);
+    writeFileSync(join(repo, 'routes.txt'), 'a\nb\nc\nd\ne\nf\ng\n'); git(repo, ['add', '.']); git(repo, ['commit', '-m', 'base']); git(repo, ['push', 'origin', 'main']);
+    git(repo, ['checkout', '-b', 'feature']);
+    writeFileSync(join(repo, 'routes.txt'), 'a feature\nb\nc\nd\ne\nf\ng\n'); git(repo, ['commit', '-am', 'feature']);
+    const source = git(repo, ['rev-parse', 'HEAD']);
+    const ref = 'refs/cc-nexs/candidates/overlap/api'; git(repo, ['update-ref', ref, source]);
+    git(repo, ['checkout', 'main']); writeFileSync(join(repo, 'routes.txt'), 'a\nb\nc\nd\ne\nf\ng upstream\n'); git(repo, ['commit', '-am', 'another task']); git(repo, ['push', 'origin', 'main']);
+    const ready = checkBaseReadiness({ repo, repositoryId: 'api', sourceCommit: source, targetBranch: 'main' });
+    assert.equal(ready.status, 'ready');
+    assert.deepEqual(ready.overlap, ['routes.txt']);
+    const result = integrateCandidateToTest({ repo, repositoryId: 'api', candidateRef: ref, targetBranch: 'main', requireDisjointTargetChanges: true, verifyIntegration: (payload) => {
+      assert.deepEqual(payload.sensitivePaths, ['routes.txt'], 'overlapping paths get the merged-tree checks');
+      return { status: 'passed', integrationCommit: payload.integrationCommit, proof: 'merged tree checks passed' };
+    } });
+    assert.deepEqual(result.overlapPaths, ['routes.txt']);
+    assert.equal(git(repo, ['show', 'origin/main:routes.txt']), 'a feature\nb\nc\nd\ne\nf\ng upstream');
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test('disjoint sensitive base changes integrate unchanged, through merged-tree checks when configured', () => {
@@ -647,20 +673,90 @@ test('a deployed revision proves the integration when it is that commit or a lat
   }
 });
 
-test('a dedicated Test target accepts its own integrations and refuses foreign work', () => {
+test('a dedicated Test target reports other tasks\' work instead of refusing it', () => {
   const fixture = mrFixture('cc-nexs-dedicated-');
   try {
     const { root, origin, repo, source } = fixture;
     git(repo, ['push', 'origin', 'origin/main:refs/heads/test02']);
-    const check = (ownCommits = []) => assertDedicatedTargetFree({ repo, targetBranch: 'test02', baseBranch: 'main', sourceCommit: source, ownCommits });
-    assert.equal(check().free, true);
+    const check = (ownCommits = []) => targetForeignCommits({ repo, targetBranch: 'test02', baseBranch: 'main', sourceCommit: source, ownCommits }).foreign;
+    assert.deepEqual(check(), []);
     const result = integrateCandidateToTest({ repo, repositoryId: 'api', candidateRef: 'refs/cc-nexs/candidates/07-demo/api', targetBranch: 'test02' });
-    assert.throws(() => check(), /TARGET_OCCUPIED: origin\/test02 carries 1 commit/);
-    assert.equal(check([result.integrationCommit]).free, true);
+    assert.deepEqual(check([result.integrationCommit]), [], 'its own merge commit is not foreign');
     const other = join(root, 'other');
     git(root, ['clone', origin, other]); configure(other); git(other, ['checkout', 'test02']);
     writeFileSync(join(other, 'theirs.txt'), 'another feature'); git(other, ['add', '.']); git(other, ['commit', '-m', 'their feature']); git(other, ['push', 'origin', 'test02']);
-    assert.throws(() => check([result.integrationCommit]), /TARGET_OCCUPIED: origin\/test02 carries 1 commit/);
+    const foreign = check([result.integrationCommit]);
+    assert.equal(foreign.length, 1);
+    assert.equal(git(repo, ['log', '-1', '--format=%s', foreign[0]]), 'their feature');
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+});
+
+// A test branch whose change.txt and manifest.json conflict with the candidate's.
+function conflictFixture(prefix) {
+  const fixture = mrFixture(prefix);
+  const { root, origin, repo } = fixture;
+  const other = join(root, 'other');
+  git(root, ['clone', origin, other]); configure(other);
+  git(other, ['checkout', '-b', 'test', 'origin/main']);
+  writeFileSync(join(other, 'change.txt'), 'test side'); writeFileSync(join(other, 'manifest.json'), '{"t":1}\n');
+  git(other, ['add', '.']); git(other, ['commit', '-m', 'other task']); git(other, ['push', 'origin', 'test']);
+  writeFileSync(join(repo, 'manifest.json'), '{"c":1}\n'); git(repo, ['add', '.']); git(repo, ['commit', '-m', 'candidate manifest']);
+  const source = git(repo, ['rev-parse', 'HEAD']);
+  git(repo, ['update-ref', 'refs/cc-nexs/candidates/07-demo/api', source]);
+  const pushUnrelated = (name) => {
+    git(other, ['pull', '--no-rebase', '-q', 'origin', 'test']);
+    writeFileSync(join(other, name), name); git(other, ['add', '.']); git(other, ['commit', '-m', name]); git(other, ['push', 'origin', 'test']);
+  };
+  const integrate = (attempt, extra = {}) => integrateCandidateToTest({ repo, repositoryId: 'api', candidateRef: 'refs/cc-nexs/candidates/07-demo/api',
+    targetBranch: 'test', preserveConflicts: true, conflictWorktree: join(root, 'conflicts', attempt), ...extra });
+  return { ...fixture, source, other, pushUnrelated, integrate };
+}
+
+test('a test conflict resolved once is replayed after the target advances, without another Developer round', () => {
+  const fixture = conflictFixture('cc-nexs-replay-');
+  try {
+    const { repo, source, integrate, pushUnrelated } = fixture;
+    const first = integrate('a1');
+    assert.equal(first.status, 'conflicts');
+    assert.deepEqual([...first.conflicts].sort(), ['change.txt', 'manifest.json']);
+    writeFileSync(join(first.worktree, 'change.txt'), 'resolved'); writeFileSync(join(first.worktree, 'manifest.json'), '{"t":1,"c":1}\n');
+    git(first.worktree, ['add', 'change.txt', 'manifest.json']);
+    pushUnrelated('later.txt');
+    assert.throws(() => resolveTestIntegrationConflict({ repo, worktree: first.worktree, targetBranch: 'test', sourceCommit: source, targetBefore: first.targetBefore }), /TARGET_ADVANCED/);
+    const second = integrate('a2');
+    assert.equal(second.status, undefined, 'the recorded resolution completes the merge');
+    assert.deepEqual([...second.autoResolved.replayed].sort(), ['change.txt', 'manifest.json']);
+    assert.equal(git(repo, ['show', `${second.remoteCommit}:change.txt`]), 'resolved');
+    assert.equal(git(repo, ['show', `${second.remoteCommit}:later.txt`]), 'later.txt');
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+});
+
+test('test_keep_target paths take the test side; anything else still goes to the Developer', () => {
+  const fixture = conflictFixture('cc-nexs-keep-target-');
+  try {
+    const { repo, integrate } = fixture;
+    const partial = integrate('a1', { keepTarget: ['*.json'] });
+    assert.equal(partial.status, 'conflicts');
+    assert.deepEqual(partial.conflicts, ['change.txt']);
+    assert.deepEqual(partial.autoResolved.kept, ['manifest.json']);
+    assert.equal(readFileSync(join(partial.worktree, 'manifest.json'), 'utf8'), '{"t":1}\n');
+    const whole = integrate('a2', { keepTarget: ['*.json', 'change.txt'] });
+    assert.deepEqual([...whole.autoResolved.kept].sort(), ['change.txt', 'manifest.json']);
+    assert.equal(git(repo, ['show', `${whole.remoteCommit}:manifest.json`]), '{"t":1}');
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+});
+
+test('integration is redone on the new tip when another task pushes first', () => {
+  const fixture = conflictFixture('cc-nexs-target-moved-');
+  try {
+    const { root, repo, integrate } = fixture;
+    const marker = join(root, 'raced');
+    const hook = join(repo, '.git', 'hooks', 'pre-push');
+    writeFileSync(hook, `#!/bin/sh\nunset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR\nif [ ! -f "${marker}" ]; then touch "${marker}"; cd "${join(root, 'other')}" && git pull -q --no-rebase origin test && echo race > race.txt && git add race.txt && git commit -qm race && git push -q origin test; fi\nexit 0\n`);
+    chmodSync(hook, 0o755);
+    const result = integrate('a1', { keepTarget: ['*.json', 'change.txt'] });
+    assert.equal(git(repo, ['show', `${result.remoteCommit}:race.txt`]), 'race');
+    assert.equal(git(repo, ['merge-base', '--is-ancestor', fixture.source, result.remoteCommit]), '');
   } finally { rmSync(fixture.root, { recursive: true, force: true }); }
 });
 

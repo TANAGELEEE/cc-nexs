@@ -7,9 +7,10 @@ import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 
 import { loadConfig, loadWorkspaceConfig } from './config-loader.mjs';
 import { jsonValuesEqual } from './canonical-json.mjs';
+import { reviewRequirement, reviewSatisfied } from './review-policy.mjs';
 import { assertLocalCandidateWorktree } from './candidate-context.mjs';
 import { assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
-import { assertCandidateExcludesTestHistory, assertDedicatedTargetFree, integrateCandidateToTest, removeIntegrationWorktree, resolveCandidateCommit, resolveDeployedRevision } from './git-custodian.mjs';
+import { assertCandidateExcludesTestHistory, integrateCandidateToTest, removeIntegrationWorktree, resolveCandidateCommit, resolveDeployedRevision, targetForeignCommits } from './git-custodian.mjs';
 import { approvedPlanDeliveryContract, extractApprovalScope } from './plan-contract.mjs';
 import { assertRecordedLocalVerification, extractLocalVerificationChecks } from './local-evidence.mjs';
 import {
@@ -142,6 +143,7 @@ export function preflightTestRelease({
         worktree,
         releaseOrder: repo.release_order,
         baseBranch: configuredRepo.base_branch,
+        keepTarget: configuredRepo.test_keep_target || [],
         testBranches: [configuredRepo.test_branch, repo.test_branch],
         dedicatedTarget: requestedDelivery !== 'local' && Boolean(progress.delivery.test.target?.branches?.[repo.id])
           && approvedTestTarget !== configuredRepo.test_branch,
@@ -168,8 +170,8 @@ export function preflightTestRelease({
       : extractHotfixScope(readFileSync(resolveHotfixDocument(progress, dirname(progressFile)), 'utf8')).raw);
     assertRecordedLocalVerification(progress, { source: source, fingerprint: releaseFingerprint(source), expectedChecks: localChecks });
   }
-  if (hotfix) assertHotfixReleaseEvidence(progress, source);
-  else if (progress.mode === 'lean') assertLeanReleaseEvidence(progress, source, planDelivery.lane);
+  if (hotfix) assertHotfixReleaseEvidence(progress, source, config.mergedReview);
+  else if (progress.mode === 'lean') assertLeanReleaseEvidence(progress, source, config.mergedReview);
 
   const release = { ...config.mergedRelease?.test, ...progress.delivery.test.target };
   if (progress.delivery.test.target) validateTestTarget(progress.delivery.test.target, workspace.repositories, deployRepositories.map(repo => repo.id));
@@ -199,25 +201,47 @@ export function preflightTestRelease({
   };
 }
 
-function assertLeanReleaseEvidence(progress, source, lane) {
+// A required Review comes before test, so it gates a test release together with local verification.
+function assertLeanReleaseEvidence(progress, source, review) {
   const fingerprint = releaseFingerprint(source);
   if (!['passed', 'deferred_to_test'].includes(progress.local_verification?.status)
     || progress.local_verification.candidate_fingerprint !== fingerprint) {
     throw new Error('[cc-nexs] Lean test release requires passed or test-deferred local verification for the exact candidate');
   }
-  if (lane !== 'fast-track'
-    && (progress.review?.status !== 'passed' || progress.review.candidate_fingerprint !== fingerprint)) {
-    throw new Error('[cc-nexs] standard Lean test release requires a passing Review for the exact candidate');
+  const requirement = reviewRequirement(progress, review);
+  if (!reviewSatisfied(progress, fingerprint, requirement)) {
+    throw new Error(`[cc-nexs] Lean test release requires a passing Review for the exact candidate (${requirement.reasons.join('; ')})`);
   }
 }
 
-function assertHotfixReleaseEvidence(progress, source) {
+function assertHotfixReleaseEvidence(progress, source, review) {
   const fingerprint = createHash('sha256').update(JSON.stringify(Object.fromEntries(Object.entries(source).sort(([a], [b]) => a.localeCompare(b))))).digest('hex');
-  if (progress.local_verification?.status !== 'passed' || progress.local_verification.candidate_fingerprint !== fingerprint) {
+  if (!['passed', 'deferred_to_test'].includes(progress.local_verification?.status) || progress.local_verification.candidate_fingerprint !== fingerprint) {
     throw new Error('[cc-nexs] hotfix test release requires local verification for the exact candidate');
   }
-  if (progress.review?.status !== 'passed' || progress.review.candidate_fingerprint !== fingerprint) {
-    throw new Error('[cc-nexs] hotfix test release requires one passing Review for the exact candidate');
+  const requirement = reviewRequirement(progress, review);
+  if (!reviewSatisfied(progress, fingerprint, requirement)) {
+    throw new Error(`[cc-nexs] hotfix test release requires one passing Review for the exact candidate (${requirement.reasons.join('; ')})`);
+  }
+}
+
+const WAITING_STATUSES = new Set(['deploying', 'awaiting_receipt']);
+const POLL_SECONDS = [30, 60, 120];
+
+function sleepSync(ms) {
+  if (ms > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+// Waiting for CI is not a stop: resume the same attempt with backoff until it leaves
+// deploying/awaiting_receipt or the wait budget ends (kept under a host tool timeout),
+// so one command call replaces a human "continue".
+export function waitForTestRelease({ waitMinutes = 8, sleep = sleepSync, ...options } = {}) {
+  const deadline = Date.now() + waitMinutes * 60000;
+  for (let polls = 1; ; polls += 1) {
+    const result = runTestRelease({ ...options, resume: true });
+    const waiting = WAITING_STATUSES.has(result.attempt?.status);
+    if (!waiting || Date.now() >= deadline) return { ...result, waited: { polls, still_waiting: waiting } };
+    sleep(Math.min(POLL_SECONDS[Math.min(polls, POLL_SECONDS.length) - 1] * 1000, Math.max(0, deadline - Date.now())));
   }
 }
 
@@ -359,13 +383,19 @@ function integratePendingRepositories(context, attemptId) {
       continue;
     }
     if (repository.dedicatedTarget) {
-      assertDedicatedTargetFree({
+      const shared = targetForeignCommits({
         repo: repository.repo,
         targetBranch: repository.targetBranch,
         baseBranch: repository.baseBranch,
         sourceCommit: repository.sourceCommit,
         ownCommits: progress.delivery.test.attempts.map((attempt) => attempt.integrations?.[repository.id]?.integrationCommit),
       });
+      if (shared.foreign.length) {
+        appendProgressEvent(context.progressFile, { type: 'delivery.test.target_shared', data: {
+          attempt: attemptId, repository: repository.id, targetBranch: repository.targetBranch,
+          commits: shared.foreign.slice(0, 20), count: shared.foreign.length,
+        } });
+      }
     }
     const result = integrateCandidateToTest({
       repo: repository.repo,
@@ -375,7 +405,13 @@ function integratePendingRepositories(context, attemptId) {
       targetBranch: repository.targetBranch,
       preserveConflicts: true,
       conflictWorktree: resolve(context.workspaceRoot, '.cc-nexs', 'runtime', 'test-conflicts', context.progress.feature.id, attemptId, repository.id),
+      keepTarget: repository.keepTarget,
     });
+    if (result.autoResolved) {
+      appendProgressEvent(context.progressFile, { type: 'delivery.test.conflicts_auto_resolved', data: {
+        attempt: attemptId, repository: repository.id, ...result.autoResolved, completed: result.status !== 'conflicts',
+      } });
+    }
     if (result.status === 'conflicts') {
       recordTestIntegration(context.progressFile, {
         attemptId, repository: repository.id, sourceCommit: result.sourceCommit,
@@ -555,10 +591,6 @@ export function invokeTestReleaseDriver({ driver, workspaceRoot, payload, resolv
   const effectivePipeline = result.pipeline || payload.previous?.pipeline;
   const effectiveDeployment = result.deployment || payload.previous?.deployment;
   const effectiveEnvironmentRevision = result.environment_revision || payload.previous?.environment_revision;
-  if (payload.previous?.pipeline && result.pipeline
-    && !jsonValuesEqual(payload.previous.pipeline, result.pipeline)) {
-    throw new Error('[cc-nexs] release driver changed pipeline identity while resuming');
-  }
   if (payload.operation === 'release_test_status' && !payload.previous?.pipeline
     && ['pending', 'succeeded', 'deployed_needs_manual_verification'].includes(result.status)
     && !isNonEmptyRecord(result.pipeline)) {

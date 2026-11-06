@@ -100,8 +100,8 @@ Generated Codex skills explicitly forbid relocating these paths.
 5. A deterministic local driver runs the available checks. If Lean has no driver, the parent runs only plan-approved commands and records exact command/exit/proof evidence; environment-only checks become structured `deferred_to_test` rather than repeated blockers. Hotfix may also record direct evidence for its frozen scope matrix; every required command must match and pass, and Hotfix cannot defer checks.
 6. The exact candidate is integrated to test and CI/deployment runs before any browser preflight.
 7. The deployed environment is verified independently; a local web may target the deployed test backend. Missing browser/login/URL capability records recoverable `manual_required` instead of blocking delivery.
-8. One independent consolidated Review reports all P0/P1 blockers; only one delta closure is allowed after fixes.
-9. Gateway B binds the reviewed and test-verified fingerprint before non-force base integration; docs are finalized last.
+8. Where `review.policy` requires it (high/critical plans, sensitive paths), one independent consolidated Review runs before step 6's test integration and reports all P0/P1 blockers; only one delta closure is allowed after fixes.
+9. Gateway B binds the test-verified fingerprint (and the Review when required) before non-force base integration; docs are finalized last.
 
 Private model configuration uses ordinary nested YAML. The following intentionally uses the same model with stronger Review reasoning; set another model ID if heterogeneous Review is preferred:
 
@@ -138,7 +138,7 @@ Lean defaults to `auto_if_ready`; `--no-auto-test-release` explicitly opts out o
 
 - `hotfix` invokes the internal `init-hotfix` controller and creates `hotfix/<key>` and latest-base `.worktrees/<key>/<repo>/` assignments, plus one BUG document in docs; it never pushes placeholders.
 - Bind paths, severity, required P0/P1 AC/rollback fields, and the local verification matrix in that BUG. `progress.hotfix_document` identifies it; local machine files live in `.cc-nexs/hotfixes/<key>/`.
-- Run the configured driver or exact scope-bound commands with structured evidence, then independent consolidated Review for every severity, including P3. File/line counts cannot prove behavior or exempt Review.
+- Run the configured driver or exact scope-bound commands with structured evidence (environment-only checks may be deferred to test), then an independent consolidated Review before test for P0/P1; P2/P3 are gated by test verification.
 - Deliver the exact candidate to test, verify it independently, then obtain Gateway B approval before integrating that candidate to configured bases.
 - If actual test deployment succeeded but verification requires unavailable environment capability, explicit user authorization may use `approve-release --test-exception` with exact local/Review, environment, and rollback evidence. Preserve `manual_required`; this authorizes base integration only, not production deployment.
 

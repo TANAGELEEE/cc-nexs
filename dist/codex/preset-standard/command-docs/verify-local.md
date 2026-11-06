@@ -17,7 +17,7 @@ Local verification is a fast check before deployment; acceptance in the test env
 
 - Frontend: lint, type check, targeted tests, and a browser check of each affected page.
 - Backend: targeted tests for the changed behavior.
-- Full production build: only when the change touches build configuration, dependencies, lockfiles, route generation, or publishing. CI builds every test release.
+- Full production build: only when the change touches build configuration, dependencies, or lockfiles; route generation, publication, or translation checks run their own generator or validator. CI builds every test release.
 
 When the project configures `workflow.local_verify.driver`, the driver receives one JSON payload on stdin containing exact candidate commits, repository worktrees, `scratch_dir`, and `artifacts_dir`. It runs the bound matrix, stops all processes, then returns one JSON object:
 
@@ -72,6 +72,12 @@ A matrix command that starts with `browser:` is a browser check, written as `bro
 A browser row cannot pass as a command row or the reverse, and a passing result still needs one executed command. A configured driver must return this evidence for browser rows itself. When the page needs a backend change that is not deployed, or the parent has no browser provider or login, Lean records `deferred_to_test`; Hotfix rebinds the row with `revise-hotfix`.
 
 Use `--failed` with an actually executed nonzero command when a compile, unit, or lint check fails. A browser check that shows the wrong behavior is `failed` with the same `method`, `command`, and `proof` fields. A failed item requires `check`, the exact `command`, a nonzero integer `exit_code`, and non-empty `proof`; it routes back to the appropriate repair state instead of advancing or reusing stale success.
+
+A check that fails the same way on the candidate's merge-base is recorded with `--passed` (or `--deferred-to-test`) as a `baseline_failed` item; the controller checks that `baseline_commit` is that merge-base, and Gateway B lists the item:
+
+```text
+--evidence-json '{"check":"typecheck","result":"baseline_failed","command":"tsc --noEmit","exit_code":2,"proof":"467 errors, none in changed files","repository":"web","baseline_commit":"<merge-base sha>","baseline_exit_code":2,"baseline_proof":"the same 467 errors on the merge-base"}'
+```
 
 A passing or deferred fallback requires at least one actually executed passed command with `check`, `command`, `exit_code=0`, and `proof`; it is rejected when a driver exists, so it cannot silently bypass the project contract. `deferred_to_test` is Lean-only. It requires at least one structured deferred item, allows only `passed|deferred_to_test`, rejects duplicate checks, is cached for the exact fingerprint, and advances to test delivery without redispatching a Developer. A real compile/unit/lint failure is always `failed`; it cannot be relabeled as an environment limitation. Every deferred `check` must later be closed by exact structured passing test evidence. Hotfix uses `--passed` or `--failed` for direct evidence and never defers checks. Both driver and direct evidence must match the bound matrix: unique `Check` IDs, exact `command`, integer `exit_code` for command rows, nonempty `proof`, and coverage of every required check. Hotfix candidate paths must remain within the bound `intended_paths`. Every severity, including P3, then requires independent Review; line counts are not behavioral proof.
 

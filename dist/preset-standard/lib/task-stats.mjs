@@ -2,7 +2,9 @@ import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { resolveFeatureProgress } from './approval-command.mjs';
-import { readProgressV2 } from './progress-v2.mjs';
+import { readProgressV2, validateProgressV2 } from './progress-v2.mjs';
+import { remoteProgressSnapshots } from './progress-share.mjs';
+import { findWorkspaceRoot } from './candidate-context.mjs';
 
 const ACTIVE_GAP_MS = 2 * 60 * 60 * 1000;
 const CONFLICT_END = new Set(['delivery.test.merge_conflict_resolved', 'delivery.test.target_advanced', 'delivery.test.started']);
@@ -92,7 +94,7 @@ export function taskStats({ cwd = process.cwd(), featureId, progressPath = null 
   return { kind: 'task-stats', feature: progress.feature, state: progress.state, stats: computeTaskStats(progress), progressFile };
 }
 
-const SKIP_DIRS = new Set(['.git', '.worktrees', 'node_modules', 'dist', 'build', 'target', 'coverage']);
+const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', 'target', 'coverage']);
 
 function findProgressFiles(dir, depth = 0, out = []) {
   if (depth > 6) return out;
@@ -113,20 +115,41 @@ function median(values) {
 }
 
 // Aggregate every Lean/Hotfix task under a workspace so a workflow change can be
-// compared with the tasks before it. Feature worktrees are skipped to avoid counting
-// the docs checkout twice; progress files that are not v2 are reported as skipped.
-export function workspaceStats({ cwd = process.cwd(), since = null } = {}) {
+// compared with the tasks before it. An active task's progress lives in its docs
+// worktree, and docs checkouts carry copies of other tasks, so each task counts once,
+// from its most recently updated copy; --remote adds the snapshots other machines
+// shared. Progress files that are not v2 are reported as skipped.
+export function workspaceStats({ cwd = process.cwd(), since = null, remote = false } = {}) {
   const sinceMs = since ? Date.parse(since) : null;
   if (since && Number.isNaN(sinceMs)) throw new Error(`--since must be a date, got ${since}`);
-  const tasks = [];
+  const latest = new Map();
   let skipped = 0;
+  const consider = (progress, source) => {
+    if (!['lean', 'hotfix'].includes(progress.mode)) { skipped += 1; return; }
+    // Templates ship a progress file whose id is still a placeholder; it is not a task.
+    if (/[{}]/.test(`${progress.feature?.id}${progress.feature?.slug}`)) return;
+    const key = `${progress.mode}:${progress.feature.id}`;
+    const known = latest.get(key);
+    if (!known || Date.parse(progress.updated_at) > Date.parse(known.progress.updated_at)) latest.set(key, { progress, source });
+  };
   for (const file of findProgressFiles(cwd)) {
     let progress;
     try { progress = readProgressV2(file); } catch { skipped += 1; continue; }
-    if (!['lean', 'hotfix'].includes(progress.mode)) { skipped += 1; continue; }
-    if (sinceMs !== null && Date.parse(progress.created_at) < sinceMs) continue;
-    tasks.push({ feature: progress.feature, mode: progress.mode, state: progress.state, stats: computeTaskStats(progress) });
+    consider(progress, 'local');
   }
+  if (remote) {
+    for (const snapshot of remoteProgressSnapshots(findWorkspaceRoot(cwd))) {
+      if (validateProgressV2(snapshot).length) { skipped += 1; continue; }
+      consider(snapshot, 'remote');
+    }
+  }
+  const tasks = [];
+  for (const { progress, source } of latest.values()) {
+    if (sinceMs !== null && Date.parse(progress.created_at) < sinceMs) continue;
+    tasks.push({ feature: progress.feature, mode: progress.mode, state: progress.state, source, stats: computeTaskStats(progress), progress });
+  }
+  const gardener = recurringCauses(tasks.map((task) => task.progress));
+  for (const task of tasks) delete task.progress;
   const sum = (pick) => tasks.reduce((total, task) => total + pick(task.stats), 0);
   const findings = {};
   for (const task of tasks) for (const [key, value] of Object.entries(task.stats.findings)) findings[key] = (findings[key] || 0) + value;
@@ -146,5 +169,44 @@ export function workspaceStats({ cwd = process.cwd(), since = null } = {}) {
       test_verifications_blocked: sum((stats) => stats.test_verifications.blocked),
       findings,
     },
+    gardener,
   };
+}
+
+const HUMAN_STOPS = new Set(['HUMAN_INTERVENTION', 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY', 'TEST_RELEASE_BLOCKED', 'HOTFIX_TEST_DEPLOYED_NEEDS_MANUAL_VERIFY', 'HOTFIX_TEST_RELEASE_BLOCKED']);
+const RECURRING = 3;
+
+// Failures that keep coming back across tasks point at a shared cause worth fixing once
+// (a generated file every task conflicts on, an environment that cannot be verified)
+// rather than in every task.
+export function recurringCauses(progresses) {
+  const conflicts = new Map();
+  const verification = { passed: 0, product_failed: 0, needs_input: 0 };
+  const stops = {};
+  for (const progress of progresses) {
+    for (const event of progress.events || []) {
+      if (event.type === 'delivery.test.repository_integrated' && event.data?.status === 'conflicts') {
+        for (const path of event.data.conflicts || []) {
+          const key = `${event.data.repository}:${path}`;
+          const entry = conflicts.get(key) || { path: key, count: 0, tasks: new Set() };
+          entry.count += 1;
+          entry.tasks.add(progress.feature.id);
+          conflicts.set(key, entry);
+        }
+      }
+      if (event.type === 'delivery.test.verification_passed') verification.passed += 1;
+      if (event.type === 'delivery.test.verification_blocked') verification.product_failed += 1;
+      if (event.type === 'delivery.test.verification_manual_required') verification.needs_input += 1;
+      if (event.to && HUMAN_STOPS.has(event.to) && event.from !== event.to) stops[event.to] = (stops[event.to] || 0) + 1;
+    }
+  }
+  const recurringConflicts = [...conflicts.values()].filter((entry) => entry.count >= RECURRING)
+    .sort((left, right) => right.count - left.count)
+    .map((entry) => ({ path: entry.path, conflicts: entry.count, tasks: entry.tasks.size }));
+  const suggestions = recurringConflicts.filter((entry) => entry.tasks >= 2).slice(0, 5).map((entry) => `${entry.path} conflicted ${entry.conflicts} times across ${entry.tasks} tasks: fix that once (a generated file the test pipeline rebuilds goes in test_keep_target; a file every task must edit is a design to split)`);
+  const verified = verification.passed + verification.product_failed + verification.needs_input;
+  if (verified >= 5 && verification.needs_input * 3 >= verified) {
+    suggestions.push(`${verification.needs_input} of ${verified} test verifications needed human input: declare the accounts and data each check needs in the plan's pre-authorized section`);
+  }
+  return { recurring_conflicts: recurringConflicts, verification, human_stops: stops, suggestions };
 }

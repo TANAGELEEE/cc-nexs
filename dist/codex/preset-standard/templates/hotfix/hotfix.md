@@ -43,11 +43,11 @@
 
 ## 本地验证
 
-使用配置的 driver，或在无 driver 时执行绑定矩阵内的命令并登记 `check/command/exit_code/proof/result`；浏览器行登记 `check/method/command/proof/result`。证据绑定精确 candidate，Hotfix 不允许延期到 test。
+使用配置的 driver，或在无 driver 时执行绑定矩阵内的命令并登记 `check/command/exit_code/proof/result`；浏览器行登记 `check/method/command/proof/result`。证据绑定精确 candidate；仅因本地环境无法执行的检查可写明原因和 test 动作后延期到 test，并由 test 验收关闭。
 
 ## 集中 Review
 
-P0/P1/P2/P3 均需独立 Review。文件数和变更行数仅作风险参考，不能证明没有行为变化。记录候选、阻塞项和修复 delta 的结论。只有实际跑出并经 Judge 复跑确认的 P0/P1 才阻塞；未证实项交给 test 验收作 probe。本段以 `cc-nexs-review` 区块结尾（rules/review-findings.md）。
+P0/P1 在上 test 前做独立 Review；P2/P3 以 test 验收把关。文件数和变更行数仅作风险参考，不能证明没有行为变化。记录候选、阻塞项和修复 delta 的结论。只有实际跑出并经 Judge 复跑确认的 P0/P1 才阻塞；未证实项交给 test 验收作 probe。本段以 `cc-nexs-review` 区块结尾（rules/review-findings.md）。
 
 ## Test 环境验收
 

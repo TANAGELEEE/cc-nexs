@@ -23,6 +23,8 @@ import { assertRecordedLocalVerification, extractLocalVerificationChecks } from 
 import { transitionState } from './progress-io.mjs';
 import { resolveFeatureProgress } from './approval-command.mjs';
 import { assertReleaseExceptionCurrent } from './release-exception.mjs';
+import { reviewRequirement, reviewSatisfied } from './review-policy.mjs';
+import { provenBaseSyncCarry } from './base-sync-carry.mjs';
 
 export function runBaseRelease({ cwd = process.cwd(), featureId, progressPath = null } = {}) {
   // Code candidates are the immutable, approved release payload. The docs
@@ -52,34 +54,44 @@ export function runBaseRelease({ cwd = process.cwd(), featureId, progressPath = 
 }
 
 function executeBaseRelease(context) {
-  const gate = context.progress.gates?.release;
+  const localChecks = extractLocalVerificationChecks(releaseScope(context.progress, context.progressFile));
+  // A tested candidate synced with a moved base carries its evidence, and an approval
+  // given before the sync, once Git proves the current candidate is only that merge.
+  const carry = provenBaseSyncCarry(context, { expectedChecks: localChecks });
+  let gate = context.progress.gates?.release;
+  if (!gate?.approved && carry?.release_gate) gate = carry.release_gate;
   if (!gate?.approved || !gate.binding) throw new Error('[cc-nexs] release gate approval is required');
   if (context.progress.mode === 'hotfix' && gate.binding.hotfix_scope_binding !== context.progress.hotfix.scope_binding.hotfix_scope_sha256) {
     throw new Error('[cc-nexs] approved hotfix scope binding is missing or stale');
   }
-  const testedSource = gate.binding.source || {};
   const currentFingerprint = candidateFingerprint(context.source);
-  if (currentFingerprint !== gate.binding.candidate_fingerprint) {
+  const carried = Boolean(carry) && !gate.binding.test_exception
+    && [carry.from_fingerprint, carry.to_fingerprint].includes(gate.binding.candidate_fingerprint);
+  const testedFingerprint = carried ? carry.from_fingerprint : currentFingerprint;
+  const testedSource = carried ? carry.from_source : (gate.binding.source || {});
+  if (!carried && currentFingerprint !== gate.binding.candidate_fingerprint) {
     throw new Error('[cc-nexs] candidate fingerprint changed after release approval');
   }
-  if (context.progress.review?.status !== 'passed' || context.progress.review.candidate_fingerprint !== currentFingerprint) {
+  const reviewed = carried ? { ...context.progress, review: carry.review || {} } : context.progress;
+  if (!reviewSatisfied(reviewed, testedFingerprint, reviewRequirement(context.progress, context.config.mergedReview))) {
     throw new Error('[cc-nexs] approved candidate no longer has a passing consolidated Review');
   }
-  const localChecks = extractLocalVerificationChecks(releaseScope(context.progress, context.progressFile));
   assertRecordedLocalVerification(context.progress, { source: context.source, fingerprint: currentFingerprint, expectedChecks: localChecks });
-  const testAttempt = context.progress.delivery?.test?.attempts?.find((item) => item.id === gate.binding.test_attempt);
+  const testAttempt = context.progress.delivery?.test?.attempts?.find((item) => item.id === (carried ? carry.test_attempt : gate.binding.test_attempt));
   assertTestAttemptNotInvalidated(testAttempt);
   if (gate.binding.test_exception) {
-    assertReleaseExceptionCurrent(context.progress, gate.binding);
-  } else if (!testAttempt || testAttempt.status !== 'verified' || testAttempt.fingerprint !== currentFingerprint) {
+    assertReleaseExceptionCurrent(context.progress, gate.binding, context.config.mergedReview);
+  } else if (!testAttempt || testAttempt.status !== 'verified' || testAttempt.fingerprint !== testedFingerprint) {
     throw new Error('[cc-nexs] approved test verification is missing or stale');
   }
   if (Object.keys(testedSource).length !== Object.keys(context.source).length) {
     throw new Error('[cc-nexs] candidate repository set changed after release approval');
   }
-  for (const [repository, commit] of Object.entries(testedSource)) {
-    if (context.source[repository] !== commit) {
-      throw new Error(`[cc-nexs] candidate changed after release approval for ${repository}`);
+  if (!carried) {
+    for (const [repository, commit] of Object.entries(testedSource)) {
+      if (context.source[repository] !== commit) {
+        throw new Error(`[cc-nexs] candidate changed after release approval for ${repository}`);
+      }
     }
   }
   const baseTargets = resolveApprovedBaseTargets({
@@ -227,6 +239,7 @@ function baseIntegrationRecord(result, previous) {
     merge_request: mergeRequest && { ...mergeRequest, status: result.pending ? 'pending' : 'merged' },
     integration_verification: result.integrationVerification || previous?.integration_verification || null,
     ...((result.unverifiedSensitivePaths || previous?.unverified_sensitive_paths) && { unverified_sensitive_paths: result.unverifiedSensitivePaths || previous.unverified_sensitive_paths }),
+    ...((result.overlapPaths || previous?.overlap_paths) && { overlap_paths: result.overlapPaths || previous.overlap_paths }),
   };
 }
 

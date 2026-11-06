@@ -304,8 +304,10 @@ export function completeTestRelease(file, {
     && deployment.environment !== (attempt.environment || 'test')) {
     throw new Error('[cc-nexs] deployment evidence must name the bound test environment');
   }
+  // Another task's later pipeline may deploy a test tip that contains this integration;
+  // that deployment proves the candidate just as well, so it supersedes ours.
   if (attempt.pipeline && pipeline && !jsonValuesEqual(attempt.pipeline, pipeline)) {
-    throw new Error('[cc-nexs] test release pipeline identity changed while resuming');
+    attempt.superseded_pipelines = [...(attempt.superseded_pipelines || []), attempt.pipeline];
   }
   if (['succeeded', 'deployed_needs_manual_verification'].includes(status)) {
     for (const [repository, integration] of Object.entries(attempt.integrations || {})) {
@@ -813,11 +815,11 @@ export function recordLocalVerification(file, {
 } = {}) {
   if (!source || Object.keys(source).length === 0) throw new Error('[cc-nexs] local verification source is required');
   const progress = readProgressV2(file);
-  const allowedStatuses = progress.mode === 'lean'
+  const allowedStatuses = ['lean', 'hotfix'].includes(progress.mode)
     ? ['passed', 'failed', 'deferred_to_test']
     : ['passed', 'failed'];
   if (!allowedStatuses.includes(status)) throw new Error(`[cc-nexs] invalid local verification status: ${status}`);
-  validateLocalEvidence(status, evidence, { allowTestDefer: progress.mode === 'lean' });
+  validateLocalEvidence(status, evidence, { allowTestDefer: ['lean', 'hotfix'].includes(progress.mode) });
   if (expectedRevision !== null && progress.revision !== expectedRevision) {
     throw new Error(`[cc-nexs] stale progress revision: expected ${expectedRevision}, found ${progress.revision}`);
   }

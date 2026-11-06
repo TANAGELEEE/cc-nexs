@@ -17,7 +17,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { resolveCandidateContext } from './candidate-context.mjs';
@@ -256,10 +256,39 @@ export function readReviewerResult({ workspaceRoot, featureId, round, reviewerId
   return JSON.parse(readFileSync(file, 'utf8'));
 }
 
+// Windows cannot spawn a bare `codex` or `pi`: npm installs them as `.cmd` shims, and
+// Node runs a `.cmd` only through a shell, which would re-parse the prompt argument.
+// Find the command on PATH and launch what the shim launches, without a shell: an
+// `.exe` directly, an npm/pnpm shim's script with this Node.
+export function resolveCliCommand(executable, args, { platform = process.platform, env = process.env } = {}) {
+  if (platform !== 'win32') return { command: executable, args };
+  const pathValue = env.PATH ?? env.Path ?? '';
+  const extensions = (env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean).map((ext) => ext.toLowerCase());
+  for (const dir of pathValue.split(delimiter).filter(Boolean)) {
+    for (const ext of extensions) {
+      const file = join(dir, `${executable}${ext}`);
+      if (!existsSync(file)) continue;
+      if (ext === '.exe' || ext === '.com') return { command: file, args };
+      if (ext !== '.cmd' && ext !== '.bat') continue;
+      const target = shimTarget(readFileSync(file, 'utf8'), dir);
+      if (!target) throw new Error(`[cc-nexs] ${file} is not an npm or pnpm shim; put ${executable}.exe on PATH or use a native reviewer`);
+      return /\.[cm]?js$/i.test(target) ? { command: process.execPath, args: [target, ...args] } : { command: target, args };
+    }
+  }
+  throw new Error(`[cc-nexs] ${executable} was not found on PATH`);
+}
+
+// The last quoted %dp0%-relative path before `%*` in the shim is the program it runs.
+function shimTarget(shim, dir) {
+  const matches = [...shim.matchAll(/"%~?dp0%?\\?([^"%]+)"\s+%\*/gi)];
+  const relative = matches.at(-1)?.[1];
+  return relative ? join(dir, ...relative.split(/[\\/]/).filter(Boolean)) : null;
+}
+
 // Runs one CLI reviewer in the workspace and stores its findings. A reviewer that
 // changed any candidate worktree is discarded: its findings no longer describe the
 // candidate, and the change has to be looked at by a person.
-export function runCliReviewer({ workspaceRoot, featureId, round, reviewer, briefFile, source, worktrees, spawn = spawnSync, timeoutSeconds = DEFAULT_TIMEOUT_SECONDS, runtime = detectRuntime() }) {
+export function runCliReviewer({ workspaceRoot, featureId, round, reviewer, briefFile, source, worktrees, spawn = spawnSync, timeoutSeconds = DEFAULT_TIMEOUT_SECONDS, runtime = detectRuntime(), platform = process.platform }) {
   if (reviewer.executor === 'native') throw new Error(`[cc-nexs] ${reviewer.id} is a native reviewer; dispatch it as a subagent and record it with record-reviewer`);
   if (!existsSync(briefFile)) throw new Error(`[cc-nexs] review brief not found: ${briefFile}`);
   const runDir = reviewRunDir(workspaceRoot, featureId, round, reviewer.id);
@@ -268,7 +297,8 @@ export function runCliReviewer({ workspaceRoot, featureId, round, reviewer, brie
   const plan = planCliReviewer(reviewer, { prompt, cwd: workspaceRoot, runDir });
   for (const [file, content] of Object.entries(plan.files || {})) writeFileSync(file, content);
   const before = worktreeSnapshot(worktrees);
-  const result = spawn(plan.executable, plan.args, {
+  const { command, args } = resolveCliCommand(plan.executable, plan.args, { platform });
+  const result = spawn(command, args, {
     cwd: workspaceRoot, encoding: 'utf8', input: plan.stdin, timeout: timeoutSeconds * 1000, maxBuffer: 64 * 1024 * 1024,
   });
   writeFileSync(join(runDir, 'stdout.txt'), result.stdout || '');

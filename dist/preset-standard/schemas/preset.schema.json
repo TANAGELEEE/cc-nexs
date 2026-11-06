@@ -120,7 +120,18 @@
           "properties": {
             "driver": { "$ref": "#/definitions/driver" },
             "reuse_passed": { "type": "boolean", "default": true },
-            "min_free_gb": { "type": "number", "minimum": 0, "default": 10 }
+            "min_free_gb": { "type": "number", "minimum": 0, "default": 10 },
+            "heavy": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Workspace-wide limit for heavy commands run through cc-nexs heavy and local verify drivers",
+              "properties": {
+                "slots": { "type": "integer", "minimum": 1, "default": 2 },
+                "wait_minutes": { "type": "number", "minimum": 1, "default": 60 },
+                "node_max_old_space_mb": { "type": ["integer", "null"], "minimum": 256, "default": 4096 },
+                "java_max_heap": { "type": ["string", "null"], "default": "2g" }
+              }
+            }
           }
         },
         "thresholds": {
@@ -170,11 +181,47 @@
         "test_fail": { "type": "string", "default": "BLOCKED" }
       }
     },
-    "review": {
+    "verify": {
       "type": "object",
-      "description": "Review panel. Every reviewer runs the same brief on the exact candidate; one entry is one reviewer. Without a panel, one native reviewer uses the Reviewer role routing.",
+      "description": "Verification panel: several Verifiers run the same acceptance matrix on the same deployed revision and their per-check results are merged",
       "additionalProperties": false,
       "properties": {
+        "panel": {
+          "description": "A list (two or more) for every runtime, or a map of claude/codex/pi lists. Unset: one Verifier.",
+          "oneOf": [
+            { "$ref": "#/properties/verify/$defs/verifiers" },
+            { "type": "object", "additionalProperties": false, "properties": {
+              "claude": { "$ref": "#/properties/verify/$defs/verifiers" },
+              "codex": { "$ref": "#/properties/verify/$defs/verifiers" },
+              "pi": { "$ref": "#/properties/verify/$defs/verifiers" }
+            } }
+          ]
+        }
+      },
+      "$defs": {
+        "verifiers": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,31}$" },
+              "profile": { "type": "string", "description": "model profile name" },
+              "model": { "type": "string" },
+              "effort": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "description": "Code Review after test verification. policy decides when a Lean task needs one; the panel lists the reviewers. Without a panel, one native reviewer uses the Reviewer role routing.",
+      "additionalProperties": false,
+      "properties": {
+        "policy": { "enum": ["risk", "always"], "default": "risk", "description": "risk: Lean reviews high/critical plans and candidates touching sensitive or required_paths; always: every Lean task. Hotfix always reviews." },
+        "required_paths": { "type": "array", "items": { "type": "string" }, "description": "Extra path globs (repository-relative) whose change requires a Review" },
         "panel": {
           "description": "A list for every runtime, or a map of claude/codex/pi lists.",
           "oneOf": [

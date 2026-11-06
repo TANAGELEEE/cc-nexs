@@ -36,7 +36,7 @@ Each code repository must keep one machine-parseable policy line; `deploy` must 
 |---|---|---|---|---|---|
 | LV-001 | AC-001 | lint/typecheck/targeted test/browser |  |  |  |
 
-Local verification is a fast check before deployment; acceptance in test is the main gate. Frontend changes run lint, type check, and targeted tests, with a `browser: <start command> @ <page path>` row for each affected page; backend changes run targeted tests. CI runs the full production build, so add it here only when the change touches build configuration, dependencies, lockfiles, route generation, or publishing. When the test environment relaxes a production check (strict build, publication or translation validation), add the production-strict command for the affected area here: Test cannot prove it.
+Local verification is a fast check before deployment; acceptance in test is the main gate. Frontend changes run lint, type check, and targeted tests, with a `browser: <start command> @ <page path>` row for each affected page; backend changes run targeted tests. CI runs the full production build, so add it here only when the change touches build configuration, dependencies, or lockfiles. Route generation, publication, or translation checks run their own generator or validator script, never the whole production build. When the test environment relaxes a production check, add that one strict check for the affected area here: Test cannot prove it.
 
 ## Test Environment Acceptance Matrix
 
@@ -50,6 +50,7 @@ Local verification is a fast check before deployment; acceptance in test is the 
 - Admission conditions and real sample result (from current sources and real output, without publishing):
 ## Pre-authorized Test Operations
 - Test environment operations (action, target, rollback; not asked again after Gateway A):
+- Verification accounts and data (accounts by role, plan, credits and other properties; how to prepare each: test-database SQL, an operations admin action, a sync from another test environment; Verifiers run these after Gateway A without asking again; the account the browser is already signed in with is used by default, with no extra restrictions):
 - Test integration policy (derived paths, and per path either the command that regenerates them or "keep the Test side" when Test does not consume the candidate's values; write "none" if there is none):
 - derived_binding: each-candidate / before-final-test (keep one; before-final-test leaves derived paths at their base values until the source passes Test, then generates them once for a final Test attempt)
 ## Risks and Release

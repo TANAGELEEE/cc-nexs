@@ -6,7 +6,7 @@ cc-nexs provides experimental Pi support for the `preset-standard` lean and hotf
 
 Supported end to end:
 
-- Lean plan, independent plan review, two human gates, local verification, one consolidated Review, test verification, and base integration
+- Lean plan, independent plan review, two human gates, local verification, a consolidated Review where the review policy requires it, test verification, and base integration
 - Lean Planner, Plan Reviewer, Developer, Reviewer, and Verifier isolation
 - workspace-aware build and Git Custodian commands
 - progress v2 state, counters, artifacts, and status/doctor commands
@@ -146,7 +146,7 @@ Gateway A/B only pause cc-nexs role dispatch. They do not block the parent Pi se
 
 Hotfix creates `hotfix/<key>` and `.worktrees/<key>/<repo>/` from latest configured bases without a shared feature number or placeholder push. The BUG lives in a related feature's `doc/<id>.<slug>/bugs/BUG-<key>.md`, or docs `hotfix/<key>/BUG-001.md` when unrelated. `progress.hotfix_document` locates the BUG; machine state/config stay in workspace `.cc-nexs/hotfixes/<key>/`. Legacy `hotfix.md` tasks remain resumable.
 
-Bind intended paths, required P0/P1 AC/rollback fields, and a matrix of actual local commands. Use the configured driver or direct structured results from those commands. Every severity, including P3, requires independent Review; line counts do not prove behavior. Exact-candidate test delivery and independent verification precede Gateway B and base integration. Explicit user authorization may use the same gateway's `--test-exception` only after real deployment is blocked on verification capability, with passed exact local/Review evidence, environment evidence, and rollback proof. Preserve the test gap; do not infer production deployment authorization.
+Bind intended paths, required P0/P1 AC/rollback fields, and a matrix of actual local commands. Use the configured driver or direct structured results from those commands. P0/P1 require independent Review before test; P2/P3 are gated by test verification. Exact-candidate test delivery and independent verification precede Gateway B and base integration. Explicit user authorization may use the same gateway's `--test-exception` only after real deployment is blocked on verification capability, with passed exact local/Review evidence, environment evidence, and rollback proof. Preserve the test gap; do not infer production deployment authorization.
 
 Existing delta/circuit limits remain. `revise-hotfix` records an already-authorized same-fault scope/severity revision on the original key/branch, preserving history and invalidating current evidence. `--promote-lean` creates `<BUGstem>.lean/` beside the original BUG and returns to Gateway A for contract/schema/permission expansion, without a new number.
 

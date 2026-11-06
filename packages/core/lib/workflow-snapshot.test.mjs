@@ -103,3 +103,22 @@ test('advance persists one guarded transition and rejects stale or empty moves',
     });
   } finally { rmSync(current.root, { recursive: true, force: true }); }
 });
+
+test('advance refuses a jump the workflow does not take unless a human authorizes the recovery', () => {
+  const current = fixture((progress) => { progress.state = 'PLANNING'; });
+  try {
+    withPluginRoot(current.root, () => {
+      const file = join(current.docs, 'progress.json');
+      assert.throws(() => runCcNexsCommand(['advance', '51', '--from', 'PLANNING', '--to', 'TEST_RELEASE', '--reason', 'skip ahead'], { cwd: current.root }),
+        /PLANNING -> TEST_RELEASE is not a workflow transition \(next: PLAN_REVIEWING\)/);
+      assert.throws(() => runCcNexsCommand(['advance', '51', '--from', 'PLANNING', '--to', 'TEST_RELEASE', '--recover'], { cwd: current.root }), /requires --authorization-evidence/);
+      assert.equal(readProgressV2(file).state, 'PLANNING');
+      runCcNexsCommand(['advance', '51', '--from', 'PLANNING', '--to', 'HUMAN_INTERVENTION', '--reason', 'needs a decision'], { cwd: current.root });
+      assert.throws(() => runCcNexsCommand(['advance', '51', '--from', 'HUMAN_INTERVENTION', '--to', 'PLANNING'], { cwd: current.root }), /not a workflow transition/);
+      runCcNexsCommand(['advance', '51', '--from', 'HUMAN_INTERVENTION', '--to', 'PLANNING', '--recover', '--authorization-evidence', 'user: replan with the new scope'], { cwd: current.root });
+      const recovered = readProgressV2(file);
+      assert.equal(recovered.state, 'PLANNING');
+      assert.deepEqual(recovered.events.at(-2).data, { from: 'HUMAN_INTERVENTION', to: 'PLANNING', authorization_evidence: 'user: replan with the new scope' });
+    });
+  } finally { rmSync(current.root, { recursive: true, force: true }); }
+});

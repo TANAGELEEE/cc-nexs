@@ -18,8 +18,8 @@ New requirements use `mode=lean`. The complete chain is:
 ```text
 init -> plan (Planner draft or user --from) -> high/critical: independent plan review (one revision at most) -> PLAN_PENDING_HUMAN (Gateway A; --auto-plan passes eligible fast-track plans)
 -> implement -> local executable checks (pass or structured deferred_to_test)
--> fast-track: test release/CI -> test verification -> one consolidated Review
--> standard: one consolidated Review -> test release/CI -> test verification
+-> Review required (high/critical or sensitive paths): one consolidated Review
+-> test release/CI -> test verification (one Verifier or a verify.panel)
 -> RELEASE_PENDING_HUMAN (Gateway B) -> configured base merge -> COMPLETE
 ```
 Lean 只维护两份由人工维护的文档：`requirements.md` 和 `plan.md`。high/critical 计划在 Gateway A 之前由独立 Plan Reviewer 对照需求与代码做事实核查，只阻塞能指出出处的 P0/P1；阻塞时 Planner 修订一次并复审，仍未关闭的问题带到 Gateway A 由人决定。low/medium 计划记录绑定哈希的 skipped 审核，由人在 Gateway A 审。Gateway A 要求计划审核绑定到正在批准的精确计划，并要求 `requirements.md` 的每条 AC 都对应任务、本地检查和 test 检查。每个仓库仍然需要独立 worktree、`feature/<id>-<slug>` 分支以及不可变的 candidate ref。Gateway A 绑定 requirements + plan approval scope 的哈希，其中包括 `risk_tier`、`delivery_lane` 和每个仓库的 `test_delivery.<repo>: deploy|local`；Gateway B 绑定本地验证、Review 和 test 验收所共享的精确 fingerprint。`fast-track` 只允许 low/medium；旧计划缺少 lane 时，安全地解释为 standard。
@@ -68,24 +68,24 @@ Observable behavior of the browser, login/MFA, `app_url` / `operations_url`, all
 The automation controller follows `release_order`:
 
 1. fetch the latest `origin/<test_branch>`;
-2. merge the candidate with `--no-ff` in a temporary detached worktree;
-3. perform a normal non-force push;
+2. merge the candidate with `--no-ff` in a temporary detached worktree; conflicts this workspace already resolved are replayed (rerere) and `test_keep_target` paths take the test side, so only new conflicts reach the Developer;
+3. perform a normal non-force push; if another task pushed first, redo the merge on the new tip (up to three times);
 4. fetch again and prove that the remote contains the source/integration SHA;
 5. call release driver start; if CI/CD has not yet completed, return `pending + pipeline` and persist `deploying`;
 6. subsequent `release-test --resume` only polls the same attempt and does not repeat merge/push/pipeline triggering;
 7. record integration, pipeline, deployment, and environment_revision in `delivery.test.attempts[]`.
 
-If any repository fails, retain the evidence already collected and stop. After entering release-blocked, only an explicit `--retry` recovers and creates a new attempt from the latest remote tip; repositories that already contain the candidate are skipped idempotently. While `deploying`, the candidate is frozen: only `--resume` of the same pipeline is allowed, and neither retry nor candidate switching is permitted.
+If any repository fails, retain the evidence already collected and stop. After entering release-blocked, only an explicit `--retry` recovers and creates a new attempt from the latest remote tip; repositories that already contain the candidate are skipped idempotently. While `deploying`, the candidate is frozen: only `--resume` is allowed, and neither retry nor candidate switching is permitted. A resume may report a later pipeline that deploys a test commit containing the integration; that deployment proves the candidate as well.
 
 ## Hotfix
 
 Hotfix uses `init-hotfix` to create `hotfix/<key>` and `.worktrees/<key>/<repo>/` from the latest base of each repository, without consuming a shared requirement number or pushing placeholder files. When there is an associated requirement, the BUG document is written to `doc/<id>.<slug>/bugs/BUG-<key>.md`; otherwise, it is written to `hotfix/<key>/BUG-001.md` in the docs repository. Machine state is located in the workspace at `.cc-nexs/hotfixes/<key>/`, with the document linked via `progress.hotfix_document`. Legacy hotfix.md tasks retain a compatibility path.
 ```text
-scope bind -> implement -> local verify -> independent Review (all severities)
+scope bind -> implement -> local verify -> independent Review (P0/P1)
 -> exact candidate -> test -> independent black-box verify
 -> HOTFIX_RELEASE_PENDING_HUMAN -> exact candidate -> base
 ```
-The binding scope must include the actual intended_paths and the local command matrix; P0/P1 must additionally include the affected ACs, the rollback owner, and the rollback steps. When no driver is available, real structured evidence from the bound commands may be registered; Hotfixes may not be deferred. P3 must also be Reviewed; file count/line count serve only as a risk reference. Keep the existing single delta and failure circuit breaker; do not add fixed rounds.
+The binding scope must include the actual intended_paths and the local command matrix; P0/P1 must additionally include the affected ACs, the rollback owner, and the rollback steps. When no driver is available, real structured evidence from the bound commands may be registered; an environment-only check may be deferred to test, which must close it. P0/P1 are Reviewed before test; P2/P3 are gated by test verification. Keep the existing single delta and failure circuit breaker; do not add fixed rounds.
 
 For an authorized path/tier revision of the same failure, use `revise-hotfix` to rebind on the original key/branch, preserving history and invalidating the current evidence. For genuine contract/schema/permission extensions, use `--promote-lean` to create `<BUGstem>.lean/` next to the BUG, migrate the state, and return to Gateway A without taking a new number. Gateway B evidence comments only supplement documentation; implementation comments require re-verification; merging base from test is forbidden.
 

@@ -12,6 +12,7 @@ import {
   integrateCandidateToTest,
   promoteCandidateViaMergeRequest,
 } from './git-custodian.mjs';
+import { reclaimTaskArtifacts } from './worktree-reclaim.mjs';
 import { readProgressV2 } from './progress-v2.mjs';
 import { pendingPostRelease } from './workflow-snapshot.mjs';
 
@@ -78,10 +79,16 @@ export function finalizeDocs({ cwd = process.cwd(), featureId, progressPath = nu
   if (integration.pending) {
     return { ...result, status: 'pending', created, sourceCommit, mergeRequest: integration.mergeRequest };
   }
+  // While the task state is still readable in its docs worktree, remove what the task
+  // left elsewhere (merged code worktrees, conflict copies, verification and task files).
+  let reclaimed = null;
+  try { reclaimed = reclaimTaskArtifacts({ cwd: workspaceRoot, featureId: progress.feature.id, exclude: [worktree] }); }
+  catch (error) { reclaimed = { removed: [], failed: [{ display: 'task artifacts', error: error.message }], kept: [] }; }
   const cleanup = cleanupMergedWorktree({ repo, worktree, branch: assignment.branch, baseBranch, candidateRef, deleteRemote: true });
   return {
     ...result,
     status: 'merged',
+    reclaimed,
     created,
     sourceCommit,
     integrationCommit: integration.mergeCommit || integration.remoteCommit || integration.integrationCommit,

@@ -21,13 +21,13 @@ Git Custodian creates `hotfix/<key>` and `.worktrees/<key>/<repo>/` from each re
 
 ## 1. Classification and Binding
 
-Assign the level based on impact and urgency; P0 is an ongoing production incident, P1 is a critical flow or core data being affected, P2 is a behavioral defect with a bounded scope of impact, and P3 covers fixes such as copy or styling with no behavior change. A single file and 20 lines are only classification references; they cannot prove that there is no behavior change. P0/P1/P2/P3 all require an independent Review.
+Assign the level based on impact and urgency; P0 is an ongoing production incident, P1 is a critical flow or core data being affected, P2 is a behavioral defect with a bounded scope of impact, and P3 covers fixes such as copy or styling with no behavior change. A single file and 20 lines are only classification references; they cannot prove that there is no behavior change. P0/P1 get an independent Review before test; P2/P3 are gated by test verification (`review.policy: always` reviews every level).
 
 Fill in the BUG document's `HOTFIX-SCOPE`:
 
 - `intended_paths` must list the actual fix paths; for multiple repos use `repo-id/path`, separated by commas; it must not remain `-`.
 - P0/P1 must fill in `affected_acs`, `rollback_owner`, and `rollback_steps`.
-- Fill in the local verification matrix inside the scope marker, with the first column as `Check` and the command column as `命令/Driver`. Record a unique check ID and the complete command that will actually be executed; descriptions such as "run the relevant tests" cannot replace the command. Keep the matrix to the reproduction and regression checks: lint, type check, and targeted tests, plus a `browser: <start command> @ <page path>` row when the fix changes a page and can run locally. A full production build stays with CI unless the fix touches build configuration, dependencies, lockfiles, route generation, or publishing.
+- Fill in the local verification matrix inside the scope marker, with the first column as `Check` and the command column as `命令/Driver`. Record a unique check ID and the complete command that will actually be executed; descriptions such as "run the relevant tests" cannot replace the command. Keep the matrix to the reproduction and regression checks: lint, type check, and targeted tests, plus a `browser: <start command> @ <page path>` row when the fix changes a page and can run locally. A full production build stays with CI unless the fix touches build configuration, dependencies, or lockfiles; route generation, publication, or translation checks run their own generator or validator. Run builds, tests and dev servers through `cc-nexs heavy --`.
 - Changes to ACs, APIs, database schema, permission models, or large-scale refactoring cannot continue as a Hotfix; use `--promote-lean` from Section 4.
 
 Then bind the scope:
@@ -39,7 +39,7 @@ In this document and throughout, `<id>` refers to the bug-key and is also compat
 ## 2. Implementation, Local Verification, and Review
 ```text
 INIT -> HOTFIX_IMPLEMENTING -> HOTFIX_IMPLEMENTED -> HOTFIX_LOCAL_VERIFYING
--> HOTFIX_REVIEWING -> PARSE_HOTFIX_REVIEW -> HOTFIX_CANDIDATE_READY
+-> [P0/P1: HOTFIX_REVIEWING -> PARSE_HOTFIX_REVIEW] -> HOTFIX_CANDIDATE_READY
 -> HOTFIX_TEST_RELEASE -> HOTFIX_TEST_VERIFYING
 -> HOTFIX_TEST_VERIFIED -> HOTFIX_RELEASE_PENDING_HUMAN
 -> /approve-release -> HOTFIX_BASE_MERGING -> COMPLETE
@@ -48,13 +48,13 @@ The Orchestrator calls `nextStep` with `progress.json.mode=hotfix`. Developer, R
 ```text
 node <plugin-root>/lib/cc-nexs-cli.mjs verify-local <id>
 ```
-If `workflow.local_verify.driver` is present, use the driver; if there is no driver, run `verify-local <id> --preflight`, then run the commands in the binding matrix inside the exact candidate worktree, and record the real results with `verify-local <id> --passed|--failed --evidence-json <json>`. Each piece of evidence includes `check`, `command`, an integer `exit_code`, `proof`, and `result` (a browser row uses `method: "browser"` instead of `exit_code`); it must cover the binding matrix and the commands must match. Hotfixes do not allow `deferred_to_test`, and a real failure must not be recorded as a pass. Passed evidence for the same candidate and a valid scope may be reused.
+If `workflow.local_verify.driver` is present, use the driver; if there is no driver, run `verify-local <id> --preflight`, then run the commands in the binding matrix inside the exact candidate worktree, and record the real results with `verify-local <id> --passed|--failed|--deferred-to-test --evidence-json <json>`. Each piece of evidence includes `check`, `command`, an integer `exit_code`, `proof`, and `result` (a browser row uses `method: "browser"` instead of `exit_code`); it must cover the binding matrix and the commands must match. A check that only the local environment prevents may be recorded as structured `deferred_to_test` and must be closed by test verification; a real failure must not be recorded as a pass. Passed evidence for the same candidate and a valid scope may be reused.
 
-Once all levels pass locally, the work enters an independent centralized Review:
+Once a P0/P1 passes locally, it enters an independent centralized Review (P2/P3 go straight to test):
 ```text
 node <plugin-root>/lib/cc-nexs-cli.mjs record-review <id> --document-findings
 ```
-Before test verification, run `node <plugin-root>/lib/cc-nexs-cli.mjs verify-guides <id>` and give the Verifier each candidate repository's verification guide and the feature-map entries the BUG touches. Review checks the complete candidate and invocation surface in one pass: every `review.panel` reviewer on the same brief (`review-panel`, then `record-reviewer` or `run-reviewer`) and one Judge, following `rules/review-findings.md`; the Judge reruns each P0/P1 command and writes the `cc-nexs-review` block, the controller derives the status, and unproven P0/P1 scenarios go to the Verifier as `probe:<finding-id>`. After fixes, enter `HOTFIX_DELTA_REVIEW` and check the corresponding delta with `--document-findings --closure`. Follow the state machine's existing circuit breakers; for scope revisions already authorized by the user, rebind per Section 4, and do not evade state by hand-editing counters or reopening numbers. P3 has no Review-exempt path.
+Before test verification, run `node <plugin-root>/lib/cc-nexs-cli.mjs verify-guides <id>` and give the Verifier each candidate repository's verification guide and the feature-map entries the BUG touches. Review checks the complete candidate and invocation surface in one pass: every `review.panel` reviewer on the same brief (`review-panel`, then `record-reviewer` or `run-reviewer`) and one Judge, following `rules/review-findings.md`; the Judge reruns each P0/P1 command and writes the `cc-nexs-review` block, the controller derives the status, and unproven P0/P1 scenarios go to the Verifier as `probe:<finding-id>`. After fixes, enter `HOTFIX_DELTA_REVIEW` and check the corresponding delta with `--document-findings --closure`. Follow the state machine's existing circuit breakers; for scope revisions already authorized by the user, rebind per Section 4, and do not evade state by hand-editing counters or reopening numbers. P2/P3 skip Review unless `review.policy: always`; a configured `verify.panel` verifies a Hotfix like Lean (`record-test-verification --verifier-json`).
 
 Each dispatch uses `resolveRoleRuntime(preset, role, runtime, {models: mergedModels, featureConfig, progress: progressV2})`. By default, Developer=`balanced`, Reviewer=`review`, and Verifier=`balanced`; the Reviewer for P0/P1 is automatically routed to `escalated`. The same model with higher effort/thinking, or a different model, is allowed; the hard constraint is session isolation. Explicit overrides in the feature `models.roles` take final precedence, and public defaults do not pin model IDs.
 

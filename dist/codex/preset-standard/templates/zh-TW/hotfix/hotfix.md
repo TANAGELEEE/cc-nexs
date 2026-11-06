@@ -43,11 +43,11 @@
 
 ## 本地驗證
 
-使用配置的 driver，或在無 driver 時執行繫結矩陣內的命令並登記 `check/command/exit_code/proof/result`；瀏覽器行登記 `check/method/command/proof/result`。證據繫結精確 candidate，Hotfix 不允許延期到 test。
+使用配置的 driver，或在無 driver 時執行繫結矩陣內的命令並登記 `check/command/exit_code/proof/result`；瀏覽器行登記 `check/method/command/proof/result`。證據繫結精確 candidate；僅因本地環境無法執行的檢查可寫明原因和 test 動作後延期到 test，並由 test 驗收關閉。
 
 ## 集中 Review
 
-P0/P1/P2/P3 均需獨立 Review。檔案數和變更行數僅作風險參考，不能證明沒有行為變化。記錄候選、阻塞項和修復 delta 的結論。只有實際跑出並經 Judge 復跑確認的 P0/P1 才阻塞；未證實項交給 test 驗收作 probe。本段以 `cc-nexs-review` 區塊結尾（rules/review-findings.md）。
+P0/P1 在上 test 前做獨立 Review；P2/P3 以 test 驗收把關。檔案數和變更行數僅作風險參考，不能證明沒有行為變化。記錄候選、阻塞項和修復 delta 的結論。只有實際跑出並經 Judge 復跑確認的 P0/P1 才阻塞；未證實項交給 test 驗收作 probe。本段以 `cc-nexs-review` 區塊結尾（rules/review-findings.md）。
 
 ## Test 環境驗收
 

@@ -23,9 +23,13 @@
 
 新增預設按 [docs/extending-presets.md](./docs/extending-presets.md) 操作。模式和角色選擇見 `preset-standard` 的 [docs/role-map.md](./packages/preset-standard/docs/role-map.md)。
 
-`preset-standard` 新需求使用 Lean。計劃由 Planner 產出，或由使用者在各 runtime 的 plan mode 寫好後以 `/cc-nexs:plan <編號> --from <檔案>` 交給 Planner 只做格式整理。low/medium 計劃直接到 Gateway A 由人審；high/critical 計劃先由獨立的 Plan Reviewer 對照需求與程式碼做事實核查，被阻塞的計劃只修訂一次。每條驗收標準都必須對應任務、本地檢查和 test 檢查，否則 Gateway A 拒絕批准；以 `--auto-plan` 初始化的需求，只有 fast-track、low/medium 且不觸及敏感路徑的計劃才會不停頓地通過 Gateway A。程式碼 Review 由設定的 review panel 執行：每位 reviewer 拿到同一份 brief（把這次改動弄壞，每個發現都要用實際執行證明），各自用自己的模型並行審查。reviewer 可以是原生子代理，也可以是其他 agent CLI（`codex-cli`、`claude-cli`、`agy-cli`、`dsh-cli`、`pi-cli`），所以在 Claude Code 或 Codex 裡也能加入其他廠商的模型；panel 配幾個就是幾位，`review.skills` 列出的 skill 用來控制審查重點。再由沒參與審查的 Judge 逐條復跑 P0/P1 命令，保留任何一位 reviewer 被證實的發現：只有確認跑得出來的失敗才阻塞，未證實的風險變成 test 環境驗收的 probe，並列在 Gateway B。驗收是主要關卡：Verifier 依各倉 `.cc-nexs/verify/` 的驗證指南與功能地圖驅動真實系統（`/cc-nexs:verify-skill`），驗收矩陣可拆成互不相干的部分時，可由多個 Verifier 分片並行，結果由控制器合併。滿足 low/medium、複用既有能力、無新表結構/基礎設施/破壞性契約的小需求預設走 fast-track：計劃批准後按 worktree/feature branch 並行實現，能本地完成的 build/start/smoke 立即完成；例如 backend-java 無法本地啟動時，記錄結構化 `deferred_to_test` 證據後繼續，不再反覆嘗試。隨後凍結精確 candidate，先合入 test 並觸發 CI/部署，再在部署環境驗收（web 可本地啟動並連線已部署的 test backend），最後做一次集中 Review 並停在 Gateway B。瀏覽器、登入/MFA 與驗收頁面 URL 都只屬於部署後 verification；缺少能力時進入可恢復的 `manual_required`，不會阻塞或回滾 test merge/CI。高風險 Lean 使用 Review-first standard lane，並升級 Plan Reviewer 與 Reviewer；無法作為一個計劃整體審核與驗收的需求，拆成多個分別批准的 Lean 需求。
+`preset-standard` 新需求使用 Lean。計劃由 Planner 產出，或由使用者在各 runtime 的 plan mode 寫好後以 `/cc-nexs:plan <編號> --from <檔案>` 交給 Planner 只做格式整理。low/medium 計劃直接到 Gateway A 由人審；high/critical 計劃先由獨立的 Plan Reviewer 對照需求與程式碼做事實核查，被阻塞的計劃只修訂一次。每條驗收標準都必須對應任務、本地檢查和 test 檢查，否則 Gateway A 拒絕批准；計劃同時寫明每項驗收需要的帳號與資料及準備方式，Verifier 之後不必停下來詢問。以 `--auto-plan` 初始化的需求，只有 fast-track、low/medium 且不觸及敏感路徑的計劃才會不停頓地通過 Gateway A。
 
-review panel 寫在 `cc-nexs.config.yml` 或 `.cc-nexs/overlay.yml`；沒有設定時，由一位原生 reviewer 沿用 Reviewer 角色的路由：
+驗收是主要關卡，所以每個 Lean candidate 走同一個順序：按 worktree/feature branch 並行實現 → 快速本地檢查（lint、受影響測試、改動頁面；整條生產構建留給 CI）→ 需要時做一次集中 Review → 合入 test 並部署 → 黑箱驗收 → Gateway B。本地無法驗證的項目記錄為結構化 `deferred_to_test`；在 merge-base 上本來就以同樣方式失敗的檢查記錄為 `baseline_failed`，不再阻塞。test 分支是共享疊加環境：其他需求在上面的提交只記錄不攔截，本 workspace 已解過的衝突自動重放，`test_keep_target` 路徑取 test 側，推送被搶先時在新 tip 上重做，只有新的衝突才交給 Developer。之後的流水線只要部署的版本包含本次 integration，也算證明了 candidate；`release-test --resume --wait` 在本次執行內等待 CI，不再中斷。Verifier 依各倉 `.cc-nexs/verify/` 的驗證指南與功能地圖驅動真實系統（`/cc-nexs:verify-skill`）；設定 `verify.panel` 後，多個不同模型的 Verifier 對同一份驗收矩陣各自執行，逐項合併結果，只有一位看到的失敗須由另一位重跑確認才算數。修復後的 test attempt 只複驗修復可能影響的項目。
+
+程式碼 Review 在上 test 之前執行，且只用在黑箱驗收照不到的地方：`review.policy: risk`（預設）在 high/critical 計劃，或 candidate 改動 auth、permission、migration、schema、payment/billing、部署、CI 或 `review.required_paths` 時才需要；`review.policy: always` 恢復每個需求都 Review。Review 由設定的 review panel 執行：每位 reviewer 拿到同一份 brief（把這次改動弄壞，每個發現都要用實際執行證明），各自用自己的模型並行審查，可以是原生子代理或其他 agent CLI（`codex-cli`、`claude-cli`、`agy-cli`、`dsh-cli`、`pi-cli`）。Judge 逐條復跑 P0/P1 命令，只有確認跑得出來的失敗才阻塞。驗收後 base 前進但仍能乾淨合併時，已驗收的 candidate 與證據保持有效；真正衝突時把 base 合進需求分支、本地構建後直接走 MR，不再重新 Review 或重新上 test。Hotfix 同樣適用：P0/P1 上 test 前 Review，P2/P3 以 test 驗收把關。瀏覽器、登入/MFA 與驗收頁面 URL 都只屬於部署後 verification；計劃沒有預授權的能力缺失進入可恢復的 `manual_required`，不回滾 test merge/CI。無法作為一個計劃整體審核與驗收的需求，拆成多個分別批准的 Lean 需求。
+
+review 與驗收 panel 寫在 `cc-nexs.config.yml` 或 `.cc-nexs/overlay.yml`；沒有設定時，由一位原生 reviewer 和一位 Verifier 沿用各自角色的路由：
 
 ```yaml
 review:
@@ -39,7 +43,27 @@ review:
     - .cc-nexs/review-skills/api-contracts
 ```
 
-要讓各 runtime 用不同的 reviewer，把 panel 按 runtime 分開寫（`panel: { claude: [...], codex: [...], pi: [...] }`）；沒有列出的 runtime 使用預設的一位原生 reviewer。
+要讓各 runtime 用不同的 reviewer，把 panel 按 runtime 分開寫（`panel: { claude: [...], codex: [...], pi: [...] }`）；沒有列出的 runtime 使用預設的一位原生 reviewer。同一處設定也決定何時 Review、由誰驗收：
+
+```yaml
+review:
+  policy: risk                 # risk（預設）| always
+  required_paths:              # 額外需要 Review 的倉內路徑 glob
+    - src/lib/public-apis/**
+verify:
+  panel:                       # 兩位以上 Verifier 跑同一份矩陣；不設定 = 一位 Verifier
+    - id: v1                   # 角色路由
+    - id: v2
+      profile: acceptance-alt  # 或 model: <id>
+workflow:
+  local_verify:
+    heavy:                     # cc-nexs heavy -- <命令>：workspace 共用的構建／測試／dev server 名額
+      slots: 2
+      node_max_old_space_mb: 4096
+      java_max_heap: 2g
+```
+
+在 `.cc-nexs/workspace.yml` 中，倉庫的 `test_keep_target: [<glob>]` 指定 test 合併衝突時取 test 側的生成檔案。
 
 Lean/Hotfix 模型採用風險驅動路由。有效優先順序是：公開 preset < 私有 overlay < 專案 `cc-nexs.config.yml.models` < feature profiles/routing < 命中的 routing rules < feature `models.roles` 顯式覆蓋。新 feature 模板不再生成 `models.roles`，因此日常專案配置會真正生效。
 
@@ -299,7 +323,7 @@ Claude Code、Codex 和 Pi 共享同一命令語義，但使用各執行時的�
 /cc-nexs:init "小需求" --auto-plan  # 預先授權 Gateway A，符合條件的 fast-track 計劃不停頓
 /cc-nexs:plan [編號] [--from 檔案] # 起草或整理 requirements/plan，high/critical 才做獨立計劃審核，產生臨時 HTML，停 Gateway A
 /cc-nexs:approve-plan [編號]       # 批准 plan 雜湊
-/cc-nexs:run [編號]                # 實現 → 能做的本地驗證 → test/CI → 環境驗收 → 一次集中 Review
+/cc-nexs:run [編號]                # 實現 → 本地檢查 → 需要時 Review → test/CI → 環境驗收 → Gateway B
 /cc-nexs:approve-release [編號]    # Gateway B，批准精確 tested fingerprint
 /cc-nexs:request-release-changes [編號] --type=... --feedback="..."  # Gateway B 提意見並安全迴流
 /cc-nexs:release-base [編號]       # 批准後合併配置 base，docs 最後歸檔
@@ -308,7 +332,11 @@ Claude Code、Codex 和 Pi 共享同一命令語義，但使用各執行時的�
 /cc-nexs:status [編號]            # 只讀看狀態
 /cc-nexs:build [--phase=...]      # 按 git diff 自動選 build/test 命令並跑
 /cc-nexs:verify-skill <倉> [--docs|--workspace] [--refresh] # 產生或稽核驗證指南與功能地圖（依序：倉內、文檔倉、本地 workspace 的 .cc-nexs/verify/）
-cc-nexs stats --all [--since <日期>]   # 彙總整個 workspace 的 Review 輪數、finding、計劃審核與 test 結果
+cc-nexs stats --all [--since <日期>] [--remote]   # 彙總輪數、驗收結果、停頓與反覆出現的共同原因（--remote：含其他機器分享的需求）
+cc-nexs share-progress <編號>     # 把需求進度快照分享給其他機器（每次停下時執行）
+cc-nexs heavy -- <命令>           # 在 workspace 共用名額內執行構建／測試／dev server，並限制記憶體
+cc-nexs release-test <編號> --resume --wait   # 在本次執行內等待 test 部署完成
+cc-nexs verify-panel <編號>       # 列出要派發的 Verifier 及其模型
 
 /cc-nexs:hotfix "現象描述" --repos=api  # hotfix/<key> + BUG 文件，不佔需求號
 /cc-nexs:hotfix [bug-key]         # 恢復：本地驗證、獨立 Review、test、Gateway B
@@ -365,7 +393,7 @@ Hotfix 直接建立 `hotfix/<key>` 和 `.worktrees/<key>/<repo>/`。有關聯需
 
 1. **事件狀態機** —— `progress.json` v2 是帶 revision 的權威事件記錄，`progress.md` 僅作人類可讀檢視
 2. **兩類門禁語義明確** —— Lean 固定 Gateway A（已審核、可追溯的計劃）與 Gateway B（tested candidate）；部署後驗收能力不足進入可恢復 `manual_required`，不阻塞 test 交付
-3. **有界迴圈** —— 計劃只修訂一次、Review 只做一次 delta closure、單一 BUG 修復熔斷，超過即轉人工
+3. **有界迴圈** —— 計劃只修訂一次、Review 只做一次 delta closure、單一 BUG 修復熔斷，超過即轉人工；`advance` 只接受流程定義的狀態遷移，其他跳轉須記錄人工授權
 4. **角色邊界硬隔離** —— hooks 透過 `CC_NEXS_ROLE` 環境變數攔截越權操作
 5. **預設可插拔** —— 新專案棧寫新 preset，不動 core
 6. **多執行時同源** —— Claude Code、Codex、Pi 共享 command SOP；執行時只適配角色排程、模型解析和許可權攔截
@@ -373,7 +401,7 @@ Hotfix 直接建立 `hotfix/<key>` 和 `.worktrees/<key>/<repo>/`。有關聯需
 
 ## 狀態
 
-當前版本只保留 Lean 需求與 Hotfix 修復：Lean fast-track 在本地不可驗證項留存 `deferred_to_test` 後，優先完成確定性 test merge/CI；跨端瀏覽器驗證只發生在部署後，能力不足可人工恢復，不回滾已經完成的交付。
+當前版本只保留 Lean 需求與 Hotfix 修復，以驗收為主導：Lean 把本地不可驗證項留存為 `deferred_to_test`，在共享 test 分支完成確定性 merge/CI，只在 review policy 要求時於上 test 前做程式碼 Review，再驗收部署的版本。驗收能力不足可恢復，不回滾已經完成的交付。
 
 除了專案在 `review.panel` 列出的 CLI reviewer，cc-nexs 的所有角色都在當前 runtime 內派發。這些 reviewer 各自獨立審同一份 brief，不互相辯論；需要跨廠商的規劃加審核流程時，請改用獨立的 `nexs-sop` skill。
 

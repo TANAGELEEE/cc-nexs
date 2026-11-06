@@ -23,6 +23,7 @@ import {
   invokeTestReleaseDriver,
   resolveTestReleasePolicy,
   runTestRelease,
+  waitForTestRelease,
 } from './test-release.mjs';
 import { runCcNexsCommand } from './cc-nexs-cli.mjs';
 
@@ -341,7 +342,8 @@ test('test release integrates candidates, invokes structured driver, records evi
     assert.equal(readProgressV2(progressFile).state, 'TEST_VERIFIED');
     const previous = readProgressV2(progressFile).delivery.test.attempts.at(-1);
     const target = { kind: 'test', environment: 'test02', branches: { code: 'test02' }, allowed_hosts: ['test02.example.com'], app_url: 'https://test02.example.com', operations_url: 'https://test02.example.com/ops' };
-    git(code, ['push', 'origin', 'origin/master:refs/heads/test02']);
+    const otherTask = git(code, ['commit-tree', git(code, ['rev-parse', 'origin/master^{tree}']), '-p', 'origin/master', '-m', 'another task on test02']);
+    git(code, ['push', 'origin', `${otherTask}:refs/heads/test02`]);
     const oldPlugin = process.env.CC_NEXS_PLUGIN_ROOT;
     process.env.CC_NEXS_PLUGIN_ROOT = new URL('../../preset-standard', import.meta.url).pathname;
     try { switchTestTarget({ cwd: root, featureId: '05', progressPath: progressFile, target, authorizationEvidence: 'user requested test02' }); }
@@ -351,6 +353,8 @@ test('test release integrates candidates, invokes structured driver, records evi
     const switched = runTestRelease({ cwd: root, featureId: '05', progressPath: progressFile });
     assert.equal(switched.attempt.status, 'awaiting_receipt');
     assert.equal(switched.environment, 'test02');
+    const shared = readProgressV2(progressFile).events.find((event) => event.type === 'delivery.test.target_shared');
+    assert.deepEqual([shared.data.repository, shared.data.count, shared.data.commits[0]], ['code', 1, otherTask], 'another task on the target is recorded, not refused');
     assert.throws(() => runTestRelease({ cwd: root, featureId: '05', progressPath: progressFile, retry: true }), /must be resumed/);
     const completed = runTestRelease({ cwd: root, featureId: '05', progressPath: progressFile, resume: true });
     assert.equal(completed.attempt.status, 'succeeded');
@@ -359,6 +363,12 @@ test('test release integrates candidates, invokes structured driver, records evi
     assert.equal(readProgressV2(progressFile).delivery.test.attempts.length, 2);
     assert.ok(readProgressV2(progressFile).delivery.test.attempts[0].invalidated_at);
 
+    const verifierJson = (id, result) => JSON.stringify({ verifier: id, model: `model-${id}`, checks: [{ check: 'smoke-code', result, proof: `${id} saw ${result}` }] });
+    assert.throws(
+      () => runCcNexsCommand(['record-test-verification', '05', '--verifier-json', verifierJson('v1', 'failed'), '--verifier-json', verifierJson('v2', 'passed'), '--progress', progressFile], { cwd: root }),
+      /rerun these checks with another Verifier.*smoke-code \(failed only by v1\)/,
+    );
+    assert.equal(readProgressV2(progressFile).delivery.test.attempts.at(-1).verification ?? null, null, 'a disputed panel records nothing');
     const shardJson = (name, result) => JSON.stringify({ shard: name, result, checks: [`smoke-${name}`], evidence: [{ check: `smoke-${name}`, result: result === 'blocked' ? 'failed' : 'passed', proof: `${name} smoke` }] });
     assert.throws(
       () => runCcNexsCommand(['record-test-verification', '05', '--passed', '--shard-json', shardJson('code', 'passed'), '--shard-json', shardJson('other', 'passed'), '--progress', progressFile], { cwd: root }),
@@ -379,7 +389,7 @@ test('test release integrates candidates, invokes structured driver, records evi
   }
 });
 
-for (const scenario of ['running', 'failed', 'conflict', 'conflict-invalidated', 'conflict-superseded', 'conflict-target-advanced', 'receipt-error']) test(`resume recovers the same attempt: ${scenario}`, () => {
+for (const scenario of ['running', 'wait', 'failed', 'conflict', 'conflict-invalidated', 'conflict-superseded', 'conflict-target-advanced', 'receipt-error']) test(`resume recovers the same attempt: ${scenario}`, () => {
   const root = mkdtempSync(join(tmpdir(), 'cc-nexs-release-resume-running-'));
   const origin = join(root, 'origin.git');
   const code = join(root, 'code');
@@ -429,6 +439,8 @@ for (const scenario of ['running', 'failed', 'conflict', 'conflict-invalidated',
     "const request = JSON.parse(input);",
     "appendFileSync('recovery-driver.log', JSON.stringify(request) + '\\n');",
     "const revision = Object.fromEntries(Object.entries(request.integrations).map(([id, value]) => [id, value.integrationCommit]));",
+    "const { existsSync, rmSync } = await import('node:fs');",
+    "if (existsSync('pending-once')) { rmSync('pending-once'); console.log(JSON.stringify({status:'pending',pipeline:{metadata:{run:6,provider:'ci'},id:request.attempt}})); process.exit(0); }",
     "console.log(JSON.stringify({status:'succeeded',pipeline:{metadata:{run:6,provider:'ci'},id:request.attempt},deployment:{id:'deploy-6',environment:'test'},environment_revision:revision}));",
   ].join('\n'));
 
@@ -547,18 +559,21 @@ for (const scenario of ['running', 'failed', 'conflict', 'conflict-invalidated',
       assert.equal(remoteContains(sourceCommit), false);
 
       const retried = runTestRelease({ cwd: root, featureId: '06', progressPath: progressFile });
-      assert.equal(retried.status, 'conflicts');
       assert.equal(retried.attempt.id, 'test-release-2');
       assert.ok(readProgressV2(progressFile).delivery.test.attempts[0].invalidated_at);
       assert.equal(existsSync(join(conflictRoot, 'test-release-1')), false);
       assert.doesNotMatch(git(code, ['worktree', 'list', '--porcelain']), /test-release-1/);
       if (scenario === 'conflict-target-advanced') {
-        // rerere replays the earlier resolution but still requires the developer to stage it.
-        assert.equal(readFileSync(join(retried.worktree, 'feature.txt'), 'utf8'), 'feature and test-only version\n');
-        assert.throws(() => resolveTestConflict({ cwd: root, featureId: '06', progressPath: progressFile }), /unresolved/);
-      } else {
-        writeFileSync(join(retried.worktree, 'feature.txt'), 'feature and test-only version\n');
+        // rerere replays the earlier resolution and the merge completes without a Developer round.
+        assert.notEqual(retried.status, 'conflicts');
+        const replay = readProgressV2(progressFile).events.find((event) => event.type === 'delivery.test.conflicts_auto_resolved');
+        assert.deepEqual([replay.data.replayed, replay.data.completed], [['feature.txt'], true]);
+        assert.equal(remoteContains(current), true);
+        assert.equal(git(code, ['show', 'origin/test:feature.txt']), 'feature and test-only version');
+        return;
       }
+      assert.equal(retried.status, 'conflicts');
+      writeFileSync(join(retried.worktree, 'feature.txt'), 'feature and test-only version\n');
       git(retried.worktree, ['add', 'feature.txt']);
       const resolved = runCli(['resolve-test-conflict', '06', '--progress', progressFile]);
       assert.equal(resolved.status, 0, resolved.stderr);
@@ -593,7 +608,15 @@ for (const scenario of ['running', 'failed', 'conflict', 'conflict-invalidated',
     const integrationEvidence = structuredClone(beforeResume.delivery.test.attempts[0].integrations.code);
     const remoteBeforeResume = git(code, ['rev-parse', 'origin/test']);
 
-    const resumed = runTestRelease({ cwd: root, featureId: '06', progressPath: progressFile, resume: true });
+    if (scenario === 'wait') writeFileSync(join(root, 'pending-once'), '');
+    const sleeps = [];
+    const resumed = scenario === 'wait'
+      ? waitForTestRelease({ cwd: root, featureId: '06', progressPath: progressFile, sleep: (ms) => sleeps.push(ms) })
+      : runTestRelease({ cwd: root, featureId: '06', progressPath: progressFile, resume: true });
+    if (scenario === 'wait') {
+      assert.deepEqual(resumed.waited, { polls: 2, still_waiting: false }, 'one call waits through the pending deployment');
+      assert.deepEqual(sleeps, [30000]);
+    }
     const recovered = readProgressV2(progressFile);
     assert.equal(resumed.reused, true);
     assert.equal(resumed.attempt.id, started.attempt.id);
@@ -603,9 +626,9 @@ for (const scenario of ['running', 'failed', 'conflict', 'conflict-invalidated',
     assert.equal(git(code, ['rev-parse', 'origin/test']), remoteBeforeResume);
     assert.equal(recovered.events.filter((event) => event.type === 'delivery.test.repository_integrated').length, 1);
     const requests = readFileSync(join(root, 'recovery-driver.log'), 'utf8').trim().split('\n').map(JSON.parse);
-    assert.deepEqual(requests.map(({ operation, attempt }) => ({ operation, attempt })), [{
+    assert.deepEqual(requests.map(({ operation, attempt }) => ({ operation, attempt })), Array(scenario === 'wait' ? 2 : 1).fill({
       operation: 'release_test_status', attempt: started.attempt.id,
-    }]);
+    }), 'waiting only polls the same attempt; it never re-integrates or retriggers');
     assert.equal(requests[0].previous.status, scenario === 'failed' ? 'awaiting_receipt' : 'running');
     assert.equal(requests[0].previous.pipeline, null);
   } finally {
@@ -686,10 +709,10 @@ test('test release driver fails closed on invalid output, process failure, timeo
       "console.log(JSON.stringify({status:'pending',pipeline:{metadata:{run:7,provider:'ci'},id:'p1'}}));\n",
       reorderedPipeline,
     ));
-    assert.throws(runWithPayload(
-      "console.log(JSON.stringify({status:'pending',pipeline:{metadata:{run:8,provider:'ci'},id:'p1'}}));\n",
+    assert.equal(runWithPayload(
+      "console.log(JSON.stringify({status:'pending',pipeline:{metadata:{run:8,provider:'ci'},id:'p2'}}));\n",
       reorderedPipeline,
-    ), /changed pipeline identity/);
+    )().pipeline.id, 'p2', 'a later pipeline may take over the attempt');
     assert.throws(runWithPayload(
       "console.log(JSON.stringify({status:'pending'}));\n",
       { ...reorderedPipeline, previous: { pipeline: null } },

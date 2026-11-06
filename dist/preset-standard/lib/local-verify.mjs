@@ -24,6 +24,22 @@ import {
   saveDriverOutput,
 } from './verify-artifacts.mjs';
 import { reclaimInactiveVerifyScratch } from './worktree-reclaim.mjs';
+import { acquireHeavySlot, heavySettings } from './heavy-slots.mjs';
+
+// A baseline_failed item must name the commit this candidate was built on: the merge-base
+// of the candidate and its base branch, so a failure the candidate introduced cannot pass
+// as pre-existing.
+function assertBaselineCommits(context, evidence) {
+  for (const item of evidence.filter((entry) => entry?.result === 'baseline_failed')) {
+    const target = context.repositories.find((entry) => entry.id === item.repository);
+    if (!target) throw new Error(`[cc-nexs] baseline_failed ${item.check} names repository ${item.repository}, which has no candidate`);
+    const base = target.assignment.base_branch || target.repository.base_branch;
+    const mergeBase = spawnSync('git', ['-C', target.repository.absolute_path, 'merge-base', target.sourceCommit, `refs/remotes/origin/${base}`], { encoding: 'utf8' });
+    if (mergeBase.status !== 0 || mergeBase.stdout.trim() !== item.baseline_commit) {
+      throw new Error(`[cc-nexs] baseline_failed ${item.check}: baseline_commit must be the candidate's merge-base with origin/${base} (${mergeBase.stdout.trim() || 'unavailable'})`);
+    }
+  }
+}
 
 export function runLocalVerification({
   cwd = process.cwd(),
@@ -45,7 +61,7 @@ export function runLocalVerification({
   }
   const driver = normalizeDriver(context.config.mergedWorkflow?.local_verify?.driver, context.workspaceRoot);
   const expectedChecks = extractLocalVerificationChecks(releaseScope(context.progress, context.progressFile));
-  const evidencePolicy = { allowTestDefer: context.progress.mode === 'lean', expectedChecks };
+  const evidencePolicy = { allowTestDefer: ['lean', 'hotfix'].includes(context.progress.mode), expectedChecks };
   const contractFingerprint = createHash('sha256').update(JSON.stringify({ driver, ...evidencePolicy })).digest('hex');
   assertVerificationWorktrees(context);
   const fingerprint = candidateFingerprint(context.source);
@@ -55,6 +71,7 @@ export function runLocalVerification({
       throw new Error('[cc-nexs] workflow.local_verify.driver is configured; run verify-local without direct evidence flags');
     }
     validateLocalEvidence(recordStatus, recordedEvidence, evidencePolicy);
+    assertBaselineCommits(context, recordedEvidence);
     recordLocalVerification(context.progressFile, {
       source: context.source,
       status: recordStatus,
@@ -113,7 +130,7 @@ export function runLocalVerification({
   }
 
   if (!driver) {
-    const flags = context.progress.mode === 'lean' ? '--passed, --failed, or --deferred-to-test' : '--passed or --failed';
+    const flags = '--passed, --failed, or --deferred-to-test';
     throw new Error(`[cc-nexs] workflow.local_verify.driver is not configured; run scope-bound local commands in the exact candidate worktrees, then use verify-local ${flags} with structured --evidence-json records`);
   }
   ensureDiskSpace(context, freeBytes);
@@ -149,9 +166,15 @@ export function runLocalVerification({
   // Scratch outlives evidence recording so nothing the driver proved is removed first.
   const ending = { status: 'error', error: null };
   try {
-    const result = invokeLocalVerifyDriver({ driver, workspaceRoot: context.workspaceRoot, payload, attempt });
+    // The driver runs the heavy checks, so it holds one workspace-wide heavy slot.
+    const heavy = heavySettings(context.config);
+    const slot = acquireHeavySlot({ root: context.workspaceRoot, slots: heavy.slots, label: `verify-local ${context.progress.feature.id}`, waitMs: heavy.wait_minutes * 60000 });
+    let result;
+    try { result = invokeLocalVerifyDriver({ driver, workspaceRoot: context.workspaceRoot, payload, attempt }); }
+    finally { slot.release(); }
     assertVerificationWorktrees(context);
     const evidence = result.evidence || [];
+    assertBaselineCommits(context, evidence);
     recordLocalVerification(context.progressFile, {
       source: context.source,
       status: result.status,

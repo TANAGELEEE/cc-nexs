@@ -7,7 +7,9 @@ import { loadConfig } from './config-loader.mjs';
 import { configuredPluginRoot } from './config-root.mjs';
 import { transitionState } from './progress-io.mjs';
 import { appendProgressEvent, readProgressV2 } from './progress-v2.mjs';
-import { nextStep } from './state-machine.mjs';
+import { isAllowedTransition, nextStep } from './state-machine.mjs';
+import { reviewRequirement } from './review-policy.mjs';
+import { baseSyncCarryReady } from './base-sync-carry.mjs';
 import { resolveTestReleasePolicy } from './test-release.mjs';
 import { taskFilesDir } from './verify-artifacts.mjs';
 
@@ -36,6 +38,7 @@ export function buildWorkflowSnapshot({ cwd = process.cwd(), featureId, progress
     && progress.review?.candidate_fingerprint === progress.local_verification?.candidate_fingerprint
     && latestLocalAttempt?.fingerprint === progress.review?.candidate_fingerprint;
   const testAttempts = progress.delivery?.test?.attempts || [];
+  const reviewNeed = reviewRequirement(progress, config.mergedReview);
   const workflow = {
     plan_approved: progress.gates?.plan?.approved === true,
     delivery_lane: progress.gates?.plan?.binding?.delivery_lane || 'standard',
@@ -53,10 +56,13 @@ export function buildWorkflowSnapshot({ cwd = process.cwd(), featureId, progress
       exact: exactRecordedReview,
       closure_attempts: progress.review?.closure_attempts || 0,
       gateway_b_delta_attempts: progress.review?.gateway_b_delta_attempts || 0,
+      required: reviewNeed.required,
+      required_reasons: reviewNeed.reasons,
     },
     test_release: {
       policy: noAutoTestRelease ? 'manual' : persistedPolicy,
       status: progress.delivery?.test?.status || 'idle',
+      exact: testAttempts.at(-1)?.fingerprint === progress.local_verification?.candidate_fingerprint,
       attempt: testAttempts.filter((item) => item.deployment && item.environment_revision).length,
       prerequisites_met: true,
     },
@@ -64,6 +70,7 @@ export function buildWorkflowSnapshot({ cwd = process.cwd(), featureId, progress
       status: progress.delivery?.base?.status || 'idle',
       attempt: progress.delivery?.base?.attempts?.length || 0,
     },
+    base_sync: { carried: baseSyncCarryReady(progress), approved: Boolean(progress.base_sync?.release_gate) },
     derived_binding: progress.gates?.plan?.binding?.derived_binding === 'before-final-test'
       ? { mode: 'before-final-test', status: progress.events.some((event) => event.type === 'derived.bound') ? 'bound' : 'pending' }
       : null,
@@ -142,7 +149,7 @@ export function deliveryMilestones(progress) {
 /** CLI form of the run loop's persist step: move from the captured state to effectiveNext exactly once. */
 const MAX_REASON_LENGTH = 300;
 
-export function advanceFeatureState({ cwd = process.cwd(), featureId, progressPath = null, from, to, reason = '' } = {}) {
+export function advanceFeatureState({ cwd = process.cwd(), featureId, progressPath = null, from, to, reason = '', recover = false, authorizationEvidence = '' } = {}) {
   if (!from || !to) throw new Error('advance requires --from <state> and --to <state>');
   if (String(reason).length > MAX_REASON_LENGTH) {
     throw new Error(`[cc-nexs] advance --reason must be at most ${MAX_REASON_LENGTH} characters of plain sentences; put details in the plan`);
@@ -151,6 +158,13 @@ export function advanceFeatureState({ cwd = process.cwd(), featureId, progressPa
   const status = featureStatus({ cwd, featureId, progressPath });
   const markdown = join(dirname(status.progressFile), 'progress.md');
   if (!existsSync(markdown)) throw new Error(`[cc-nexs] progress.md not found beside ${status.progressFile}`);
+  if (status.input.state === from && !isAllowedTransition({ mode: status.input.mode, from, to, next: status.next.next })) {
+    if (!recover) {
+      throw new Error(`[cc-nexs] ${from} -> ${to} is not a workflow transition (next: ${status.next.next}). Run the controller for the current step; a human-authorized recovery uses --recover --authorization-evidence "<the user's instruction>"`);
+    }
+    if (!String(authorizationEvidence).trim()) throw new Error('[cc-nexs] --recover requires --authorization-evidence with the user\'s actual instruction');
+    appendProgressEvent(status.progressFile, { type: 'state.recovery_authorized', from: null, to: null, data: { from, to, authorization_evidence: String(authorizationEvidence).trim() } });
+  }
   transitionState(markdown, { from, to, reason });
   const progress = readProgressV2(status.progressFile);
   return {

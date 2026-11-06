@@ -331,6 +331,7 @@ export function loadConfig({ projectRoot = process.cwd(), presetRoot = null } = 
   const mergedModels = mergeModelConfigs(preset?.models, project.models);
   // review.panel is an array, so a project list replaces the preset's.
   const mergedReview = deepMerge(preset?.review || {}, project.review || {});
+  const mergedVerify = deepMerge(preset?.verify || {}, project.verify || {});
 
   // Project-level paths_override merges into preset.stack.
   // Use case: public preset ships with generic placeholders like "src/main/java/**";
@@ -377,6 +378,7 @@ export function loadConfig({ projectRoot = process.cwd(), presetRoot = null } = 
     mergedRelease,
     mergedModels,
     mergedReview,
+    mergedVerify,
   };
 }
 
@@ -416,6 +418,9 @@ export function loadWorkspaceConfig({ projectRoot = process.cwd(), configPath = 
     const testBranch = repo.test_branch || null;
     if (testBranch && testBranch === baseBranch) {
       throw new Error(`[cc-nexs] repository ${repo.id} test_branch must differ from base_branch; automatic test delivery must never target the base branch`);
+    }
+    if (repo.test_keep_target !== undefined && (!Array.isArray(repo.test_keep_target) || repo.test_keep_target.some((glob) => typeof glob !== 'string' || !glob.trim()))) {
+      throw new Error(`[cc-nexs] repository ${repo.id} test_keep_target must be a list of path globs`);
     }
     return {
       ...repo,

@@ -255,9 +255,32 @@ export function reclaimWorktrees({ cwd = process.cwd(), confirm = null, sizes = 
   if (confirm !== inventory.token) {
     throw new Error('[cc-nexs] reclaim plan changed since it was shown; rerun reclaim-worktrees without --confirm and review the new plan');
   }
+  return { ...inventory, kind: 'worktree-reclaim', applied: true, ...applyReclaim(inventory, inventory.entries.filter((item) => item.action === 'reclaim')) };
+}
+
+// After a task completes, its own merged worktrees, conflict copies, verification
+// artifacts and task files go without a confirmation round: classification already
+// keeps anything unmerged, dirty, or belonging to an active task.
+export function reclaimTaskArtifacts({ cwd = process.cwd(), featureId, exclude = [] } = {}) {
+  const inventory = inventoryWorktrees({ cwd });
+  const id = String(featureId);
+  const tasks = readTasks(inventory.root, inventory.workspace);
+  const under = (root, path) => { const rel = relative(join(root, id), path); return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel)); };
+  const excluded = new Set(exclude.map((path) => resolve(path)));
+  const owned = inventory.entries.filter((entry) => entry.action === 'reclaim' && !excluded.has(resolve(entry.path)) && (
+    (entry.kind === 'worktree' && tasks.byWorktree.get(resolve(entry.path))?.id === id)
+    || (entry.kind === 'test-conflict' && under(inventory.conflictRoot, entry.path))
+    || (entry.kind.startsWith('verify-') && under(inventory.verifyRoot, entry.path))
+    || (entry.kind === 'task-files' && under(inventory.taskFilesRoot, entry.path))
+  ));
+  const kept = inventory.entries.filter((entry) => entry.action === 'keep' && entry.path && relative(inventory.root, entry.path).split(/[\\/]/).some((part) => part === id || part.startsWith(`${id}-`)));
+  return { kind: 'task-reclaim', feature: id, ...applyReclaim(inventory, owned), kept: kept.map(({ display, reason }) => ({ display, reason })) };
+}
+
+function applyReclaim(inventory, entries) {
   const removed = [];
   const failed = [];
-  for (const entry of inventory.entries.filter((item) => item.action === 'reclaim')) {
+  for (const entry of entries) {
     try {
       if (entry.kind === 'worktree') {
         cleanupMergedWorktree({ repo: entry.repo, worktree: entry.path, branch: entry.branch, baseBranch: entry.baseBranch, candidateRef: entry.candidateRef });
@@ -282,7 +305,7 @@ export function reclaimWorktrees({ cwd = process.cwd(), confirm = null, sizes = 
   pruneEmptyParents(inventory.conflictRoot, 2);
   pruneEmptyParents(inventory.verifyRoot, 1);
   pruneEmptyParents(inventory.taskFilesRoot, 1);
-  return { ...inventory, kind: 'worktree-reclaim', applied: true, removed, failed };
+  return { removed, failed };
 }
 
 function pruneEmptyParents(root, depth) {

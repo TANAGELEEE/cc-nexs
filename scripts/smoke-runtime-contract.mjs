@@ -153,11 +153,16 @@ async function assertStateMachine() {
     'lean local verification',
   );
   expectStep(
-    mod.nextStep({ state: 'LOCAL_VERIFYING', enabledRoles: leanRoles, mode: 'lean' }),
+    mod.nextStep({ state: 'LOCAL_VERIFYING', enabledRoles: leanRoles, mode: 'lean', workflow: { review: { required: true } } }),
     { next: 'CONSOLIDATED_REVIEW', role: 'lean-reviewer', action: 'review_candidate' },
-    'lean consolidated review',
+    'lean required Review before test',
   );
-  const leanReleaseGate = mod.nextStep({ state: 'TEST_VERIFIED', enabledRoles: leanRoles, mode: 'lean' });
+  expectStep(
+    mod.nextStep({ state: 'LOCAL_VERIFYING', enabledRoles: leanRoles, mode: 'lean', workflow: { review: { required: false } } }),
+    { next: 'CANDIDATE_READY', role: null, action: 'continue_to_test' },
+    'lean without a required Review goes to test',
+  );
+  const leanReleaseGate = mod.nextStep({ state: 'TEST_VERIFIED', enabledRoles: leanRoles, mode: 'lean', workflow: { review: { required: false } } });
   expectStep(leanReleaseGate, { next: 'RELEASE_PENDING_HUMAN', action: 'await_release_approval' }, 'lean release gate');
   assert(leanReleaseGate.stop === true, 'Lean release gate must stop for human approval');
 
@@ -167,9 +172,9 @@ async function assertStateMachine() {
     'hotfix concentrated Review',
   );
   expectStep(
-    mod.nextStep({ state: 'HOTFIX_LOCAL_VERIFYING', enabledRoles: hotfixRoles, mode: 'hotfix', workflow: { hotfix: { severity: 'P3' } } }),
-    { next: 'HOTFIX_REVIEWING', role: 'hotfix-reviewer', action: 'review_hotfix' },
-    'hotfix P3 requires independent Review',
+    mod.nextStep({ state: 'HOTFIX_LOCAL_VERIFYING', enabledRoles: hotfixRoles, mode: 'hotfix', workflow: { hotfix: { severity: 'P3' }, review: { required: false } } }),
+    { next: 'HOTFIX_CANDIDATE_READY', role: null, action: 'continue_to_test' },
+    'hotfix P3 is gated by test verification',
   );
   const hotfixGate = mod.nextStep({ state: 'HOTFIX_TEST_VERIFIED', enabledRoles: hotfixRoles, mode: 'hotfix' });
   expectStep(hotfixGate, { next: 'HOTFIX_RELEASE_PENDING_HUMAN', action: 'await_release_approval' }, 'hotfix Gateway B');

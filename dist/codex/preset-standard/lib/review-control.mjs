@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 
 import { resolveCandidateContext } from './candidate-context.mjs';
 import { assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
-import { approvedPlanDeliveryLane, assertPlanApprovalCurrent, extractApprovalScope, planApprovalBinding } from './plan-contract.mjs';
+import { assertPlanApprovalCurrent, extractApprovalScope, planApprovalBinding } from './plan-contract.mjs';
 import { assertRecordedLocalVerification, extractLocalVerificationChecks } from './local-evidence.mjs';
 import { assertTestAttemptNotInvalidated, candidateFingerprint, readProgressV2, recordConsolidatedReview, recordPlanReview } from './progress-v2.mjs';
 import { resolveFeatureProgress } from './approval-command.mjs';
@@ -44,11 +44,12 @@ export function recordLeanReview({
   if (!documentFindings && notReproduced.length > 0) throw new Error('[cc-nexs] --not-reproduced requires --document-findings');
   const context = resolveCandidateContext({ cwd, featureId, progressPath });
   releaseScope(context.progress, context.progressFile);
-  let leanDeliveryLane = 'standard';
+  // A required Lean Review normally runs before test. A Review recorded after test (a task
+  // that reached test before its Review) must be of the exact tested candidate.
   if (context.progress.mode === 'lean') {
     assertPlanApprovalCurrent(context.progress, dirname(context.progressFile));
-    leanDeliveryLane = approvedPlanDeliveryLane(context.progress, dirname(context.progressFile));
-    if (!closure && !gatewayBDelta && leanDeliveryLane === 'fast-track') {
+    const testedStates = ['TEST_VERIFIED', 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY', 'RELEASE_PENDING_HUMAN'];
+    if (!closure && !gatewayBDelta && testedStates.includes(context.progress.state)) {
       const attempt = context.progress.delivery?.test?.attempts?.at(-1);
       assertTestAttemptNotInvalidated(attempt);
       const deployedForManualVerification = attempt?.status === 'deployed_needs_manual_verification'
@@ -58,7 +59,7 @@ export function recordLeanReview({
         && Object.keys(attempt.environment_revision || {}).length > 0;
       if ((!deployedForManualVerification && attempt?.status !== 'verified')
         || attempt.fingerprint !== candidateFingerprint(context.source)) {
-        throw new Error('[cc-nexs] fast-track consolidated Review requires verified test or a deployed manual-verification attempt for the exact candidate');
+        throw new Error('[cc-nexs] consolidated Review requires verified test or a deployed manual-verification attempt for the exact candidate');
       }
     }
   }
@@ -75,7 +76,7 @@ export function recordLeanReview({
       ? ['GATEWAY_B_LOCAL_REVERIFYING', 'GATEWAY_B_DELTA_REVIEW']
       : closure
         ? ['LOCAL_REVERIFYING', 'REVIEW_CLOSURE']
-        : ['RELEASE_PENDING_HUMAN', 'LOCAL_VERIFYING', 'CONSOLIDATED_REVIEW', ...(leanDeliveryLane === 'fast-track' ? ['TEST_VERIFIED', 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY'] : [])];
+        : ['RELEASE_PENDING_HUMAN', 'LOCAL_VERIFYING', 'CONSOLIDATED_REVIEW', 'TEST_VERIFIED', 'TEST_DEPLOYED_NEEDS_MANUAL_VERIFY'];
   if (!expectedStates.includes(context.progress.state)) {
     throw new Error(`[cc-nexs] ${closure ? 'review closure' : 'consolidated review'} requires ${expectedStates.join(' or ')}, found ${context.progress.state}`);
   }

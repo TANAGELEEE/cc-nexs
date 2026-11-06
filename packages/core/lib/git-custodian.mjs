@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync 
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep, win32 } from 'node:path';
 
+import { matchAny } from './build-selector.mjs';
 import { gitIdentityEnv, resolveGitIdentity } from './git-identity.mjs';
 import { recordRepositoryCandidatePrepared } from './progress-v2.mjs';
 
@@ -308,8 +309,20 @@ function assessTargetChanges({ repo, sourceCommit, targetBefore, checkSensitive 
   };
 }
 
+// Whether the candidate merges into the target without conflicts, computed without
+// touching a worktree (git merge-tree, git 2.38+).
+function mergesCleanly(repo, sourceCommit, targetBefore) {
+  try {
+    execFileSync('git', ['-C', repo, 'merge-tree', '--write-tree', '--no-messages', targetBefore, sourceCommit], { stdio: ['ignore', 'pipe', 'pipe'] });
+    return true;
+  } catch (error) {
+    if (error.status === 1) return false;
+    throw new Error(`[cc-nexs] git merge-tree failed (git 2.38 or newer is required): ${error.stderr?.toString().trim() || error.message}`);
+  }
+}
+
 function overlapError(targetBranch) {
-  return new Error(`[cc-nexs] BASE_CHANGED: origin/${targetBranch} overlaps candidate paths; resolve and verify the affected changes before release`);
+  return new Error(`[cc-nexs] BASE_CHANGED: candidate conflicts with origin/${targetBranch}; resolve and verify the affected changes before release`);
 }
 
 function assertBranchName(name) {
@@ -320,7 +333,42 @@ function assertBranchName(name) {
   return name;
 }
 
-export function integrateCandidateToTest({
+const TARGET_RETRIES = 3;
+
+// Integrates a candidate onto the latest target. When another task pushes between
+// the fetch and the push, the merge is redone on the new tip (a few times) instead of
+// handing the race to a person.
+export function integrateCandidateToTest(options) {
+  for (let round = 1; ; round += 1) {
+    try { return integrateOnce(options); }
+    catch (error) { if (error.code !== 'TARGET_MOVED' || round >= TARGET_RETRIES) throw error; }
+  }
+}
+
+// Conflicts the task already resolved once are replayed by rerere; paths the workspace
+// marks `test_keep_target` take the target's side. When nothing else is left the merge
+// completes without a Developer round.
+function settleTestConflicts(worktree, keepTarget) {
+  const unmerged = () => git(worktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
+  const conflicted = unmerged();
+  const remaining = new Set(git(worktree, ['rerere', 'remaining']).split('\n').filter(Boolean));
+  const replayed = conflicted.filter((path) => !remaining.has(path) && !hasConflictMarkers(join(worktree, path)));
+  for (const path of replayed) git(worktree, ['add', '--', path]);
+  const kept = [];
+  for (const path of unmerged().filter((item) => keepTarget.length && matchAny(item, keepTarget))) {
+    try { git(worktree, ['checkout', '--ours', '--', path]); git(worktree, ['add', '--', path]); kept.push(path); } catch {}
+  }
+  return { conflicts: unmerged(), replayed, kept };
+}
+
+function hasConflictMarkers(file) {
+  if (!existsSync(file)) return false;
+  const bytes = readFileSync(file);
+  if (bytes.includes(0)) return true;
+  return /^(<{7}|>{7})( |$)/m.test(bytes.toString('utf8'));
+}
+
+function integrateOnce({
   repo,
   repositoryId,
   candidateRef,
@@ -331,6 +379,7 @@ export function integrateCandidateToTest({
   verifyIntegration = null,
   preserveConflicts = false,
   conflictWorktree = null,
+  keepTarget = [],
 }) {
   assertSegment(repositoryId, 'repository id');
   assertSegment(targetBranch, 'test branch');
@@ -353,11 +402,15 @@ export function integrateCandidateToTest({
       alreadyIntegrated: true,
     };
   }
+  // A base that changed the candidate's own paths still takes the tested candidate when
+  // the merge is clean; those paths join the merged-tree checks, and a conflict below
+  // sends the task to BASE_CHANGED.
   let sensitive = [];
+  let overlap = [];
   if (requireDisjointTargetChanges && !isAncestor(repo, targetBefore, sourceCommit)) {
     const changes = assessTargetChanges({ repo, sourceCommit, targetBefore });
-    if (changes.overlap.length) throw overlapError(targetBranch);
-    sensitive = changes.sensitive;
+    overlap = changes.overlap;
+    sensitive = [...new Set([...changes.sensitive, ...changes.overlap])];
   }
   const tempRoot = conflictWorktree ? null : mkdtempSync(join(tmpdir(), `cc-nexs-test-release-${repositoryId}-`));
   const integrationWorktree = conflictWorktree || join(tempRoot, 'worktree');
@@ -368,17 +421,26 @@ export function integrateCandidateToTest({
     git(repo, ['worktree', 'add', '--detach', integrationWorktree, target]);
     registered = true;
     const identity = resolveGitIdentity(repo);
+    let autoResolved = null;
     try {
       // rerere replays a recorded resolution if the target advances and the merge is retried.
-      git(integrationWorktree, [...(preserveConflicts ? ['-c', 'rerere.enabled=true'] : []), 'merge', '--no-ff', '--no-edit', sourceCommit], { env: gitIdentityEnv(identity) });
+      git(integrationWorktree, [...(preserveConflicts ? ['-c', 'rerere.enabled=true', '-c', 'rerere.autoupdate=false'] : []), 'merge', '--no-ff', '--no-edit', sourceCommit], { env: gitIdentityEnv(identity) });
     } catch {
-      const conflicts = git(integrationWorktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean);
-      if (preserveConflicts && conflicts.length) {
+      const settled = preserveConflicts
+        ? settleTestConflicts(integrationWorktree, keepTarget)
+        : { conflicts: git(integrationWorktree, ['diff', '--name-only', '--diff-filter=U', '-z']).split('\0').filter(Boolean), replayed: [], kept: [] };
+      const handled = settled.replayed.length + settled.kept.length;
+      if (preserveConflicts && settled.conflicts.length === 0 && handled > 0) {
+        git(integrationWorktree, ['-c', 'rerere.enabled=true', 'commit', '--no-edit'], { env: gitIdentityEnv(identity) });
+        autoResolved = { replayed: settled.replayed, kept: settled.kept };
+      } else if (preserveConflicts && settled.conflicts.length) {
         keepWorktree = true;
-        return { repository: repositoryId, sourceCommit, targetBranch, targetBefore, status: 'conflicts', conflicts, worktree: integrationWorktree };
+        return { repository: repositoryId, sourceCommit, targetBranch, targetBefore, status: 'conflicts', conflicts: settled.conflicts, worktree: integrationWorktree,
+          ...(handled && { autoResolved: { replayed: settled.replayed, kept: settled.kept } }) };
+      } else {
+        try { git(integrationWorktree, ['merge', '--abort']); } catch {}
+        throw new Error(`[cc-nexs] ${requireDisjointTargetChanges ? 'BASE_CHANGED: ' : ''}candidate ${candidateRef} conflicts with latest origin/${targetBranch}`);
       }
-      try { git(integrationWorktree, ['merge', '--abort']); } catch {}
-      throw new Error(`[cc-nexs] ${requireDisjointTargetChanges ? 'BASE_CHANGED: ' : ''}candidate ${candidateRef} conflicts with latest origin/${targetBranch}`);
     }
     const integrationCommit = git(integrationWorktree, ['rev-parse', 'HEAD']);
     const integrationVerification = sensitive.length && verifyIntegration
@@ -389,7 +451,11 @@ export function integrateCandidateToTest({
     } catch (error) {
       const detail = error.stderr?.toString().trim() || error.message;
       const remote = fetchBase(repo, targetBranch);
-      if (git(repo, ['rev-parse', remote]) !== targetBefore) throw new Error(`[cc-nexs] origin/${targetBranch} advanced during integration; retry from the new remote tip: ${detail}`);
+      if (git(repo, ['rev-parse', remote]) !== targetBefore) {
+        const moved = new Error(`[cc-nexs] origin/${targetBranch} advanced during integration; retry from the new remote tip: ${detail}`);
+        moved.code = 'TARGET_MOVED';
+        throw moved;
+      }
       throw new Error(`[cc-nexs] PUSH_REJECTED: origin/${targetBranch} did not advance; check branch protection/permissions and configure release.base.driver for MR delivery: ${detail}`);
     }
     const remote = fetchBase(repo, targetBranch);
@@ -406,6 +472,8 @@ export function integrateCandidateToTest({
       remoteCommit,
       alreadyIntegrated: false,
       integrationVerification,
+      ...(autoResolved && { autoResolved }),
+      ...(overlap.length && { overlapPaths: overlap }),
       ...(sensitive.length && !verifyIntegration && { unverifiedSensitivePaths: sensitive }),
     };
   } finally {
@@ -501,13 +569,16 @@ export function promoteCandidateViaMergeRequest({
   }
   let integrationVerification = null;
   let unverifiedSensitivePaths = [];
+  let overlapPaths = [];
   if (!isAncestor(repo, targetBefore, sourceCommit)) {
     const changes = assessTargetChanges({ repo, sourceCommit, targetBefore, checkSensitive });
-    if (changes.overlap.length) throw overlapError(targetBranch);
-    if (changes.sensitive.length && verifyIntegration) {
-      integrationVerification = verifyMergedTree({ repo, repositoryId, sourceCommit, targetBefore, sensitive: changes.sensitive, verifyIntegration });
+    if (changes.overlap.length && !mergesCleanly(repo, sourceCommit, targetBefore)) throw overlapError(targetBranch);
+    overlapPaths = changes.overlap;
+    const checked = [...new Set([...changes.sensitive, ...changes.overlap])];
+    if (checked.length && verifyIntegration) {
+      integrationVerification = verifyMergedTree({ repo, repositoryId, sourceCommit, targetBefore, sensitive: checked, verifyIntegration });
     } else {
-      unverifiedSensitivePaths = changes.sensitive;
+      unverifiedSensitivePaths = checked;
     }
   }
   // The driver pushes the candidate to the branch itself: GitLab ignores
@@ -518,14 +589,14 @@ export function promoteCandidateViaMergeRequest({
   }
   const remoteCommit = git(repo, ['rev-parse', fetchBase(repo, targetBranch)]);
   if (isAncestor(repo, sourceCommit, remoteCommit)) {
-    return { ...base, ...proveCandidateMerge({ repo, remoteCommit, sourceCommit }), remoteCommit, pending: false, mergeRequest: { ...receipt, status: 'merged' }, integrationVerification, ...(unverifiedSensitivePaths.length && { unverifiedSensitivePaths }) };
+    return { ...base, ...proveCandidateMerge({ repo, remoteCommit, sourceCommit }), remoteCommit, pending: false, mergeRequest: { ...receipt, status: 'merged' }, integrationVerification, ...(overlapPaths.length && { overlapPaths }), ...(unverifiedSensitivePaths.length && { unverifiedSensitivePaths }) };
   }
   if (receipt.status === 'merged') throw new Error('[cc-nexs] MR receipt has no remote ancestry proof');
   const pushed = git(repo, ['ls-remote', '--heads', 'origin', `refs/heads/${branch}`]).split(/\s+/)[0] || '';
   if (pushed !== sourceCommit) {
     throw new Error(`[cc-nexs] MR_SOURCE_DRIFT: origin/${branch} is ${pushed || 'absent'}, expected approved candidate ${sourceCommit}; the driver must push exactly the candidate`);
   }
-  return { ...base, remoteCommit, pending: true, mergeRequest: receipt, integrationVerification, ...(unverifiedSensitivePaths.length && { unverifiedSensitivePaths }) };
+  return { ...base, remoteCommit, pending: true, mergeRequest: receipt, integrationVerification, ...(overlapPaths.length && { overlapPaths }), ...(unverifiedSensitivePaths.length && { unverifiedSensitivePaths }) };
 }
 
 // Read-only check that a tested candidate can still be released unchanged. It
@@ -538,24 +609,23 @@ export function checkBaseReadiness({ repo, repositoryId, sourceCommit, targetBra
   if (isAncestor(repo, sourceCommit, targetBefore)) return { ...result, status: 'merged' };
   if (isAncestor(repo, targetBefore, sourceCommit)) return { ...result, status: 'ready', sensitive: [] };
   const changes = assessTargetChanges({ repo, sourceCommit, targetBefore });
-  if (changes.overlap.length) return { ...result, status: 'base_changed', reason: overlapError(targetBranch).message, overlap: changes.overlap };
-  return { ...result, status: 'ready', sensitive: changes.sensitive };
+  if (changes.overlap.length && !mergesCleanly(repo, sourceCommit, targetBefore)) {
+    return { ...result, status: 'base_changed', reason: overlapError(targetBranch).message, overlap: changes.overlap };
+  }
+  return { ...result, status: 'ready', sensitive: changes.sensitive, ...(changes.overlap.length && { overlap: changes.overlap }) };
 }
 
-// A dedicated Test target (one task switched off the shared test branch) is a
-// slot for this task alone. Work on it that is neither in the base, in this
-// candidate, nor one of this task's own integrations belongs to someone else;
-// integrating would test a tree that is not this candidate.
-export function assertDedicatedTargetFree({ repo, targetBranch, baseBranch, sourceCommit, ownCommits = [] }) {
+// Commits on a Test target that are neither in the base, this candidate, nor this
+// task's own integrations: other tasks deployed there too. Test branches are shared
+// overlays, so this is recorded for the acceptance evidence, never a refusal; the
+// deployed revision only has to contain this task's integration.
+export function targetForeignCommits({ repo, targetBranch, baseBranch, sourceCommit, ownCommits = [] }) {
   const target = fetchBase(repo, targetBranch);
   const base = fetchBase(repo, baseBranch);
   const known = ownCommits.filter((commit) => typeof commit === 'string' && /^[0-9a-f]{40}$/.test(commit)
     && (() => { try { git(repo, ['cat-file', '-e', `${commit}^{commit}`]); return true; } catch { return false; } })());
-  const foreign = git(repo, ['rev-list', target, `^${base}`, `^${sourceCommit}`, ...known.map((commit) => `^${commit}`)]).split('\n').filter(Boolean);
-  if (foreign.length) {
-    throw new Error(`[cc-nexs] TARGET_OCCUPIED: origin/${targetBranch} carries ${foreign.length} commit(s) that are not in origin/${baseBranch}, this candidate, or this task's earlier integrations (${foreign.slice(0, 3).join(', ')}${foreign.length > 3 ? ', ...' : ''}); free the target with its owners or switch back to the shared test branch`);
-  }
-  return { targetBranch, free: true };
+  const foreign = git(repo, ['rev-list', '--no-merges', target, `^${base}`, `^${sourceCommit}`, ...known.map((commit) => `^${commit}`)]).split('\n').filter(Boolean);
+  return { targetBranch, foreign };
 }
 
 // How a head relates to a base: contained by ancestry, every commit present as

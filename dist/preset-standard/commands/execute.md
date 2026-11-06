@@ -22,9 +22,10 @@ Only for `mode=lean` with an approved plan. Read the plan task DAG and dispatch 
 - `test-fix` repairs every failure in the Verifier's report in one round and returns local evidence for each: a frontend-only fix is confirmed in a local browser or targeted test against the deployed test backend before it is redeployed.
 - `gateway-b-fix` handles only the ACs and allowed paths of the current Gateway B implementation request in `plan.md`; if requirement/AC/approved-plan changes are found, stop and switch to a scope request.
 
-Fast-track constraints:
+Local check constraints (every lane):
 
 - Run only the targeted checks specified by the plan, preferring to reuse/extend the most recent existing tests; do not add new test files unless there is no existing file where the key regression can live.
+- Run builds, test suites, Maven and dev servers through `node <plugin-root>/lib/cc-nexs-cli.mjs heavy -- <command>`: other tasks share this machine, and it queues the command for a workspace slot and caps its memory.
 - Record the same confirmed baseline Maven/Nexus/external-dependency blocker only once; do not repeatedly download, re-run, or have multiple children prove it again.
 - Real compile/unit/lint failures must be fixed; only start/smoke/E2E that explicitly depend on locally unavailable infrastructure may be recorded as `deferred_to_test` per the driver contract, with the test action written out. Code failures must not be disguised as deferred.
 - When no local driver is configured, do not add one-off project scripts: the parent Orchestrator runs `verify-local <id> --preflight`, then the plan-approved commands directly, and binds the real command/exit_code/proof with `verify-local --passed|--deferred-to-test --evidence-json`; at least one command must actually pass.

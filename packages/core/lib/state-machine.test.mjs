@@ -24,7 +24,7 @@ test('lean mode: plan is the first role call, then an independent plan review, t
   assert.equal(gate.stop, true);
 });
 
-test('lean mode: approved plan executes, verifies locally, then performs one consolidated review', () => {
+test('lean mode: approved plan executes, verifies locally, then reviews when required or goes to test', () => {
   const approved = nextStep({
     state: 'PLAN_PENDING_HUMAN', enabledRoles: leanRoles, mode: 'lean', workflow: { plan_approved: true },
   });
@@ -35,57 +35,64 @@ test('lean mode: approved plan executes, verifies locally, then performs one con
   assert.deepEqual(nextStep({ state: 'IMPLEMENTING', enabledRoles: leanRoles, mode: 'lean' }), {
     next: 'LOCAL_VERIFYING', role: null, action: 'verify_local',
   });
-  assert.deepEqual(nextStep({ state: 'LOCAL_VERIFYING', enabledRoles: leanRoles, mode: 'lean' }), {
+  assert.deepEqual(nextStep({ state: 'LOCAL_VERIFYING', enabledRoles: leanRoles, mode: 'lean', workflow: { review: { required: true } } }), {
     next: 'CONSOLIDATED_REVIEW', role: 'lean-reviewer', action: 'review_candidate',
-  });
+  }, 'a required Review runs before test');
+  assert.deepEqual(nextStep({ state: 'LOCAL_VERIFYING', enabledRoles: leanRoles, mode: 'lean', workflow: { review: { required: false } } }), {
+    next: 'CANDIDATE_READY', role: null, action: 'continue_to_test',
+  }, 'without a required Review the candidate goes straight to test');
 });
 
-test('lean mode: fast-track reaches test before consolidated Review and still reviews before Gateway B', () => {
-  const workflow = {
-    delivery_lane: 'fast-track',
-    review: { status: 'idle' },
+test('lean mode: a required Review passes before test; otherwise verification is the gate', () => {
+  const reviewedBeforeTest = {
+    review: { status: 'passed', exact: true, required: true },
     test_release: { policy: 'auto_if_ready', status: 'idle', attempt: 0 },
   };
-  assert.deepEqual(nextStep({ state: 'LOCAL_VERIFYING', enabledRoles: leanRoles, mode: 'lean', workflow }), {
-    next: 'CANDIDATE_READY', role: null, action: 'continue_to_test',
-  });
-  assert.deepEqual(nextStep({ state: 'CANDIDATE_READY', enabledRoles: leanRoles, mode: 'lean', workflow }), {
+  assert.deepEqual(nextStep({ state: 'CANDIDATE_READY', enabledRoles: leanRoles, mode: 'lean', workflow: reviewedBeforeTest }), {
     next: 'TEST_RELEASE', role: null, action: 'continue',
   });
   assert.deepEqual(nextStep({
-    state: 'TEST_VERIFIED', enabledRoles: leanRoles, mode: 'lean', workflow: { ...workflow, test_release: { status: 'verified' } },
+    state: 'TEST_VERIFIED', enabledRoles: leanRoles, mode: 'lean', workflow: { ...reviewedBeforeTest, test_release: { status: 'verified' } },
+  }), { next: 'RELEASE_PENDING_HUMAN', role: null, action: 'await_release_approval', stop: true });
+  assert.deepEqual(nextStep({
+    state: 'TEST_VERIFIED', enabledRoles: leanRoles, mode: 'lean', workflow: { review: { status: 'idle', required: true }, test_release: { status: 'verified' } },
   }), {
     next: 'CONSOLIDATED_REVIEW', role: 'lean-reviewer', action: 'review_tested_candidate',
+  }, 'a task that reached test without its required Review still gets it before Gateway B');
+  const reviewed = nextStep({
+    state: 'CANDIDATE_READY', enabledRoles: leanRoles, mode: 'lean',
+    workflow: { review: { status: 'passed', exact: true, required: true }, test_release: { status: 'verified', exact: true } },
   });
-  const gate = nextStep({
-    state: 'CANDIDATE_READY',
-    enabledRoles: leanRoles,
-    mode: 'lean',
-    workflow: { delivery_lane: 'fast-track', review: { status: 'passed' }, test_release: { status: 'verified' } },
-  });
-  assert.equal(gate.next, 'RELEASE_PENDING_HUMAN');
-  assert.equal(gate.stop, true);
+  assert.equal(reviewed.next, 'RELEASE_PENDING_HUMAN');
+  assert.equal(reviewed.stop, true);
+
+  const verificationOnly = { review: { status: 'idle', required: false }, test_release: { status: 'verified', exact: true } };
+  assert.deepEqual(nextStep({ state: 'TEST_VERIFIED', enabledRoles: leanRoles, mode: 'lean', workflow: verificationOnly }),
+    { next: 'RELEASE_PENDING_HUMAN', role: null, action: 'await_release_approval', stop: true });
+  assert.equal(nextStep({ state: 'CANDIDATE_READY', enabledRoles: leanRoles, mode: 'lean', workflow: verificationOnly }).next, 'RELEASE_PENDING_HUMAN');
+  assert.equal(nextStep({
+    state: 'CANDIDATE_READY', enabledRoles: leanRoles, mode: 'lean',
+    workflow: { ...verificationOnly, test_release: { status: 'verified', exact: false } },
+  }).next, 'TEST_RELEASE', 'a changed candidate needs its own test attempt');
+  assert.deepEqual(nextStep({
+    state: 'GATEWAY_B_LOCAL_REVERIFYING', enabledRoles: leanRoles, mode: 'lean', workflow: verificationOnly,
+  }), { next: 'CANDIDATE_READY', role: null, action: 'continue_to_test' });
 });
 
-test('lean mode: fast-track environment-only local deferral and test fixes do not force a premature delta Review', () => {
-  const result = nextStep({
-    state: 'LOCAL_REVERIFYING',
-    enabledRoles: leanRoles,
-    mode: 'lean',
-    workflow: {
-      delivery_lane: 'fast-track',
-      review: { status: 'idle' },
-      local_verification: { context: 'test' },
-    },
+test('lean mode: a test fix goes back to test, through a delta closure only when a Review is required', () => {
+  const fix = (required) => nextStep({
+    state: 'LOCAL_REVERIFYING', enabledRoles: leanRoles, mode: 'lean',
+    workflow: { review: { status: required ? 'passed' : 'idle', required }, local_verification: { context: 'test' } },
   });
-  assert.deepEqual(result, { next: 'CANDIDATE_READY', role: null, action: 'continue_to_test' });
+  assert.deepEqual(fix(false), { next: 'CANDIDATE_READY', role: null, action: 'continue_to_test' });
+  assert.deepEqual(fix(true), { next: 'REVIEW_CLOSURE', role: 'lean-reviewer', action: 'review_delta' });
 });
 
 test('lean mode: review findings are fixed once and closed against the delta', () => {
   assert.deepEqual(nextStep({ state: 'CONSOLIDATED_REVIEW_BLOCKED', enabledRoles: leanRoles, mode: 'lean' }), {
     next: 'REVIEW_FIXING', role: 'lean-developer', action: 'fix_review',
   });
-  assert.deepEqual(nextStep({ state: 'LOCAL_REVERIFYING', enabledRoles: leanRoles, mode: 'lean' }), {
+  assert.deepEqual(nextStep({ state: 'LOCAL_REVERIFYING', enabledRoles: leanRoles, mode: 'lean', workflow: { local_verification: { context: 'review' } } }), {
     next: 'REVIEW_CLOSURE', role: 'lean-reviewer', action: 'review_delta',
   });
   const stopped = nextStep({ state: 'REVIEW_CLOSURE_BLOCKED', enabledRoles: leanRoles, mode: 'lean' });
@@ -94,10 +101,6 @@ test('lean mode: review findings are fixed once and closed against the delta', (
 });
 
 test('lean mode: recorded exact Review survives a crash before the state transition', () => {
-  assert.deepEqual(nextStep({
-    state: 'LOCAL_VERIFYING', enabledRoles: leanRoles, mode: 'lean',
-    workflow: { review: { status: 'passed', exact: true } },
-  }), { next: 'CONSOLIDATED_REVIEW', role: null, action: 'continue' });
   assert.deepEqual(nextStep({
     state: 'TEST_VERIFIED', enabledRoles: leanRoles, mode: 'lean',
     workflow: { delivery_lane: 'fast-track', review: { status: 'passed', exact: true } },
@@ -108,7 +111,7 @@ test('lean mode: recorded exact Review survives a crash before the state transit
   }), { next: 'CONSOLIDATED_REVIEW', role: 'lean-reviewer', action: 'review_tested_candidate' });
   assert.deepEqual(nextStep({
     state: 'LOCAL_REVERIFYING', enabledRoles: leanRoles, mode: 'lean',
-    workflow: { review: { status: 'passed', exact: true, closure_attempts: 1 } },
+    workflow: { review: { status: 'passed', exact: true, closure_attempts: 1 }, local_verification: { context: 'review' } },
   }), { next: 'REVIEW_CLOSURE', role: null, action: 'continue' });
   assert.deepEqual(nextStep({
     state: 'GATEWAY_B_LOCAL_REVERIFYING', enabledRoles: leanRoles, mode: 'lean',
@@ -137,7 +140,7 @@ test('lean mode: local reverify failures return to the originating repair path',
 });
 
 test('lean mode: verified test release pauses at release gate then merges base', () => {
-  const verified = nextStep({ state: 'TEST_VERIFIED', enabledRoles: leanRoles, mode: 'lean' });
+  const verified = nextStep({ state: 'TEST_VERIFIED', enabledRoles: leanRoles, mode: 'lean', workflow: { review: { status: 'passed', exact: true } } });
   assert.equal(verified.next, 'RELEASE_PENDING_HUMAN');
   assert.equal(verified.stop, true);
   const merge = nextStep({
@@ -350,4 +353,15 @@ test('removed Fast and Full modes are rejected', () => {
   for (const mode of ['fast', 'full', 'lite']) {
     assert.throws(() => nextStep({ mode, state: 'INIT', enabledRoles: [] }), /unsupported mode/);
   }
+});
+
+test('hotfix mode: P0/P1 are reviewed before test, P2/P3 go from local checks straight to test', () => {
+  const hotfixRoles = ['hotfix-developer', 'hotfix-reviewer', 'hotfix-verifier'];
+  const step = (state, required) => nextStep({ state, enabledRoles: hotfixRoles, mode: 'hotfix', workflow: { review: { required, status: 'idle' } } });
+  assert.deepEqual(step('HOTFIX_LOCAL_VERIFYING', true), { next: 'HOTFIX_REVIEWING', role: 'hotfix-reviewer', action: 'review_hotfix' });
+  assert.deepEqual(step('HOTFIX_LOCAL_VERIFYING', false), { next: 'HOTFIX_CANDIDATE_READY', role: null, action: 'continue_to_test' });
+  assert.deepEqual(step('HOTFIX_LOCAL_REVERIFYING', false), { next: 'HOTFIX_CANDIDATE_READY', role: null, action: 'continue_to_test' });
+  assert.equal(step('HOTFIX_LOCAL_REVERIFYING', true).next, 'HOTFIX_DELTA_REVIEW');
+  const carried = nextStep({ state: 'HOTFIX_LOCAL_REVERIFYING', enabledRoles: hotfixRoles, mode: 'hotfix', workflow: { review: { required: true }, base_sync: { carried: true, approved: true } } });
+  assert.deepEqual(carried, { next: 'HOTFIX_BASE_MERGING', role: null, action: 'release_base' }, 'a synced tested Hotfix goes to its MR');
 });

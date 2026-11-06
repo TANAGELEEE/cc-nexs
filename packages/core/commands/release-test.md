@@ -2,12 +2,12 @@
 description: "Integrate final feature candidates into test, run the project release driver, then hand deployed evidence to the black-box Verifier."
 disable-model-invocation: true
 allowed-tools: "Read, Bash, Skill, Task, mcp__chrome-devtools__*"
-argument-hint: "<feature-id> [--resume | --retry | --dry-run] [--hotfix]"
+argument-hint: "<feature-id> [--resume [--wait[=<minutes>]] | --retry | --dry-run] [--hotfix]"
 ---
 
 # /cc-nexs:release-test
 
-This is the deterministic test delivery action for an exact candidate. Standard Lean invokes it after Review; eligible fast-track Lean invokes it immediately after deterministic local checks and performs its one Review after test verification. It never targets production.
+This is the deterministic test delivery action for an exact candidate. Lean invokes it after deterministic local checks, and after the consolidated Review when the review policy requires one. It never targets production.
 
 ## Delivery preflight
 
@@ -17,7 +17,7 @@ Before any remote mutation, resolve `release.test` from project config/private o
 2. A structured release driver exists and every assigned code repository has an exact candidate ref.
 3. At least one repository is approved for `deploy` and has a configured `test_branch`. A Lean repository is local only when its Gateway A-bound plan explicitly contains `test_delivery.<repo>: local`; missing `test_branch` is never silently interpreted as local.
 4. Plaintext credentials are absent. Browser provider, login/MFA, app/operations URLs, allowlist completeness, and S3 bucket/CORS/IAM observability are post-deployment verification concerns and must not block the test merge.
-5. Lean has exact-fingerprint local evidence (`passed` or structured `deferred_to_test`); standard Lean additionally has an exact-fingerprint passing Review. Fast-track intentionally performs that Review after test verification.
+5. Lean has exact-fingerprint local evidence (`passed` or structured `deferred_to_test`), plus an exact-fingerprint passing Review when the review policy requires one.
 
 `--hotfix` is accepted only for `mode=hotfix + HOTFIX_TEST_RELEASE`; it never bypasses readiness.
 
@@ -42,12 +42,14 @@ For CI/CD systems triggered by the test push, the driver should return promptly:
 This persists `delivery.test.status=deploying` and returns control immediately. `examples/drivers/gitlab-test-release-driver.mjs` is a reference GitLab driver that reads pipelines through the API, so no browser is needed to observe CI. Where API tokens are not allowed, run it with `--receipts .cc-nexs/runtime/tasks`: it returns `awaiting_receipt` with the exact `record-receipt` command, and the Orchestrator records what the signed-in GitLab pipeline or operations publication page shows. The controller still proves the recorded revision contains the integration. Resume without another merge or trigger:
 
 ```text
-node <plugin-root>/lib/cc-nexs-cli.mjs release-test <feature-id> --resume
+node <plugin-root>/lib/cc-nexs-cli.mjs release-test <feature-id> --resume --wait
 ```
+
+`--wait` keeps resuming the same attempt with backoff (30s, 60s, then every 120s) for up to 8 minutes, or `--wait=<minutes>`, and returns as soon as the attempt leaves `deploying`/`awaiting_receipt`; the result reports `waited.polls` and `waited.still_waiting`. Call it again while it is still waiting. It never re-integrates or retriggers.
 
 Hotfix resume also includes `--hotfix`.
 
-The same driver receives `operation=release_test_status` plus the previous attempt evidence and returns `pending`, `succeeded`, or `failed`. Combined evidence across start/poll must keep the same non-empty pipeline identity; terminal deployment must name environment `test`, and every deployed repository's `environment_revision` must be its recorded integration commit or a later test commit that contains it (a short SHA is accepted). The controller records the full deployed commit and whether it was `exact` or `contains`.
+The same driver receives `operation=release_test_status` plus the previous attempt evidence and returns `pending`, `succeeded`, or `failed`. Combined evidence across start/poll must name a non-empty pipeline. A later pipeline (another task's push to the same test branch) may take over: when it deploys a test commit containing this integration it proves the candidate, and the earlier pipeline is kept in `superseded_pipelines`. Terminal deployment must name environment `test`, and every deployed repository's `environment_revision` must be its recorded integration commit or a later test commit that contains it (a short SHA is accepted). The controller records the full deployed commit and whether it was `exact` or `contains`.
 
 A driver timeout or missing authenticated CI receipt records `awaiting_receipt`, not a product failure. `--resume` can also recover a legacy failed attempt with complete integration evidence and no product verification failure: it preserves the old reason in recovery history, queries `release_test_status` for that same attempt, and validates pipeline/environment revision before accepting success. It does not start a new deployment.
 

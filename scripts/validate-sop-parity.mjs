@@ -177,7 +177,7 @@ function validateHotfixCommand() {
     '--authorization-evidence',
     '--promote-lean',
     '--test-exception',
-    /(?:P0\/P1\/P2\/P3 全部需要独立 Review|P0\/P1\/P2\/P3 all require an independent Review)/,
+    /P0\/P1 get an independent Review before test; P2\/P3 are gated by test verification/,
     'HOTFIX-SCOPE',
     'start-hotfix',
     'HOTFIX_LOCAL_VERIFYING',
