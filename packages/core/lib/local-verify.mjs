@@ -25,6 +25,21 @@ import {
 } from './verify-artifacts.mjs';
 import { reclaimInactiveVerifyScratch } from './worktree-reclaim.mjs';
 
+// A baseline_failed item must name the commit this candidate was built on: the merge-base
+// of the candidate and its base branch, so a failure the candidate introduced cannot pass
+// as pre-existing.
+function assertBaselineCommits(context, evidence) {
+  for (const item of evidence.filter((entry) => entry?.result === 'baseline_failed')) {
+    const target = context.repositories.find((entry) => entry.id === item.repository);
+    if (!target) throw new Error(`[cc-nexs] baseline_failed ${item.check} names repository ${item.repository}, which has no candidate`);
+    const base = target.assignment.base_branch || target.repository.base_branch;
+    const mergeBase = spawnSync('git', ['-C', target.repository.absolute_path, 'merge-base', target.sourceCommit, `refs/remotes/origin/${base}`], { encoding: 'utf8' });
+    if (mergeBase.status !== 0 || mergeBase.stdout.trim() !== item.baseline_commit) {
+      throw new Error(`[cc-nexs] baseline_failed ${item.check}: baseline_commit must be the candidate's merge-base with origin/${base} (${mergeBase.stdout.trim() || 'unavailable'})`);
+    }
+  }
+}
+
 export function runLocalVerification({
   cwd = process.cwd(),
   featureId,
@@ -55,6 +70,7 @@ export function runLocalVerification({
       throw new Error('[cc-nexs] workflow.local_verify.driver is configured; run verify-local without direct evidence flags');
     }
     validateLocalEvidence(recordStatus, recordedEvidence, evidencePolicy);
+    assertBaselineCommits(context, recordedEvidence);
     recordLocalVerification(context.progressFile, {
       source: context.source,
       status: recordStatus,
@@ -152,6 +168,7 @@ export function runLocalVerification({
     const result = invokeLocalVerifyDriver({ driver, workspaceRoot: context.workspaceRoot, payload, attempt });
     assertVerificationWorktrees(context);
     const evidence = result.evidence || [];
+    assertBaselineCommits(context, evidence);
     recordLocalVerification(context.progressFile, {
       source: context.source,
       status: result.status,

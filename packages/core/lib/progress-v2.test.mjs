@@ -571,7 +571,7 @@ test('local verification mutation rejects unstructured and contradictory results
       const old = structuredClone(valid);
       old.local_verification.attempts.at(-1).evidence = evidence;
       writeProgressV2(file, old);
-      assert.throws(() => recordConsolidatedReview(file, { source: { api: 'abc123' }, status: 'passed' }), /structured evidence|may contain only passed evidence/);
+      assert.throws(() => recordConsolidatedReview(file, { source: { api: 'abc123' }, status: 'passed' }), /structured evidence|may contain only passed or baseline_failed evidence/);
       assert.equal(readProgressV2(file).review.status, 'idle');
     }
     const newerFailure = structuredClone(valid);

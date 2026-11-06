@@ -69,6 +69,18 @@ export function validateLocalEvidence(status, evidence, { allowTestDefer = false
         || !Number.isInteger(item.exit_code) || (item.result === 'passed' ? item.exit_code !== 0 : item.exit_code === 0)) {
         throw new Error(`[cc-nexs] ${item.result === 'passed' ? 'passing' : 'failing'} local evidence requires check, command, ${item.result === 'passed' ? 'exit_code=0' : 'a nonzero integer exit_code'}, and proof`);
       }
+    } else if (item.result === 'baseline_failed') {
+      // The same command already fails on the candidate's merge-base: a pre-existing base
+      // failure is recorded and shown at Gateway B instead of blocking every task on it.
+      if (typeof item.command !== 'string' || !item.command.trim()
+        || typeof item.proof !== 'string' || !item.proof.trim()
+        || !Number.isInteger(item.exit_code) || item.exit_code === 0
+        || typeof item.repository !== 'string' || !item.repository.trim()
+        || typeof item.baseline_commit !== 'string' || !/^[0-9a-f]{40}$/.test(item.baseline_commit)
+        || !Number.isInteger(item.baseline_exit_code) || item.baseline_exit_code === 0
+        || typeof item.baseline_proof !== 'string' || !item.baseline_proof.trim()) {
+        throw new Error('[cc-nexs] baseline_failed evidence requires check, command, nonzero exit_code, proof, repository, the 40-character baseline_commit, a nonzero baseline_exit_code, and baseline_proof');
+      }
     } else if (item.result !== 'deferred_to_test' || !allowTestDefer
       || typeof item.reason !== 'string' || !item.reason.trim()
       || typeof item.test_action !== 'string' || !item.test_action.trim()) {
@@ -83,16 +95,16 @@ export function validateLocalEvidence(status, evidence, { allowTestDefer = false
     }
   }
   if (status === 'failed') {
-    if (!evidence.some((item) => item.result === 'failed') || evidence.some((item) => !['passed', 'failed'].includes(item.result))) {
-      throw new Error('[cc-nexs] a failed local verification requires at least one failed command and may contain only passed or failed evidence');
+    if (!evidence.some((item) => item.result === 'failed') || evidence.some((item) => !['passed', 'failed', 'baseline_failed'].includes(item.result))) {
+      throw new Error('[cc-nexs] a failed local verification requires at least one failed command and may contain only passed, failed, or baseline_failed evidence');
     }
     return;
   }
-  if (status === 'passed' && evidence.some((item) => item.result !== 'passed')) {
-    throw new Error('[cc-nexs] a passing local verification may contain only passed evidence');
+  if (status === 'passed' && evidence.some((item) => !['passed', 'baseline_failed'].includes(item.result))) {
+    throw new Error('[cc-nexs] a passing local verification may contain only passed or baseline_failed evidence');
   }
   if (status === 'deferred_to_test' && (!evidence.some((item) => item.result === 'deferred_to_test')
-    || evidence.some((item) => !['passed', 'deferred_to_test'].includes(item.result)))) {
+    || evidence.some((item) => !['passed', 'deferred_to_test', 'baseline_failed'].includes(item.result)))) {
     throw new Error('[cc-nexs] deferred local verification requires structured test deferral evidence');
   }
   if (!evidence.some((item) => item.result === 'passed' && item.method !== 'browser')) {

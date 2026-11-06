@@ -142,7 +142,7 @@ test('Lean local verification invokes the configured driver and binds evidence t
       type: 'p3_boundary', check: 'failed-smoke', result: 'failed', command: 'node smoke.mjs', exit_code: 1, proof: 'smoke failed',
     }];
     writeProgressV2(progressFile, invalidReviewEvidence);
-    assert.throws(() => recordLeanReview({ cwd: root, featureId: '30', progressPath: progressFile, status: 'passed' }), /may contain only passed evidence/);
+    assert.throws(() => recordLeanReview({ cwd: root, featureId: '30', progressPath: progressFile, status: 'passed' }), /may contain only passed or baseline_failed evidence/);
 
     const documentReview = structuredClone(beforeReview);
     documentReview.state = 'LOCAL_VERIFYING';
@@ -530,4 +530,56 @@ test('local verification driver rejects empty, contradictory, incomplete, and un
   }
   assert.throws(() => extractLocalVerificationChecks('| Check | Command |\n|---|---|\n| LV-001 | |'), /unique Check IDs and exact nonempty commands/);
   assert.deepEqual(extractLocalVerificationChecks('| Check | Command |\n|---|---|\n| LV-001 | `test ready \\|\\| exit 1` |'), [{ check: 'LV-001', command: 'test ready || exit 1' }]);
+});
+
+test('a failure that already happens on the merge-base is recorded as baseline_failed, not a blocker', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-local-verify-baseline-'));
+  const api = join(root, 'api');
+  const docs = join(root, 'docs', 'doc', '32.baseline');
+  try {
+    mkdirSync(join(root, '.cc-nexs'), { recursive: true });
+    mkdirSync(api, { recursive: true });
+    mkdirSync(docs, { recursive: true });
+    writeFileSync(join(root, '.cc-nexs', 'workspace.yml'), [
+      'version: 1', 'docs_repository: docs', 'repositories:',
+      '  - id: docs', '    path: docs', '    docs: true',
+      '  - id: api', '    path: api', '    base_branch: main', '    test_branch: test',
+    ].join('\n'));
+    writeFileSync(join(root, 'cc-nexs.config.json'), '{}\n');
+    git(api, ['init', '-b', 'main']);
+    git(api, ['config', 'user.name', 'Test User']);
+    git(api, ['config', 'user.email', 'test@example.com']);
+    writeFileSync(join(api, 'legacy.ts'), 'const broken: number = "x";\n');
+    git(api, ['add', '.']); git(api, ['commit', '-m', 'base with an existing type error']);
+    const base = git(api, ['rev-parse', 'HEAD']);
+    git(api, ['update-ref', 'refs/remotes/origin/main', base]);
+    git(api, ['checkout', '-b', 'feature/32-baseline']);
+    writeFileSync(join(api, 'feature.ts'), 'export const ok = 1;\n');
+    git(api, ['add', '.']); git(api, ['commit', '-m', 'feature']);
+    const commit = git(api, ['rev-parse', 'HEAD']);
+    const candidateRef = 'refs/cc-nexs/candidates/32-baseline/api';
+    git(api, ['update-ref', candidateRef, commit]);
+    writeFileSync(join(docs, 'requirements.md'), '# Requirements\n\n- AC-001\n');
+    writeFileSync(join(docs, 'plan.md'), ['# Plan', '<!-- APPROVAL-SCOPE START -->', '- risk_tier: medium', '- delivery_lane: fast-track', '<!-- APPROVAL-SCOPE END -->', ''].join('\n'));
+    writeFileSync(join(docs, 'progress.md'), '## 当前状态\n\n```yaml\ncurrent_state: IMPLEMENTING\nupdated_at: null\n```\n\n## 历史轨迹\n\n- (尚无)\n');
+    const progress = createProgressV2({ featureId: '32', featureSlug: 'baseline', preset: 'preset-standard' });
+    progress.state = 'IMPLEMENTING';
+    progress.gates.plan = { approved: true, binding: planApprovalBinding(docs) };
+    progress.repositories.api = { branch: 'feature/32-baseline', worktree: 'api', base_branch: 'main', candidate: { commit, ref: candidateRef, paths: ['feature.ts'] } };
+    const progressFile = join(docs, 'progress.json');
+    writeProgressV2(progressFile, progress);
+    const passed = { check: 'unit', result: 'passed', command: 'npm test -- feature', exit_code: 0, proof: '3 passed' };
+    const baseline = (baselineCommit) => ({
+      check: 'typecheck', result: 'baseline_failed', command: 'tsc --noEmit', exit_code: 2, proof: 'legacy.ts(1,7): TS2322 (1 error)',
+      repository: 'api', baseline_commit: baselineCommit, baseline_exit_code: 2, baseline_proof: 'legacy.ts(1,7): TS2322 (1 error) on the merge-base',
+    });
+    const record = (item) => runCcNexsCommand(['verify-local', '32', '--passed', '--evidence-json', JSON.stringify(passed), '--evidence-json', JSON.stringify(item), '--progress', progressFile], { cwd: root });
+    assert.throws(() => record(baseline(commit)), /baseline_commit must be the candidate's merge-base with origin\/main/);
+    assert.throws(() => record({ ...baseline(base), baseline_proof: '' }), /baseline_failed evidence requires/);
+    const result = record(baseline(base));
+    assert.equal(result.status, 'passed');
+    assert.equal(readProgressV2(progressFile).local_verification.attempts.at(-1).evidence[1].result, 'baseline_failed');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
