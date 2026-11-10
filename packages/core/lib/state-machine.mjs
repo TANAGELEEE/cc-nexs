@@ -455,10 +455,14 @@ const HOTFIX_OUTCOMES = {
 
 // Whether `advance` may move a task from `from` to `to` without a recovery authorization.
 // Escalating to HUMAN_INTERVENTION is always allowed; leaving it is a human decision.
-export function isAllowedTransition({ mode, from, to, next }) {
+export const REVIEW_STATES = new Set(['CONSOLIDATED_REVIEW', 'REVIEW_CLOSURE', 'GATEWAY_B_DELTA_REVIEW', 'HOTFIX_REVIEWING', 'HOTFIX_DELTA_REVIEW']);
+
+export function isAllowedTransition({ mode, from, to, next, reviewRequired = true }) {
   if (to === 'HUMAN_INTERVENTION') return true;
   if (from === 'HUMAN_INTERVENTION') return false;
   if (to === next) return true;
+  // A Review state is an outcome only for a candidate that needs a Review.
+  if (!reviewRequired && REVIEW_STATES.has(to)) return false;
   const outcomes = mode === 'hotfix' ? HOTFIX_OUTCOMES : LEAN_OUTCOMES;
   return (outcomes[from] || []).includes(to);
 }

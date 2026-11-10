@@ -158,7 +158,7 @@ export function advanceFeatureState({ cwd = process.cwd(), featureId, progressPa
   const status = featureStatus({ cwd, featureId, progressPath });
   const markdown = join(dirname(status.progressFile), 'progress.md');
   if (!existsSync(markdown)) throw new Error(`[cc-nexs] progress.md not found beside ${status.progressFile}`);
-  if (status.input.state === from && !isAllowedTransition({ mode: status.input.mode, from, to, next: status.next.next })) {
+  if (status.input.state === from && !isAllowedTransition({ mode: status.input.mode, from, to, next: status.next.next, reviewRequired: status.input.workflow.review.required })) {
     if (!recover) {
       throw new Error(`[cc-nexs] ${from} -> ${to} is not a workflow transition (next: ${status.next.next}). Run the controller for the current step; a human-authorized recovery uses --recover --authorization-evidence "<the user's instruction>"`);
     }
