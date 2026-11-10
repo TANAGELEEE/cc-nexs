@@ -92,13 +92,22 @@ export function buildWorkflowSnapshot({ cwd = process.cwd(), featureId, progress
   };
 }
 
+// Event types the controllers write. Anything else in the ledger was written around them
+// (a script importing controller modules), and the state it claims was never checked.
+const CONTROLLER_EVENT = /^(?:state\.(?:transition|recovery_authorized)|gate\.[a-z_.]+|plan\.(?:reviewed|amendment_requested|amendment_reviewed)|review\.[a-z_]+|local_verification\.[a-z_]+|repository\.candidate_(?:prepared|recorded)|workspace\.worktrees_created|base\.(?:synced|sync_carry_recorded|sync_carry_completed)|derived\.bound|counters\.updated|migration\.[a-z_]+|hotfix\.(?:scope_[a-z_]+|promoted_to_lean)|delivery\.base\.[a-z_]+|delivery\.test\.(?:started|awaiting_receipt|deploying|succeeded|failed|merge_conflict|merge_conflict_resolved|conflicts_auto_resolved|receipt_recovery|repository_integrated|retry_requested|target_advanced|target_changed|target_shared|verification_[a-z_]+))$/;
+
+export function unrecognizedEvents(progress) {
+  return [...new Set((progress.events || []).map((event) => event.type).filter((type) => !CONTROLLER_EVENT.test(type)))];
+}
+
 export function featureStatus(options = {}) {
   const snapshot = buildWorkflowSnapshot(options);
-  const milestones = deliveryMilestones(readProgressV2(snapshot.progressFile));
+  const progress = readProgressV2(snapshot.progressFile);
+  const milestones = deliveryMilestones(progress);
   let taskFiles = null;
   try { taskFiles = taskFilesDir(findWorkspaceRoot(options.cwd || process.cwd(), snapshot.progressFile), snapshot.feature.id); } catch {}
   const postRelease = pendingPostRelease(snapshot.progressFile);
-  return { kind: 'feature-status', ...snapshot, milestones, taskFiles, postRelease, next: nextStep(snapshot.input) };
+  return { kind: 'feature-status', ...snapshot, milestones, taskFiles, postRelease, unrecognizedEvents: unrecognizedEvents(progress), next: nextStep(snapshot.input) };
 }
 
 // Steps the plan lists for after the base merge (production deploy, data

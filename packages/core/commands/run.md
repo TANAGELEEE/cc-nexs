@@ -64,55 +64,29 @@ After resolving mode, **Read exactly one** file relative to the active plugin ro
 
 The selected rule is authoritative for mode-specific dispatch, state parsing, human gates, circuit behavior, and release evidence. Continue using this common controller for shared safety and persistence.
 
-## 2. Load one coherent runtime snapshot
+## 2. Drive the task through the CLI
 
-Use `loadConfig({ projectRoot: pwd })`. Resolve:
+Every controller step is a `cc-nexs` command (`node <plugin-root>/lib/cc-nexs-cli.mjs <command>`). `status <id>` prints the state, the Review requirement and the next step; each step's rule names its command. Do not import files under `<plugin-root>/lib`, call `nextStep`/`appendProgressEvent` yourself, edit `progress.json`, or write per-task control, gateway or driver scripts: state reached that way was never checked, and `status` reports the events it left. When a step seems to have no command, stop and report it instead of scripting around it. Files a task needs (requests, logs, screenshots) go under the `Task files` directory that `status` prints, rebuildable copies in its `scratch/`; create no other directories under `.cc-nexs/` and no worktrees besides the assigned ones.
 
-- `preset.modes[MODE].enabled`, falling back to `preset.roles.enabled`
-- `preset.modes[MODE].state_machine` (`lean` or `hotfix`)
-- mode threshold overrides on `preset.workflow.thresholds`
-- `i18n.locale`
+Resolve the model for the roles about to run with one command, at the workspace root:
 
-Resolve each dispatched role from a fresh coherent snapshot:
-
-```js
-const progressV2 = readProgressV2(PROGRESS_JSON);
-const featureConfig = JSON.parse(readFileSync(join(REQ_DIR, 'config.json'), 'utf8'));
-const planText = MODE === 'lean' && existsSync(join(REQ_DIR, 'plan.md'))
-  ? readFileSync(join(REQ_DIR, 'plan.md'), 'utf8')
-  : '';
-if (MODE === 'lean' && progressV2.gates?.plan?.approved) {
-  assertPlanApprovalCurrent(progressV2, REQ_DIR);
-}
-// Run at the workspace root. hostContext identifies the non-secret account,
-// executor surface, active model and provider configuration revision.
-const saved = modelGateway('inspect', { runtime, context: hostContext }, { cwd: workspaceRoot });
-// Discover only missing executor catalogs; reuse saved.catalogs otherwise.
-// tasks includes {role, difficulty, reason, proposal?}; omit proposals when
-// reusing a successful combination, unless there is a justified change.
-const prepared = modelGateway('prepare', {
-  runtime, context: hostContext, preset, catalogs: missingCatalogs, tasks,
-  options: { models: mergedModels, featureConfig, progress: progressV2, planText },
-}, { cwd: workspaceRoot });
-// Show prepared.preview/table only if prepared.showPreview; do not await approval.
-// Apply actual user feedback already received before start.
-const frozen = modelGateway('start', {
-  runtime, context: hostContext, batchId: prepared.batch.id,
-}, { cwd: workspaceRoot });
-const roleRuntime = frozen.batch.rows.find((row) => row.role === role).selection;
+```text
+node <plugin-root>/lib/cc-nexs-cli.mjs dispatch <id> --role <role> [--role <role>] --reason "<what the task is>" [--difficulty routine|moderate|complex]
 ```
+
+It reads the workspace config, feature `config.json`, progress and plan, applies risk routing and remembered choices, and prints each role's model, effort and fallbacks with a batch id. Dispatch those selections. After a role really ran, record it: `dispatch-result <id> --batch <batch> --role <role> --outcome succeeded|task-failed|model-unavailable --evidence "<what ran>"`. A Lean task with an approved plan must still pass `assertPlanApprovalCurrent` (the gate commands check it).
 
 Do not pre-merge `featureConfig.models.roles` into `mergedModels`. Automatic routing follows public/overlay/project defaults, then the explicit feature role override is applied last. Trusted plan/hotfix risk may raise but never lower severity. Lean high/critical and Hotfix P0/P1 Reviewer routing uses `escalated`; `models.routing.enabled: false` is the explicit opt-out.
 
-Before dispatch, follow `rules/model-discovery.md` for every mode and role, not only Lean. Use the advisory `modelGateway` protocol above for single-step role commands as well. Reuse workspace-local catalog and successful combinations before discovery. The preview is not a new human approval state: absent feedback, start immediately; do not poll, sleep, or end the turn awaiting a response. Feedback received after start applies to the next batch. Model selection is operational metadata, not approval scope: a catalog refresh never invalidates completed Review, tests, or user approval. Overlay is optional and is not a required model registry; preserve its existing project, release, and explicit model restrictions.
+Before dispatch, follow `rules/model-discovery.md` for every mode and role, not only Lean. Use `dispatch` for single-step role commands as well. Reuse workspace-local catalog and successful combinations before discovery. The preview is not a new human approval state: absent feedback, start immediately; do not poll, sleep, or end the turn awaiting a response. Feedback received after start applies to the next batch. Model selection is operational metadata, not approval scope: a catalog refresh never invalidates completed Review, tests, or user approval. Overlay is optional and is not a required model registry; preserve its existing project, release, and explicit model restrictions.
 
-Claude uses `model`/`effort`, Codex uses `model`/`reasoning_effort`, and Pi uses `model`/`thinking` plus ordered `fallback_models`. `inherit` keeps the active runtime model. Record risk tier/source/signals, plan binding status, `matched_rules`, feature profile override, effective profile/model/effort, and fallback chain in dispatch evidence; show the model table only on first use or selection change. Re-resolve policy at stage boundaries without re-querying an unchanged host catalog. Record each real role result through `modelGateway('result', ...)`: learn only `succeeded`, preserve catalog on `task-failed`, invalidate the affected executor catalog on `model-unavailable`. Never mark a proposal as successfully dispatched.
+Claude uses `model`/`effort`, Codex uses `model`/`reasoning_effort`, and Pi uses `model`/`thinking` plus ordered `fallback_models`. `inherit` keeps the active runtime model. Record risk tier/source/signals, plan binding status, `matched_rules`, feature profile override, effective profile/model/effort, and fallback chain in dispatch evidence; show the model table only on first use or selection change. Re-resolve policy at stage boundaries without re-querying an unchanged host catalog. Record each real role result through `dispatch-result`: learn only `succeeded`, preserve catalog on `task-failed`, invalidate the affected executor catalog on `model-unavailable`. Never mark a proposal as successfully dispatched.
 
 Every dispatch gets `CC_NEXS_REQ_DIR=<absolute-feature-doc-dir>/` and the repository-id → assigned-worktree map. Treat old `all-docs/doc/<id>` wording as logical notation, not topology.
 
 ### Construct `workflow`
 
-Rebuild the snapshot before each `nextStep()` call with `buildWorkflowSnapshot({ cwd, featureId, noAutoTestRelease })` from `lib/workflow-snapshot.mjs`, or run `node <plugin-root>/lib/cc-nexs-cli.mjs status <id> [--no-auto-test-release]`, which prints the state, revision and `nextStep()` result. The snapshot reads only authoritative progress.json, feature `config.json` and the loaded config:
+Before each step run `node <plugin-root>/lib/cc-nexs-cli.mjs status <id> [--no-auto-test-release]`, which prints the state, revision and `nextStep()` result. The snapshot reads only authoritative progress.json, feature `config.json` and the loaded config:
 
 - `plan_approved`, `delivery_lane` and `release_approved` come from the plan/release gates.
 - `review.exact` is true only when a passed/blocked Review, the current local candidate fingerprint and the latest local attempt for it are the same fingerprint.
@@ -128,7 +102,7 @@ New features default to `auto_if_ready`. An explicit project/overlay `manual` or
 Repeat until terminal or stopped:
 
 1. Re-read authoritative state/revision, config, active documents, role routing, counters, and workflow.
-2. Call `nextStep({ state, counters, thresholds, enabledRoles, humanGateApproved, workflow, mode })`.
+2. Run `cc-nexs status <id>`; it prints the next step `{ next, role, action, stop, circuitBreaker }`.
 3. Apply the active mode rule to the returned `{ next, role, action, stop, circuitBreaker }`.
 4. A circuit breaker appends its diagnostic event and required changelog. Dispatch a role only through the active rule's mapping.
 5. Parent control actions are deterministic:
@@ -145,7 +119,7 @@ Repeat until terminal or stopped:
    - `continue`, `continue_to_test`, and `noop` → no role/tool side effect; apply only the returned state movement.
    - `unknown_state` or `unknown_phase` → stop as a genuine controller failure and report the exact mode/state; never guess a transition.
 6. Let the completed action determine `effectiveNext` (normally the returned `next`; `verify_local` failure uses the active rule's explicit failure state). Re-read authoritative progress, then persist `effectiveNext` **before** honoring `stop: true`. If the current state is still the captured `state` and `effectiveNext !== state`, run `cc-nexs advance <id> --from <state> --to <effectiveNext> --reason <text>` (one or two plain sentences, at most 300 characters; details belong in the plan) (equivalent to `transitionState(PROGRESS_MD, { from: state, to: effectiveNext, reason })`) exactly once; it rejects a stale `--from`—even when the action persisted evidence and incremented revision—and any `--to` that is neither the returned `next` nor a defined outcome of the action (parse results, local-verification failures, release results, base drift). Leaving `HUMAN_INTERVENTION`, or any other jump, needs the user's decision: `--recover --authorization-evidence "<the user's instruction>"`, recorded as `state.recovery_authorized`. Never use `--recover` to skip a controller step. This covers boundaries such as `TEST_VERIFIED -> RELEASE_PENDING_HUMAN` and `TEST_RELEASE -> *_BLOCKED|*_DEPLOYED_NEEDS_MANUAL_VERIFY`; returning first would strand progress in the prior state. If a controller already changed state to `effectiveNext`, do not append a synthetic transition. Any third state is stale/conflicting: discard the decision, rebuild the snapshot, and call `nextStep()` again.
-7. Exact candidate fingerprint, attempt, evidence, and from-state checks make reruns idempotent. Never redispatch a completed role, re-integrate a candidate, retrigger CI, or append a transition already reflected in authoritative state. Release actions that only update delivery status must be re-read and routed by `nextStep()`; they never receive an invented same-state transition.
+7. Exact candidate fingerprint, attempt, evidence, and from-state checks make reruns idempotent. Never redispatch a completed role, re-integrate a candidate, retrigger CI, or append a transition already reflected in authoritative state. Release actions that only update delivery status must be re-read and routed by `cc-nexs status`; they never receive an invented same-state transition.
 8. Only after step 6/7, if `stop: true`, run `node <plugin-root>/lib/cc-nexs-cli.mjs share-progress <id>` when the workspace has a docs repository (a failure to push is reported, never a stop of its own), then render the active rule's summary from the newly persisted state and return. Otherwise the loop continues immediately. The shared snapshot lets `stats --all --remote` see tasks running on other machines.
 
 A stop returns orchestration control; it is not a tool lock. The user-authorized parent session may still inspect status, prepare documents or deployment, and use Git/SQL/SSH as separately authorized.

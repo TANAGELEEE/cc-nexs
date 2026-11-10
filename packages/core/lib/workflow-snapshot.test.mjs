@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 import { runCcNexsCommand } from './cc-nexs-cli.mjs';
 import { createProgressV2, readProgressV2, writeProgressV2 } from './progress-v2.mjs';
-import { advanceFeatureState, buildWorkflowSnapshot, featureStatus } from './workflow-snapshot.mjs';
+import { advanceFeatureState, buildWorkflowSnapshot, featureStatus, unrecognizedEvents } from './workflow-snapshot.mjs';
 
 function fixture(mutate = () => {}) {
   const root = mkdtempSync(join(tmpdir(), 'cc-nexs-snapshot-'));
@@ -121,4 +121,12 @@ test('advance refuses a jump the workflow does not take unless a human authorize
       assert.deepEqual(recovered.events.at(-2).data, { from: 'HUMAN_INTERVENTION', to: 'PLANNING', authorization_evidence: 'user: replan with the new scope' });
     });
   } finally { rmSync(current.root, { recursive: true, force: true }); }
+});
+
+test('events no controller writes are reported', () => {
+  const events = ['state.transition', 'delivery.test.verification_passed', 'review.closure_passed', 'local_verification.deferred_to_test', 'hotfix.scope_revised', 'gate.release.change_requested.scope']
+    .map((type) => ({ type }));
+  assert.deepEqual(unrecognizedEvents({ events }), []);
+  assert.deepEqual(unrecognizedEvents({ events: [...events, { type: 'hotfix.review_accepted' }, { type: 'delivery.test.priority_repair_authorized' }, { type: 'runtime.migrated' }] }),
+    ['hotfix.review_accepted', 'delivery.test.priority_repair_authorized', 'runtime.migrated']);
 });
