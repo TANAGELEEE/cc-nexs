@@ -5,6 +5,8 @@ allowed-tools: "Read, Write, Edit, Bash, Task"
 argument-hint: "[requirement ID] [--closure|--gateway-b-delta]"
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # /cc-nexs:lean-review
 
 First use `assertPlanApprovalCurrent` to verify the Gateway A hash, then resolve `lean-reviewer` from the bound `risk_tier`: `resolveRoleRuntime(..., {models: mergedModels, featureConfig, progress: progressV2, planText})`. `high|critical` automatically hits `escalated`; an explicit feature profile ultimately takes precedence. Print the risk source, matched rule, and final profile/model/effort. This routing applies to native panel reviewers without their own `profile`/`model`, and to the Judge. Every reviewer and the Judge run in their own independent sessions.

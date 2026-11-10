@@ -9,6 +9,7 @@
 
 import { matchAny } from './build-selector.mjs';
 import { isSensitivePlanPath } from './plan-contract.mjs';
+import { REVIEW_STATES } from './state-machine.mjs';
 
 export const REVIEW_POLICIES = new Set(['risk', 'always']);
 
@@ -39,4 +40,15 @@ export function reviewRequirement(progress, review = {}) {
 export function reviewSatisfied(progress, fingerprint, requirement) {
   if (!requirement.required) return true;
   return progress.review?.status === 'passed' && progress.review.candidate_fingerprint === fingerprint;
+}
+
+// The Review commands and `advance` refuse a Review nobody asked for: an unrequired one
+// costs a reviewer panel and a Judge and, when it blocks, a repair round that test
+// verification was meant to decide. A task already in a Review state may finish it.
+export function assertReviewRequired(progress, review = {}) {
+  const need = reviewRequirement(progress, review);
+  if (!need.required && !REVIEW_STATES.has(progress.state)) {
+    throw new Error(`[cc-nexs] no Review is required for this candidate (${need.reasons.join('; ')}); continue to test (cc-nexs status shows the next step). review.policy: always reviews every task`);
+  }
+  return need;
 }

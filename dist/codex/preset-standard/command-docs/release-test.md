@@ -5,6 +5,8 @@ allowed-tools: "Read, Bash, Skill, Task, mcp__chrome-devtools__*"
 argument-hint: "<feature-id> [--resume [--wait[=<minutes>]] | --retry | --dry-run] [--hotfix]"
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # /cc-nexs:release-test
 
 This is the deterministic test delivery action for an exact candidate. Lean invokes it after deterministic local checks, and after the consolidated Review when the review policy requires one. It never targets production.
@@ -49,7 +51,7 @@ node <plugin-root>/lib/cc-nexs-cli.mjs release-test <feature-id> --resume --wait
 
 Hotfix resume also includes `--hotfix`.
 
-The same driver receives `operation=release_test_status` plus the previous attempt evidence and returns `pending`, `succeeded`, or `failed`. Combined evidence across start/poll must name a non-empty pipeline. A later pipeline (another task's push to the same test branch) may take over: when it deploys a test commit containing this integration it proves the candidate, and the earlier pipeline is kept in `superseded_pipelines`. Terminal deployment must name environment `test`, and every deployed repository's `environment_revision` must be its recorded integration commit or a later test commit that contains it (a short SHA is accepted). The controller records the full deployed commit and whether it was `exact` or `contains`.
+The same driver receives `operation=release_test_status` plus the previous attempt evidence and returns `pending`, `succeeded`, or `failed`. Combined evidence across start/poll must name a non-empty pipeline. A later pipeline (another task's push to the same test branch) may take over: when it deploys a test commit containing this integration it proves the candidate, and the earlier pipeline is kept in `superseded_pipelines`. When the recorded pipeline is canceled, skipped, or still waiting while a later pipeline on the same test branch has run, look for that later pipeline yourself before reporting a block: record it (`record-receipt ... --deploy-pipeline <later id> --revision <deployed commit>` with the receipts driver) and resume. Do not wait for the user to point at it. Terminal deployment must name environment `test`, and every deployed repository's `environment_revision` must be its recorded integration commit or a later test commit that contains it (a short SHA is accepted). The controller records the full deployed commit and whether it was `exact` or `contains`.
 
 A driver timeout or missing authenticated CI receipt records `awaiting_receipt`, not a product failure. `--resume` can also recover a legacy failed attempt with complete integration evidence and no product verification failure: it preserves the old reason in recovery history, queries `release_test_status` for that same attempt, and validates pipeline/environment revision before accepting success. It does not start a new deployment.
 

@@ -4,6 +4,8 @@ description: "Verify the read/write boundaries and independent-session requireme
 disable-model-invocation: true
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # Role Boundaries
 
 First determine the current mode and the dispatched role, then read the corresponding agent file and its read/write contract. Role registration and runtime selection are resolved by `lib/role-registry.mjs`, `lib/runtime-resolver.mjs`, and preset.yml; do not infer a fixed model or tool set from historical role names.

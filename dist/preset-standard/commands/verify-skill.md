@@ -5,6 +5,8 @@ allowed-tools: "Read, Write, Edit, Glob, Grep, Bash"
 argument-hint: "<repository-id> [--docs|--workspace] [--refresh]"
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # /cc-nexs:verify-skill
 
 Verification is the main gate, so each code repository needs a scripted, repeatable way to drive the real app and prove behavior. This command writes that as plain Markdown inside the repository, readable by Claude Code, Codex, and Pi alike:

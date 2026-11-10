@@ -4,6 +4,8 @@ description: "cc-nexs candidate commit constraints. The Git Custodian commits th
 disable-model-invocation: true
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # Candidate Commits
 
 Follow `rules/git-custodian-boundary.md`. Roles return the exact modified paths and check results, and the Orchestrator invokes the Git Custodian; this skill does not perform Git mutations directly.

@@ -5,6 +5,8 @@ allowed-tools: "Read, Write, Edit, Bash, Glob, Grep, Task, Skill"
 argument-hint: "<bug-key | bug symptom> [--level=P0|P1|P2|P3] [--related=<feature-id>] [--repos=a,b] [--bug-file=<docs-relative.md>]"
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # /cc-nexs:hotfix
 
 Hotfix uses an independent fix branch and BUG document; it does not consume a shared requirement ID and does not publish a placeholder directory. When the argument is an existing bug-key with `mode=hotfix` or a legacy ID, resume the original task; when the argument is a bug description, first determine the affected repositories and slug, then run:
@@ -44,7 +46,7 @@ INIT -> HOTFIX_IMPLEMENTING -> HOTFIX_IMPLEMENTED -> HOTFIX_LOCAL_VERIFYING
 -> HOTFIX_TEST_VERIFIED -> HOTFIX_RELEASE_PENDING_HUMAN
 -> /approve-release -> HOTFIX_BASE_MERGING -> COMPLETE
 ```
-The Orchestrator calls `nextStep` with `progress.json.mode=hotfix`. Developer, Reviewer, and Verifier each use a dedicated role; review and verification must be performed in independent sessions. During the implementation phase, only the bound paths are modified; Git Custodian records the exact candidate and then executes:
+The Orchestrator reads each next step from `cc-nexs status <id>`. Developer, Reviewer, and Verifier each use a dedicated role; review and verification must be performed in independent sessions. During the implementation phase, only the bound paths are modified; Git Custodian records the exact candidate and then executes:
 ```text
 node <plugin-root>/lib/cc-nexs-cli.mjs verify-local <id>
 ```
@@ -56,7 +58,7 @@ node <plugin-root>/lib/cc-nexs-cli.mjs record-review <id> --document-findings
 ```
 Before test verification, run `node <plugin-root>/lib/cc-nexs-cli.mjs verify-guides <id>` and give the Verifier each candidate repository's verification guide and the feature-map entries the BUG touches. Review checks the complete candidate and invocation surface in one pass: every `review.panel` reviewer on the same brief (`review-panel`, then `record-reviewer` or `run-reviewer`) and one Judge, following `rules/review-findings.md`; the Judge reruns each P0/P1 command and writes the `cc-nexs-review` block, the controller derives the status, and unproven P0/P1 scenarios go to the Verifier as `probe:<finding-id>`. After fixes, enter `HOTFIX_DELTA_REVIEW` and check the corresponding delta with `--document-findings --closure`. Follow the state machine's existing circuit breakers; for scope revisions already authorized by the user, rebind per Section 4, and do not evade state by hand-editing counters or reopening numbers. P2/P3 skip Review unless `review.policy: always`; a configured `verify.panel` verifies a Hotfix like Lean (`record-test-verification --verifier-json`).
 
-Each dispatch uses `resolveRoleRuntime(preset, role, runtime, {models: mergedModels, featureConfig, progress: progressV2})`. By default, Developer=`balanced`, Reviewer=`review`, and Verifier=`balanced`; the Reviewer for P0/P1 is automatically routed to `escalated`. The same model with higher effort/thinking, or a different model, is allowed; the hard constraint is session isolation. Explicit overrides in the feature `models.roles` take final precedence, and public defaults do not pin model IDs.
+Each dispatch resolves its model with `cc-nexs dispatch <id> --role <role> --reason "<task>"`. By default, Developer=`balanced`, Reviewer=`review`, and Verifier=`balanced`; the Reviewer for P0/P1 is automatically routed to `escalated`. The same model with higher effort/thinking, or a different model, is allowed; the hard constraint is session isolation. Explicit overrides in the feature `models.roles` take final precedence, and public defaults do not pin model IDs.
 
 ## 3. Test, Gateway B, and Completion
 

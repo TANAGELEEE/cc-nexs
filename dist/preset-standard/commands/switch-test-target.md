@@ -5,6 +5,8 @@ allowed-tools: "Read, Bash"
 argument-hint: "--request <json-file>"
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # /cc-nexs:switch-test-target
 
 Run `node <plugin-root>/lib/cc-nexs-cli.mjs switch-test-target --request <json-file>`.

@@ -5,6 +5,8 @@ allowed-tools: "Read, Bash"
 argument-hint: "[feature_id]"
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # /cc-nexs:release-base
 
 Only `/cc-nexs:run` may invoke this after Gateway B. Resolve the packaged CLI and run:

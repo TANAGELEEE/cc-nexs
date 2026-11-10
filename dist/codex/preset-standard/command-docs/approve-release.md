@@ -5,6 +5,8 @@ allowed-tools: "Read, Bash"
 argument-hint: "<id> [--test-exception --authorization-evidence <text> --reason <text> --environment-evidence <text> --rollback-evidence <text>]"
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # /cc-nexs:approve-release
 
 Human release Gateway B for Lean and Hotfix. Resolve the packaged CLI and record the user's authorization:

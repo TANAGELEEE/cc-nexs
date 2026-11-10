@@ -4,6 +4,8 @@ description: "Guides new features, cross-module requirements, full development-t
 disable-model-invocation: true
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # Using cc-nexs
 
 Use `commands/*.md` as the source of truth for the workflow. Claude Code, Codex, and Pi only adapt entry points and role tooling; they must not fork state, artifacts, or Git semantics.

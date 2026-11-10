@@ -5,6 +5,8 @@ allowed-tools: "Read, Bash, mcp__chrome-devtools__*"
 argument-hint: "[feature_id] [--preflight|--passed|--failed|--deferred-to-test] [--evidence-json <json>]..."
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # /cc-nexs:verify-local
 
 Resolve the packaged CLI and run:

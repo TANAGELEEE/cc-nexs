@@ -4,6 +4,8 @@ description: "Compatibility entry for worktree requests. Delegates all repositor
 disable-model-invocation: true
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # Worktrees through Git Custodian
 
 Do not run Git mutation commands in this skill. Load `.cc-nexs/workspace.yml`; the Orchestrator must invoke `/cc-nexs:git-custodian reserve` first and may invoke `create` only after the phase-one docs reservation is visible on the remote docs base.

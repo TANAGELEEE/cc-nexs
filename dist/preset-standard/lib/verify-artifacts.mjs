@@ -172,10 +172,72 @@ export function classifyTaskFiles({ root, tasks }) {
     const task = tasks.byFeature.get(entry.name);
     const keep = (reason) => entries.push({ kind: 'task-files', path, action: 'keep', reason });
     if (!task) keep('no task state found; inspect manually');
-    else if (task.active) keep(`active task ${entry.name} (${task.state})`);
+    else if (task.active) {
+      keep(`active task ${entry.name} (${task.state})`);
+      // scratch/ holds only rebuildable copies, so an idle one goes even while the task waits.
+      const scratch = join(path, 'scratch');
+      const idle = existsSync(scratch) ? idleDays(scratch) : 0;
+      if (idle >= SCRATCH_IDLE_DAYS && !dirtySourceIn(scratch)) {
+        entries.push({ kind: 'task-scratch', path: scratch, action: 'reclaim', reason: `rebuildable scratch of active task ${entry.name}, idle ${idle} days` });
+      }
+    }
     else if (dirtySourceIn(path)) keep('uncommitted source in task files; inspect manually');
     else entries.push({ kind: 'task-files', path, action: 'reclaim', reason: `task ${entry.name} complete` });
   }
+  return entries;
+}
+
+// Whole days since anything directly inside `dir` (or `dir` itself) last changed.
+export const SCRATCH_IDLE_DAYS = 1;
+export const UNMANAGED_IDLE_DAYS = 7;
+
+export function idleDays(dir, now = Date.now()) {
+  let newest = 0;
+  try {
+    newest = statSync(dir).mtimeMs;
+    for (const name of readdirSync(dir)) {
+      try { newest = Math.max(newest, statSync(join(dir, name)).mtimeMs); } catch {}
+    }
+  } catch { return 0; }
+  return Math.max(0, Math.floor((now - newest) / 86400000));
+}
+
+function taskByPrefix(tasks, name) {
+  let match = null;
+  for (const task of tasks.byFeature.values()) {
+    const id = String(task.id);
+    if ((name === id || name.startsWith(`${id}-`)) && (!match || id.length > String(match.id).length)) match = task;
+  }
+  return match;
+}
+
+// Agents sometimes create their own directories beside the managed ones. Under
+// runtime/ everything is rebuildable by contract, so such a directory is reclaimed once
+// its task is complete or it has sat idle; directly under .cc-nexs/ only one whose task
+// is complete is, and the rest is reported with its age for a person to decide.
+const MANAGED_ROOT = new Set(['backups', 'drafts', 'drivers', 'hotfixes', 'model-dispatch', 'reservations', 'runtime', 'verify']);
+const MANAGED_RUNTIME = new Set(['heavy', 'tasks', 'verify', 'test-conflicts', 'merge-requests']);
+
+export function classifyUnmanaged({ root, tasks }) {
+  const entries = [];
+  const scan = (base, managed, runtime) => {
+    if (!existsSync(base)) return;
+    for (const entry of readdirSync(base, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.isSymbolicLink() || managed.has(entry.name)) continue;
+      const path = join(base, entry.name);
+      const task = taskByPrefix(tasks, entry.name);
+      const idle = idleDays(path);
+      const kind = runtime ? 'unmanaged-runtime' : 'unmanaged';
+      const keep = (reason) => entries.push({ kind, path, action: 'keep', reason });
+      if (task?.active && idle < UNMANAGED_IDLE_DAYS) keep(`active task ${task.id} (${task.state}); not managed by cc-nexs, task files belong in runtime/tasks/${task.id}`);
+      else if (dirtySourceIn(path)) keep('uncommitted source inside; inspect manually');
+      else if (task && !task.active) entries.push({ kind, path, action: 'reclaim', reason: `task ${task.id} complete; not managed by cc-nexs` });
+      else if (runtime && idle >= UNMANAGED_IDLE_DAYS) entries.push({ kind, path, action: 'reclaim', reason: `not managed by cc-nexs; runtime files idle ${idle} days` });
+      else keep(`not managed by cc-nexs, idle ${idle} days; inspect manually`);
+    }
+  };
+  scan(join(root, '.cc-nexs'), MANAGED_ROOT, false);
+  scan(join(root, '.cc-nexs', 'runtime'), MANAGED_RUNTIME, true);
   return entries;
 }
 

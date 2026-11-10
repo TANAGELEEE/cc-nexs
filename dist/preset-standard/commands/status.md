@@ -5,6 +5,8 @@ allowed-tools: "Read, Bash, Glob"
 argument-hint: "[feature_id]"
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # /cc-nexs:status
 
 ## Steps

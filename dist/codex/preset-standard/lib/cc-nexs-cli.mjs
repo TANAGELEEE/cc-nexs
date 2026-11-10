@@ -27,6 +27,7 @@ import { requestPlanAmendment, reviewPlanAmendment } from './plan-amendment.mjs'
 import { runTestRelease, waitForTestRelease } from './test-release.mjs';
 import { recordEnvironmentVerification, verifyPanelStatus } from './test-verification-control.mjs';
 import { migrateFeatureConfig } from './feature-config.mjs';
+import { dispatchRoles, recordDispatchResult } from './dispatch.mjs';
 import { modelGateway } from './model-gateway.mjs';
 import { recordPanelReviewer, reviewPanelStatus, runPanelReviewer } from './review-panel.mjs';
 import { formatInventory, reclaimWorktrees } from './worktree-reclaim.mjs';
@@ -42,6 +43,8 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
     if (args.length !== 3 || args[1] !== '--request') throw new Error('model-gateway <inspect|prepare|view|start|feedback|result> --request <json-file>');
     return modelGateway(args[0], JSON.parse(readFileSync(args[2], 'utf8')), { cwd });
   }
+  if (command === 'dispatch') return dispatchRoles({ cwd, ...parseDispatchOptions(args) });
+  if (command === 'dispatch-result') return recordDispatchResult({ cwd, ...parseDispatchOptions(args) });
   if (command === 'reclaim-worktrees') {
     const options = { sizes: false, confirm: null };
     for (let index = 0; index < args.length; index += 1) {
@@ -372,6 +375,26 @@ function parseReviewerOptions(args) {
   return options;
 }
 
+function parseDispatchOptions(args) {
+  const values = { '--runtime': 'runtime', '--difficulty': 'difficulty', '--reason': 'reason', '--context': 'context', '--batch': 'batchId', '--outcome': 'outcome', '--evidence': 'evidence', '--progress': 'progressPath' };
+  const options = { roles: [], progressPath: null };
+  const positional = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const token = args[index];
+    const equals = token.indexOf('=');
+    const flag = equals < 0 ? token : token.slice(0, equals);
+    const value = () => (equals < 0 ? requireValue(args, ++index, flag) : token.slice(equals + 1));
+    if (flag === '--role') options.roles.push(value());
+    else if (values[flag]) options[values[flag]] = value();
+    else if (token.startsWith('-')) throw new Error(`unknown option: ${token}`);
+    else positional.push(token);
+  }
+  options.featureId = positional[0] || null;
+  if (positional.length > 1) throw new Error(`unexpected arguments: ${positional.slice(1).join(' ')}`);
+  options.role = options.roles[0] || null;
+  return options;
+}
+
 function parseAmendmentOptions(args) {
   const lists = { '--ac': 'acs', '--path': 'paths', '--finding': 'blockingFindings' };
   const values = { '--reason': 'reason', '--target': 'target', '--amendment': 'amendmentId', '--progress': 'progressPath' };
@@ -558,6 +581,7 @@ function printResult(result) {
     const review = result.input.workflow?.review;
     if (result.input.mode === 'lean' && review) console.log(`Review: ${review.required ? 'required' : 'not required'} (${(review.required_reasons || []).join('; ')})`);
     if (result.taskFiles) console.log(`Task files: ${result.taskFiles} (rebuildable copies only in scratch/)`);
+    if (result.unrecognizedEvents?.length) console.log(`Warning: the ledger holds events no controller writes (${result.unrecognizedEvents.slice(0, 6).join(", ")}${result.unrecognizedEvents.length > 6 ? ", ..." : ""}); they were written around the CLI and prove nothing. Drive the task only through cc-nexs commands.`);
     if (result.postRelease?.length) console.log(`Post-release pending: ${result.postRelease.join('; ')}`);
     console.log(`Progress: ${result.progressFile}`);
     return;
@@ -580,6 +604,14 @@ function printResult(result) {
       : `cc-nexs browser provider (${result.runtime}): none available (${result.reason}); record manual_required`);
     return;
   }
+  if (result.kind === 'dispatch') {
+    console.log(`cc-nexs dispatch (${result.runtime}) batch ${result.batch}`);
+    for (const row of result.rows) console.log(`- ${row.role}: model=${row.model} effort=${row.effort}${row.fallback_models.length ? ` fallback=${row.fallback_models.join(',')}` : ''} (${row.source})`);
+    if (result.preview) console.log(`Preview (advisory, do not wait for a reply): ${result.preview}`);
+    console.log(`After each role really ran: cc-nexs dispatch-result ${result.feature.id} --batch ${result.batch} --role <role> --outcome succeeded|task-failed|model-unavailable --evidence "<what ran>"`);
+    return;
+  }
+  if (result.kind === 'dispatch-result') { console.log(`cc-nexs dispatch result: ${result.role} ${result.outcome} (batch ${result.batch})`); return; }
   if (result.kind === 'verify-panel') {
     if (!result.verifiers.length) console.log(`cc-nexs verify panel (${result.runtime}): none configured; one Verifier runs the matrix`);
     else {
@@ -841,6 +873,8 @@ function printUsage() {
   console.error('  cc-nexs record-test-verification <feature-id> <--passed|--blocked|--manual-required> --evidence <text> [--attempt <id>] [--progress <path>]');
   console.error('  cc-nexs record-test-verification <feature-id> --verifier-json <json> --verifier-json <json>... [--confirm-json <json>]... [--attempt <id>] [--progress <path>]');
   console.error('  cc-nexs verify-panel <feature-id> [--runtime <claude|codex|pi>] [--progress <path>]');
+  console.error('  cc-nexs dispatch <feature-id> --role <role> [--role <role>] --reason <text> [--difficulty routine|moderate|complex] [--runtime <claude|codex|pi>] [--context <key>]');
+  console.error('  cc-nexs dispatch-result <feature-id> --batch <id> --role <role> --outcome succeeded|task-failed|model-unavailable --evidence <text>');
   console.error('  cc-nexs record-test-verification <feature-id> --shard-json <json> --shard-json <json>... [--attempt <id>] [--progress <path>]');
   console.error('  cc-nexs request-release-changes <feature-id> --type <evidence|implementation|scope> --feedback <text> [--ac <id>] [--path <path>] [--progress <path>]');
   console.error('  cc-nexs release-base <feature-id> [--progress <path>]');

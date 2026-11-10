@@ -4,6 +4,8 @@ description: "Clarify ambiguous requirements and update requirements.md during a
 disable-model-invocation: true
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # Clarify Requirements
 
 Use only when the user invokes brainstorm or the current flow explicitly requires clarification. The goal is to produce a requirements.md that the Planner can use, without adding approval gates beyond Gateway A / G1.
