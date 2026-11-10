@@ -4,6 +4,27 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-11-10
+
+Fixes from the first week of 0.17.0 tasks.
+
+### Added
+
+- `cc-nexs dispatch <id> --role <role> --reason <text>` and `dispatch-result` resolve and record role models from the task's own config, progress and plan. Orchestrators had been importing controller modules to assemble model gateway requests; the run and model rules now name only CLI commands and forbid importing `lib/`, hand-written progress events, and per-task control or driver scripts.
+- `cc-nexs status` warns when the ledger holds events no controller writes.
+
+### Fixed
+
+- A Review the policy does not require is refused: `advance` no longer accepts a Review state for such a candidate, and `review-panel`, `run-reviewer`, `record-reviewer` and `record-review` say so. P2/P3 Hotfixes and low/medium Lean tasks had still run a reviewer panel and a Judge. A task already in a Review state may finish it.
+- A newer runtime of the same major resumes a task an older one started (0.16.1 tasks could not resume a test release on 0.17.0); only a downgrade is refused.
+- `reclaim-worktrees` listed nothing in a workspace holding 120 GB. It now reclaims the idle `scratch/` of an active task, clean worktrees no task owns (branch kept), and directories created beside the managed ones under `.cc-nexs/runtime/`, and reports unknown directories under `.cc-nexs/` with their age. See `commands/git-custodian.md`.
+- Claude command entry points state that the command is already loaded, so a model no longer calls the Skill tool for it, gets refused, and stops.
+
+### Changed
+
+- Tests, fixtures, snapshots, callers changed only to keep compiling, and the conflicting paths of a test integration need no plan amendment.
+- When the recorded test pipeline is canceled or stalled and a later one ran on the same branch, the Orchestrator records the later pipeline itself.
+
 ## [0.17.0] - 2026-11-06
 
 ### Changed
