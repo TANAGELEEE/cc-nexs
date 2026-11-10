@@ -5,6 +5,8 @@ allowed-tools: "Read, Bash"
 argument-hint: "[--phase=build|test|both] [--dry-run] [--no-cache] [--max-parallel=N] [--config-root=path]"
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # /cc-nexs:build
 
 Resolve the packaged deterministic executor and run:

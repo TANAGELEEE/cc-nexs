@@ -5,6 +5,8 @@ allowed-tools: "Read, Bash"
 argument-hint: "<feature-id>"
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # /cc-nexs:sync-base
 
 Run `node <plugin-root>/lib/cc-nexs-cli.mjs sync-base <feature-id>` in BASE_CHANGED or HOTFIX_BASE_CHANGED.

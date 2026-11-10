@@ -5,6 +5,8 @@ allowed-tools: "Read, Write, Edit, Bash"
 argument-hint: "<bug-key> --reason <text> --authorization-evidence <text> [--promote-lean]"
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # /cc-nexs:revise-hotfix
 
 Use the user's existing authorization for a revision of the same fault. Update the assigned BUG document's scope, then invoke the deterministic controller:

@@ -10,6 +10,7 @@ import { assertTestAttemptNotInvalidated, candidateFingerprint, readProgressV2, 
 import { resolveFeatureProgress } from './approval-command.mjs';
 import { hasReviewBlock, readReviewFindings } from './finding-contract.mjs';
 import { readReviewerResult, resolveReviewPanel } from './review-panel.mjs';
+import { assertReviewRequired } from './review-policy.mjs';
 import { detectRuntime } from './runtime-resolver.mjs';
 
 // Every reviewer the Judge lists must have stored its own findings for this round and
@@ -44,6 +45,7 @@ export function recordLeanReview({
   if (!documentFindings && notReproduced.length > 0) throw new Error('[cc-nexs] --not-reproduced requires --document-findings');
   const context = resolveCandidateContext({ cwd, featureId, progressPath });
   releaseScope(context.progress, context.progressFile);
+  assertReviewRequired(context.progress, context.config.mergedReview);
   // A required Lean Review normally runs before test. A Review recorded after test (a task
   // that reached test before its Review) must be of the exact tested candidate.
   if (context.progress.mode === 'lean') {

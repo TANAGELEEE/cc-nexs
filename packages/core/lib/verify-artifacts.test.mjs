@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -342,5 +342,65 @@ test('doctor lists verify artifacts in the worktree inventory', () => {
     attempt('h-done', { scratch: false });
     const doctor = spawnSync(process.execPath, [join(lib, 'doctor.mjs'), root, '--worktrees', '--sizes'], { encoding: 'utf8' });
     assert.match(doctor.stdout, /RECLAIM verify-attempt\s+\.cc-nexs\/runtime\/verify\/h-done\/1/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('idle scratch, unmanaged directories and clean orphan worktrees are reclaimed; recent or dirty ones stay', () => {
+  const { root, task } = reclaimWorkspace();
+  const age = (path, days) => { const at = new Date(Date.now() - days * 86400000); utimesSync(path, at, at); };
+  const make = (path, days) => { mkdirSync(path, { recursive: true }); writeFileSync(join(path, 'f.bin'), 'x'); age(join(path, 'f.bin'), days); age(path, days); };
+  try {
+    task('h-active', 'HOTFIX_IMPLEMENTING');
+    task('h-done', 'COMPLETE');
+    const nexs = join(root, '.cc-nexs');
+    make(join(nexs, 'runtime', 'tasks', 'h-active', 'scratch'), 3);
+    writeFileSync(join(nexs, 'runtime', 'tasks', 'h-active', 'request.json'), '{}');
+    make(join(nexs, 'runtime', 'h-active-isolated'), 9);
+    make(join(nexs, 'runtime', 'h-active-fresh'), 0);
+    make(join(nexs, 'runtime', 'heavy'), 30);
+    make(join(nexs, 'h-done-evidence'), 0);
+    make(join(nexs, 'notes'), 40);
+    make(join(nexs, 'drivers'), 40);
+
+    const code = join(root, 'code');
+    writeFileSync(join(code, 'app.txt'), 'one\n');
+    git(code, ['add', '.']);
+    execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-q', '-m', 'init'], { cwd: code, env: { ...process.env, GIT_COMMITTER_DATE: '2020-01-01T00:00:00Z' } });
+    const wt = (key, name, branch) => { git(code, ['worktree', 'add', '-q', '-b', branch, join(root, '.worktrees', key, name)]); return join(root, '.worktrees', key, name); };
+    const idle = wt('scratch-old', 'code', 'scratch/old');
+    const dirty = wt('scratch-dirty', 'code', 'scratch/dirty');
+    const recent = wt('scratch-new', 'code', 'scratch/new');
+    writeFileSync(join(dirty, 'edit.txt'), 'x');
+    for (const path of [idle, dirty]) { for (const name of readdirSync(path)) age(join(path, name), 10); age(path, 10); }
+    git(recent, ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'now']);
+
+    const inventory = inventoryWorktrees({ cwd: root });
+    const of = (suffix) => entryFor(inventory, suffix);
+    assert.equal(of('tasks/h-active/scratch').kind, 'task-scratch');
+    assert.equal(of('tasks/h-active/scratch').action, 'reclaim');
+    assert.equal(of('tasks/h-active').action, 'keep');
+    assert.match(of('runtime/h-active-isolated').reason, /runtime files idle 9 days/);
+    assert.equal(of('runtime/h-active-isolated').action, 'reclaim');
+    assert.equal(of('runtime/h-active-fresh').action, 'keep');
+    assert.equal(of('runtime/heavy'), undefined, 'managed directories are never listed as unmanaged');
+    assert.equal(of('.cc-nexs/drivers'), undefined);
+    assert.match(of('.cc-nexs/h-done-evidence').reason, /task h-done complete/);
+    assert.equal(of('.cc-nexs/h-done-evidence').action, 'reclaim');
+    assert.equal(of('.cc-nexs/notes').action, 'keep', 'an unknown directory outside runtime is only reported');
+    assert.equal(of('scratch-old/code').kind, 'idle-worktree', of('scratch-old/code').reason);
+    assert.match(of('scratch-old/code').reason, /branch scratch\/old is kept/);
+    assert.match(of('scratch-dirty/code').reason, /uncommitted or untracked/);
+    assert.match(of('scratch-new/code').reason, /clean, idle 0 days/);
+
+    const result = reclaimWorktrees({ cwd: root, confirm: inventory.token });
+    assert.deepEqual(result.failed, []);
+    assert.equal(existsSync(idle), false);
+    assert.equal(git(code, ['rev-parse', '--verify', 'refs/heads/scratch/old']).length, 40, 'the branch survives');
+    assert.ok(existsSync(dirty) && existsSync(recent));
+    assert.equal(existsSync(join(nexs, 'runtime', 'tasks', 'h-active', 'scratch')), false);
+    assert.ok(existsSync(join(nexs, 'runtime', 'tasks', 'h-active', 'request.json')));
+    assert.equal(existsSync(join(nexs, 'runtime', 'h-active-isolated')), false);
+    assert.equal(existsSync(join(nexs, 'h-done-evidence')), false);
+    assert.ok(existsSync(join(nexs, 'notes')) && existsSync(join(nexs, 'drivers')) && existsSync(join(nexs, 'runtime', 'heavy')));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

@@ -5,6 +5,8 @@ allowed-tools: "Read, Bash"
 argument-hint: "[workspace-root] [--release-test] [--feature <id>] [--worktrees [--sizes]]"
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # /cc-nexs:doctor
 
 Resolve the installed plugin root and run:

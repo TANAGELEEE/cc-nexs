@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 
 import { resolveCandidateContext } from './candidate-context.mjs';
 import { candidateFingerprint } from './progress-v2.mjs';
+import { assertReviewRequired } from './review-policy.mjs';
 import { detectRuntime } from './runtime-resolver.mjs';
 import { taskFilesDir } from './verify-artifacts.mjs';
 
@@ -319,6 +320,7 @@ export function runCliReviewer({ workspaceRoot, featureId, round, reviewer, brie
 
 function panelContext({ cwd, featureId, progressPath, runtime }) {
   const context = resolveCandidateContext({ cwd, featureId, progressPath });
+  assertReviewRequired(context.progress, context.config.mergedReview);
   return { context, runtime, panel: resolveReviewPanel(context.config.mergedReview, runtime), featureKey: String(context.progress.feature.id) };
 }
 

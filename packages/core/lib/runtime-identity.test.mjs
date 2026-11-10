@@ -6,12 +6,13 @@ import { join } from 'node:path';
 import { assertRuntimeCompatible, runtimeIdentity } from './runtime-identity.mjs';
 import { createProgressV2, readProgressV2, writeProgressV2 } from './progress-v2.mjs';
 
-test('patch upgrades accept old tasks without rebinding evidence; downgrades reject', () => {
+test('newer runtimes of the same major accept old tasks without rebinding evidence; downgrades reject', () => {
   const progress = { runtime: { name: 'cc-nexs', version: '0.5.5' } };
   assertRuntimeCompatible(progress, { name: 'cc-nexs', version: '0.5.8' });
   assertRuntimeCompatible({}, runtimeIdentity());
   assert.throws(() => assertRuntimeCompatible(progress, { name: 'cc-nexs', version: '0.5.4' }), /runtime version mismatch/);
-  assert.throws(() => assertRuntimeCompatible(progress, { name: 'cc-nexs', version: '0.6.0' }), /runtime version mismatch/);
+  assertRuntimeCompatible(progress, { name: 'cc-nexs', version: '0.6.0' });
+  assert.throws(() => assertRuntimeCompatible(progress, { name: 'cc-nexs', version: '1.0.0' }), /runtime version mismatch/);
   assert.match(runtimeIdentity().version, /^\d+\.\d+\.\d+$/);
 });
 

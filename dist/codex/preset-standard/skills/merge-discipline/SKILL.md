@@ -4,6 +4,8 @@ description: "Compatibility guard for merge requests. Roles never merge; release
 disable-model-invocation: true
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # Merge Discipline
 
 Roles and ordinary orchestration must not merge, rebase, push, or delete branches. Record candidate refs and stop at the release gate. If the user explicitly authorizes merging/pushing to the configured base, the release action preserves the tested candidate, integrates it into base without a preliminary feature sync, merges code repositories before docs, then performs complete finalize cleanup in the same task: remote feature, local feature, worktree, and candidate ref. Retain the remote feature only when the user explicitly requests it.

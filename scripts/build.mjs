@@ -210,6 +210,8 @@ function extractDescription(commandText, commandName) {
   return desc.replace(/^["']|["']$/g, '');
 }
 
+const LOADED_NOTE = '> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.';
+
 function assertExplicitClaudeEntrypoints(dst) {
   const entryFiles = [];
   const commandsDir = join(dst, 'commands');
@@ -230,6 +232,12 @@ function assertExplicitClaudeEntrypoints(dst) {
     const frontmatter = extractFrontmatter(text);
     if (!/^disable-model-invocation:\s*true\s*$/m.test(frontmatter)) {
       throw new Error(`explicit-only Claude entry is missing disable-model-invocation: true: ${file}`);
+    }
+    // A model that calls the Skill tool for a command the user already invoked is refused
+    // (disable-model-invocation) and then stops; say up front that the text is loaded.
+    if (!text.includes(LOADED_NOTE)) {
+      const eol = text.includes('\r\n') ? '\r\n' : '\n';
+      writeFileSync(file, text.replace(/^(---\r?\n[\s\S]*?\r?\n---\r?\n)/, `$1${eol}${LOADED_NOTE}${eol}`));
     }
   }
 }

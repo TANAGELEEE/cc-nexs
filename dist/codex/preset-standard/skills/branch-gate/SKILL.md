@@ -4,6 +4,8 @@ description: "Compatibility guard that verifies the current worktree assignment 
 disable-model-invocation: true
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # Branch Gate
 
 Read progress.json and verify the current path and branch match its repository assignment. If they do not match, stop. Branch creation and switching belong exclusively to Git Custodian.

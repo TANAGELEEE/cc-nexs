@@ -261,7 +261,7 @@ test('Lean local verification can defer an environment-only backend start to tes
       '    base_branch: main',
       '    test_branch: test',
     ].join('\n'));
-    writeFileSync(join(root, 'cc-nexs.config.json'), '{}\n');
+    writeFileSync(join(root, 'cc-nexs.config.json'), '{"review":{"policy":"always"}}\n');
 
     git(api, ['init', '-b', 'feature/31-local-verify-deferred']);
     git(api, ['config', 'user.name', 'Test User']);

@@ -5,6 +5,8 @@ allowed-tools: "Read, Write, Edit, Bash, Glob, Grep, Task"
 argument-hint: "[requirement-id] [--from <plan-file>]"
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # /cc-nexs:plan
 
 For `mode=lean` only. Resolve the requirement directory and workspace; require `requirements.md` to be non-empty and in `INIT` or `PLANNING` status.

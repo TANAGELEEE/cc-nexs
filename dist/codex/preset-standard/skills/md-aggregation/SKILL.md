@@ -4,6 +4,8 @@ description: "cc-nexs document aggregation rules quick reference. Avoid file pro
 disable-model-invocation: true
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # md Document Aggregation Rules
 
 Lean writes execution, Review, and verification evidence into `plan.md`; Hotfix writes into the BUG document specified by `progress.hotfix_document` (`hotfix.md` for legacy tasks). Rounds of the same kind are appended to that one document under level-2 headings; never create one file per round.

@@ -5,6 +5,8 @@ allowed-tools: "Read, Write, Bash"
 argument-hint: "<feature-id> [--dry-run] [--bind-plan-risk] [--progress <path>]"
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # /cc-nexs:migrate-feature-config
 
 Resolve the installed plugin root and run the deterministic migration:

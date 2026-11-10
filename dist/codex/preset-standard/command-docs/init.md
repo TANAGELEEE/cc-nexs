@@ -5,6 +5,8 @@ allowed-tools: "Read, Write, Edit, Bash, Glob, Skill"
 argument-hint: "<requirement description> [--mode=lean|hotfix] [--risk-tier=auto|low|medium|high|critical] [--id=<number>] [--slug=<short-name>] [--repos=a,b] [--brainstorm] [--auto-plan]"
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # /cc-nexs:init
 
 A one-line requirement description: automatically continue numbering + automatically generate a slug + **create a worktree** + copy the template + write the mode.

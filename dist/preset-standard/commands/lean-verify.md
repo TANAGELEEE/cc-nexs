@@ -5,6 +5,8 @@ allowed-tools: "Read, Write, Edit, Bash, Task, mcp__chrome-devtools__*"
 argument-hint: "[requirement ID]"
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # /cc-nexs:lean-verify
 
 Dispatch an independent `lean-verifier` only after a successful test release, using the resolved runtime model profile. First run `node <plugin-root>/lib/cc-nexs-cli.mjs verify-guides <id>` and give each Verifier the verification guide and the feature-map entries of the repositories it covers, read from the exact candidate commit; the Verifier runs the guide's Doctor before driving anything and drives the app the way the guide describes. A repository without a guide is still verified from the acceptance matrix; mention `/cc-nexs:verify-skill <repo>` once in the output. Freeze the browser with `node <plugin-root>/lib/cc-nexs-cli.mjs browser-provider --runtime <claude|codex|pi>` and give every Verifier (and shard) that provider; Verifiers reuse its signed-in session and otherwise sign in through `cc-nexs test-account -- <command>` (`test-account --check` shows whether `release.test.credential_ref` is ready, without values). The parent Orchestrator injects the complete structured deferral list from the local verification attempt at the current exact fingerprint; following the Test environment acceptance matrix in `plan.md`, it runs every P0/P1 check, all cross-platform paths, and all `deferred_to_test` checks, accessing only `allowed_hosts`. Each deferred item must be closed precisely with `--evidence-json '{"check":"<exact-id>","result":"passed","proof":"<request/result/artifact>"}'`; free-text matches, skipped results, and failed results cannot pass the controller.

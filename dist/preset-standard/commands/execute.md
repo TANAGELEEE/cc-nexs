@@ -5,6 +5,8 @@ allowed-tools: "Read, Write, Edit, Bash, Glob, Grep, Task"
 argument-hint: "[requirement ID] [--phase=implement|review-fix|test-fix|gateway-b-fix|base-sync|bind-derived]"
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # /cc-nexs:execute
 
 Only for `mode=lean` with an approved plan. Read the plan task DAG and dispatch independent `lean-developer`s by wave:

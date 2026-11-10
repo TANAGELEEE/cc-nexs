@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { reviewRequirement, reviewSatisfied } from './review-policy.mjs';
+import { assertReviewRequired, reviewRequirement, reviewSatisfied } from './review-policy.mjs';
+import { isAllowedTransition } from './state-machine.mjs';
 
 const lean = (risk, paths = {}) => ({
   mode: 'lean',
@@ -38,4 +39,16 @@ test('a required Review is satisfied only by a pass for the exact candidate', ()
   assert.equal(reviewSatisfied({ review: { status: 'passed', candidate_fingerprint: 'a' } }, 'a', required), true);
   assert.equal(reviewSatisfied({ review: { status: 'passed', candidate_fingerprint: 'a' } }, 'b', required), false);
   assert.equal(reviewSatisfied({ review: { status: 'idle' } }, 'a', { required: false, reasons: [] }), true);
+});
+
+test('an unrequired Review is refused unless the task is already in a Review state', () => {
+  const p2 = { mode: 'hotfix', state: 'HOTFIX_LOCAL_VERIFYING', hotfix: { severity: 'P2' } };
+  assert.throws(() => assertReviewRequired(p2), /no Review is required.*severity is P2/);
+  assert.equal(assertReviewRequired(p2, { policy: 'always' }).required, true);
+  assert.equal(assertReviewRequired({ ...p2, state: 'HOTFIX_REVIEWING' }).required, false);
+  assert.equal(assertReviewRequired({ ...p2, hotfix: { severity: 'P1' } }).required, true);
+  assert.equal(isAllowedTransition({ mode: 'hotfix', from: 'HOTFIX_LOCAL_VERIFYING', to: 'HOTFIX_REVIEWING', next: 'HOTFIX_CANDIDATE_READY', reviewRequired: false }), false);
+  assert.equal(isAllowedTransition({ mode: 'hotfix', from: 'HOTFIX_LOCAL_VERIFYING', to: 'HOTFIX_REVIEWING', next: 'HOTFIX_REVIEWING', reviewRequired: true }), true);
+  assert.equal(isAllowedTransition({ mode: 'lean', from: 'LOCAL_REVERIFYING', to: 'REVIEW_CLOSURE', next: 'CANDIDATE_READY', reviewRequired: false }), false);
+  assert.equal(isAllowedTransition({ mode: 'lean', from: 'LOCAL_VERIFYING', to: 'CANDIDATE_READY', next: 'CANDIDATE_READY', reviewRequired: false }), true);
 });

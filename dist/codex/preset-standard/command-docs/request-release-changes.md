@@ -5,6 +5,8 @@ allowed-tools: "Read, Bash"
 argument-hint: "[feature-id] --type=evidence|implementation|scope --feedback=\"...\" [--ac=AC-001] [--path=src/...]"
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # /cc-nexs:request-release-changes
 
 Lean/Hotfix Gateway B change request. Resolve the packaged CLI and run:

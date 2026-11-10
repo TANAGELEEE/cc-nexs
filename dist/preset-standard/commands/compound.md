@@ -5,6 +5,8 @@ allowed-tools: "Read, Write, Edit, Glob, Grep, Bash, Task"
 argument-hint: "[Requirement ID] [optional: --force]"
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # /cc-nexs:compound
 
 For a completed requirement, run this command to distill lessons into the repository-level `docs/solutions/`. The Lean Planner greps it while surveying the current state for the next similar requirement.

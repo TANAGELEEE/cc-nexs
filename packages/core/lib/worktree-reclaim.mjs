@@ -1,15 +1,18 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { existsSync, lstatSync, readFileSync, readdirSync, rmSync } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
 import { loadWorkspaceConfig } from './config-loader.mjs';
 import { classifyMergedWork, cleanupMergedWorktree, isWorktreeRegistered, removeIntegrationWorktree } from './git-custodian.mjs';
 import { readProgressV2 } from './progress-v2.mjs';
 import {
+  UNMANAGED_IDLE_DAYS,
   classifyLegacyDrafts,
   classifyTaskFiles,
+  classifyUnmanaged,
   classifyVerifyArtifacts,
+  idleDays,
   legacyDraftsRoot,
   taskFilesRoot,
   verifyArtifactRoot,
@@ -113,10 +116,36 @@ function sizeOf(path) {
   return total;
 }
 
+// A worktree no task owns (an agent added it by hand) is rebuildable from its branch when
+// it is clean: removing it loses nothing, and the branch stays. Only an idle one goes.
+function classifyOrphanWorktree(entry, why) {
+  const keep = (reason) => ({ ...entry, action: 'keep', reason });
+  let common;
+  try { common = git(entry.path, ['rev-parse', '--path-format=absolute', '--git-common-dir']); } catch { return keep(`${why}; inspect manually`); }
+  let branch;
+  try {
+    if (git(entry.path, ['status', '--porcelain'])) return keep(`${why}; uncommitted or untracked changes`);
+    branch = git(entry.path, ['branch', '--show-current']);
+  } catch { return keep(`${why}; inspect manually`); }
+  if (!branch) return keep(`${why}; detached HEAD`);
+  const idle = Math.min(idleDays(entry.path), Math.floor((Date.now() / 1000 - Number(git(entry.path, ['log', '-1', '--format=%ct']))) / 86400));
+  if (idle < UNMANAGED_IDLE_DAYS) return keep(`${why}; clean, idle ${idle} days`);
+  return { ...entry, kind: 'idle-worktree', gitDir: common, branch, head: git(entry.path, ['rev-parse', 'HEAD']), action: 'reclaim', reason: `${why}; clean and idle ${idle} days; branch ${branch} is kept` };
+}
+
+function isWorktreePointer(path) {
+  const pointer = join(path, '.git');
+  return existsSync(pointer) && lstatSync(pointer).isFile();
+}
+
 function classifyWorktree({ workspace, tasks, worktree, repositoryId }) {
   const entry = { kind: 'worktree', path: worktree, repository: repositoryId };
   const repository = workspace.repositories.find((item) => item.id === repositoryId);
-  if (!repository) return { ...entry, action: 'keep', reason: 'not a configured repository' };
+  if (!repository) {
+    return isWorktreePointer(worktree) && !isStaleWorktreePointer(worktree)
+      ? classifyOrphanWorktree(entry, 'not a configured repository')
+      : { ...entry, action: 'keep', reason: 'not a configured repository' };
+  }
   entry.repo = repository.absolute_path;
   const registered = isWorktreeRegistered(git(repository.absolute_path, ['worktree', 'list', '--porcelain']), worktree);
   if (!registered) {
@@ -126,12 +155,14 @@ function classifyWorktree({ workspace, tasks, worktree, repositoryId }) {
   }
   const task = tasks.byWorktree.get(resolve(worktree));
   if (task?.active) {
+    const idle = Math.floor((Date.now() - Date.parse(task.progress.updated_at || '')) / 86400000);
     const hint = task.legacy ? `; legacy ${task.progress.mode || 'unknown'}-mode task, run reconcile ${task.id} once its work is merged`
-      : /BASE_MERGE_BLOCKED$/.test(task.state) ? '; rerun release-base to finish cleanup' : '';
+      : /BASE_MERGE_BLOCKED$/.test(task.state) ? '; rerun release-base to finish cleanup'
+        : idle >= 14 ? `; idle ${idle} days, run reconcile ${task.id} if its work was merged outside the workflow` : '';
     return { ...entry, action: 'keep', reason: `active task ${task.id} (${task.state})${hint}` };
   }
   // A fresh worktree sits on its base tip and would look merged; only completed tasks prove it is done.
-  if (!task) return { ...entry, action: 'keep', reason: 'no task state found; inspect manually' };
+  if (!task) return classifyOrphanWorktree(entry, 'no task state found');
   if (git(worktree, ['status', '--porcelain'])) return { ...entry, action: 'keep', reason: 'uncommitted or untracked changes' };
   const branch = git(worktree, ['branch', '--show-current']);
   if (!branch) return { ...entry, action: 'keep', reason: 'detached HEAD' };
@@ -201,6 +232,14 @@ export function inventoryWorktrees({ cwd = process.cwd(), sizes = false } = {}) 
   const tasks = readTasks(root, workspace);
   const entries = [];
   for (const key of directories(workspace.worktree_root)) {
+    // A checkout placed directly at <worktree_root>/<key> is one worktree, not a task folder.
+    if (isWorktreePointer(join(workspace.worktree_root, key))) {
+      const path = join(workspace.worktree_root, key);
+      entries.push(isStaleWorktreePointer(path)
+        ? { kind: 'worktree', path, repository: null, action: 'keep', reason: 'not in the <task>/<repository> layout and Git no longer tracks it; inspect manually' }
+        : classifyOrphanWorktree({ kind: 'worktree', path, repository: null }, 'not in the <task>/<repository> layout'));
+      continue;
+    }
     for (const repositoryId of directories(join(workspace.worktree_root, key))) {
       entries.push(classifyWorktree({ workspace, tasks, worktree: join(workspace.worktree_root, key, repositoryId), repositoryId }));
     }
@@ -216,6 +255,7 @@ export function inventoryWorktrees({ cwd = process.cwd(), sizes = false } = {}) 
   entries.push(...classifyVerifyArtifacts({ root, tasks }));
   entries.push(...classifyTaskFiles({ root, tasks }));
   entries.push(...classifyLegacyDrafts({ root, tasks }));
+  entries.push(...classifyUnmanaged({ root, tasks }));
   entries.push(...legacyMergeRequestBranches(workspace));
   for (const entry of entries) {
     entry.display ??= relative(root, entry.path) || '.';
@@ -228,11 +268,13 @@ export function inventoryWorktrees({ cwd = process.cwd(), sizes = false } = {}) 
   };
 }
 
-// Preflight needs no confirmation because it removes only rebuildable scratch, never logs or worktrees.
+// Preflight needs no confirmation because it removes only rebuildable scratch (of inactive
+// verify attempts and idle task files), never logs or worktrees.
 export function reclaimInactiveVerifyScratch({ root, workspace }) {
   const removed = [];
-  for (const entry of classifyVerifyArtifacts({ root, tasks: readTasks(root, workspace) })) {
-    if (entry.kind !== 'verify-scratch' || entry.action !== 'reclaim') continue;
+  const tasks = readTasks(root, workspace);
+  for (const entry of [...classifyVerifyArtifacts({ root, tasks }), ...classifyTaskFiles({ root, tasks })]) {
+    if (!['verify-scratch', 'task-scratch'].includes(entry.kind) || entry.action !== 'reclaim') continue;
     try {
       rmSync(entry.path, { recursive: true, force: true, maxRetries: 3 });
       removed.push({ ...entry, display: relative(root, entry.path) });
@@ -271,7 +313,8 @@ export function reclaimTaskArtifacts({ cwd = process.cwd(), featureId, exclude =
     (entry.kind === 'worktree' && tasks.byWorktree.get(resolve(entry.path))?.id === id)
     || (entry.kind === 'test-conflict' && under(inventory.conflictRoot, entry.path))
     || (entry.kind.startsWith('verify-') && under(inventory.verifyRoot, entry.path))
-    || (entry.kind === 'task-files' && under(inventory.taskFilesRoot, entry.path))
+    || (['task-files', 'task-scratch'].includes(entry.kind) && under(inventory.taskFilesRoot, entry.path))
+    || (entry.kind === 'unmanaged-runtime' && (basename(entry.path) === id || basename(entry.path).startsWith(`${id}-`)))
   ));
   const kept = inventory.entries.filter((entry) => entry.action === 'keep' && entry.path && relative(inventory.root, entry.path).split(/[\\/]/).some((part) => part === id || part.startsWith(`${id}-`)));
   return { kind: 'task-reclaim', feature: id, ...applyReclaim(inventory, owned), kept: kept.map(({ display, reason }) => ({ display, reason })) };
@@ -284,13 +327,17 @@ function applyReclaim(inventory, entries) {
     try {
       if (entry.kind === 'worktree') {
         cleanupMergedWorktree({ repo: entry.repo, worktree: entry.path, branch: entry.branch, baseBranch: entry.baseBranch, candidateRef: entry.candidateRef });
+      } else if (entry.kind === 'idle-worktree') {
+        // No --force: Git itself refuses if the worktree turned dirty since it was listed.
+        execFileSync('git', [`--git-dir=${entry.gitDir}`, 'worktree', 'remove', entry.path], { stdio: ['ignore', 'pipe', 'pipe'] });
       } else if (entry.kind === 'test-conflict' && entry.repo) {
         removeIntegrationWorktree({ repo: entry.repo, worktree: entry.path, root: inventory.conflictRoot });
       } else {
         const within = entry.kind === 'test-conflict' ? inventory.conflictRoot
           : entry.kind.startsWith('verify-') ? inventory.verifyRoot
-            : entry.kind === 'task-files' ? inventory.taskFilesRoot
-              : entry.kind === 'draft-cache' ? inventory.draftsRoot : inventory.workspace.worktree_root;
+            : ['task-files', 'task-scratch'].includes(entry.kind) ? inventory.taskFilesRoot
+              : entry.kind === 'draft-cache' ? inventory.draftsRoot
+                : entry.kind.startsWith('unmanaged') ? join(inventory.root, '.cc-nexs') : inventory.workspace.worktree_root;
         const rel = relative(within, entry.path);
         if (!rel || rel.startsWith('..') || isAbsolute(rel)) throw new Error(`[cc-nexs] unsafe reclaim path: ${entry.path}`);
         rmSync(entry.path, { recursive: true, force: true });

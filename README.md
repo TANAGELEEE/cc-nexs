@@ -315,6 +315,8 @@ cc-nexs share-progress <id>     # publish a task's progress snapshot for other m
 cc-nexs heavy -- <command>      # run a build/test/dev server in a workspace-wide slot with a memory cap
 cc-nexs release-test <id> --resume --wait   # wait for a running test deployment inside the run
 cc-nexs verify-panel <id>       # list the Verifiers to dispatch and their models
+cc-nexs dispatch <id> --role <role> --reason "<task>"   # resolve the role's model and effort (no request file)
+cc-nexs reclaim-worktrees --sizes   # list reclaimable worktrees, idle scratch and unmanaged runtime files
 
 /cc-nexs:hotfix "symptom description" --repos=api  # hotfix/<key> + BUG document without consuming a requirement number
 /cc-nexs:hotfix [bug-key]         # resume: local verification, independent Review, test, Gateway B

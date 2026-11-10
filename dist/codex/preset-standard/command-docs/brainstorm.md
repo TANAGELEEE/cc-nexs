@@ -5,6 +5,8 @@ allowed-tools: "Read, Write, Edit, Glob, Grep, Bash"
 argument-hint: "<requirement id>"
 ---
 
+> The user invoked this command and its instructions are loaded below: follow them now. Do not call the Skill tool for it.
+
 # /cc-nexs:brainstorm
 
 Use the [brainstorming skill](../skills/brainstorming/SKILL.md) to clarify the specified requirement. This command does not add a separate approval point.
