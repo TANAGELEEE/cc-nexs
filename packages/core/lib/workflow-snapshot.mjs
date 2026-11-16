@@ -150,7 +150,7 @@ export function deliveryMilestones(progress) {
     row('local_verification', ['passed', 'deferred_to_test'].includes(local.status), local.status === 'failed'),
     row('test_deployment', deployed, !deployed && failedAttempt, attempt ? `${attempt.id} ${attempt.status}` : ''),
     row('test_acceptance', attempt?.status === 'verified', deployed && (failedAttempt || attempt?.status === 'deployed_needs_manual_verification'), attempt && deployed ? `${attempt.id} ${attempt.status}` : ''),
-    row('review', review.status === 'passed' && review.candidate_fingerprint === fingerprint, review.status === 'blocked'),
+    row('review', review.status === 'passed' && (review.candidate_fingerprint === fingerprint || review.carried?.fingerprint === fingerprint), review.status === 'blocked'),
     row('base_merge', base === 'succeeded', !['idle', 'running', 'succeeded'].includes(base)),
   ];
 }

@@ -16,6 +16,11 @@ export const REVIEW_POLICIES = new Set(['risk', 'always']);
 export function reviewRequirement(progress, review = {}) {
   if (!['lean', 'hotfix'].includes(progress?.mode)) return { required: true, reasons: [`${progress?.mode || 'unknown'} mode always reviews`] };
   const policy = review.policy ?? 'risk';
+  // A repair carried by the Review that already passed (review-carry.mjs) needs no other.
+  const carried = progress.review?.status === 'passed' ? progress.review.carried : null;
+  if (policy !== 'always' && carried?.fingerprint && carried.fingerprint === progress.local_verification?.candidate_fingerprint) {
+    return { required: false, reasons: [`the Review of ${String(progress.review.candidate_fingerprint).slice(0, 12)} passed and the repair since then touches no sensitive path`] };
+  }
   if (!REVIEW_POLICIES.has(policy)) throw new Error(`[cc-nexs] review.policy must be risk or always, got ${policy}`);
   if (policy === 'always') return { required: true, reasons: ['review.policy is always'] };
   if (progress.mode === 'hotfix') {
