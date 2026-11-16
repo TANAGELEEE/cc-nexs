@@ -601,6 +601,7 @@ function printResult(result) {
     console.log(`Milestones: ${result.milestones.map((item) => `${item.id}=${item.status}${item.detail ? ` (${item.detail})` : ''}`).join(', ')}`);
     const review = result.input.workflow?.review;
     if (result.input.mode === 'lean' && review) console.log(`Review: ${review.required ? 'required' : 'not required'} (${(review.required_reasons || []).join('; ')})`);
+    if (result.input.workflow.test_release?.optional) console.log('Test deployment: optional (P3 with every local check passed); approve-release goes to the MR, or advance to HOTFIX_TEST_RELEASE to verify in test first');
     if (result.taskFiles) console.log(`Task files: ${result.taskFiles} (rebuildable copies only in scratch/)`);
     if (result.unrecognizedEvents?.length) console.log(`Warning: the ledger holds events no controller writes (${result.unrecognizedEvents.slice(0, 6).join(", ")}${result.unrecognizedEvents.length > 6 ? ", ..." : ""}); they were written around the CLI and prove nothing. Drive the task only through cc-nexs commands.`);
     if (result.postRelease?.length) console.log(`Post-release pending: ${result.postRelease.join('; ')}`);

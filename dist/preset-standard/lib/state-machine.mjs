@@ -116,6 +116,11 @@ function nextStepHotfix({ state, counters, thresholds, enabledRoles, workflow = 
         circuitBreaker: state === 'HOTFIX_P3_BOUNDARY_BLOCKED' ? 'hotfix_boundary' : 'hotfix_delta', stop: true,
       };
     case 'HOTFIX_CANDIDATE_READY':
+      // A P3 with every local check passed may be approved without a test deployment;
+      // `advance --to HOTFIX_TEST_RELEASE` still takes it through test when asked.
+      if (workflow.test_release?.optional) {
+        return { next: 'HOTFIX_RELEASE_PENDING_HUMAN', role: null, action: 'await_release_approval', stop: true };
+      }
       return { next: 'HOTFIX_TEST_RELEASE', role: null, action: 'continue' };
     case 'HOTFIX_TEST_RELEASE':
       return nextHotfixTestReleaseStep({ workflow, verifier });
@@ -440,7 +445,7 @@ const HOTFIX_OUTCOMES = {
   HOTFIX_LOCAL_REVERIFYING: ['HOTFIX_DELTA_REVIEW', 'HOTFIX_CANDIDATE_READY', 'HOTFIX_LOCAL_REVERIFY_FAILED'],
   HOTFIX_DELTA_REVIEW: ['PARSE_HOTFIX_DELTA_REVIEW'],
   PARSE_HOTFIX_DELTA_REVIEW: ['HOTFIX_CANDIDATE_READY', 'HOTFIX_DELTA_REVIEW_BLOCKED'],
-  HOTFIX_CANDIDATE_READY: ['HOTFIX_TEST_RELEASE'],
+  HOTFIX_CANDIDATE_READY: ['HOTFIX_TEST_RELEASE', 'HOTFIX_RELEASE_PENDING_HUMAN'],
   HOTFIX_TEST_RELEASE: ['HOTFIX_TEST_VERIFYING', 'HOTFIX_TEST_VERIFIED', 'HOTFIX_TEST_MERGE_CONFLICT', 'HOTFIX_TEST_RELEASE_BLOCKED', 'HOTFIX_TEST_DEPLOYED_NEEDS_MANUAL_VERIFY'],
   HOTFIX_TEST_MERGE_CONFLICT: ['HOTFIX_TEST_RELEASE'],
   HOTFIX_TEST_RELEASE_BLOCKED: ['HOTFIX_TEST_RELEASE'],

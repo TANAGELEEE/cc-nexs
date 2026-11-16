@@ -125,7 +125,8 @@ export function assertHotfixCandidatePaths(context) {
     const allowed = scope.intendedPaths.filter((path) => path.startsWith(`${item.id}/`)).map((path) => path.slice(item.id.length + 1));
     // Legacy single-repository documents used unqualified paths.
     if (context.repositories.length === 1 && !allowed.length) allowed.push(...scope.intendedPaths);
-    const outside = paths.filter((path) => !implementationPathAllowed(path, allowed));
+    // Tests, fixtures and snapshots travel with the fix; only source outside the bound paths needs a revision.
+    const outside = paths.filter((path) => !implementationPathAllowed(path, allowed) && !isTestSupportPath(path));
     if (outside.length) throw new Error(`[cc-nexs] Hotfix candidate is outside intended_paths: ${item.id}/${outside.join(', ')}; record authorized scope with revise-hotfix`);
   }
 }
@@ -179,6 +180,14 @@ function globExpression(pattern) {
     }
   }
   return new RegExp(`^${expression}$`);
+}
+
+export function isTestSupportPath(path) {
+  const normalized = path.replace(/\\/g, '/');
+  return /(^|\/)(__tests__|__snapshots__|__fixtures__|__mocks__|fixtures|tests?|e2e)\//.test(normalized)
+    || /\.(test|spec)\.[cm]?[jt]sx?$/.test(normalized)
+    || /(Test|Tests|IT)\.(java|kt|groovy)$/.test(normalized)
+    || /(^|\/)test_[^/]+\.py$|_test\.(py|go)$|\.snap$/.test(normalized);
 }
 
 function implementationPathAllowed(path, allowedPaths) {

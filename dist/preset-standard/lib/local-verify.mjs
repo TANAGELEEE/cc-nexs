@@ -25,6 +25,7 @@ import {
 } from './verify-artifacts.mjs';
 import { reclaimInactiveVerifyScratch } from './worktree-reclaim.mjs';
 import { acquireHeavySlot, heavySettings } from './heavy-slots.mjs';
+import { carryReviewOverRepair } from './review-carry.mjs';
 
 // A baseline_failed item must name the commit this candidate was built on: the merge-base
 // of the candidate and its base branch, so a failure the candidate introduced cannot pass
@@ -81,6 +82,7 @@ export function runLocalVerification({
       expectedRevision: context.progress.revision,
       actor: 'local-evidence-controller',
     });
+    if (isLocalVerificationReadyStatus(recordStatus)) carryReviewOverRepair(context, { verificationContext, review: context.config.mergedReview });
     return {
       kind: 'local-verification',
       feature: context.progress.feature,
@@ -183,6 +185,7 @@ export function runLocalVerification({
       contractFingerprint,
       expectedRevision: context.progress.revision,
     });
+    if (isLocalVerificationReadyStatus(result.status)) carryReviewOverRepair(context, { verificationContext, review: context.config.mergedReview });
     ending.status = result.status;
     return {
       kind: 'local-verification',

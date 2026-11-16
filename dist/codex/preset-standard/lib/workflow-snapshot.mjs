@@ -8,7 +8,7 @@ import { configuredPluginRoot } from './config-root.mjs';
 import { transitionState } from './progress-io.mjs';
 import { appendProgressEvent, readProgressV2 } from './progress-v2.mjs';
 import { isAllowedTransition, nextStep } from './state-machine.mjs';
-import { reviewRequirement } from './review-policy.mjs';
+import { reviewRequirement, testDeploymentOptional } from './review-policy.mjs';
 import { baseSyncCarryReady } from './base-sync-carry.mjs';
 import { resolveTestReleasePolicy } from './test-release.mjs';
 import { taskFilesDir } from './verify-artifacts.mjs';
@@ -65,6 +65,7 @@ export function buildWorkflowSnapshot({ cwd = process.cwd(), featureId, progress
       exact: testAttempts.at(-1)?.fingerprint === progress.local_verification?.candidate_fingerprint,
       attempt: testAttempts.filter((item) => item.deployment && item.environment_revision).length,
       prerequisites_met: true,
+      optional: testDeploymentOptional(progress).optional && testAttempts.at(-1)?.fingerprint !== progress.local_verification?.candidate_fingerprint,
     },
     base_release: {
       status: progress.delivery?.base?.status || 'idle',
@@ -150,7 +151,7 @@ export function deliveryMilestones(progress) {
     row('local_verification', ['passed', 'deferred_to_test'].includes(local.status), local.status === 'failed'),
     row('test_deployment', deployed, !deployed && failedAttempt, attempt ? `${attempt.id} ${attempt.status}` : ''),
     row('test_acceptance', attempt?.status === 'verified', deployed && (failedAttempt || attempt?.status === 'deployed_needs_manual_verification'), attempt && deployed ? `${attempt.id} ${attempt.status}` : ''),
-    row('review', review.status === 'passed' && review.candidate_fingerprint === fingerprint, review.status === 'blocked'),
+    row('review', review.status === 'passed' && (review.candidate_fingerprint === fingerprint || review.carried?.fingerprint === fingerprint), review.status === 'blocked'),
     row('base_merge', base === 'succeeded', !['idle', 'running', 'succeeded'].includes(base)),
   ];
 }

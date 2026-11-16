@@ -14,6 +14,15 @@ All notable changes to cc-nexs will be documented here.
 ### Added
 
 - `cc-nexs commit-candidate <id> --repo <repository-id> --message <text> --path <path>` commits the declared paths of an assigned worktree as the candidate. The step had no command, so Orchestrators imported `git-custodian.mjs` for it.
+- A P3 Hotfix (`non_behavioral_change: yes`) whose local checks all passed may skip the test deployment: the run stops at the release gate, `approve-release` binds the locally verified candidate with `test_skipped`, and release-base accepts it only while the task is still such a P3. `advance` can still send it through test; P2 and above always verify in test.
+- After a required Review has passed, a test repair that touches no sensitive or `review.required_paths` path is carried by it (`review.carried_over`) instead of going through another closure Review and Judge. One task had run more than twenty closure rounds.
+
+### Changed
+
+- Hotfix tests, fixtures and snapshots are always inside the bound scope; `intended_paths` may bind a directory or glob; `revise-hotfix` is not the place to record the user's authorization. Ten of twelve Hotfixes had called it, mostly to add a test file.
+- Local checks are sized to the change: a style, markup or copy change runs lint on the touched files, the affected tests and one look at the page, not a whole-project type check or a second dev server.
+- `commands/run.md` gains "Converging on delivery": reuse passed evidence, hold the approved scope, correct self-added requirements that block delivery, limit new subagents, watch CI to its result inside the turn, and report concrete results at a stop. Long tasks had needed the same correction pasted in by hand.
+- A missing ego lite task space (`task space not found`, closed or finished) is recreated by the role that owned it instead of stopping the run to ask; user-owned spaces are never claimed.
 
 ## [0.18.0] - 2026-11-10
 

@@ -626,6 +626,44 @@ export function recordRepositoryCandidatePrepared(file, repository, candidate, {
   return progress;
 }
 
+// A new candidate needs its own Review, but what the last passed Review covered is kept:
+// a repair that touches no sensitive path is carried by it (recordReviewCarry) instead
+// of going through another reviewer and Judge.
+function idleReview(previous) {
+  const lastPassed = previous?.status === 'passed'
+    ? { candidate_fingerprint: previous.candidate_fingerprint, reviewed_commits: previous.reviewed_commits, reviewed_at: previous.reviewed_at || null }
+    : previous?.last_passed || null;
+  return {
+    status: 'idle',
+    candidate_fingerprint: null,
+    reviewed_commits: {},
+    blocking_findings: [],
+    closure_attempts: previous?.closure_attempts || 0,
+    gateway_b_delta_attempts: previous?.gateway_b_delta_attempts || 0,
+    ...(lastPassed && { last_passed: lastPassed }),
+  };
+}
+
+export function recordReviewCarry(file, { fingerprint, changedPaths = [], actor = 'review-policy' }) {
+  const progress = readProgressV2(file);
+  const last = progress.review?.last_passed;
+  if (progress.review?.status !== 'idle' || !last) throw new Error('[cc-nexs] no passed Review to carry');
+  if (progress.local_verification?.candidate_fingerprint !== fingerprint) throw new Error('[cc-nexs] a Review is carried only to the locally verified candidate');
+  progress.review = {
+    status: 'passed',
+    candidate_fingerprint: last.candidate_fingerprint,
+    reviewed_commits: last.reviewed_commits,
+    blocking_findings: [],
+    closure_attempts: progress.review.closure_attempts || 0,
+    gateway_b_delta_attempts: progress.review.gateway_b_delta_attempts || 0,
+    reviewed_at: last.reviewed_at,
+    carried: { fingerprint, changed_paths: changedPaths.length, at: new Date().toISOString() },
+  };
+  appendMutationEvent(progress, { type: 'review.carried_over', actor, data: { reviewed_fingerprint: last.candidate_fingerprint, fingerprint, changed_paths: changedPaths.slice(0, 50) } });
+  writeProgressV2(file, progress);
+  return progress;
+}
+
 function invalidateLeanCandidateEvidence(progress) {
   progress.local_verification = {
     status: 'idle',
@@ -633,14 +671,7 @@ function invalidateLeanCandidateEvidence(progress) {
     candidate_fingerprint: null,
     attempts: progress.local_verification?.attempts || [],
   };
-  progress.review = {
-    status: 'idle',
-    candidate_fingerprint: null,
-    reviewed_commits: {},
-    blocking_findings: [],
-    closure_attempts: progress.review?.closure_attempts || 0,
-    gateway_b_delta_attempts: progress.review?.gateway_b_delta_attempts || 0,
-  };
+  progress.review = idleReview(progress.review);
   if (progress.delivery?.test) progress.delivery.test.status = 'idle';
   if (progress.gates?.release) progress.gates.release = { approved: false, binding: null };
 }
@@ -841,16 +872,7 @@ export function recordLocalVerification(file, {
   progress.local_verification.context = context;
   progress.local_verification.candidate_fingerprint = fingerprint;
   progress.local_verification.attempts.push(attempt);
-  if (status === 'failed') {
-    progress.review = {
-      status: 'idle',
-      candidate_fingerprint: null,
-      reviewed_commits: {},
-      blocking_findings: [],
-      closure_attempts: progress.review?.closure_attempts || 0,
-      gateway_b_delta_attempts: progress.review?.gateway_b_delta_attempts || 0,
-    };
-  }
+  if (status === 'failed') progress.review = idleReview(progress.review);
   appendMutationEvent(progress, { type: `local_verification.${status}`, actor, data: attempt });
   writeProgressV2(file, progress);
   return progress;
