@@ -29,4 +29,4 @@ For a pre-existing defect blocking acceptance, first compare baseline/candidate 
 
 ## Model dispatch preview
 
-Before any role dispatch, follow `<plugin-root>/rules/model-discovery.md` and the shared `modelGateway` protocol: inspect cached choices, prepare a non-blocking preview, start immediately without waiting for a reply, and record the actual result. Apply real user corrections before start or to the next batch; never restart a running role merely to change models. This applies to the current runtime, including Claude-native single-step commands. Commands that do not dispatch roles need no model discovery.
+Before any role dispatch, follow `<plugin-root>/rules/model-discovery.md` and resolve models with `cc-nexs dispatch <id> --role <role> --reason "<task>"`: show its preview when it prints one, start immediately without waiting for a reply, and record the actual result with `dispatch-result`. Apply real user corrections before start or to the next batch; never restart a running role merely to change models. This applies to the current runtime, including Claude-native single-step commands. Commands that do not dispatch roles need no model discovery.
