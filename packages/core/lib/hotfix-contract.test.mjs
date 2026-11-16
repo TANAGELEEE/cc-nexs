@@ -83,6 +83,12 @@ test('Hotfix path checks exclude merged upstream changes but retain the complete
     git('update-ref', 'refs/remotes/origin/main', 'HEAD');
     git('switch', 'hotfix/repair');
     assert.doesNotThrow(() => assertHotfixCandidatePaths(context));
+    mkdirSync(join(repo, 'src', '__tests__'), { recursive: true });
+    writeFileSync(join(repo, 'src', '__tests__', 'a.test.js'), 'test\n');
+    writeFileSync(join(repo, 'src', 'unrelated.spec.ts'), 'spec\n');
+    git('add', '.'); git('commit', '-m', 'tests for the repair');
+    context.repositories[0].sourceCommit = git('rev-parse', 'HEAD');
+    assert.doesNotThrow(() => assertHotfixCandidatePaths(context), 'tests travel with the fix without a scope revision');
     writeFileSync(join(repo, 'src', 'c.js'), 'export const outside = true;\n');
     git('add', '.'); git('commit', '-m', 'outside repair scope');
     context.repositories[0].sourceCommit = git('rev-parse', 'HEAD');
