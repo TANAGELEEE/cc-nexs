@@ -145,7 +145,7 @@ for (const command of ['hotfix', 'revise-hotfix']) {
     'progress.hotfix_document',
     '.cc-nexs/hotfixes/<key>/',
     'never reserve a shared feature number or publish placeholders',
-    'Every severity, including P3, requires independent Review',
+    'P2/P3 go from local verification straight to test',
     'CC_NEXS_PROGRESS_FILE',
     'BUG_FILE',
     'approve-release --test-exception',

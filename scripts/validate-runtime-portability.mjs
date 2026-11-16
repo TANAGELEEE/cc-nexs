@@ -13,7 +13,7 @@ for (const file of [
   'pi/skills/cc-nexs-run/SKILL.md',
 ]) {
   const text = readFileSync(join(root, file), 'utf8');
-  if (!text.includes('model-discovery.md') || !/modelGateway|cc_nexs_model_gateway/.test(text)) {
+  if (!text.includes('model-discovery.md') || !/modelGateway|cc_nexs_model_gateway|cc-nexs-cli\.mjs dispatch|cc-nexs dispatch/.test(text)) {
     errors.push(`${file}: missing shared non-blocking model gateway`);
   }
 }
