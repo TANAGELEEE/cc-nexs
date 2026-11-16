@@ -1108,3 +1108,29 @@ test('environment exception accepts CI-closed local deferrals but never unclosed
   assert.equal(approved.delivery.test.attempts.at(-1).id, attempt.id);
   assert.equal(approved.delivery.test.status, 'deployed_needs_manual_verification');
 });
+
+test('a P3 Hotfix with every local check passed is approved without a test deployment; P2 is not', () => {
+  const passed = [{ check: 'regression', result: 'passed', command: 'node check.mjs', exit_code: 0, proof: 'regression passed' }];
+  const setup = (id, severity) => {
+    const fixture = createFeature({ id, mode: 'hotfix', state: 'HOTFIX_RELEASE_PENDING_HUMAN' });
+    const source = { api: bindCandidate(fixture, 'api', `candidate ${id}\n`) };
+    recordLocalVerification(fixture.progressFile, { source, status: 'passed', evidence: passed });
+    const ready = readProgressV2(fixture.progressFile);
+    ready.state = 'HOTFIX_RELEASE_PENDING_HUMAN';
+    const doc = join(fixture.docs, 'hotfix.md');
+    let text = readFileSync(doc, 'utf8').replace('- severity: P2', `- severity: ${severity}`);
+    if (severity === 'P3') text = text.replace('- non_behavioral_change: no', '- non_behavioral_change: yes');
+    writeFileSync(doc, text);
+    ready.hotfix = { ...ready.hotfix, severity, scope_binding: hotfixScopeBinding(fixture.docs) };
+    writeProgressV2(fixture.progressFile, ready);
+    return fixture;
+  };
+  const p2 = setup('27', 'P2');
+  assert.throws(() => approveFeatureGate({ cwd: p2.root, featureId: '27', gate: 'release', approver: 'Owner' }), /requires a verified test release attempt/);
+  const p3 = setup('28', 'P3');
+  approveFeatureGate({ cwd: p3.root, featureId: '28', gate: 'release', approver: 'Owner' });
+  const binding = readProgressV2(p3.progressFile).gates.release.binding;
+  assert.equal(binding.test_attempt, null);
+  assert.deepEqual(binding.test_skipped, { severity: 'P3', reason: 'P3 Hotfix with every local check passed' });
+  assert.equal(binding.candidate_fingerprint, readProgressV2(p3.progressFile).local_verification.candidate_fingerprint);
+});

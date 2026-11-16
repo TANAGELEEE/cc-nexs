@@ -57,3 +57,12 @@ export function assertReviewRequired(progress, review = {}) {
   }
   return need;
 }
+
+// A P3 Hotfix (cosmetic, no behavior at risk) whose local verification passed every check
+// may go to the release gate without a test deployment: the person approving has the fix
+// in front of them, and a 15-minute pipeline adds nothing to a two-line style change.
+// A deferred check means something still has to be seen in test, so it does not qualify.
+export function testDeploymentOptional(progress) {
+  const optional = progress?.mode === 'hotfix' && progress.hotfix?.severity === 'P3' && progress.local_verification?.status === 'passed';
+  return { optional, reason: optional ? 'P3 Hotfix with every local check passed' : null };
+}

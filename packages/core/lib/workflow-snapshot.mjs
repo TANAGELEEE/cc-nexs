@@ -8,7 +8,7 @@ import { configuredPluginRoot } from './config-root.mjs';
 import { transitionState } from './progress-io.mjs';
 import { appendProgressEvent, readProgressV2 } from './progress-v2.mjs';
 import { isAllowedTransition, nextStep } from './state-machine.mjs';
-import { reviewRequirement } from './review-policy.mjs';
+import { reviewRequirement, testDeploymentOptional } from './review-policy.mjs';
 import { baseSyncCarryReady } from './base-sync-carry.mjs';
 import { resolveTestReleasePolicy } from './test-release.mjs';
 import { taskFilesDir } from './verify-artifacts.mjs';
@@ -65,6 +65,7 @@ export function buildWorkflowSnapshot({ cwd = process.cwd(), featureId, progress
       exact: testAttempts.at(-1)?.fingerprint === progress.local_verification?.candidate_fingerprint,
       attempt: testAttempts.filter((item) => item.deployment && item.environment_revision).length,
       prerequisites_met: true,
+      optional: testDeploymentOptional(progress).optional && testAttempts.at(-1)?.fingerprint !== progress.local_verification?.candidate_fingerprint,
     },
     base_release: {
       status: progress.delivery?.base?.status || 'idle',

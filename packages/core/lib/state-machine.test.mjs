@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { nextStep } from './state-machine.mjs';
+import { isAllowedTransition, nextStep } from './state-machine.mjs';
 
 const leanRoles = ['lean-planner', 'lean-plan-reviewer', 'lean-developer', 'lean-reviewer', 'lean-verifier'];
 
@@ -364,4 +364,13 @@ test('hotfix mode: P0/P1 are reviewed before test, P2/P3 go from local checks st
   assert.equal(step('HOTFIX_LOCAL_REVERIFYING', true).next, 'HOTFIX_DELTA_REVIEW');
   const carried = nextStep({ state: 'HOTFIX_LOCAL_REVERIFYING', enabledRoles: hotfixRoles, mode: 'hotfix', workflow: { review: { required: true }, base_sync: { carried: true, approved: true } } });
   assert.deepEqual(carried, { next: 'HOTFIX_BASE_MERGING', role: null, action: 'release_base' }, 'a synced tested Hotfix goes to its MR');
+});
+
+test('hotfix mode: a P3 with every local check passed may stop at Gateway B without test', () => {
+  assert.deepEqual(nextStep({
+    state: 'HOTFIX_CANDIDATE_READY', enabledRoles: hotfixRoles, mode: 'hotfix',
+    workflow: { test_release: { policy: 'auto_if_ready', status: 'idle', attempt: 0, optional: true } },
+  }), { next: 'HOTFIX_RELEASE_PENDING_HUMAN', role: null, action: 'await_release_approval', stop: true });
+  assert.equal(isAllowedTransition({ mode: 'hotfix', from: 'HOTFIX_CANDIDATE_READY', to: 'HOTFIX_TEST_RELEASE', next: 'HOTFIX_RELEASE_PENDING_HUMAN' }), true,
+    'the user can still send it through test');
 });

@@ -50,6 +50,8 @@ node <plugin-root>/lib/cc-nexs-cli.mjs verify-local <id>
 ```
 If `workflow.local_verify.driver` is present, use the driver; if there is no driver, run `verify-local <id> --preflight`, then run the commands in the binding matrix inside the exact candidate worktree, and record the real results with `verify-local <id> --passed|--failed|--deferred-to-test --evidence-json <json>`. Each piece of evidence includes `check`, `command`, an integer `exit_code`, `proof`, and `result` (a browser row uses `method: "browser"` instead of `exit_code`); it must cover the binding matrix and the commands must match. A check that only the local environment prevents may be recorded as structured `deferred_to_test` and must be closed by test verification; a real failure must not be recorded as a pass. Passed evidence for the same candidate and a valid scope may be reused.
 
+A P3 (`non_behavioral_change: yes`) whose local verification passed every check, with nothing deferred to test, does not need a test deployment: `cc-nexs status` reports `Test deployment: optional`, the run stops at `HOTFIX_RELEASE_PENDING_HUMAN` with the local evidence, and `approve-release` binds that candidate with `test_skipped` and opens the MR. The person approving checks the change; `advance <id> --from HOTFIX_CANDIDATE_READY --to HOTFIX_TEST_RELEASE` still sends it through test when wanted. P2 and above always verify in test.
+
 Once a P0/P1 passes locally, it enters an independent centralized Review (P2/P3 go straight to test):
 ```text
 node <plugin-root>/lib/cc-nexs-cli.mjs record-review <id> --document-findings

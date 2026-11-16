@@ -13,7 +13,7 @@ Human release Gateway B for Lean and Hotfix. Resolve the packaged CLI and record
 node <plugin-root>/lib/cc-nexs-cli.mjs approve-release <feature-id-or-bug-key>
 ```
 
-Normal approval requires `RELEASE_PENDING_HUMAN` or Hotfix `HOTFIX_RELEASE_PENDING_HUMAN`, passed local verification and independent consolidated Review for the same candidate, and a verified test attempt. P3 also requires Review. Approval binds candidate commits, test attempt, environment revision, and the current approved plan, G1 spec or Hotfix scope. Later candidate/scope changes invalidate it.
+Normal approval requires `RELEASE_PENDING_HUMAN` or Hotfix `HOTFIX_RELEASE_PENDING_HUMAN`, passed local verification and independent consolidated Review for the same candidate, and a verified test attempt. P3 also requires Review. Approval binds candidate commits, test attempt, environment revision, and the current approved plan, G1 spec or Hotfix scope. Later candidate/scope changes invalidate it. A P3 Hotfix whose local checks all passed and that has no test attempt for the current candidate is approved on that local evidence; the binding records `test_skipped` instead of a test attempt, and release-base accepts it only while the task is still such a P3.
 
 If the exact candidate was actually deployed to test but environment capability prevents verification, explicit user authorization may record an exception through this same gateway:
 

@@ -23,7 +23,7 @@ import { assertRecordedLocalVerification, extractLocalVerificationChecks } from 
 import { transitionState } from './progress-io.mjs';
 import { resolveFeatureProgress } from './approval-command.mjs';
 import { assertReleaseExceptionCurrent } from './release-exception.mjs';
-import { reviewRequirement, reviewSatisfied } from './review-policy.mjs';
+import { reviewRequirement, reviewSatisfied, testDeploymentOptional } from './review-policy.mjs';
 import { provenBaseSyncCarry } from './base-sync-carry.mjs';
 
 export function runBaseRelease({ cwd = process.cwd(), featureId, progressPath = null } = {}) {
@@ -81,6 +81,8 @@ function executeBaseRelease(context) {
   assertTestAttemptNotInvalidated(testAttempt);
   if (gate.binding.test_exception) {
     assertReleaseExceptionCurrent(context.progress, gate.binding, context.config.mergedReview);
+  } else if (gate.binding.test_skipped) {
+    if (!testDeploymentOptional(context.progress).optional) throw new Error('[cc-nexs] the approval skipped test for a P3 with passed local checks, which this candidate no longer is');
   } else if (!testAttempt || testAttempt.status !== 'verified' || testAttempt.fingerprint !== testedFingerprint) {
     throw new Error('[cc-nexs] approved test verification is missing or stale');
   }
