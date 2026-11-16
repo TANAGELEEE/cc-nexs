@@ -4,6 +4,17 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-11-16
+
+### Fixed
+
+- P2/P3 Hotfixes were still reviewed on Codex and Pi. The generated Hotfix skills (and `verify-local`) said every severity, including P3, requires an independent Review, contradicting the Hotfix command and the controller; Orchestrators obeyed the skill and, once `review-panel` refused, dispatched a reviewer outside the ledger. The adapters now state the policy (P0/P1 reviewed before test, P2/P3 straight to test) and that no reviewer, formal or informal, is dispatched when `cc-nexs status` says none is required. The Lean and Hotfix run rules say the same.
+- The Codex and Pi adapters name `cc-nexs dispatch` for model selection instead of the `modelGateway` module.
+
+### Added
+
+- `cc-nexs commit-candidate <id> --repo <repository-id> --message <text> --path <path>` commits the declared paths of an assigned worktree as the candidate. The step had no command, so Orchestrators imported `git-custodian.mjs` for it.
+
 ## [0.18.0] - 2026-11-10
 
 Fixes from the first week of 0.17.0 tasks.

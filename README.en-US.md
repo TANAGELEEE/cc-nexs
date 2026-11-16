@@ -316,6 +316,7 @@ cc-nexs heavy -- <command>      # run a build/test/dev server in a workspace-wid
 cc-nexs release-test <id> --resume --wait   # wait for a running test deployment inside the run
 cc-nexs verify-panel <id>       # list the Verifiers to dispatch and their models
 cc-nexs dispatch <id> --role <role> --reason "<task>"   # resolve the role's model and effort (no request file)
+cc-nexs commit-candidate <id> --repo <repo> --message "<msg>" --path <path>   # commit declared paths as the candidate
 cc-nexs reclaim-worktrees --sizes   # list reclaimable worktrees, idle scratch and unmanaged runtime files
 
 /cc-nexs:hotfix "symptom description" --repos=api  # hotfix/<key> + BUG document without consuming a requirement number

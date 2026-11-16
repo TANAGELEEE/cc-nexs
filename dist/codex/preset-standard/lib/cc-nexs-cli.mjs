@@ -27,6 +27,7 @@ import { requestPlanAmendment, reviewPlanAmendment } from './plan-amendment.mjs'
 import { runTestRelease, waitForTestRelease } from './test-release.mjs';
 import { recordEnvironmentVerification, verifyPanelStatus } from './test-verification-control.mjs';
 import { migrateFeatureConfig } from './feature-config.mjs';
+import { commitTaskCandidate } from './candidate-commit.mjs';
 import { dispatchRoles, recordDispatchResult } from './dispatch.mjs';
 import { modelGateway } from './model-gateway.mjs';
 import { recordPanelReviewer, reviewPanelStatus, runPanelReviewer } from './review-panel.mjs';
@@ -43,6 +44,7 @@ export function runCcNexsCommand(argv, { cwd = process.cwd() } = {}) {
     if (args.length !== 3 || args[1] !== '--request') throw new Error('model-gateway <inspect|prepare|view|start|feedback|result> --request <json-file>');
     return modelGateway(args[0], JSON.parse(readFileSync(args[2], 'utf8')), { cwd });
   }
+  if (command === 'commit-candidate') return commitTaskCandidate({ cwd, ...parseCandidateOptions(args) });
   if (command === 'dispatch') return dispatchRoles({ cwd, ...parseDispatchOptions(args) });
   if (command === 'dispatch-result') return recordDispatchResult({ cwd, ...parseDispatchOptions(args) });
   if (command === 'reclaim-worktrees') {
@@ -375,6 +377,25 @@ function parseReviewerOptions(args) {
   return options;
 }
 
+function parseCandidateOptions(args) {
+  const values = { '--repo': 'repositoryId', '--message': 'message', '--progress': 'progressPath' };
+  const options = { paths: [], progressPath: null };
+  const positional = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const token = args[index];
+    const equals = token.indexOf('=');
+    const flag = equals < 0 ? token : token.slice(0, equals);
+    const value = () => (equals < 0 ? requireValue(args, ++index, flag) : token.slice(equals + 1));
+    if (flag === '--path') options.paths.push(value());
+    else if (values[flag]) options[values[flag]] = value();
+    else if (token.startsWith('-')) throw new Error(`unknown option: ${token}`);
+    else positional.push(token);
+  }
+  options.featureId = positional[0] || null;
+  if (positional.length > 1) throw new Error(`unexpected arguments: ${positional.slice(1).join(' ')}`);
+  return options;
+}
+
 function parseDispatchOptions(args) {
   const values = { '--runtime': 'runtime', '--difficulty': 'difficulty', '--reason': 'reason', '--context': 'context', '--batch': 'batchId', '--outcome': 'outcome', '--evidence': 'evidence', '--progress': 'progressPath' };
   const options = { roles: [], progressPath: null };
@@ -602,6 +623,10 @@ function printResult(result) {
     console.log(result.provider
       ? `cc-nexs browser provider (${result.runtime}): ${result.provider}${result.fallback ? ` (fallback: ${result.reason})` : ''}`
       : `cc-nexs browser provider (${result.runtime}): none available (${result.reason}); record manual_required`);
+    return;
+  }
+  if (result.kind === 'candidate-commit') {
+    console.log(`cc-nexs candidate: ${result.repository} ${result.commit} on ${result.branch} (${result.staged.length} path(s)); ref ${result.candidateRef}`);
     return;
   }
   if (result.kind === 'dispatch') {
@@ -873,6 +898,7 @@ function printUsage() {
   console.error('  cc-nexs record-test-verification <feature-id> <--passed|--blocked|--manual-required> --evidence <text> [--attempt <id>] [--progress <path>]');
   console.error('  cc-nexs record-test-verification <feature-id> --verifier-json <json> --verifier-json <json>... [--confirm-json <json>]... [--attempt <id>] [--progress <path>]');
   console.error('  cc-nexs verify-panel <feature-id> [--runtime <claude|codex|pi>] [--progress <path>]');
+  console.error('  cc-nexs commit-candidate <feature-id> --repo <repository-id> --message <text> --path <path> [--path <path>]');
   console.error('  cc-nexs dispatch <feature-id> --role <role> [--role <role>] --reason <text> [--difficulty routine|moderate|complex] [--runtime <claude|codex|pi>] [--context <key>]');
   console.error('  cc-nexs dispatch-result <feature-id> --batch <id> --role <role> --outcome succeeded|task-failed|model-unavailable --evidence <text>');
   console.error('  cc-nexs record-test-verification <feature-id> --shard-json <json> --shard-json <json>... [--attempt <id>] [--progress <path>]');
