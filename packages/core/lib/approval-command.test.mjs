@@ -296,6 +296,37 @@ test('only a low or medium plan may skip the independent plan review', () => {
   assert.match(spawnSync(process.execPath, [cli, 'record-review', '20h', '--progress', high.progressFile, '--skipped'], { cwd: high.root, encoding: 'utf8' }).stderr, /does not accept --skipped/);
 });
 
+test('a high plan keeps its passed review across edits outside the requirements, tasks and classification', () => {
+  const high = createFeature({ id: '20c', mode: 'lean', state: 'PLAN_REVIEWING' });
+  const reset = readProgressV2(high.progressFile);
+  reset.plan_review = null;
+  writeProgressV2(high.progressFile, reset);
+  const cli = join(dirname(fileURLToPath(import.meta.url)), 'cc-nexs-cli.mjs');
+  const record = (...flags) => spawnSync(process.execPath, [cli, 'record-plan-review', '20c', '--progress', high.progressFile, ...flags], { cwd: high.root, encoding: 'utf8' });
+  const setState = (state) => { const p = readProgressV2(high.progressFile); p.state = state; writeProgressV2(high.progressFile, p); };
+  const plan = (lv, prose = 'Design: reuse the export service.') => writeLeanPlan(high.docs, [prose, '| T-001 | AC-001 | api/src/export.ts |', lv, '| TV-001 | AC-001 |', '- risk_tier: high', '- delivery_lane: standard', '- test_delivery.api: deploy']);
+  plan('| LV-001 | AC-001 | targeted test | npm test |');
+  assert.equal(record('--passed').status, 0);
+
+  setState('PLANNING');
+  plan('| LV-001 | AC-001 | targeted test | npm test -- export |', 'Design: reuse the export service and its retry.');
+  const carried = record('--skipped', '--reason', 'only the LV command and design prose changed');
+  assert.equal(carried.status, 0, carried.stderr);
+  assert.equal(readProgressV2(high.progressFile).plan_review.carried, true);
+  assert.equal(approveFeatureGate({ cwd: high.root, featureId: '20c', gate: 'plan', approver: 'Plan Owner' }).state, 'PLAN_APPROVED');
+
+  const changedTasks = createFeature({ id: '20d', mode: 'lean', state: 'PLAN_REVIEWING' });
+  const fresh = readProgressV2(changedTasks.progressFile);
+  fresh.plan_review = null;
+  writeProgressV2(changedTasks.progressFile, fresh);
+  const recordD = (...flags) => spawnSync(process.execPath, [cli, 'record-plan-review', '20d', '--progress', changedTasks.progressFile, ...flags], { cwd: changedTasks.root, encoding: 'utf8' });
+  writeLeanPlan(changedTasks.docs, ['| T-001 | AC-001 | api/src/export.ts |', '| LV-001 | AC-001 |', '| TV-001 | AC-001 |', '- risk_tier: high', '- delivery_lane: standard', '- test_delivery.api: deploy']);
+  assert.equal(recordD('--passed').status, 0);
+  const p = readProgressV2(changedTasks.progressFile); p.state = 'PLANNING'; writeProgressV2(changedTasks.progressFile, p);
+  writeLeanPlan(changedTasks.docs, ['| T-001 | AC-001 | api/src/export.ts, api/src/billing/charge.ts |', '| LV-001 | AC-001 |', '| TV-001 | AC-001 |', '- risk_tier: high', '- delivery_lane: standard', '- test_delivery.api: deploy']);
+  assert.match(recordD('--skipped', '--reason', 'small').stderr, /may skip a re-review only when the requirements, task table and classification lines are unchanged/);
+});
+
 test('approve-plan --auto passes Gateway A only for an eligible plan authorized at init', () => {
   const fixture = createFeature({ id: '20u', mode: 'lean', state: 'PLAN_PENDING_HUMAN' });
   const scope = (paths, risk = 'low', lane = 'fast-track') => ['| Task | AC | Repo | Paths |', '|---|---|---|---|', `| T-001 | AC-001 | api | ${paths} |`, '| LV-001 | AC-001 |', '| TV-001 | AC-001 |', `- risk_tier: ${risk}`, `- delivery_lane: ${lane}`, '- test_delivery.api: deploy'];

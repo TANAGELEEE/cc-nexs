@@ -891,6 +891,8 @@ export function recordHotfixBoundaryEvidence(file, {
 // so a plan edited at the gate can be re-reviewed without reopening the revision loop.
 export function recordPlanReview(file, {
   planSha256,
+  reviewScopeSha256 = null,
+  carried = false,
   status,
   blockingFindings = [],
   reason = null,
@@ -918,9 +920,13 @@ export function recordPlanReview(file, {
   const rounds = (progress.plan_review?.rounds || 0) + (status === 'skipped' ? 0 : 1);
   const from = progress.state;
   const to = status === 'blocked' && rounds === 1 ? 'PLAN_REVIEW_BLOCKED' : 'PLAN_PENDING_HUMAN';
-  progress.plan_review = { status, plan_sha256: planSha256, rounds, blocking_findings: blockingFindings, ...(reason && { reason }), reviewed_at: new Date().toISOString() };
+  progress.plan_review = {
+    status, plan_sha256: planSha256, rounds, blocking_findings: blockingFindings, ...(reason && { reason }),
+    ...(reviewScopeSha256 && { review_scope_sha256: reviewScopeSha256 }), ...(carried && { carried: true }),
+    reviewed_at: new Date().toISOString(),
+  };
   progress.state = to;
-  appendMutationEvent(progress, { type: 'plan.reviewed', actor, data: { status, plan_sha256: planSha256, rounds, blocking_findings: blockingFindings, ...(reason && { reason }), from, to } });
+  appendMutationEvent(progress, { type: 'plan.reviewed', actor, data: { status, plan_sha256: planSha256, rounds, blocking_findings: blockingFindings, ...(reason && { reason }), ...(carried && { carried: true }), from, to } });
   writeProgressV2(file, progress);
   return progress;
 }

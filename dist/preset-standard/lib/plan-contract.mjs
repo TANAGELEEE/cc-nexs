@@ -124,6 +124,18 @@ export function assertRequirementTraceability(reqDir) {
   return required;
 }
 
+// What an independent plan review judged: the requirements, the task table (tasks,
+// paths, ACs), and the classification lines. A later edit that leaves these unchanged
+// (verification matrices, delivery notes, design prose) keeps a passed plan review.
+const CLASSIFICATION_LINE = /^\s*-\s*(risk_tier|delivery_lane|test_delivery\.[\w.-]+|derived_binding)\s*:/;
+
+function planReviewScopeDigest(requirements, approvalScope) {
+  const lines = approvalScope.split('\n');
+  const tasks = tableRows(approvalScope, 'T').map((line) => line.trim());
+  const classification = lines.filter((line) => CLASSIFICATION_LINE.test(line)).map((line) => line.trim());
+  return digest(`${requirements}\n${tasks.join('\n')}\n${classification.join('\n')}`);
+}
+
 export function planApprovalBinding(reqDir, { requireRiskTier = false, requireDeliveryLane = false } = {}) {
   const requirements = normalized(readFileSync(join(reqDir, 'requirements.md'), 'utf8'));
   const plan = readFileSync(join(reqDir, 'plan.md'), 'utf8');
@@ -145,6 +157,7 @@ export function planApprovalBinding(reqDir, { requireRiskTier = false, requireDe
     requirements_sha256: digest(requirements),
     plan_scope_sha256: digest(approvalScope),
     combined_sha256: digest(`${requirements}\n${approvalScope}`),
+    review_scope_sha256: planReviewScopeDigest(requirements, approvalScope),
     risk_tier: riskTier,
     delivery_lane: deliveryLane || (requireRiskTier ? 'standard' : null),
     delivery_contract_version: deliveryLane ? 1 : 0,

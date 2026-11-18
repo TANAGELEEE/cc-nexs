@@ -115,11 +115,17 @@ export function recordLeanPlanReview({ cwd = process.cwd(), featureId, progressP
   const progressFile = resolveFeatureProgress({ cwd, featureId, progressPath });
   const progress = readProgressV2(progressFile);
   const binding = planApprovalBinding(dirname(progressFile), { requireRiskTier: true, requireDeliveryLane: true });
-  if (status === 'skipped' && !['low', 'medium'].includes(binding.risk_tier)) {
-    throw new Error(`[cc-nexs] a ${binding.risk_tier} plan requires an independent plan review; only low/medium plans may skip it`);
+  // A high/critical plan may skip a re-review only when what the passed review judged
+  // (requirements, task table, classification lines) is unchanged.
+  const previous = progress.plan_review;
+  const carried = status === 'skipped' && !['low', 'medium'].includes(binding.risk_tier)
+    && previous?.review_scope_sha256 === binding.review_scope_sha256
+    && (previous.status === 'passed' || previous.carried === true);
+  if (status === 'skipped' && !['low', 'medium'].includes(binding.risk_tier) && !carried) {
+    throw new Error(`[cc-nexs] a ${binding.risk_tier} plan requires an independent plan review; it may skip a re-review only when the requirements, task table and classification lines are unchanged since a passed review`);
   }
   const after = recordPlanReview(progressFile, {
-    planSha256: binding.combined_sha256, status, blockingFindings, reason, expectedRevision: progress.revision,
+    planSha256: binding.combined_sha256, reviewScopeSha256: binding.review_scope_sha256, carried, status, blockingFindings, reason, expectedRevision: progress.revision,
   });
   return { kind: 'plan-review', feature: after.feature, status, rounds: after.plan_review.rounds, state: after.state, progressFile };
 }
