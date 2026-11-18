@@ -113,7 +113,7 @@ Pure function. No I/O, no side effects. Given `(state, counters, thresholds, ena
 
 Characteristics:
 - `mode=lean` is used for new requirements; every Lean task goes plan, independent plan review (high/critical), plan gate, locally executable verification, a consolidated Review where the review policy requires it, test delivery/acceptance, release gate, base merge
-- Bounded loops: one plan revision, one Review delta closure, and the review_revision / fix_per_bug circuit breakers
+- Bounded loops: one plan revision, a Review carried to repairs or at most one delta closure, and the review_revision / fix_per_bug circuit breakers
 - Unsupported modes throw instead of falling back
 - Default stops: Gateway A, Gateway B, test release block, manual verification, and circuit breaker
 
@@ -171,7 +171,7 @@ INIT → PLANNING → PLAN_REVIEWING → PLAN_PENDING_HUMAN
 → CONSOLIDATED_REVIEW → RELEASE_PENDING_HUMAN
 → BASE_MERGING → COMPLETE
 ```
-Lean maintains only two manually maintained documents, requirements.md and plan.md; after a Review block, at most one delta closure is allowed. Environment items that cannot be started locally are documented with `deferred_to_test` as evidence, and delivery continues. Browser, login/MFA, and acceptance URL checks are performed only after deployment; if any are missing, delivery enters the recoverable `TEST_DEPLOYED_NEEDS_MANUAL_VERIFY` state and does not roll back the test merge/CI.
+Lean maintains only two manually maintained documents, requirements.md and plan.md; after a Review block, a repair carries the Review when its finding checks pass and it changes no sensitive path, and gets at most one delta closure otherwise. Environment items that cannot be started locally are documented with `deferred_to_test` as evidence, and delivery continues. Browser, login/MFA, and acceptance URL checks are performed only after deployment; if any are missing, delivery enters the recoverable `TEST_DEPLOYED_NEEDS_MANUAL_VERIFY` state and does not roll back the test merge/CI.
 
 An explicit exit, release driver, or test branch misconfiguration can block delivery before push; browser/login/MFA/verification URL issues only affect post-deployment acceptance and fall into recoverable manual verification. Production releases are always manual.
 
