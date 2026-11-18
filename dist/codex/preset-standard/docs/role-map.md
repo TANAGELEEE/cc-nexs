@@ -18,7 +18,7 @@ Runtime mapping: Claude Code uses independent Claude subagents; Codex uses an in
 
 The plan review happens before Gateway A for high/critical plans: the Plan Reviewer fact-checks the plan against the requirements and the code, and blocks only P0/P1 issues it can cite. A blocked plan gets one Planner revision and one re-review; findings still open after that go to Gateway A for the human to decide. A low/medium plan records a skipped review and the human reviews it at Gateway A; with `--from`, the user wrote the plan and the Planner only normalizes it. Gateway A also refuses a plan whose acceptance criteria do not each trace to a task, a local check, and a test check.
 
-Lean's full code Review happens only once: it examines the accumulated diff of all repos, the approval boundary, local evidence, and risks, and lists all P0/P1 at once. After fixes there is at most one delta closure; if blocked again, the case is escalated to a human rather than consuming more tokens. P2/P3 are recorded but do not block.
+Lean's full code Review happens only once: it examines the accumulated diff of all repos, the approval boundary, local evidence, and risks, and lists all P0/P1 at once. After fixes the Review carries to the repaired candidate when every blocking finding has a passing check of its id and no sensitive path changed; otherwise there is at most one delta closure; if blocked again, the case is escalated to a human rather than consuming more tokens. P2/P3 are recorded but do not block.
 
 ## Hotfix mini-Lean Roles
 

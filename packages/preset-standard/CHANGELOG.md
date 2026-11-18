@@ -4,6 +4,22 @@ All notable changes to cc-nexs will be documented here.
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-11-18
+
+Fewer Review and test rounds, from the 0.18/0.19 sessions on both machines (5 Lean tasks, all rated high: 45 test attempts, 38 delta closures of which 2 blocked).
+
+### Changed
+
+- A Lean repair keeps the earlier Review instead of a delta closure when every blocking finding has a passing local check named by its id and the repair changed no sensitive path of the candidate's own diff (`review.carry`; merged base changes do not count). Otherwise one delta closure runs as before. The full Review still runs before test; the Judge runs only when a reviewer reports P0/P1; Gateway B shows the reviewed candidate and the paths changed since. The "at most one delta closure" wording, which made Orchestrators ask the user before every closure, is gone.
+- The Planner raises `risk_tier` only for a mechanism the plan changes (funds rules, permission model, an external contract, existing data, infrastructure or concurrency), naming the mechanism and its files. Reusing existing billing, permissions, routes or storage does not count, and cross-repository work never does by itself. The plan reviewer treats an unsupported high rating as a misclassification too.
+- Sensitive paths match infrastructure files and whole directory names. Module names such as `sa-deployment/` and files such as `BillingPage.tsx` no longer require a Review, block `--auto-plan`, or send an amendment to independent review; list business-critical code in `review.required_paths`.
+- A high/critical plan edited after a passed plan review records `record-plan-review --skipped` instead of a re-review while `requirements.md`, the task table and the classification lines are unchanged.
+
+### Added
+
+- A blocked Lean test verification recorded from direct evidence must report every TV check and every check deferred from local verification (`passed`, `failed`, `not_run` with its reason and `blocked_by` or `required_input`, or `waived` with `authorization_evidence`), so one repair round gets every failure.
+- Local verification refuses `deferred_to_test` for a matrix row typed `lint`, `typecheck` or `compile`; the Planner gives every changed code repository such a row.
+
 ## [0.19.0] - 2026-11-16
 
 ### Fixed

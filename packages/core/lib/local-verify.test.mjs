@@ -182,6 +182,7 @@ test('Lean local verification invokes the configured driver and binds evidence t
     assert.deepEqual(blockedReview.review.finding_counts, { blocking: 1, unproven: 1, refuted: 0, advisory: 0, rejected: 0 });
     assert.deepEqual(blockedReview.events.at(-1).data.finding_counts, { blocking: 1, unproven: 1, refuted: 0, advisory: 0, rejected: 0 });
     assert.deepEqual(blockedReview.review.reviewers, reviewers);
+    assert.deepEqual(blockedReview.review_baseline.blocking, [{ id: 'F-1', summary: 'P1: F-1' }], 'the baseline names the finding a repair must prove with a check of the same id');
     assert.throws(
       () => recordLeanReview({ cwd: root, featureId: '30', progressPath: progressFile, status: 'passed' }),
       /record it with --document-findings/,
@@ -579,6 +580,96 @@ test('a failure that already happens on the merge-base is recorded as baseline_f
     const result = record(baseline(base));
     assert.equal(result.status, 'passed');
     assert.equal(readProgressV2(progressFile).local_verification.attempts.at(-1).evidence[1].result, 'baseline_failed');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a repaired high-risk candidate carries its Review to test unless the repair touches a sensitive path', async () => {
+  const { featureStatus } = await import('./workflow-snapshot.mjs');
+  const { recordRepositoryCandidate } = await import('./progress-v2.mjs');
+  const root = mkdtempSync(join(tmpdir(), 'cc-nexs-review-carry-'));
+  const api = join(root, 'api');
+  const docs = join(root, 'docs', 'doc', '32.review-carry');
+  try {
+    mkdirSync(join(root, '.cc-nexs'), { recursive: true });
+    mkdirSync(api, { recursive: true });
+    mkdirSync(docs, { recursive: true });
+    writeFileSync(join(root, '.cc-nexs', 'workspace.yml'), [
+      'version: 1', 'docs_repository: docs', 'repositories:', '  - id: docs', '    path: docs', '    docs: true',
+      '  - id: api', '    path: api', '    base_branch: main', '    test_branch: test',
+    ].join('\n'));
+    writeFileSync(join(root, 'cc-nexs.config.json'), JSON.stringify({ workflow: { local_verify: { min_free_gb: 0 } } }));
+    git(api, ['init', '-b', 'feature/32-review-carry']);
+    git(api, ['config', 'user.name', 'Test User']);
+    git(api, ['config', 'user.email', 'test@example.com']);
+    writeFileSync(join(api, 'base.txt'), 'base\n');
+    git(api, ['add', 'base.txt']);
+    git(api, ['commit', '-m', 'base']);
+    git(api, ['update-ref', 'refs/remotes/origin/main', 'HEAD']);
+    const commitCandidate = (path, content) => {
+      mkdirSync(join(api, path, '..'), { recursive: true });
+      writeFileSync(join(api, path), content);
+      git(api, ['add', path]);
+      git(api, ['commit', '-m', `change ${path}`]);
+      const commit = git(api, ['rev-parse', 'HEAD']);
+      git(api, ['update-ref', 'refs/cc-nexs/candidates/32-review-carry/api', commit]);
+      return commit;
+    };
+    const reviewed = commitCandidate('app.txt', 'v1\n');
+    writeFileSync(join(docs, 'requirements.md'), '# Requirements\n\n- AC-001\n');
+    writeFileSync(join(docs, 'plan.md'), [
+      '# Plan', '<!-- APPROVAL-SCOPE START -->', '- T-001', '- risk_tier: high',
+      '| Check | AC | 类型 | 命令/Driver | 通过条件 |', '|---|---|---|---|---|',
+      '| LV-001 | AC-001 | targeted test | git show HEAD:app.txt | ready |',
+      '<!-- APPROVAL-SCOPE END -->', '',
+    ].join('\n'));
+    writeFileSync(join(docs, 'progress.md'), '## 当前状态\n\n```yaml\ncurrent_state: LOCAL_VERIFYING\nupdated_at: null\n```\n\n## 历史轨迹\n\n- (尚无)\n');
+    const progress = createProgressV2({ featureId: '32', featureSlug: 'review-carry', preset: 'preset-standard' });
+    progress.state = 'LOCAL_VERIFYING';
+    progress.gates.plan = { approved: true, binding: planApprovalBinding(docs) };
+    progress.repositories.api = { branch: 'feature/32-review-carry', worktree: 'api', candidate: { commit: reviewed, ref: 'refs/cc-nexs/candidates/32-review-carry/api', paths: ['app.txt'] } };
+    const progressFile = join(docs, 'progress.json');
+    writeProgressV2(progressFile, progress);
+    const evidence = (...extra) => [{ check: 'LV-001', result: 'passed', command: 'git show HEAD:app.txt', exit_code: 0, proof: 'ready' }, ...extra];
+    const verify = (state, extra = []) => {
+      const current = readProgressV2(progressFile);
+      current.state = state;
+      writeProgressV2(progressFile, current);
+      writeFileSync(join(docs, 'progress.md'), `## 当前状态\n\n\`\`\`yaml\ncurrent_state: ${state}\nupdated_at: null\n\`\`\`\n\n## 历史轨迹\n\n- (尚无)\n`);
+      return runLocalVerification({ cwd: root, featureId: '32', progressPath: progressFile, recordStatus: 'passed', evidence: evidence(...extra) });
+    };
+    const reverified = () => {
+      const current = readProgressV2(progressFile);
+      current.state = 'LOCAL_REVERIFYING';
+      writeProgressV2(progressFile, current);
+      return featureStatus({ cwd: root, featureId: '32', progressPath: progressFile });
+    };
+    verify('LOCAL_VERIFYING');
+    recordLeanReview({ cwd: root, featureId: '32', progressPath: progressFile, status: 'passed' });
+    const baseline = readProgressV2(progressFile).review_baseline;
+    assert.equal(baseline.status, 'passed');
+    assert.deepEqual(baseline.source, { api: reviewed });
+    assert.equal(baseline.plan_binding, readProgressV2(progressFile).gates.plan.binding.combined_sha256);
+
+    const repair = commitCandidate('app.txt', 'v2\n');
+    recordRepositoryCandidate(progressFile, 'api', { commit: repair, candidateRef: 'refs/cc-nexs/candidates/32-review-carry/api', staged: ['app.txt'] });
+    verify('TEST_FIXING');
+    const carried = readProgressV2(progressFile);
+    assert.deepEqual(carried.review.carry.changed_paths, ['api:app.txt']);
+    assert.equal(carried.events.at(-1).type, 'review.carry_computed');
+    let status = reverified();
+    assert.equal(status.input.workflow.review.carried, true);
+    assert.equal(status.next.next, 'CANDIDATE_READY', 'a non-sensitive repair goes straight back to test');
+    assert.throws(() => recordLeanReview({ cwd: root, featureId: '32', progressPath: progressFile, status: 'passed', closure: true }), /earlier Review carries/);
+
+    const migration = commitCandidate('db/migrations/001.sql', 'alter table t add c int;\n');
+    recordRepositoryCandidate(progressFile, 'api', { commit: migration, candidateRef: 'refs/cc-nexs/candidates/32-review-carry/api', staged: ['db/migrations/001.sql'] });
+    verify('TEST_FIXING');
+    status = reverified();
+    assert.deepEqual(readProgressV2(progressFile).review.carry.sensitive_paths, ['api:db/migrations/001.sql']);
+    assert.equal(status.input.workflow.review.carried, false);
+    assert.deepEqual([status.next.next, status.next.action], ['REVIEW_CLOSURE', 'review_delta'], 'a sensitive repair still gets the delta Review');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

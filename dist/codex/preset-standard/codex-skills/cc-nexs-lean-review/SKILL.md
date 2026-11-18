@@ -1,6 +1,6 @@
 ---
 name: cc-nexs-lean-review
-description: "/cc-nexs:lean-review Codex mirror skill. Use when $cc-nexs-lean-review is explicitly invoked. Lean: one consolidated Review by the review panel and a Judge, and at most one delta closure check."
+description: "/cc-nexs:lean-review Codex mirror skill. Use when $cc-nexs-lean-review is explicitly invoked. Lean: one consolidated Review by the review panel (and a Judge when a reviewer reports P0/P1), and a delta closure only for a repair the Review does not carry."
 ---
 
 # /cc-nexs:lean-review for Codex

@@ -6,14 +6,16 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 
 import { assertLocalCandidateWorktree, resolveCandidateContext } from './candidate-context.mjs';
 import { assertHotfixCandidatePaths, assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
-import { extractLocalVerificationChecks, validateLocalEvidence } from './local-evidence.mjs';
+import { assertCompileChecksNotDeferred, compileLevelChecks, extractLocalVerificationChecks, validateLocalEvidence } from './local-evidence.mjs';
 import { assertPlanApprovalCurrent, extractApprovalScope } from './plan-contract.mjs';
 import {
   candidateFingerprint,
   isLocalVerificationReadyStatus,
   readProgressV2,
   recordLocalVerification,
+  recordReviewCarry,
 } from './progress-v2.mjs';
+import { computeReviewCarry } from './review-carry.mjs';
 import {
   beginVerifyAttempt,
   finishVerifyAttempt,
@@ -60,7 +62,9 @@ export function runLocalVerification({
     throw new Error(`[cc-nexs] local verification is not valid from ${context.progress.state}`);
   }
   const driver = normalizeDriver(context.config.mergedWorkflow?.local_verify?.driver, context.workspaceRoot);
-  const expectedChecks = extractLocalVerificationChecks(releaseScope(context.progress, context.progressFile));
+  const scope = releaseScope(context.progress, context.progressFile);
+  const expectedChecks = extractLocalVerificationChecks(scope);
+  const compileChecks = compileLevelChecks(scope);
   const evidencePolicy = { allowTestDefer: ['lean', 'hotfix'].includes(context.progress.mode), expectedChecks };
   const contractFingerprint = createHash('sha256').update(JSON.stringify({ driver, ...evidencePolicy })).digest('hex');
   assertVerificationWorktrees(context);
@@ -71,6 +75,7 @@ export function runLocalVerification({
       throw new Error('[cc-nexs] workflow.local_verify.driver is configured; run verify-local without direct evidence flags');
     }
     validateLocalEvidence(recordStatus, recordedEvidence, evidencePolicy);
+    assertCompileChecksNotDeferred(recordedEvidence, compileChecks);
     assertBaselineCommits(context, recordedEvidence);
     recordLocalVerification(context.progressFile, {
       source: context.source,
@@ -81,6 +86,7 @@ export function runLocalVerification({
       expectedRevision: context.progress.revision,
       actor: 'local-evidence-controller',
     });
+    recordCarry(context, recordedEvidence);
     return {
       kind: 'local-verification',
       feature: context.progress.feature,
@@ -174,6 +180,7 @@ export function runLocalVerification({
     finally { slot.release(); }
     assertVerificationWorktrees(context);
     const evidence = result.evidence || [];
+    assertCompileChecksNotDeferred(evidence, compileChecks);
     assertBaselineCommits(context, evidence);
     recordLocalVerification(context.progressFile, {
       source: context.source,
@@ -183,6 +190,7 @@ export function runLocalVerification({
       contractFingerprint,
       expectedRevision: context.progress.revision,
     });
+    recordCarry(context, evidence);
     ending.status = result.status;
     return {
       kind: 'local-verification',
@@ -201,6 +209,22 @@ export function runLocalVerification({
   } finally {
     finishVerifyAttempt(attempt, ending);
   }
+}
+
+// A repaired Lean candidate that passed local verification is checked against the last
+// Review; review-carry.mjs decides whether that Review still covers it.
+function recordCarry(context, evidence) {
+  if (context.progress.mode !== 'lean') return;
+  const progress = readProgressV2(context.progressFile);
+  if (!isLocalVerificationReadyStatus(progress.local_verification?.status)) return;
+  const carry = computeReviewCarry({
+    progress,
+    repositories: context.repositories,
+    fingerprint: candidateFingerprint(context.source),
+    evidence,
+    review: context.config.mergedReview || {},
+  });
+  if (carry) recordReviewCarry(context.progressFile, carry);
 }
 
 // One reclaim, one recheck: a blocker never moves outputs to another disk and never loops.

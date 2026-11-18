@@ -782,6 +782,7 @@ export function recordReleaseChangeRequest(file, {
     progress.state = progress.mode === 'hotfix' ? 'HOTFIX_CHANGE_REQUESTED' : 'GATEWAY_B_CHANGE_REQUESTED';
   } else if (kind === 'scope') {
     invalidateLeanCandidateEvidence(progress);
+    progress.review_baseline = null;
     requireDelivery(progress).test.status = 'idle';
     progress.gates.plan = { approved: false, binding: null, invalidated_at: timestamp, reason: request.id };
     progress.plan_review = null;
@@ -890,6 +891,8 @@ export function recordHotfixBoundaryEvidence(file, {
 // so a plan edited at the gate can be re-reviewed without reopening the revision loop.
 export function recordPlanReview(file, {
   planSha256,
+  reviewScopeSha256 = null,
+  carried = false,
   status,
   blockingFindings = [],
   reason = null,
@@ -917,9 +920,13 @@ export function recordPlanReview(file, {
   const rounds = (progress.plan_review?.rounds || 0) + (status === 'skipped' ? 0 : 1);
   const from = progress.state;
   const to = status === 'blocked' && rounds === 1 ? 'PLAN_REVIEW_BLOCKED' : 'PLAN_PENDING_HUMAN';
-  progress.plan_review = { status, plan_sha256: planSha256, rounds, blocking_findings: blockingFindings, ...(reason && { reason }), reviewed_at: new Date().toISOString() };
+  progress.plan_review = {
+    status, plan_sha256: planSha256, rounds, blocking_findings: blockingFindings, ...(reason && { reason }),
+    ...(reviewScopeSha256 && { review_scope_sha256: reviewScopeSha256 }), ...(carried && { carried: true }),
+    reviewed_at: new Date().toISOString(),
+  };
   progress.state = to;
-  appendMutationEvent(progress, { type: 'plan.reviewed', actor, data: { status, plan_sha256: planSha256, rounds, blocking_findings: blockingFindings, ...(reason && { reason }), from, to } });
+  appendMutationEvent(progress, { type: 'plan.reviewed', actor, data: { status, plan_sha256: planSha256, rounds, blocking_findings: blockingFindings, ...(reason && { reason }), ...(carried && { carried: true }), from, to } });
   writeProgressV2(file, progress);
   return progress;
 }
@@ -966,12 +973,46 @@ export function recordConsolidatedReview(file, {
     ...(findings ? { findings: findings.classified, finding_counts: findings.counts, reviewers: findings.reviewers } : {}),
     reviewed_at: new Date().toISOString(),
   };
+  // The baseline outlives candidate changes so a later repair can carry this Review
+  // (review-carry.mjs); a new Gateway A approval no longer matches its plan binding.
+  progress.review_baseline = {
+    status,
+    round: gatewayBDelta ? 'gateway-b-delta' : closure ? 'closure' : 'consolidated',
+    fingerprint,
+    source: { ...source },
+    blocking: findings
+      ? findings.classified.filter((item) => item.class === 'blocking').map((item) => ({ id: item.finding.id, summary: `${item.finding.severity}: ${item.finding.id}` }))
+      : blockingFindings.map((summary) => ({ id: null, summary })),
+    plan_binding: progress.gates?.plan?.binding?.combined_sha256 || null,
+    recorded_at: progress.review.reviewed_at,
+  };
   appendMutationEvent(progress, {
     type: gatewayBDelta
       ? `review.gateway_b_delta_${status}`
       : closure ? `review.closure_${status}` : `review.consolidated_${status}`,
     actor,
     data: { fingerprint, source, blocking_findings: blockingFindings, ...(findings ? { finding_counts: findings.counts, reviewers: findings.reviewers } : {}) },
+  });
+  writeProgressV2(file, progress);
+  return progress;
+}
+
+// The carry review-carry.mjs computed for the candidate that just passed local verification.
+export function recordReviewCarry(file, carry) {
+  const progress = readProgressV2(file);
+  if (!carry || progress.local_verification?.candidate_fingerprint !== carry.to_fingerprint) return progress;
+  progress.review = { ...progress.review, carry };
+  appendMutationEvent(progress, {
+    type: 'review.carry_computed',
+    actor: 'local-evidence-controller',
+    data: {
+      from_fingerprint: carry.from_fingerprint,
+      to_fingerprint: carry.to_fingerprint,
+      carried: carry.sensitive_paths.length === 0 && carry.unresolved_findings.length === 0,
+      sensitive_paths: carry.sensitive_paths,
+      unresolved_findings: carry.unresolved_findings,
+      changed_paths: carry.changed_paths.length,
+    },
   });
   writeProgressV2(file, progress);
   return progress;

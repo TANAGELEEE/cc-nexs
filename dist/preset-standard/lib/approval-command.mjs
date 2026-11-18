@@ -122,7 +122,8 @@ export function approveFeatureGate({
     const baseTargets = assertReleaseCandidateRefsCurrent({ progress: before, progressFile, attempt: { source: candidate.source } });
     assertRecordedLocalVerification(before, { source: candidate.source, fingerprint: candidate.fingerprint, expectedChecks: localChecks });
     const reviewNeed = reviewRequirement(before, reviewConfig);
-    if (!reviewSatisfied(carry ? { ...before, review: carry.review || {} } : before, attempt.fingerprint, reviewNeed)) {
+    const reviewedProgress = carry ? { ...before, review: carry.review || {} } : before;
+    if (!reviewSatisfied(reviewedProgress, attempt.fingerprint, reviewNeed)) {
       throw new Error(`[cc-nexs] release approval requires a consolidated review for the tested candidate (${reviewNeed.reasons.join('; ')})`);
     }
     const binding = {
@@ -131,7 +132,14 @@ export function approveFeatureGate({
       base_targets: baseTargets,
       test_attempt: attempt.id,
       environment_revision: attempt.environment_revision,
-      review: { required: reviewNeed.required, reasons: reviewNeed.reasons },
+      review: {
+        required: reviewNeed.required,
+        reasons: reviewNeed.reasons,
+        ...(reviewNeed.required && reviewedProgress.review?.carry?.to_fingerprint === attempt.fingerprint && reviewedProgress.review.status !== 'passed' && {
+          carried_from: reviewedProgress.review.carry.from_fingerprint,
+          changed_since_review: reviewedProgress.review.carry.changed_paths,
+        }),
+      },
       ...(carry && { base_sync: { from_fingerprint: carry.from_fingerprint, from_source: carry.from_source, tested_again: false } }),
       plan_binding: before.mode === 'lean' ? before.gates.plan?.binding?.combined_sha256 || null : null,
       hotfix_scope_binding: before.mode === 'hotfix' ? before.hotfix.scope_binding.hotfix_scope_sha256 : null,

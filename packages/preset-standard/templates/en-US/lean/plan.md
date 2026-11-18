@@ -61,7 +61,7 @@ Local verification is a fast check before deployment; acceptance in test is the 
 - Rollback plan:
 ## Complexity and Size
 - Complexity: low / medium / high
-- High-risk items: none / high coupling across multiple modules / breaking public contract / high permission or funding risk / destructive migration / other
+- High-risk items (only a changed mechanism counts; name what changes and its files): none / funds rules / permission model / breaking external contract / destructive migration / infrastructure or concurrency / other
 - Size recommendation: keep one Lean requirement / split into several Lean requirements
 - Basis for judgment:
 <!-- APPROVAL-SCOPE END -->

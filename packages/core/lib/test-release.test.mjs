@@ -374,6 +374,11 @@ test('test release integrates candidates, invokes structured driver, records evi
       () => runCcNexsCommand(['record-test-verification', '05', '--passed', '--shard-json', shardJson('code', 'passed'), '--shard-json', shardJson('other', 'passed'), '--progress', progressFile], { cwd: root }),
       /--shard-json derives status/,
     );
+    assert.throws(
+      () => runCcNexsCommand(['record-test-verification', '05', '--blocked', '--evidence', 'smoke failed', '--progress', progressFile], { cwd: root }),
+      /needs at least one failed check/,
+      'a blocked Lean verification reports structured checks, not one line of prose',
+    );
     const sharded = runCcNexsCommand([
       'record-test-verification', '05', '--shard-json', shardJson('code', 'passed'), '--shard-json', shardJson('other', 'blocked'), '--progress', progressFile,
     ], { cwd: root });

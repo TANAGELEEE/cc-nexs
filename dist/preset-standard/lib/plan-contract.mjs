@@ -70,12 +70,27 @@ function acIds(lines) {
   return new Set(lines.flatMap((line) => line.match(/\bAC-\d+\b/g) || []));
 }
 
-// Paths that make a plan ineligible for --auto-plan, whatever risk the Planner declared:
-// schema/data, auth/permission/secret, payment, and infrastructure/deployment changes.
-const AUTO_PLAN_SENSITIVE_PATH = /migration|schema|\.sql$|auth|permission|security|secret|credential|iam|payment|billing|terraform|helm|k8s|kubernetes|deploy|docker|\.gitlab-ci|\.github\/workflows/i;
+// Paths that make a plan ineligible for --auto-plan, require a Review of a low/medium
+// candidate, and send an amendment to independent review, whatever risk the Planner
+// declared: data migrations, infrastructure and CI files, and directories named for
+// auth, permission, secrets, payment or deployment. Directory names match whole path
+// segments, so a module such as `sa-deployment/` or a page such as `BillingPage.tsx` is
+// not sensitive by name; a workspace lists its own business-critical code in
+// `review.required_paths`.
+const SENSITIVE_SEGMENT = new Set([
+  'migration', 'migrations', 'auth', 'permission', 'permissions', 'security', 'secret', 'secrets',
+  'credential', 'credentials', 'iam', 'payment', 'payments', 'billing', 'terraform', 'helm', 'k8s',
+  'kubernetes', 'deploy', 'deployment', 'deployments',
+]);
+const SENSITIVE_FILE = /(^|\/)(Dockerfile(\.[^/]*)?|docker-compose[^/]*\.ya?ml|\.gitlab-ci\.yml|schema\.prisma)$|\.(sql|tf)$|(^|\/)\.github\/workflows\//i;
 
 export function isSensitivePlanPath(path) {
-  return AUTO_PLAN_SENSITIVE_PATH.test(path);
+  const normalized = String(path).replace(/\\/g, '/');
+  if (SENSITIVE_FILE.test(normalized)) return true;
+  const segments = normalized.split('/');
+  // The last segment is a directory too unless it names a file (`src/auth` vs `src/auth.ts`).
+  if (segments.at(-1).includes('.')) segments.pop();
+  return segments.some((segment) => SENSITIVE_SEGMENT.has(segment.toLowerCase()));
 }
 
 export function sensitivePlanPaths(planText) {
@@ -83,7 +98,7 @@ export function sensitivePlanPaths(planText) {
   const paths = rows.flatMap((line) => (line.split('|')[4] || '').split(/[\s,，、;；]+/))
     .map((token) => token.replace(/^`+|`+$/g, '').trim())
     .filter(Boolean);
-  return [...new Set(paths.filter((path) => AUTO_PLAN_SENSITIVE_PATH.test(path)))];
+  return [...new Set(paths.filter(isSensitivePlanPath))];
 }
 
 export function requirementAcIds(reqDir) {
@@ -109,6 +124,18 @@ export function assertRequirementTraceability(reqDir) {
   return required;
 }
 
+// What an independent plan review judged: the requirements, the task table (tasks,
+// paths, ACs), and the classification lines. A later edit that leaves these unchanged
+// (verification matrices, delivery notes, design prose) keeps a passed plan review.
+const CLASSIFICATION_LINE = /^\s*-\s*(risk_tier|delivery_lane|test_delivery\.[\w.-]+|derived_binding)\s*:/;
+
+function planReviewScopeDigest(requirements, approvalScope) {
+  const lines = approvalScope.split('\n');
+  const tasks = tableRows(approvalScope, 'T').map((line) => line.trim());
+  const classification = lines.filter((line) => CLASSIFICATION_LINE.test(line)).map((line) => line.trim());
+  return digest(`${requirements}\n${tasks.join('\n')}\n${classification.join('\n')}`);
+}
+
 export function planApprovalBinding(reqDir, { requireRiskTier = false, requireDeliveryLane = false } = {}) {
   const requirements = normalized(readFileSync(join(reqDir, 'requirements.md'), 'utf8'));
   const plan = readFileSync(join(reqDir, 'plan.md'), 'utf8');
@@ -130,6 +157,7 @@ export function planApprovalBinding(reqDir, { requireRiskTier = false, requireDe
     requirements_sha256: digest(requirements),
     plan_scope_sha256: digest(approvalScope),
     combined_sha256: digest(`${requirements}\n${approvalScope}`),
+    review_scope_sha256: planReviewScopeDigest(requirements, approvalScope),
     risk_tier: riskTier,
     delivery_lane: deliveryLane || (requireRiskTier ? 'standard' : null),
     delivery_contract_version: deliveryLane ? 1 : 0,

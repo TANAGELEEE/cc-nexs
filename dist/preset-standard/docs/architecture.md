@@ -159,7 +159,7 @@ Repeated calls with the same successful fingerprint reuse the previous attempt. 
 - Some repositories have already been merged: the attempt retains evidence for each repository, and retry idempotently fills the gaps.
 - Driver failure/timeout/invalid JSON: the attempt is marked as failed and enters the release block.
 - Deployed but browser verification cannot be completed: a dedicated state waits for manual handling, without falsely reporting success.
-- Test verification failure: fix in the same feature worktree, re-verify locally, take one delta Review, then publish a new attempt and run regression after deployment.
+- Test verification failure: record the whole matrix, fix every failure in the same feature worktree in one round, re-verify locally (the Review carries unless a sensitive path changed, which takes one delta Review), then publish a new attempt and run regression after deployment.
 
 ## Runtime Materialization
 

@@ -17,6 +17,7 @@ test('a low or medium Lean task is gated by verification unless it touches sensi
   assert.match(auth.reasons[0], /api:src\/auth\/session\.ts/);
   assert.equal(reviewRequirement(lean('medium', { api: ['db/migrations/001.sql'] })).required, true);
   assert.equal(reviewRequirement(lean('medium', { web: ['src/billing/plan.ts'] })).required, true);
+  assert.equal(reviewRequirement(lean('medium', { api: ['sa-deployment/sa-dp-claw/src/main/java/ClawController.java'] })).required, false, 'a module named for deployment is not sensitive');
 });
 
 test('high risk, a missing risk tier, configured paths, policy always, and P0/P1 Hotfixes keep the Review', () => {

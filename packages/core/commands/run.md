@@ -145,7 +145,7 @@ This index keeps cross-runtime command discovery stable; dispatch details belong
 | Lean | `/cc-nexs:plan <id>`; `/cc-nexs:execute <id>`; `/cc-nexs:lean-review <id>`; `/cc-nexs:verify-local <id>`; `/cc-nexs:approve-release <id>`; `/cc-nexs:request-release-changes <id>` |
 | Hotfix | `/cc-nexs:hotfix`; `/cc-nexs:revise-hotfix`; dedicated developer/reviewer/verifier agents; `/cc-nexs:release-test <id> --hotfix`; `/cc-nexs:approve-release <id>` |
 
-The **Role → command dispatch table**, mode conclusion tables, and gate summaries are in the selected rule. Stable state markers include `PLAN_PENDING_HUMAN`, `CONSOLIDATED_REVIEW`, `RELEASE_PENDING_HUMAN`, `GATEWAY_B_CHANGE_REQUESTED`, `SCOPE_CHANGE_REQUESTED`, `HOTFIX_RELEASE_PENDING_HUMAN`, `TEST_RELEASE`, and `BASE_MERGING`. Lean keeps: **完整 Review 只有一次；修复只允许一次 delta closure**.
+The **Role → command dispatch table**, mode conclusion tables, and gate summaries are in the selected rule. Stable state markers include `PLAN_PENDING_HUMAN`, `CONSOLIDATED_REVIEW`, `RELEASE_PENDING_HUMAN`, `GATEWAY_B_CHANGE_REQUESTED`, `SCOPE_CHANGE_REQUESTED`, `HOTFIX_RELEASE_PENDING_HUMAN`, `TEST_RELEASE`, and `BASE_MERGING`. Lean keeps: **完整 Review 只有一次；修复由 controller 判定沿用 Review 或做一次 delta closure**.
 
 ## 4. Common completion and candidate discipline
 

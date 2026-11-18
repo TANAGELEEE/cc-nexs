@@ -9,6 +9,7 @@ import { execFileSync } from 'node:child_process';
 
 import { assertRecordedLocalVerification } from './local-evidence.mjs';
 import { appendMutationEvent, candidateFingerprint, readProgressV2, writeProgressV2 } from './progress-v2.mjs';
+import { reviewCarried } from './review-carry.mjs';
 
 const LOCAL_READY = { lean: ['passed', 'deferred_to_test'], hotfix: ['passed', 'deferred_to_test'] };
 
@@ -29,7 +30,8 @@ export function captureBaseSyncCarry(progress, source) {
     const releaseGate = progress.base_sync.release_gate || (gate?.approved && gate.binding?.candidate_fingerprint === fingerprint ? structuredClone(gate) : null);
     return { ...progress.base_sync, release_gate: releaseGate, to_source: null, to_fingerprint: null };
   }
-  const review = progress.review?.status === 'passed' && progress.review.candidate_fingerprint === fingerprint ? structuredClone(progress.review) : null;
+  const reviewed = (progress.review?.status === 'passed' && progress.review.candidate_fingerprint === fingerprint) || reviewCarried(progress, fingerprint);
+  const review = reviewed ? structuredClone(progress.review) : null;
   const gate = progress.gates?.release;
   const releaseGate = gate?.approved && gate.binding?.candidate_fingerprint === fingerprint ? structuredClone(gate) : null;
   return { from_fingerprint: fingerprint, from_source: { ...source }, test_attempt: attempt.id, review, release_gate: releaseGate, to_source: null, to_fingerprint: null };
