@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { resolveFeatureProgress } from './approval-command.mjs';
 import { extractApprovalScope } from './plan-contract.mjs';
 import { resolveHotfixDocument } from './hotfix-contract.mjs';
-import { appendProgressEvent, readProgressV2, recordTestVerification } from './progress-v2.mjs';
+import { appendProgressEvent, deferredChecksForAttempt, readProgressV2, recordTestVerification } from './progress-v2.mjs';
 import { preflightTestRelease } from './test-release.mjs';
 import { acceptanceCheckIds, insertVerificationSection, mergeShardResults, renderShardedVerification } from './verification-shards.mjs';
 import { mergeVerifierResults, renderPanelVerification, resolveVerifyPanel, verifyPanelModels } from './verification-panel.mjs';
@@ -64,6 +64,13 @@ export function recordEnvironmentVerification({ cwd = process.cwd(), featureId, 
   const result = ['passed', 'blocked', 'manual_required'].includes(status) ? status : null;
   if (!result) throw new Error('[cc-nexs] verification status must be passed, blocked, or manual_required');
   assertVerificationBlocker(result, evidence);
+  // Shards and a verification panel already report every check of the matrix.
+  if (progress.mode === 'lean' && result === 'blocked' && !shards && !verifiers) {
+    assertCompleteFailureRecord(evidence, [
+      ...acceptanceChecks(progress, progressFile),
+      ...deferredChecksForAttempt(progress, attempt).map((item) => item.check),
+    ]);
+  }
   const actor = progress.mode === 'hotfix' ? 'hotfix-verifier' : progress.mode === 'lean' ? 'lean-verifier' : 'verifier';
   let after = recordTestVerification(progressFile, { attemptId: attempt.id, result, evidence, actor });
   if (shards) {
@@ -96,6 +103,44 @@ export function assertVerificationBlocker(result, evidence) {
       .some(field => typeof blocker[field] !== 'string' || !blocker[field].trim())
       || !/^[a-f0-9]{40,64}$/i.test(blocker.baseline_commit)) {
       throw new Error('[cc-nexs] pre_existing_defect requires baseline commit/reproduction, candidate reproduction, impact, alternative attempt, tracking and independent review proof');
+    }
+  }
+}
+
+// A failed Lean verification goes to one repair round, so it must report the whole
+// matrix: every TV check and every check deferred from local verification, each passed,
+// failed, not_run (with why, and which failure blocks it or what input it needs), or
+// waived by the user. A run that stops at the first failure is refused.
+const FAILURE_RECORD_RESULTS = new Set(['passed', 'failed', 'not_run', 'waived']);
+
+export function assertCompleteFailureRecord(evidence, requiredChecks) {
+  const byCheck = new Map();
+  for (const item of evidence) {
+    if (!item || typeof item !== 'object' || item.type === 'human_input_required') continue;
+    if (typeof item.check !== 'string' || !item.check.trim()) continue;
+    if (!FAILURE_RECORD_RESULTS.has(item.result)) {
+      throw new Error(`[cc-nexs] test verification ${item.check}: result must be passed, failed, not_run, or waived, found ${item.result ?? '<missing>'}`);
+    }
+    if (item.result === 'not_run') {
+      const why = typeof item.reason === 'string' && item.reason.trim();
+      const cause = (typeof item.blocked_by === 'string' && item.blocked_by.trim()) || (typeof item.required_input === 'string' && item.required_input.trim());
+      if (!why || !cause) throw new Error(`[cc-nexs] test verification ${item.check}: not_run needs reason and blocked_by (the failed check that prevents it) or required_input`);
+    }
+    if (item.result === 'waived' && !(typeof item.authorization_evidence === 'string' && item.authorization_evidence.trim())) {
+      throw new Error(`[cc-nexs] test verification ${item.check}: waived needs the user's authorization_evidence`);
+    }
+    byCheck.set(item.check.trim(), item);
+  }
+  if (![...byCheck.values()].some((item) => item.result === 'failed')) {
+    throw new Error('[cc-nexs] a blocked test verification needs at least one failed check');
+  }
+  const missing = [...new Set(requiredChecks)].filter((check) => !byCheck.has(check));
+  if (missing.length) {
+    throw new Error(`[cc-nexs] a blocked test verification must report every check before the repair round; missing: ${missing.join(', ')}. Run the remaining checks (not_run with blocked_by when an earlier failure prevents one)`);
+  }
+  for (const item of byCheck.values()) {
+    if (item.result === 'not_run' && item.blocked_by && !(byCheck.get(item.blocked_by.trim())?.result === 'failed')) {
+      throw new Error(`[cc-nexs] test verification ${item.check}: blocked_by ${item.blocked_by} names no failed check in this run`);
     }
   }
 }

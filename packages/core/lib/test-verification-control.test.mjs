@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assertVerificationBlocker, verificationResultState } from './test-verification-control.mjs';
+import { assertCompleteFailureRecord, assertVerificationBlocker, verificationResultState } from './test-verification-control.mjs';
 
 test('unfinished verification cannot masquerade as a human-input blocker', () => {
   assert.throws(() => assertVerificationBlocker('manual_required', ['not tested yet']), /unfinished automated verification must continue/);
@@ -34,4 +34,23 @@ test('pre-existing defects require comparative evidence, not an unsupported unre
   for (const field of ['baseline_commit', 'baseline_proof', 'candidate_proof', 'impact', 'alternative_attempted', 'tracking', 'review_proof']) {
     assert.throws(() => assertVerificationBlocker('manual_required', [{ ...blocker, [field]: '' }]), /pre_existing_defect requires/);
   }
+});
+
+const failed = (check) => ({ check, result: 'failed', proof: 'observed failure' });
+const passed = (check) => ({ check, result: 'passed', proof: 'ok' });
+
+test('a blocked verification must report every check before the repair round', () => {
+  assert.doesNotThrow(() => assertCompleteFailureRecord([
+    failed('TV-001'), passed('TV-002'),
+    { check: 'TV-003', result: 'not_run', reason: 'upload page never loads', blocked_by: 'TV-001' },
+    { check: 'TV-004', result: 'not_run', reason: 'needs a paid account', required_input: 'a test02 account with credits' },
+    { check: 'TV-005', result: 'waived', proof: 'skipped', authorization_evidence: 'user: skip the GIF check this round' },
+    passed('LV-007'),
+  ], ['TV-001', 'TV-002', 'TV-003', 'TV-004', 'TV-005', 'LV-007']));
+  assert.throws(() => assertCompleteFailureRecord([failed('TV-001')], ['TV-001', 'TV-002', 'LV-007']), /must report every check.*missing: TV-002, LV-007/);
+  assert.throws(() => assertCompleteFailureRecord([passed('TV-001')], ['TV-001']), /at least one failed check/);
+  assert.throws(() => assertCompleteFailureRecord([failed('TV-001'), { check: 'TV-002', result: 'partial', proof: 'half' }], ['TV-001', 'TV-002']), /result must be passed, failed, not_run, or waived, found partial/);
+  assert.throws(() => assertCompleteFailureRecord([failed('TV-001'), { check: 'TV-002', result: 'not_run', reason: 'later' }], ['TV-001', 'TV-002']), /not_run needs reason and blocked_by/);
+  assert.throws(() => assertCompleteFailureRecord([failed('TV-001'), { check: 'TV-002', result: 'not_run', reason: 'x', blocked_by: 'TV-009' }], ['TV-001', 'TV-002']), /blocked_by TV-009 names no failed check/);
+  assert.throws(() => assertCompleteFailureRecord([failed('TV-001'), { check: 'TV-002', result: 'waived', proof: 'x' }], ['TV-001', 'TV-002']), /waived needs the user's authorization_evidence/);
 });

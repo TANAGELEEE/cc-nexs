@@ -895,7 +895,7 @@ function printUsage() {
   console.error('  cc-nexs record-amendment-review <feature-id> --amendment <id> <--passed|--blocked> [--finding <P0/P1 text>] [--progress <path>]');
   console.error('  cc-nexs start-hotfix <feature-id> [--level <P0|P1|P2|P3>] [--related <feature-id>] [--progress <path>]');
   console.error('  cc-nexs assert-hotfix-candidate <feature-id> [--progress <path>]');
-  console.error('  cc-nexs record-test-verification <feature-id> <--passed|--blocked|--manual-required> --evidence <text> [--attempt <id>] [--progress <path>]');
+  console.error('  cc-nexs record-test-verification <feature-id> <--passed|--blocked|--manual-required> <--evidence <text>|--evidence-json <json>...> [--attempt <id>] [--progress <path>]');
   console.error('  cc-nexs record-test-verification <feature-id> --verifier-json <json> --verifier-json <json>... [--confirm-json <json>]... [--attempt <id>] [--progress <path>]');
   console.error('  cc-nexs verify-panel <feature-id> [--runtime <claude|codex|pi>] [--progress <path>]');
   console.error('  cc-nexs commit-candidate <feature-id> --repo <repository-id> --message <text> --path <path> [--path <path>]');
