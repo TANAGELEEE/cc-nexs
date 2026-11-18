@@ -99,7 +99,7 @@ The controller reads only the last block, checks the candidate, checks that the 
 3. Start every reviewer in parallel:
    - native: dispatch the Reviewer role as an independent subagent on the model `review-panel` lists (role routing when it says so) with the brief, then save its reply to a file and run `record-reviewer <id> --reviewer <rid> --model <model it ran on> --findings-file <file> [--round ...]`;
    - CLI: `node <plugin-root>/lib/cc-nexs-cli.mjs run-reviewer <id> --reviewer <rid> --brief <brief file> [--round ...]`. It stores the findings and the model the CLI reports, and discards the result if the reviewer changed a candidate worktree.
-4. Dispatch one Judge (a fresh Reviewer-role session) with the same inputs and every stored reviewer result. The Judge writes the document.
+4. When any reviewer reported a P0/P1, dispatch one Judge (a fresh Reviewer-role session) with the same inputs and every stored reviewer result. The Judge writes the document. When none did, there is nothing to rerun: dispatch no Judge and write the block yourself from the stored results, listing their P2/P3 findings as reported.
 5. Record the round:
 
 ```text

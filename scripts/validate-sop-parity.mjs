@@ -136,7 +136,7 @@ function validateRunCommand() {
     '/cc-nexs:request-release-changes <id>',
     'GATEWAY_B_CHANGE_REQUESTED',
     'SCOPE_CHANGE_REQUESTED',
-    '完整 Review 只有一次；修复只允许一次 delta closure',
+    '完整 Review 只有一次；修复由 controller 判定沿用 Review 或做一次 delta closure',
     'migrate-feature-config',
     'cc-nexs-cli.mjs dispatch <id>',
     'dispatch-result <id>',

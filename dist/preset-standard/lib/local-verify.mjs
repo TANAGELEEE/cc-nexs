@@ -13,7 +13,9 @@ import {
   isLocalVerificationReadyStatus,
   readProgressV2,
   recordLocalVerification,
+  recordReviewCarry,
 } from './progress-v2.mjs';
+import { computeReviewCarry } from './review-carry.mjs';
 import {
   beginVerifyAttempt,
   finishVerifyAttempt,
@@ -81,6 +83,7 @@ export function runLocalVerification({
       expectedRevision: context.progress.revision,
       actor: 'local-evidence-controller',
     });
+    recordCarry(context, recordedEvidence);
     return {
       kind: 'local-verification',
       feature: context.progress.feature,
@@ -183,6 +186,7 @@ export function runLocalVerification({
       contractFingerprint,
       expectedRevision: context.progress.revision,
     });
+    recordCarry(context, evidence);
     ending.status = result.status;
     return {
       kind: 'local-verification',
@@ -201,6 +205,22 @@ export function runLocalVerification({
   } finally {
     finishVerifyAttempt(attempt, ending);
   }
+}
+
+// A repaired Lean candidate that passed local verification is checked against the last
+// Review; review-carry.mjs decides whether that Review still covers it.
+function recordCarry(context, evidence) {
+  if (context.progress.mode !== 'lean') return;
+  const progress = readProgressV2(context.progressFile);
+  if (!isLocalVerificationReadyStatus(progress.local_verification?.status)) return;
+  const carry = computeReviewCarry({
+    progress,
+    repositories: context.repositories,
+    fingerprint: candidateFingerprint(context.source),
+    evidence,
+    review: context.config.mergedReview || {},
+  });
+  if (carry) recordReviewCarry(context.progressFile, carry);
 }
 
 // One reclaim, one recheck: a blocker never moves outputs to another disk and never loops.

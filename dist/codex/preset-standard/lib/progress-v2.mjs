@@ -782,6 +782,7 @@ export function recordReleaseChangeRequest(file, {
     progress.state = progress.mode === 'hotfix' ? 'HOTFIX_CHANGE_REQUESTED' : 'GATEWAY_B_CHANGE_REQUESTED';
   } else if (kind === 'scope') {
     invalidateLeanCandidateEvidence(progress);
+    progress.review_baseline = null;
     requireDelivery(progress).test.status = 'idle';
     progress.gates.plan = { approved: false, binding: null, invalidated_at: timestamp, reason: request.id };
     progress.plan_review = null;
@@ -966,12 +967,46 @@ export function recordConsolidatedReview(file, {
     ...(findings ? { findings: findings.classified, finding_counts: findings.counts, reviewers: findings.reviewers } : {}),
     reviewed_at: new Date().toISOString(),
   };
+  // The baseline outlives candidate changes so a later repair can carry this Review
+  // (review-carry.mjs); a new Gateway A approval no longer matches its plan binding.
+  progress.review_baseline = {
+    status,
+    round: gatewayBDelta ? 'gateway-b-delta' : closure ? 'closure' : 'consolidated',
+    fingerprint,
+    source: { ...source },
+    blocking: findings
+      ? findings.classified.filter((item) => item.class === 'blocking').map((item) => ({ id: item.finding.id, summary: `${item.finding.severity}: ${item.finding.id}` }))
+      : blockingFindings.map((summary) => ({ id: null, summary })),
+    plan_binding: progress.gates?.plan?.binding?.combined_sha256 || null,
+    recorded_at: progress.review.reviewed_at,
+  };
   appendMutationEvent(progress, {
     type: gatewayBDelta
       ? `review.gateway_b_delta_${status}`
       : closure ? `review.closure_${status}` : `review.consolidated_${status}`,
     actor,
     data: { fingerprint, source, blocking_findings: blockingFindings, ...(findings ? { finding_counts: findings.counts, reviewers: findings.reviewers } : {}) },
+  });
+  writeProgressV2(file, progress);
+  return progress;
+}
+
+// The carry review-carry.mjs computed for the candidate that just passed local verification.
+export function recordReviewCarry(file, carry) {
+  const progress = readProgressV2(file);
+  if (!carry || progress.local_verification?.candidate_fingerprint !== carry.to_fingerprint) return progress;
+  progress.review = { ...progress.review, carry };
+  appendMutationEvent(progress, {
+    type: 'review.carry_computed',
+    actor: 'local-evidence-controller',
+    data: {
+      from_fingerprint: carry.from_fingerprint,
+      to_fingerprint: carry.to_fingerprint,
+      carried: carry.sensitive_paths.length === 0 && carry.unresolved_findings.length === 0,
+      sensitive_paths: carry.sensitive_paths,
+      unresolved_findings: carry.unresolved_findings,
+      changed_paths: carry.changed_paths.length,
+    },
   });
   writeProgressV2(file, progress);
   return progress;

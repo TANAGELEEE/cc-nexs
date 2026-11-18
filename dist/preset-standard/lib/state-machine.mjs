@@ -204,7 +204,10 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
   const gatewayBDeltaAttempts = Number(workflow.review?.gateway_b_delta_attempts || 0);
   const testReleaseStatus = workflow.test_release?.status || 'idle';
   const testExact = workflow.test_release?.exact !== false;
-  const reviewSatisfied = !reviewRequired || (reviewExact && reviewStatus === 'passed');
+  // An earlier Review carries to a repaired candidate whose blocking findings have passing
+  // local checks and whose repair changed no sensitive path (review-carry.mjs).
+  const reviewCarried = workflow.review?.carried === true;
+  const reviewSatisfied = !reviewRequired || (reviewExact && reviewStatus === 'passed') || reviewCarried;
   const derivedPending = workflow.derived_binding?.status === 'pending';
 
   if (TERMINAL.has(state)) return { next: state, role: null, action: 'noop' };
@@ -253,6 +256,7 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
       if (reviewExact && ['passed', 'blocked'].includes(reviewStatus)) {
         return { next: 'CONSOLIDATED_REVIEW', role: null, action: 'continue' };
       }
+      if (reviewCarried) return { next: 'CANDIDATE_READY', role: null, action: 'continue_to_test' };
       return { next: 'CONSOLIDATED_REVIEW', role: reviewer, action: 'review_candidate' };
     case 'CONSOLIDATED_REVIEW':
       return { next: 'PARSE_CONSOLIDATED_REVIEW', role: null, action: 'parse_review_conclusion' };
@@ -270,12 +274,14 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
       }
       return { next: 'REVIEW_FIXING', role: developer, action: 'fix_local' };
     case 'LOCAL_REVERIFYING':
-      // Without a required Review a fix goes straight back to test; with one, the
-      // changed code gets the delta closure before it is tested again.
+      // A repair goes straight back to test when no Review is required or the earlier
+      // Review carries to it; only unresolved findings or a sensitive change get a delta
+      // closure first.
       if (!reviewRequired) return { next: 'CANDIDATE_READY', role: null, action: 'continue_to_test' };
       if (reviewExact && closureAttempts > 0) {
         return { next: 'REVIEW_CLOSURE', role: null, action: 'continue' };
       }
+      if (reviewCarried) return { next: 'CANDIDATE_READY', role: null, action: 'continue_to_test' };
       return { next: 'REVIEW_CLOSURE', role: reviewer, action: 'review_delta' };
     case 'REVIEW_CLOSURE':
       return { next: 'PARSE_REVIEW_CLOSURE', role: null, action: 'parse_review_conclusion' };
@@ -340,6 +346,7 @@ function nextStepLean({ state, counters, thresholds, enabledRoles, humanGateAppr
       if (reviewExact && gatewayBDeltaAttempts > 0) {
         return { next: 'GATEWAY_B_DELTA_REVIEW', role: null, action: 'continue' };
       }
+      if (reviewCarried) return { next: 'CANDIDATE_READY', role: null, action: 'continue_to_test' };
       return { next: 'GATEWAY_B_DELTA_REVIEW', role: reviewer, action: 'review_gateway_b_delta' };
     case 'GATEWAY_B_DELTA_REVIEW':
       return { next: 'PARSE_GATEWAY_B_DELTA_REVIEW', role: null, action: 'parse_review_conclusion' };

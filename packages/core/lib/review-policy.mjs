@@ -9,6 +9,7 @@
 
 import { matchAny } from './build-selector.mjs';
 import { isSensitivePlanPath } from './plan-contract.mjs';
+import { reviewCarried } from './review-carry.mjs';
 import { REVIEW_STATES } from './state-machine.mjs';
 
 export const REVIEW_POLICIES = new Set(['risk', 'always']);
@@ -36,10 +37,12 @@ export function reviewRequirement(progress, review = {}) {
   return { required: false, reasons: [`risk_tier is ${risk} and no sensitive path changed`] };
 }
 
-// A Review is satisfied when none is required, or one passed for exactly this candidate.
+// A Review is satisfied when none is required, one passed for exactly this candidate, or
+// an earlier Review carries to this repaired candidate (review-carry.mjs).
 export function reviewSatisfied(progress, fingerprint, requirement) {
   if (!requirement.required) return true;
-  return progress.review?.status === 'passed' && progress.review.candidate_fingerprint === fingerprint;
+  if (progress.review?.status === 'passed' && progress.review.candidate_fingerprint === fingerprint) return true;
+  return reviewCarried(progress, fingerprint);
 }
 
 // The Review commands and `advance` refuse a Review nobody asked for: an unrequired one
@@ -49,6 +52,9 @@ export function assertReviewRequired(progress, review = {}) {
   const need = reviewRequirement(progress, review);
   if (!need.required && !REVIEW_STATES.has(progress.state)) {
     throw new Error(`[cc-nexs] no Review is required for this candidate (${need.reasons.join('; ')}); continue to test (cc-nexs status shows the next step). review.policy: always reviews every task`);
+  }
+  if (need.required && !REVIEW_STATES.has(progress.state) && reviewCarried(progress, progress.local_verification?.candidate_fingerprint)) {
+    throw new Error('[cc-nexs] the earlier Review carries to this candidate: its blocking findings have passing local checks and the repair changed no sensitive path; continue to test (cc-nexs status shows the next step)');
   }
   return need;
 }

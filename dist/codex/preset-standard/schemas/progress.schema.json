@@ -152,6 +152,7 @@
       }
     },
     "base_sync": { "type": ["object", "null"], "description": "Tested candidate evidence carried across a conflicting base sync" },
+    "review_baseline": { "type": ["object", "null"], "description": "The last recorded Lean Review, which a later repair may carry to its candidate" },
     "repositories": { "type": "object" },
     "events": {
       "type": "array",

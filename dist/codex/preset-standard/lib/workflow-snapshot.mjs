@@ -9,6 +9,7 @@ import { transitionState } from './progress-io.mjs';
 import { appendProgressEvent, readProgressV2 } from './progress-v2.mjs';
 import { isAllowedTransition, nextStep } from './state-machine.mjs';
 import { reviewRequirement } from './review-policy.mjs';
+import { reviewCarried } from './review-carry.mjs';
 import { baseSyncCarryReady } from './base-sync-carry.mjs';
 import { resolveTestReleasePolicy } from './test-release.mjs';
 import { taskFilesDir } from './verify-artifacts.mjs';
@@ -58,6 +59,7 @@ export function buildWorkflowSnapshot({ cwd = process.cwd(), featureId, progress
       gateway_b_delta_attempts: progress.review?.gateway_b_delta_attempts || 0,
       required: reviewNeed.required,
       required_reasons: reviewNeed.reasons,
+      carried: reviewCarried(progress, progress.local_verification?.candidate_fingerprint),
     },
     test_release: {
       policy: noAutoTestRelease ? 'manual' : persistedPolicy,
@@ -167,7 +169,7 @@ export function advanceFeatureState({ cwd = process.cwd(), featureId, progressPa
   const status = featureStatus({ cwd, featureId, progressPath });
   const markdown = join(dirname(status.progressFile), 'progress.md');
   if (!existsSync(markdown)) throw new Error(`[cc-nexs] progress.md not found beside ${status.progressFile}`);
-  if (status.input.state === from && !isAllowedTransition({ mode: status.input.mode, from, to, next: status.next.next, reviewRequired: status.input.workflow.review.required })) {
+  if (status.input.state === from && !isAllowedTransition({ mode: status.input.mode, from, to, next: status.next.next, reviewRequired: status.input.workflow.review.required && !status.input.workflow.review.carried })) {
     if (!recover) {
       throw new Error(`[cc-nexs] ${from} -> ${to} is not a workflow transition (next: ${status.next.next}). Run the controller for the current step; a human-authorized recovery uses --recover --authorization-evidence "<the user's instruction>"`);
     }

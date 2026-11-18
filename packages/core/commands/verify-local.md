@@ -17,6 +17,7 @@ Local verification is a fast check before deployment; acceptance in the test env
 
 - Frontend: lint, type check, targeted tests, and a browser check of each affected page.
 - Backend: targeted tests for the changed behavior.
+- After a Lean Review blocked: one extra check per blocking finding, whose `check` id is the finding id and whose command reproduces it (the Judge's rerun). When every blocking id passes and the repair changed no sensitive path, the controller carries the Review to the repaired candidate (`review.carry`) and it goes back to test without a delta Review.
 - Full production build: only when the change touches build configuration, dependencies, or lockfiles; route generation, publication, or translation checks run their own generator or validator. CI builds every test release.
 
 When the project configures `workflow.local_verify.driver`, the driver receives one JSON payload on stdin containing exact candidate commits, repository worktrees, `scratch_dir`, and `artifacts_dir`. It runs the bound matrix, stops all processes, then returns one JSON object:
