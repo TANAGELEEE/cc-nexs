@@ -70,12 +70,27 @@ function acIds(lines) {
   return new Set(lines.flatMap((line) => line.match(/\bAC-\d+\b/g) || []));
 }
 
-// Paths that make a plan ineligible for --auto-plan, whatever risk the Planner declared:
-// schema/data, auth/permission/secret, payment, and infrastructure/deployment changes.
-const AUTO_PLAN_SENSITIVE_PATH = /migration|schema|\.sql$|auth|permission|security|secret|credential|iam|payment|billing|terraform|helm|k8s|kubernetes|deploy|docker|\.gitlab-ci|\.github\/workflows/i;
+// Paths that make a plan ineligible for --auto-plan, require a Review of a low/medium
+// candidate, and send an amendment to independent review, whatever risk the Planner
+// declared: data migrations, infrastructure and CI files, and directories named for
+// auth, permission, secrets, payment or deployment. Directory names match whole path
+// segments, so a module such as `sa-deployment/` or a page such as `BillingPage.tsx` is
+// not sensitive by name; a workspace lists its own business-critical code in
+// `review.required_paths`.
+const SENSITIVE_SEGMENT = new Set([
+  'migration', 'migrations', 'auth', 'permission', 'permissions', 'security', 'secret', 'secrets',
+  'credential', 'credentials', 'iam', 'payment', 'payments', 'billing', 'terraform', 'helm', 'k8s',
+  'kubernetes', 'deploy', 'deployment', 'deployments',
+]);
+const SENSITIVE_FILE = /(^|\/)(Dockerfile(\.[^/]*)?|docker-compose[^/]*\.ya?ml|\.gitlab-ci\.yml|schema\.prisma)$|\.(sql|tf)$|(^|\/)\.github\/workflows\//i;
 
 export function isSensitivePlanPath(path) {
-  return AUTO_PLAN_SENSITIVE_PATH.test(path);
+  const normalized = String(path).replace(/\\/g, '/');
+  if (SENSITIVE_FILE.test(normalized)) return true;
+  const segments = normalized.split('/');
+  // The last segment is a directory too unless it names a file (`src/auth` vs `src/auth.ts`).
+  if (segments.at(-1).includes('.')) segments.pop();
+  return segments.some((segment) => SENSITIVE_SEGMENT.has(segment.toLowerCase()));
 }
 
 export function sensitivePlanPaths(planText) {
@@ -83,7 +98,7 @@ export function sensitivePlanPaths(planText) {
   const paths = rows.flatMap((line) => (line.split('|')[4] || '').split(/[\s,，、;；]+/))
     .map((token) => token.replace(/^`+|`+$/g, '').trim())
     .filter(Boolean);
-  return [...new Set(paths.filter((path) => AUTO_PLAN_SENSITIVE_PATH.test(path)))];
+  return [...new Set(paths.filter(isSensitivePlanPath))];
 }
 
 export function requirementAcIds(reqDir) {

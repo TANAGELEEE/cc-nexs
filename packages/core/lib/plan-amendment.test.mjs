@@ -72,7 +72,7 @@ test('ordinary same-AC paths activate at once and are left to the final Review',
   assert.equal(amendment.review, 'final-review');
   assert.match(readFileSync(join(feature.dir, 'plan.md'), 'utf8'), /\| A-1 \[feature\] .* \| no \| active \|/);
   assert.equal(amend(feature, { paths: ['web:src/app.ts'] }).amendment.id, 'A-2', 'an active amendment does not hold up the next one');
-  assert.equal(amend(feature, { paths: ['web:src/lib/permissions.ts'] }).amendment.status, 'pending_review');
+  assert.equal(amend(feature, { paths: ['web:src/lib/permissions/roles.ts'] }).amendment.status, 'pending_review');
   const integration = createApprovedFeature('TEST_MERGE_CONFLICT');
   assert.equal(amend(integration, { paths: ['web:src/app.ts'], target: 'test-integration' }).amendment.status, 'pending_review');
 });

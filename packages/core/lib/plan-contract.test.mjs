@@ -10,6 +10,7 @@ import {
   approvedPlanRiskTier,
   assertPlanApprovalCurrent,
   inspectPlanRiskBinding,
+  isSensitivePlanPath,
   planApprovalBinding,
 } from './plan-contract.mjs';
 
@@ -116,4 +117,16 @@ test('stored Gateway A risk must match its hashed plan scope', () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('sensitive paths match infrastructure files and whole directory names only', () => {
+  for (const path of [
+    'db/migrations/001.sql', 'api/db/migration/V12__add_export.sql', 'src/auth/session.ts', 'src/billing/plan.ts',
+    'api/auth', 'deploy/values.yaml', 'helm/app/values.yaml', 'infra/main.tf', 'Dockerfile', 'web/Dockerfile.test',
+    'docker-compose.test.yml', '.gitlab-ci.yml', '.github/workflows/ci.yml', 'prisma/schema.prisma', 'src\\Auth\\Filter.java',
+  ]) assert.equal(isSensitivePlanPath(path), true, path);
+  for (const path of [
+    'sa-deployment/sa-dp-claw/src/main/java/com/example/claw/ClawController.java', 'src/pages/BillingPage.tsx',
+    'src/lib/author.ts', 'src/hooks/useCreditSummary.ts', 'src/lib/seo/schema.ts', 'src/billing.ts', 'src/app/page.tsx',
+  ]) assert.equal(isSensitivePlanPath(path), false, path);
 });
