@@ -6,7 +6,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 
 import { assertLocalCandidateWorktree, resolveCandidateContext } from './candidate-context.mjs';
 import { assertHotfixCandidatePaths, assertHotfixScopeCurrent, extractHotfixScope, resolveHotfixDocument } from './hotfix-contract.mjs';
-import { extractLocalVerificationChecks, validateLocalEvidence } from './local-evidence.mjs';
+import { assertCompileChecksNotDeferred, compileLevelChecks, extractLocalVerificationChecks, validateLocalEvidence } from './local-evidence.mjs';
 import { assertPlanApprovalCurrent, extractApprovalScope } from './plan-contract.mjs';
 import {
   candidateFingerprint,
@@ -62,7 +62,9 @@ export function runLocalVerification({
     throw new Error(`[cc-nexs] local verification is not valid from ${context.progress.state}`);
   }
   const driver = normalizeDriver(context.config.mergedWorkflow?.local_verify?.driver, context.workspaceRoot);
-  const expectedChecks = extractLocalVerificationChecks(releaseScope(context.progress, context.progressFile));
+  const scope = releaseScope(context.progress, context.progressFile);
+  const expectedChecks = extractLocalVerificationChecks(scope);
+  const compileChecks = compileLevelChecks(scope);
   const evidencePolicy = { allowTestDefer: ['lean', 'hotfix'].includes(context.progress.mode), expectedChecks };
   const contractFingerprint = createHash('sha256').update(JSON.stringify({ driver, ...evidencePolicy })).digest('hex');
   assertVerificationWorktrees(context);
@@ -73,6 +75,7 @@ export function runLocalVerification({
       throw new Error('[cc-nexs] workflow.local_verify.driver is configured; run verify-local without direct evidence flags');
     }
     validateLocalEvidence(recordStatus, recordedEvidence, evidencePolicy);
+    assertCompileChecksNotDeferred(recordedEvidence, compileChecks);
     assertBaselineCommits(context, recordedEvidence);
     recordLocalVerification(context.progressFile, {
       source: context.source,
@@ -177,6 +180,7 @@ export function runLocalVerification({
     finally { slot.release(); }
     assertVerificationWorktrees(context);
     const evidence = result.evidence || [];
+    assertCompileChecksNotDeferred(evidence, compileChecks);
     assertBaselineCommits(context, evidence);
     recordLocalVerification(context.progressFile, {
       source: context.source,

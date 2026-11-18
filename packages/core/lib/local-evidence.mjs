@@ -45,6 +45,37 @@ export function extractLocalVerificationChecks(scope) {
   return checks;
 }
 
+// Matrix rows whose Type is lint, type check or compile. These run locally in seconds and
+// fail the test build when skipped, so they are never deferred to test: a failure that
+// already exists on the base is recorded as baseline_failed instead.
+const COMPILE_LEVEL_TYPE = /\b(lint|typecheck|type[ -]check|tsc|compile)\b/i;
+
+export function compileLevelChecks(scope) {
+  const checks = [];
+  let typeColumn = -1;
+  for (const line of String(scope).split(/\r?\n/)) {
+    if (!line.trim().startsWith('|')) {
+      typeColumn = -1;
+      continue;
+    }
+    const cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split(/(?<!\\)\|/).map((cell) => cell.trim());
+    if (cells[0] === 'Check') {
+      typeColumn = cells.findIndex((cell) => ['类型', '型別', 'Type'].includes(cell));
+      continue;
+    }
+    if (typeColumn === -1 || !/^LV-/.test(cells[0])) continue;
+    if (COMPILE_LEVEL_TYPE.test(cells[typeColumn] || '')) checks.push(cells[0]);
+  }
+  return checks;
+}
+
+export function assertCompileChecksNotDeferred(evidence, compileChecks) {
+  const deferred = (evidence || []).filter((item) => item?.result === 'deferred_to_test' && compileChecks.includes(String(item.check).trim()));
+  if (deferred.length) {
+    throw new Error(`[cc-nexs] ${deferred.map((item) => item.check).join(', ')} ${deferred.length > 1 ? 'are' : 'is a'} lint, type check or compile row${deferred.length > 1 ? 's' : ''} and cannot be deferred to test; run it locally, and record a failure that already happens on the merge-base as baseline_failed`);
+  }
+}
+
 export function validateLocalEvidence(status, evidence, { allowTestDefer = false, expectedChecks = [] } = {}) {
   if (!['passed', 'failed', ...(allowTestDefer ? ['deferred_to_test'] : [])].includes(status)) {
     throw new Error(`[cc-nexs] invalid local verification status: ${status || '<missing>'}`);

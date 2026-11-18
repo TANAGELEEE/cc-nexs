@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { extractLocalVerificationChecks, validateLocalEvidence } from './local-evidence.mjs';
+import { assertCompileChecksNotDeferred, compileLevelChecks, extractLocalVerificationChecks, validateLocalEvidence } from './local-evidence.mjs';
 
 const lint = { check: 'LV-001', result: 'passed', command: 'pnpm lint', exit_code: 0, proof: 'clean' };
 const browser = {
@@ -53,4 +53,21 @@ test('Lean can defer a browser row, and evidence without a method keeps the comm
   const deferred = { check: browser.check, result: 'deferred_to_test', reason: 'backend change is not deployed', test_action: 'verify on test' };
   assert.doesNotThrow(() => validateLocalEvidence('deferred_to_test', [lint, deferred], { allowTestDefer: true, expectedChecks }));
   assert.throws(() => validateLocalEvidence('passed', [{ ...lint, exit_code: undefined }]), /exit_code=0/);
+});
+
+test('lint, type check and compile rows cannot be deferred to test', () => {
+  const scope = [
+    '| Check | AC | 类型 | 命令/Driver | 通过条件 |', '|---|---|---|---|---|',
+    '| LV-001 | AC-001 | lint | npm run lint | 0 |',
+    '| LV-002 | AC-001 | typecheck | npx tsc --noEmit | no new errors |',
+    '| LV-003 | AC-001 | targeted test | npm test | pass |',
+    '| LV-004 | AC-002 | compile | mvn -q compile | 0 |',
+    '| LV-005 | AC-002 | browser | browser: npm run dev @ /seller | page loads |',
+    '', '| Check | AC | Type | Command/Driver | Pass criteria |', '|---|---|---|---|---|',
+    '| LV-006 | AC-003 | lint/typecheck | pnpm check | 0 |',
+  ].join('\n');
+  assert.deepEqual(compileLevelChecks(scope), ['LV-001', 'LV-002', 'LV-004', 'LV-006']);
+  const defer = (check) => ({ check, result: 'deferred_to_test', reason: 'errors outside the diff', test_action: 'CI typecheck' });
+  assert.throws(() => assertCompileChecksNotDeferred([defer('LV-002')], compileLevelChecks(scope)), /LV-002 is a lint, type check or compile row and cannot be deferred/);
+  assert.doesNotThrow(() => assertCompileChecksNotDeferred([defer('LV-005'), { check: 'LV-002', result: 'baseline_failed' }], compileLevelChecks(scope)));
 });
